@@ -51,11 +51,7 @@ func NewClient(opt *RedisOpt) *Client {
 // Enqueue pushes a given task to the specified queue.
 func (c *Client) Enqueue(queue string, task *Task, executeAt time.Time) error {
 	if time.Now().After(executeAt) {
-		bytes, err := json.Marshal(task)
-		if err != nil {
-			return err
-		}
-		return c.rdb.RPush(queuePrefix+queue, string(bytes)).Err()
+		return push(c.rdb, queue, task)
 	}
 	dt := &delayedTask{
 		ID:    uuid.New().String(),
@@ -156,22 +152,26 @@ func (w *Workers) pollScheduledTasks() {
 			}
 
 			if w.rdb.ZRem(scheduled, j).Val() > 0 {
-				// Do we need to encode this again?
-				// Can we skip this entirely by defining Task field to be a string field?
-				bytes, err := json.Marshal(job.Task)
+				err = push(w.rdb, job.Queue, job.Task)
 				if err != nil {
-					log.Printf("could not marshal job.Task %v: %v\n", job.Task, err)
-					// TODO(hibiken): Put item that cannot marshal into dead queue.
-					continue
-				}
-				err = w.rdb.RPush(queuePrefix+job.Queue, string(bytes)).Err()
-				if err != nil {
-					log.Printf("command RPUSH %q %s failed: %v",
-						queuePrefix+job.Queue, string(bytes), err)
+					log.Printf("could not push task to queue %q: %v", job.Queue, err)
 					// TODO(hibiken): Handle this error properly. Add back to scheduled ZSET?
 					continue
 				}
 			}
 		}
 	}
+}
+
+func push(rdb *redis.Client, queue string, t *Task) error {
+	bytes, err := json.Marshal(t)
+	if err != nil {
+		return fmt.Errorf("could not encode task into JSON: %v", err)
+	}
+	err = rdb.SAdd(allQueues, queue).Err()
+	if err != nil {
+		return fmt.Errorf("could not execute command SADD %q %q: %v",
+			allQueues, queue, err)
+	}
+	return rdb.RPush(queuePrefix+queue, string(bytes)).Err()
 }
