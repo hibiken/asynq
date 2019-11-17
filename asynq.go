@@ -5,8 +5,10 @@ TODOs:
 - [P0] Task error handling
 - [P0] Retry
 - [P0] Dead task (retry exausted)
-- [P0] Shutdown all workers gracefully when killed
+- [P0] Shutdown all workers gracefully when the process gets killed
 - [P1] Add Support for multiple queues
+- [P1] User defined max-retry count
+- [P2] Web UI
 */
 
 import (
@@ -21,9 +23,11 @@ import (
 
 // Redis keys
 const (
-	queuePrefix = "asynq:queues:"
-	allQueues   = "asynq:queues"
-	scheduled   = "asynq:scheduled"
+	queuePrefix = "asynq:queues:"   // LIST
+	allQueues   = "asynq:queues"    // SET
+	scheduled   = "asynq:scheduled" // ZSET
+	retry       = "asynq:retry"     // ZSET
+	dead        = "asynq:dead"      // ZSET
 )
 
 // Max retry count by default
@@ -79,25 +83,21 @@ func NewClient(opt *RedisOpt) *Client {
 
 // Process enqueues the task to be performed at a given time.
 func (c *Client) Process(task *Task, executeAt time.Time) error {
-	return c.enqueue("default", task, executeAt)
-}
-
-// enqueue pushes a given task to the specified queue.
-func (c *Client) enqueue(queue string, task *Task, executeAt time.Time) error {
 	msg := &taskMessage{
 		Type:    task.Type,
 		Payload: task.Payload,
-		Queue:   queue,
+		Queue:   "default",
 		Retry:   defaultMaxRetry,
 	}
+	return c.enqueue(msg, executeAt)
+}
+
+// enqueue pushes a given task to the specified queue.
+func (c *Client) enqueue(msg *taskMessage, executeAt time.Time) error {
 	if time.Now().After(executeAt) {
 		return push(c.rdb, msg)
 	}
-	bytes, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	return c.rdb.ZAdd(scheduled, &redis.Z{Member: string(bytes), Score: float64(executeAt.Unix())}).Err()
+	return zadd(c.rdb, scheduled, float64(executeAt.Unix()), msg)
 }
 
 //-------------------- Workers --------------------
@@ -125,12 +125,12 @@ type TaskHandler func(*Task) error
 
 // Run starts the workers and scheduler with a given handler.
 func (w *Workers) Run(handler TaskHandler) {
-	go w.pollScheduledTasks()
+	go w.pollDeferred()
 
 	for {
 		// pull message out of the queue and process it
 		// TODO(hibiken): sort the list of queues in order of priority
-		res, err := w.rdb.BLPop(0, listQueues(w.rdb)...).Result() // A timeout of zero means block indefinitely.
+		res, err := w.rdb.BLPop(5*time.Second, listQueues(w.rdb)...).Result() // NOTE: BLPOP needs to time out because if case a new queue is added.
 		if err != nil {
 			if err != redis.Nil {
 				log.Printf("BLPOP command failed: %v\n", err)
@@ -151,51 +151,67 @@ func (w *Workers) Run(handler TaskHandler) {
 		go func(task *Task) {
 			err := handler(task)
 			if err != nil {
+				if msg.Retry == 0 {
+					// TODO(hibiken): Add the task to "dead" collection
+					fmt.Println("Retry exausted!!!")
+					return
+				}
 				fmt.Println("RETRY!!!")
-				//timeout := 10 * time.Second // TODO(hibiken): Implement exponential backoff.
-				// TODO(hibiken): Enqueue the task to "retry" ZSET with some timeout
+				delay := 10 * time.Second // TODO(hibiken): Implement exponential backoff.
+				msg.Retry--
+				msg.ErrorMsg = err.Error()
+				if err := zadd(w.rdb, retry, float64(time.Now().Add(delay).Unix()), &msg); err != nil {
+					// TODO(hibiken): Not sure how to handle this error
+					log.Printf("[SEVERE ERROR] could not add msg %+v to 'retry' set: %v\n", msg, err)
+					return
+				}
+
 			}
 			<-w.poolTokens // release the token
 		}(t)
 	}
 }
 
-func (w *Workers) pollScheduledTasks() {
+func (w *Workers) pollDeferred() {
+	zsets := []string{scheduled, retry}
 	for {
-		// Get next items in the queue with scores (time to execute) <= now.
-		now := time.Now().Unix()
-		jobs, err := w.rdb.ZRangeByScore(scheduled,
-			&redis.ZRangeBy{
-				Min: "-inf",
-				Max: strconv.Itoa(int(now))}).Result()
-		fmt.Printf("len(jobs) = %d\n", len(jobs))
-		if err != nil {
-			log.Printf("radis command ZRANGEBYSCORE failed: %v\n", err)
-			continue
-		}
-		if len(jobs) == 0 {
-			fmt.Println("jobs empty")
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		for _, j := range jobs {
-			var msg taskMessage
-			err = json.Unmarshal([]byte(j), &msg)
+		for _, zset := range zsets {
+			// Get next items in the queue with scores (time to execute) <= now.
+			now := time.Now().Unix()
+			fmt.Printf("[DEBUG] polling ZSET %q\n", zset)
+			jobs, err := w.rdb.ZRangeByScore(zset,
+				&redis.ZRangeBy{
+					Min: "-inf",
+					Max: strconv.Itoa(int(now))}).Result()
+			fmt.Printf("len(jobs) = %d\n", len(jobs))
 			if err != nil {
-				fmt.Println("unmarshal failed")
+				log.Printf("radis command ZRANGEBYSCORE failed: %v\n", err)
+				continue
+			}
+			if len(jobs) == 0 {
+				fmt.Println("jobs empty")
 				continue
 			}
 
-			if w.rdb.ZRem(scheduled, j).Val() > 0 {
-				err = push(w.rdb, &msg)
+			for _, j := range jobs {
+				var msg taskMessage
+				err = json.Unmarshal([]byte(j), &msg)
 				if err != nil {
-					log.Printf("could not push task to queue %q: %v", msg.Queue, err)
-					// TODO(hibiken): Handle this error properly. Add back to scheduled ZSET?
+					fmt.Println("unmarshal failed")
 					continue
+				}
+
+				if w.rdb.ZRem(zset, j).Val() > 0 {
+					err = push(w.rdb, &msg)
+					if err != nil {
+						log.Printf("could not push task to queue %q: %v", msg.Queue, err)
+						// TODO(hibiken): Handle this error properly. Add back to scheduled ZSET?
+						continue
+					}
 				}
 			}
 		}
+		time.Sleep(5 * time.Second)
 	}
 }
 
@@ -212,6 +228,15 @@ func push(rdb *redis.Client, msg *taskMessage) error {
 			allQueues, qname, err)
 	}
 	return rdb.RPush(qname, string(bytes)).Err()
+}
+
+// zadd serializes the given message and adds to the specified sorted set.
+func zadd(rdb *redis.Client, zset string, zscore float64, msg *taskMessage) error {
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("could not encode task into JSON: %v", err)
+	}
+	return rdb.ZAdd(zset, &redis.Z{Member: string(bytes), Score: zscore}).Err()
 }
 
 // listQueues returns the list of all queues.
