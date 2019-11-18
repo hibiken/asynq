@@ -109,6 +109,9 @@ type Workers struct {
 	// poolTokens is a counting semaphore to ensure the number of active workers
 	// does not exceed the limit.
 	poolTokens chan struct{}
+
+	// running indicates whether the workes are currently running.
+	running bool
 }
 
 // NewWorkers creates and returns a new Workers.
@@ -125,6 +128,11 @@ type TaskHandler func(*Task) error
 
 // Run starts the workers and scheduler with a given handler.
 func (w *Workers) Run(handler TaskHandler) {
+	if w.running {
+		return
+	}
+	w.running = true
+
 	go w.pollDeferred()
 
 	for {
