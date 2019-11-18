@@ -2,9 +2,7 @@ package asynq
 
 /*
 TODOs:
-- [P0] Task error handling
-- [P0] Retry
-- [P0] Dead task (retry exausted)
+- [P0] Write tests
 - [P0] Shutdown all workers gracefully when the process gets killed
 - [P1] Add Support for multiple queues
 - [P1] User defined max-retry count
@@ -154,8 +152,10 @@ func (w *Workers) Run(handler TaskHandler) {
 			err := handler(task)
 			if err != nil {
 				if msg.Retried >= msg.Retry {
-					// TODO(hibiken): Add the task to "dead" collection
-					fmt.Println("Retry exausted!!!")
+					fmt.Println("Retry exhausted!!!")
+					if err := kill(w.rdb, &msg); err != nil {
+						log.Printf("[SERVER ERROR] could not add task %+v to 'dead' set\n", err)
+					}
 					return
 				}
 				fmt.Println("RETRY!!!")
@@ -240,6 +240,26 @@ func zadd(rdb *redis.Client, zset string, zscore float64, msg *taskMessage) erro
 		return fmt.Errorf("could not encode task into JSON: %v", err)
 	}
 	return rdb.ZAdd(zset, &redis.Z{Member: string(bytes), Score: zscore}).Err()
+}
+
+const maxDeadTask = 100
+const deadExpirationInDays = 90
+
+// kill sends the task to "dead" sorted set. It also trim the sorted set by
+// timestamp and set size.
+func kill(rdb *redis.Client, msg *taskMessage) error {
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("could not encode task into JSON: %v", err)
+	}
+	now := time.Now()
+	pipe := rdb.Pipeline()
+	pipe.ZAdd(dead, &redis.Z{Member: string(bytes), Score: float64(now.Unix())})
+	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
+	pipe.ZRemRangeByScore(dead, "-inf", strconv.Itoa(int(limit)))
+	pipe.ZRemRangeByRank(dead, 0, -maxDeadTask) // trim the set to 100
+	_, err = pipe.Exec()
+	return err
 }
 
 // listQueues returns the list of all queues.
