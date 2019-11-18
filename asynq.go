@@ -154,9 +154,10 @@ func (w *Workers) Run(handler TaskHandler) {
 			log.Printf("[Servere Error] could not parse json encoded message %s: %v", data, err)
 			continue
 		}
-		w.poolTokens <- struct{}{} // acquire a token
 		t := &Task{Type: msg.Type, Payload: msg.Payload}
+		w.poolTokens <- struct{}{} // acquire token
 		go func(task *Task) {
+			defer func() { <-w.poolTokens }() // release token
 			err := handler(task)
 			if err != nil {
 				if msg.Retried >= msg.Retry {
@@ -178,7 +179,6 @@ func (w *Workers) Run(handler TaskHandler) {
 				}
 
 			}
-			<-w.poolTokens // release the token
 		}(t)
 	}
 }
