@@ -15,6 +15,7 @@ import (
 	"math"
 	"math/rand"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v7"
@@ -105,8 +106,9 @@ func (c *Client) enqueue(msg *taskMessage, executeAt time.Time) error {
 type Launcher struct {
 	rdb *redis.Client
 
-	// running indicates whether the workes are currently running.
+	// running indicates whether manager and poller are both running.
 	running bool
+	mu      sync.Mutex
 
 	poller *poller
 
@@ -135,6 +137,8 @@ type TaskHandler func(*Task) error
 
 // Start starts the manager and poller.
 func (l *Launcher) Start(handler TaskHandler) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.running {
 		return
 	}
@@ -147,6 +151,8 @@ func (l *Launcher) Start(handler TaskHandler) {
 
 // Stop stops both manager and poller.
 func (l *Launcher) Stop() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if !l.running {
 		return
 	}
