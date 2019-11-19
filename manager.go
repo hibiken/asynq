@@ -18,6 +18,7 @@ type manager struct {
 	// does not exceed the limit
 	sema chan struct{}
 
+	// channel to communicate back to the long running "manager" goroutine.
 	done chan struct{}
 }
 
@@ -31,7 +32,16 @@ func newManager(rdb *redis.Client, numWorkers int, handler TaskHandler) *manager
 }
 
 func (m *manager) terminate() {
+	// send a signal to the manager goroutine to stop
+	// processing tasks from the queue.
 	m.done <- struct{}{}
+
+	fmt.Println("--- Waiting for all workers to finish ---")
+	for i := 0; i < cap(m.sema); i++ {
+		// block until all workers have released the token
+		m.sema <- struct{}{}
+	}
+	fmt.Println("--- All workers have finished! ----")
 }
 
 func (m *manager) start() {
@@ -39,7 +49,10 @@ func (m *manager) start() {
 		for {
 			select {
 			case <-m.done:
-				m.shutdown()
+				fmt.Println("-------------[Manager]---------------")
+				fmt.Println("Manager shutting down...")
+				fmt.Println("-------------------------------------")
+				return
 			default:
 				m.processTasks()
 			}
@@ -91,11 +104,4 @@ func (m *manager) processTasks() {
 			}
 		}
 	}(t)
-}
-
-func (m *manager) shutdown() {
-	// TODO(hibiken): implement this. Gracefully shutdown all active goroutines.
-	fmt.Println("-------------[Manager]---------------")
-	fmt.Println("Manager shutting down...")
-	fmt.Println("------------------------------------")
 }

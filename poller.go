@@ -13,6 +13,7 @@ import (
 type poller struct {
 	rdb *redis.Client
 
+	// channel to communicate back to the long running "poller" goroutine.
 	done chan struct{}
 
 	// poll interval on average
@@ -23,6 +24,8 @@ type poller struct {
 }
 
 func (p *poller) terminate() {
+	// send a signal to the manager goroutine to stop
+	// processing tasks from the queue.
 	p.done <- struct{}{}
 }
 
@@ -31,7 +34,10 @@ func (p *poller) start() {
 		for {
 			select {
 			case <-p.done:
-				p.shutdown()
+				fmt.Println("-------------[Poller]---------------")
+				fmt.Println("Poller shutting down...")
+				fmt.Println("------------------------------------")
+				return
 			default:
 				p.enqueue()
 				time.Sleep(p.avgInterval)
@@ -79,11 +85,4 @@ func (p *poller) enqueue() {
 			}
 		}
 	}
-}
-
-func (p *poller) shutdown() {
-	// TODO(hibiken): implement this. Gracefully shutdown all active goroutines.
-	fmt.Println("-------------[Poller]---------------")
-	fmt.Println("Poller shutting down...")
-	fmt.Println("------------------------------------")
 }
