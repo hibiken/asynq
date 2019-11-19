@@ -102,8 +102,8 @@ func (c *Client) enqueue(msg *taskMessage, executeAt time.Time) error {
 
 //-------------------- Workers --------------------
 
-// Workers represents a pool of workers.
-type Workers struct {
+// Launcher starts the manager and poller.
+type Launcher struct {
 	rdb *redis.Client
 
 	// poolTokens is a counting semaphore to ensure the number of active workers
@@ -116,8 +116,8 @@ type Workers struct {
 	poller *poller
 }
 
-// NewWorkers creates and returns a new Workers.
-func NewWorkers(poolSize int, opt *RedisOpt) *Workers {
+// NewLauncher creates and returns a new Launcher.
+func NewLauncher(poolSize int, opt *RedisOpt) *Launcher {
 	rdb := redis.NewClient(&redis.Options{Addr: opt.Addr, Password: opt.Password})
 	poller := &poller{
 		rdb:         rdb,
@@ -125,7 +125,7 @@ func NewWorkers(poolSize int, opt *RedisOpt) *Workers {
 		avgInterval: 5 * time.Second,
 		zsets:       []string{scheduled, retry},
 	}
-	return &Workers{
+	return &Launcher{
 		rdb:        rdb,
 		poller:     poller,
 		poolTokens: make(chan struct{}, poolSize),
@@ -135,8 +135,8 @@ func NewWorkers(poolSize int, opt *RedisOpt) *Workers {
 // TaskHandler handles a given task and report any error.
 type TaskHandler func(*Task) error
 
-// Run starts the workers and scheduler with a given handler.
-func (w *Workers) Run(handler TaskHandler) {
+// Start starts the workers and scheduler with a given handler.
+func (w *Launcher) Start(handler TaskHandler) {
 	if w.running {
 		return
 	}
