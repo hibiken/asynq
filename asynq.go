@@ -3,7 +3,6 @@ package asynq
 /*
 TODOs:
 - [P0] Write tests
-- [P0] Shutdown all workers gracefully when the process gets killed
 - [P1] Add Support for multiple queues
 - [P1] User defined max-retry count
 - [P2] Web UI
