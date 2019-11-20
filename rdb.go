@@ -55,10 +55,10 @@ func (r *rdb) push(msg *taskMessage) error {
 	return nil
 }
 
-// bpop blocks until there is a taskMessage available to be processed.
-// bpop returns immediately if there are already taskMessages waiting to be processed.
+// bpop blocks until there is a taskMessage available to be processed,
+// returns immediately if there are already tasks waiting to be processed.
 func (r *rdb) bpop(timeout time.Duration, keys ...string) (*taskMessage, error) {
-	res, err := r.client.BLPop(5*time.Second, keys...).Result() // NOTE: BLPOP needs to time out because if case a new queue is added.
+	res, err := r.client.BLPop(timeout, keys...).Result()
 	if err != nil {
 		if err != redis.Nil {
 			return nil, fmt.Errorf("command BLPOP %v %v failed: %v",
@@ -150,6 +150,12 @@ func (r *rdb) kill(msg *taskMessage) error {
 }
 
 // listQueues returns the list of all queues.
+// NOTE: Add default to the slice if empty because
+// BLPOP will error out if empty list is passed.
 func (r *rdb) listQueues() []string {
-	return r.client.SMembers(allQueues).Val()
+	queues := r.client.SMembers(allQueues).Val()
+	if len(queues) == 0 {
+		queues = append(queues, queuePrefix+"default")
+	}
+	return queues
 }

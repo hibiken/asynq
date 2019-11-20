@@ -62,6 +62,7 @@ func (m *manager) start() {
 func (m *manager) processTasks() {
 	// pull message out of the queue and process it
 	// TODO(hibiken): sort the list of queues in order of priority
+	// NOTE: BLPOP needs to timeout in case a new queue is added.
 	msg, err := m.rdb.bpop(5*time.Second, m.rdb.listQueues()...)
 	if err != nil {
 		switch err {
