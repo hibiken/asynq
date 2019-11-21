@@ -13,7 +13,7 @@ type Launcher struct {
 	running bool
 	mu      sync.Mutex
 
-	poller *poller
+	poller    *poller
 	processor *processor
 }
 
@@ -24,7 +24,7 @@ func NewLauncher(poolSize int, opt *RedisOpt) *Launcher {
 	poller := newPoller(rdb, 5*time.Second, []string{scheduled, retry})
 	processor := newProcessor(rdb, poolSize, nil)
 	return &Launcher{
-		poller:  poller,
+		poller:    poller,
 		processor: processor,
 	}
 }
