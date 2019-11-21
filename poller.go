@@ -32,8 +32,7 @@ func newPoller(rdb *rdb, avgInterval time.Duration, zsets []string) *poller {
 }
 
 func (p *poller) terminate() {
-	// send a signal to the manager goroutine to stop
-	// processing tasks from the queue.
+	// Signal the poller goroutine to stop polling.
 	p.done <- struct{}{}
 }
 
@@ -47,29 +46,27 @@ func (p *poller) start() {
 				fmt.Println("------------------------------------")
 				return
 			default:
-				p.enqueue()
+				p.exec()
 				time.Sleep(p.avgInterval)
 			}
 		}
 	}()
 }
 
-func (p *poller) enqueue() {
+func (p *poller) exec() {
 	for _, zset := range p.zsets {
 		// Get next items in the queue with scores (time to execute) <= now.
 		now := time.Now().Unix()
-		fmt.Printf("[DEBUG] polling ZSET %q\n", zset)
-		msgs, err := p.rdb.zRangeByScore(zset,
-			&redis.ZRangeBy{Min: "-inf", Max: strconv.Itoa(int(now))})
+		msgs, err := p.rdb.zRangeByScore(zset, &redis.ZRangeBy{Min: "-inf", Max: strconv.Itoa(int(now))})
 		if err != nil {
 			log.Printf("radis command ZRANGEBYSCORE failed: %v\n", err)
 			continue
 		}
+		fmt.Printf("[DEBUG] got %d tasks from %q\n", len(msgs), zset)
 
 		for _, m := range msgs {
 			if err := p.rdb.move(zset, m); err != nil {
-				log.Printf("could not move task %+v to queue %q: %v",
-					m, m.Queue, err)
+				log.Printf("could not move task %+v to queue %q: %v", m, m.Queue, err)
 				continue
 			}
 		}

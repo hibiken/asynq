@@ -31,8 +31,7 @@ func newProcessor(rdb *rdb, numWorkers int, handler TaskHandler) *processor {
 }
 
 func (p *processor) terminate() {
-	// send a signal to the processor goroutine to stop
-	// processing tasks from the queue.
+	// Signal he processor goroutine to stop processing tasks from the queue.
 	p.done <- struct{}{}
 
 	fmt.Println("--- Waiting for all workers to finish ---")

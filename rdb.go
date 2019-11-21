@@ -67,12 +67,12 @@ func (r *rdb) bpop(timeout time.Duration, keys ...string) (*taskMessage, error) 
 		return nil, errQueuePopTimeout
 	}
 	q, data := res[0], res[1]
-	fmt.Printf("perform task %v from %s\n", data, q)
 	var msg taskMessage
 	err = json.Unmarshal([]byte(data), &msg)
 	if err != nil {
 		return nil, errDeserializeTask
 	}
+	fmt.Printf("[DEBUG] perform task %+v from %s\n", msg, q)
 	return &msg, nil
 }
 
@@ -92,7 +92,6 @@ func (r *rdb) zadd(zset string, zscore float64, msg *taskMessage) error {
 
 func (r *rdb) zRangeByScore(key string, opt *redis.ZRangeBy) ([]*taskMessage, error) {
 	jobs, err := r.client.ZRangeByScore(key, opt).Result()
-	fmt.Printf("len(jobs) = %d\n", len(jobs))
 	if err != nil {
 		return nil, fmt.Errorf("command ZRANGEBYSCORE %s %v failed: %v", key, opt, err)
 	}
