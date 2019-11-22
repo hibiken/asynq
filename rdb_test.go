@@ -51,7 +51,7 @@ func TestPush(t *testing.T) {
 	}
 }
 
-func TestBPopImmediateReturn(t *testing.T) {
+func TestDequeueImmediateReturn(t *testing.T) {
 	r := setup()
 	msg := &taskMessage{
 		Type:  "GenerateCSVExport",
@@ -60,19 +60,31 @@ func TestBPopImmediateReturn(t *testing.T) {
 	}
 	r.push(msg)
 
-	res, err := r.bpop(time.Second, "asynq:queues:csv")
+	res, err := r.dequeue(time.Second, "asynq:queues:csv")
 	if err != nil {
 		t.Fatalf("r.bpop() failed: %v", err)
 	}
+
 	if !cmp.Equal(res, msg) {
 		t.Errorf("cmp.Equal(res, msg) = %t, want %t", false, true)
 	}
+	jobs := client.SMembers(inProgress).Val()
+	if len(jobs) != 1 {
+		t.Fatalf("len(jobs) = %d, want %d", len(jobs), 1)
+	}
+	var tm taskMessage
+	if err := json.Unmarshal([]byte(jobs[0]), &tm); err != nil {
+		t.Fatalf("json.Marshal() failed: %v", err)
+	}
+	if diff := cmp.Diff(res, &tm); diff != "" {
+		t.Errorf("cmp.Diff(res, tm) = %s", diff)
+	}
 }
 
-func TestBPopTimeout(t *testing.T) {
+func TestDequeueTimeout(t *testing.T) {
 	r := setup()
 
-	_, err := r.bpop(time.Second, "asynq:queues:default")
+	_, err := r.dequeue(time.Second, "asynq:queues:default")
 	if err != errQueuePopTimeout {
 		t.Errorf("err = %v, want %v", err, errQueuePopTimeout)
 	}

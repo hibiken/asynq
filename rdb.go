@@ -13,11 +13,12 @@ import (
 
 // Redis keys
 const (
-	queuePrefix = "asynq:queues:"   // LIST
-	allQueues   = "asynq:queues"    // SET
-	scheduled   = "asynq:scheduled" // ZSET
-	retry       = "asynq:retry"     // ZSET
-	dead        = "asynq:dead"      // ZSET
+	queuePrefix = "asynq:queues:"     // LIST
+	allQueues   = "asynq:queues"      // SET
+	scheduled   = "asynq:scheduled"   // ZSET
+	retry       = "asynq:retry"       // ZSET
+	dead        = "asynq:dead"        // ZSET
+	inProgress  = "asynq:in_progress" // SET
 )
 
 var (
@@ -55,18 +56,22 @@ func (r *rdb) push(msg *taskMessage) error {
 	return nil
 }
 
-// bpop blocks until there is a taskMessage available to be processed,
-// returns immediately if there are already tasks waiting to be processed.
-func (r *rdb) bpop(timeout time.Duration, keys ...string) (*taskMessage, error) {
+// dequeue blocks until there is a taskMessage available to be processed,
+// once available, it adds the task to "in progress" set and returns the task.
+func (r *rdb) dequeue(timeout time.Duration, keys ...string) (*taskMessage, error) {
+	// TODO(hibiken): Make BLPOP & SADD atomic.
 	res, err := r.client.BLPop(timeout, keys...).Result()
 	if err != nil {
 		if err != redis.Nil {
-			return nil, fmt.Errorf("command BLPOP %v %v failed: %v",
-				timeout, keys, err)
+			return nil, fmt.Errorf("command BLPOP %v %v failed: %v", timeout, keys, err)
 		}
 		return nil, errQueuePopTimeout
 	}
 	q, data := res[0], res[1]
+	err = r.client.SAdd(inProgress, data).Err()
+	if err != nil {
+		return nil, fmt.Errorf("command SADD %q %v failed: %v", inProgress, data, err)
+	}
 	var msg taskMessage
 	err = json.Unmarshal([]byte(data), &msg)
 	if err != nil {
@@ -74,6 +79,18 @@ func (r *rdb) bpop(timeout time.Duration, keys ...string) (*taskMessage, error) 
 	}
 	fmt.Printf("[DEBUG] perform task %+v from %s\n", msg, q)
 	return &msg, nil
+}
+
+func (r *rdb) srem(key string, msg *taskMessage) error {
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("could not encode task into JSON: %v", err)
+	}
+	err = r.client.SRem(key, string(bytes)).Err()
+	if err != nil {
+		return fmt.Errorf("command SREM %s %s failed: %v", key, string(bytes), err)
+	}
+	return nil
 }
 
 // zadd adds the taskMessage to the specified zset (sorted set) with the given score.
