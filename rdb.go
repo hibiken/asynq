@@ -9,16 +9,18 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
+	"github.com/google/uuid"
 )
 
 // Redis keys
 const (
-	queuePrefix = "asynq:queues:"     // LIST
-	allQueues   = "asynq:queues"      // SET
-	scheduled   = "asynq:scheduled"   // ZSET
-	retry       = "asynq:retry"       // ZSET
-	dead        = "asynq:dead"        // ZSET
-	inProgress  = "asynq:in_progress" // SET
+	queuePrefix     = "asynq:queues:"     // LIST - asynq:queues:<qname>
+	allQueues       = "asynq:queues"      // SET
+	scheduled       = "asynq:scheduled"   // ZSET
+	retry           = "asynq:retry"       // ZSET
+	dead            = "asynq:dead"        // ZSET
+	inProgress      = "asynq:in_progress" // SET
+	heartbeatPrefix = "asynq:heartbeat:"  // STRING - asynq:heartbeat:<taskID>
 )
 
 var (
@@ -141,6 +143,24 @@ func (r *rdb) move(from string, msg *taskMessage) error {
 			// Add back to zfrom?
 			return fmt.Errorf("could not push task %v from %q: %v", msg, msg.Queue, err)
 		}
+	}
+	return nil
+}
+
+func (r *rdb) heartbeat(id uuid.UUID, timestamp time.Time) error {
+	key := heartbeatPrefix + id.String()
+	err := r.client.Set(key, timestamp, 0).Err() // zero expiration means no expiration
+	if err != nil {
+		return fmt.Errorf("command SET %s %v failed: %v", key, timestamp, err)
+	}
+	return nil
+}
+
+func (r *rdb) clearHeartbeat(id uuid.UUID) error {
+	key := heartbeatPrefix + id.String()
+	err := r.client.Del(key).Err()
+	if err != nil {
+		return fmt.Errorf("command DEL %s failed: %v", key, err)
 	}
 	return nil
 }
