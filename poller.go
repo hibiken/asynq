@@ -36,6 +36,7 @@ func (p *poller) terminate() {
 	p.done <- struct{}{}
 }
 
+// start starts the "poller" goroutine.
 func (p *poller) start() {
 	go func() {
 		for {
@@ -65,6 +66,7 @@ func (p *poller) exec() {
 		fmt.Printf("[DEBUG] got %d tasks from %q\n", len(msgs), zset)
 
 		for _, m := range msgs {
+			// TODO(hibiken): Make this move operation atomic.
 			if err := p.rdb.move(zset, m); err != nil {
 				log.Printf("could not move task %+v to queue %q: %v", m, m.Queue, err)
 				continue

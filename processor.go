@@ -29,7 +29,7 @@ func newProcessor(rdb *rdb, numWorkers int, handler TaskHandler) *processor {
 }
 
 func (p *processor) terminate() {
-	// Signal he processor goroutine to stop processing tasks from the queue.
+	// Signal the processor goroutine to stop processing tasks from the queue.
 	p.done <- struct{}{}
 
 	fmt.Println("--- Waiting for all workers to finish ---")
@@ -57,10 +57,11 @@ func (p *processor) start() {
 }
 
 func (p *processor) exec() {
-	// pull message out of the queue and process it
+	const timeout = 5 * time.Second
+	// pull a task out of the queue and process it
 	// TODO(hibiken): sort the list of queues in order of priority
 	// NOTE: BLPOP needs to timeout in case a new queue is added.
-	msg, err := p.rdb.bpop(5*time.Second, p.rdb.listQueues()...)
+	msg, err := p.rdb.bpop(timeout, p.rdb.listQueues()...)
 	if err != nil {
 		switch err {
 		case errQueuePopTimeout:

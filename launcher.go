@@ -54,6 +54,7 @@ func (l *Launcher) Stop() {
 		return
 	}
 	l.running = false
+	l.processor.handler = nil
 
 	l.poller.terminate()
 	l.processor.terminate()
