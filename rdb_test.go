@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 )
 
 var client *redis.Client
@@ -28,6 +29,7 @@ func setup() *rdb {
 func TestPush(t *testing.T) {
 	r := setup()
 	msg := &taskMessage{
+		ID:    uuid.New(),
 		Type:  "sendEmail",
 		Queue: "default",
 		Retry: 10,
@@ -54,6 +56,7 @@ func TestPush(t *testing.T) {
 func TestDequeueImmediateReturn(t *testing.T) {
 	r := setup()
 	msg := &taskMessage{
+		ID:    uuid.New(),
 		Type:  "GenerateCSVExport",
 		Queue: "csv",
 		Retry: 10,

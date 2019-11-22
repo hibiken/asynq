@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
+	"github.com/google/uuid"
 )
 
 // Client is an interface for scheduling tasks.
@@ -20,6 +21,7 @@ func NewClient(opt *RedisOpt) *Client {
 // Process enqueues the task to be performed at a given time.
 func (c *Client) Process(task *Task, executeAt time.Time) error {
 	msg := &taskMessage{
+		ID:      uuid.New(),
 		Type:    task.Type,
 		Payload: task.Payload,
 		Queue:   "default",

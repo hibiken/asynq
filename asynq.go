@@ -1,5 +1,7 @@
 package asynq
 
+import "github.com/google/uuid"
+
 /*
 TODOs:
 - [P0] Write tests
@@ -26,11 +28,16 @@ type Task struct {
 // taskMessage is an internal representation of a task with additional metadata fields.
 // This data gets written in redis.
 type taskMessage struct {
-	// fields from type Task
+	//-------- Task fields --------
+
 	Type    string
 	Payload map[string]interface{}
 
-	//------- metadata fields ----------
+	//-------- metadata fields --------
+
+	// unique identifier for each task
+	ID uuid.UUID
+
 	// queue name this message should be enqueued to
 	Queue string
 
