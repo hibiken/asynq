@@ -63,7 +63,7 @@ func TestDequeueImmediateReturn(t *testing.T) {
 	}
 	r.push(msg)
 
-	res, err := r.dequeue(time.Second, "asynq:queues:csv")
+	res, err := r.dequeue("asynq:queues:csv", time.Second)
 	if err != nil {
 		t.Fatalf("r.bpop() failed: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestDequeueImmediateReturn(t *testing.T) {
 	if !cmp.Equal(res, msg) {
 		t.Errorf("cmp.Equal(res, msg) = %t, want %t", false, true)
 	}
-	jobs := client.SMembers(inProgress).Val()
+	jobs := client.LRange(inProgress, 0, -1).Val()
 	if len(jobs) != 1 {
 		t.Fatalf("len(jobs) = %d, want %d", len(jobs), 1)
 	}
@@ -87,7 +87,7 @@ func TestDequeueImmediateReturn(t *testing.T) {
 func TestDequeueTimeout(t *testing.T) {
 	r := setup()
 
-	_, err := r.dequeue(time.Second, "asynq:queues:default")
+	_, err := r.dequeue("asynq:queues:default", time.Second)
 	if err != errQueuePopTimeout {
 		t.Errorf("err = %v, want %v", err, errQueuePopTimeout)
 	}
