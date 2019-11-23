@@ -171,3 +171,16 @@ func (r *rdb) listQueues() []string {
 	}
 	return queues
 }
+
+// moveAll moves all tasks from src list to dst list.
+func (r *rdb) moveAll(src, dst string) error {
+	// TODO(hibiken): Lua script
+	txf := func(tx *redis.Tx) error {
+		length := tx.LLen(src).Val()
+		for i := 0; i < int(length); i++ {
+			tx.RPopLPush(src, dst)
+		}
+		return nil
+	}
+	return r.client.Watch(txf, src)
+}

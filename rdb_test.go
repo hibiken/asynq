@@ -2,6 +2,7 @@ package asynq
 
 import (
 	"encoding/json"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -11,6 +12,10 @@ import (
 )
 
 var client *redis.Client
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 // setup connects to a redis database and flush all keys
 // before returning an instance of rdb.
@@ -26,14 +31,18 @@ func setup() *rdb {
 	return newRDB(client)
 }
 
+func randomTask(taskType, qname string) *taskMessage {
+	return &taskMessage{
+		ID:    uuid.New(),
+		Type:  taskType,
+		Queue: qname,
+		Retry: rand.Intn(100),
+	}
+}
+
 func TestPush(t *testing.T) {
 	r := setup()
-	msg := &taskMessage{
-		ID:    uuid.New(),
-		Type:  "sendEmail",
-		Queue: "default",
-		Retry: 10,
-	}
+	msg := randomTask("send_email", "default")
 
 	err := r.push(msg)
 	if err != nil {
@@ -55,12 +64,7 @@ func TestPush(t *testing.T) {
 
 func TestDequeueImmediateReturn(t *testing.T) {
 	r := setup()
-	msg := &taskMessage{
-		ID:    uuid.New(),
-		Type:  "GenerateCSVExport",
-		Queue: "csv",
-		Retry: 10,
-	}
+	msg := randomTask("export_csv", "csv")
 	r.push(msg)
 
 	res, err := r.dequeue("asynq:queues:csv", time.Second)
@@ -90,5 +94,35 @@ func TestDequeueTimeout(t *testing.T) {
 	_, err := r.dequeue("asynq:queues:default", time.Second)
 	if err != errQueuePopTimeout {
 		t.Errorf("err = %v, want %v", err, errQueuePopTimeout)
+	}
+}
+
+func TestMoveAll(t *testing.T) {
+	r := setup()
+	seed := []*taskMessage{
+		randomTask("send_email", "default"),
+		randomTask("export_csv", "csv"),
+		randomTask("sync_stuff", "sync"),
+	}
+	for _, task := range seed {
+		bytes, err := json.Marshal(task)
+		if err != nil {
+			t.Errorf("json.Marhsal() failed: %v", err)
+		}
+		if err := client.LPush(inProgress, string(bytes)).Err(); err != nil {
+			t.Errorf("LPUSH %q %s failed: %v", inProgress, string(bytes), err)
+		}
+	}
+
+	err := r.moveAll(inProgress, defaultQueue)
+	if err != nil {
+		t.Errorf("moveAll failed: %v", err)
+	}
+
+	if l := client.LLen(inProgress).Val(); l != 0 {
+		t.Errorf("LLEN %q = %d, want 0", inProgress, l)
+	}
+	if l := client.LLen(defaultQueue).Val(); int(l) != len(seed) {
+		t.Errorf("LLEN %q = %d, want %d", defaultQueue, l, len(seed))
 	}
 }

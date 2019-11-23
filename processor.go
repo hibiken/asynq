@@ -41,6 +41,9 @@ func (p *processor) terminate() {
 }
 
 func (p *processor) start() {
+	// NOTE: The call to "restore" needs to complete before starting
+	// the processor goroutine.
+	p.restore()
 	go func() {
 		for {
 			select {
@@ -91,4 +94,13 @@ func (p *processor) exec() {
 			retryTask(p.rdb, msg, err)
 		}
 	}(task)
+}
+
+// restore moves all tasks from "in-progress" back to queue
+// to restore all unfinished tasks.
+func (p *processor) restore() {
+	err := p.rdb.moveAll(inProgress, defaultQueue)
+	if err != nil {
+		log.Printf("[SERVER ERROR] could not move tasks from %q to %q\n", inProgress, defaultQueue)
+	}
 }
