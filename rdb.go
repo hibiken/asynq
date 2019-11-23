@@ -49,7 +49,7 @@ func (r *rdb) push(msg *taskMessage) error {
 		return fmt.Errorf("command SADD %q %q failed: %v",
 			allQueues, qname, err)
 	}
-	err = r.client.RPush(qname, string(bytes)).Err()
+	err = r.client.LPush(qname, string(bytes)).Err()
 	if err != nil {
 		return fmt.Errorf("command RPUSH %q %q failed: %v",
 			qname, string(bytes), err)
@@ -60,8 +60,8 @@ func (r *rdb) push(msg *taskMessage) error {
 // dequeue blocks until there is a taskMessage available to be processed,
 // once available, it adds the task to "in progress" set and returns the task.
 func (r *rdb) dequeue(timeout time.Duration, keys ...string) (*taskMessage, error) {
-	// TODO(hibiken): Make BLPOP & SADD atomic.
-	res, err := r.client.BLPop(timeout, keys...).Result()
+	// TODO(hibiken): Make BRPOP & SADD atomic.
+	res, err := r.client.BRPop(timeout, keys...).Result()
 	if err != nil {
 		if err != redis.Nil {
 			return nil, fmt.Errorf("command BLPOP %v %v failed: %v", timeout, keys, err)
