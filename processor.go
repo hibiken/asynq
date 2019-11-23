@@ -41,6 +41,9 @@ func (p *processor) terminate() {
 }
 
 func (p *processor) start() {
+	// NOTE: The call to "restore" needs to complete before starting
+	// the processor goroutine.
+	p.restore()
 	go func() {
 		for {
 			select {
@@ -59,11 +62,10 @@ func (p *processor) start() {
 // exec pulls a task out of the queue and starts a worker goroutine to
 // process the task.
 func (p *processor) exec() {
-	// NOTE: BLPOP needs to timeout to avoid blocking forever
+	// NOTE: dequeue needs to timeout to avoid blocking forever
 	// in case of a program shutdown or additon of a new queue.
 	const timeout = 5 * time.Second
-	// TODO(hibiken): sort the list of queues in order of priority
-	msg, err := p.rdb.dequeue(timeout, p.rdb.listQueues()...)
+	msg, err := p.rdb.dequeue(defaultQueue, timeout)
 	if err != nil {
 		switch err {
 		case errQueuePopTimeout:
@@ -81,34 +83,24 @@ func (p *processor) exec() {
 	task := &Task{Type: msg.Type, Payload: msg.Payload}
 	p.sema <- struct{}{} // acquire token
 	go func(task *Task) {
-		quit := make(chan struct{}) // channel to signal heartbeat goroutine
 		defer func() {
-			quit <- struct{}{}
-			if err := p.rdb.srem(inProgress, msg); err != nil {
-				log.Printf("[SERVER ERROR] SREM failed: %v\n", err)
-			}
-			if err := p.rdb.clearHeartbeat(msg.ID); err != nil {
-				log.Printf("[SERVER ERROR] DEL heartbeat failed: %v\n", err)
+			if err := p.rdb.lrem(inProgress, msg); err != nil {
+				log.Printf("[SERVER ERROR] LREM failed: %v\n", err)
 			}
 			<-p.sema // release token
-		}()
-		// start "heartbeat" goroutine
-		go func() {
-			ticker := time.NewTicker(5 * time.Second)
-			for {
-				select {
-				case <-quit:
-					return
-				case t := <-ticker.C:
-					if err := p.rdb.heartbeat(msg.ID, t); err != nil {
-						log.Printf("[ERROR] heartbeat failed for %v at %v: %v", msg.ID, t, err)
-					}
-				}
-			}
 		}()
 		err := p.handler(task) // TODO(hibiken): maybe also handle panic?
 		if err != nil {
 			retryTask(p.rdb, msg, err)
 		}
 	}(task)
+}
+
+// restore moves all tasks from "in-progress" back to queue
+// to restore all unfinished tasks.
+func (p *processor) restore() {
+	err := p.rdb.moveAll(inProgress, defaultQueue)
+	if err != nil {
+		log.Printf("[SERVER ERROR] could not move tasks from %q to %q\n", inProgress, defaultQueue)
+	}
 }

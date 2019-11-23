@@ -9,18 +9,17 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
-	"github.com/google/uuid"
 )
 
 // Redis keys
 const (
-	queuePrefix     = "asynq:queues:"     // LIST - asynq:queues:<qname>
-	allQueues       = "asynq:queues"      // SET
-	scheduled       = "asynq:scheduled"   // ZSET
-	retry           = "asynq:retry"       // ZSET
-	dead            = "asynq:dead"        // ZSET
-	inProgress      = "asynq:in_progress" // SET
-	heartbeatPrefix = "asynq:heartbeat:"  // STRING - asynq:heartbeat:<taskID>
+	queuePrefix  = "asynq:queues:"         // LIST - asynq:queues:<qname>
+	defaultQueue = queuePrefix + "default" // LIST
+	allQueues    = "asynq:queues"          // SET
+	scheduled    = "asynq:scheduled"       // ZSET
+	retry        = "asynq:retry"           // ZSET
+	dead         = "asynq:dead"            // ZSET
+	inProgress   = "asynq:in_progress"     // SET
 )
 
 var (
@@ -50,7 +49,7 @@ func (r *rdb) push(msg *taskMessage) error {
 		return fmt.Errorf("command SADD %q %q failed: %v",
 			allQueues, qname, err)
 	}
-	err = r.client.RPush(qname, string(bytes)).Err()
+	err = r.client.LPush(qname, string(bytes)).Err()
 	if err != nil {
 		return fmt.Errorf("command RPUSH %q %q failed: %v",
 			qname, string(bytes), err)
@@ -59,38 +58,33 @@ func (r *rdb) push(msg *taskMessage) error {
 }
 
 // dequeue blocks until there is a taskMessage available to be processed,
-// once available, it adds the task to "in progress" set and returns the task.
-func (r *rdb) dequeue(timeout time.Duration, keys ...string) (*taskMessage, error) {
-	// TODO(hibiken): Make BLPOP & SADD atomic.
-	res, err := r.client.BLPop(timeout, keys...).Result()
+// once available, it adds the task to "in progress" list and returns the task.
+func (r *rdb) dequeue(qname string, timeout time.Duration) (*taskMessage, error) {
+	data, err := r.client.BRPopLPush(qname, inProgress, timeout).Result()
 	if err != nil {
 		if err != redis.Nil {
-			return nil, fmt.Errorf("command BLPOP %v %v failed: %v", timeout, keys, err)
+			return nil, fmt.Errorf("command BRPOPLPUSH %q %q %v failed: %v", qname, inProgress, timeout, err)
 		}
 		return nil, errQueuePopTimeout
-	}
-	q, data := res[0], res[1]
-	err = r.client.SAdd(inProgress, data).Err()
-	if err != nil {
-		return nil, fmt.Errorf("command SADD %q %v failed: %v", inProgress, data, err)
 	}
 	var msg taskMessage
 	err = json.Unmarshal([]byte(data), &msg)
 	if err != nil {
 		return nil, errDeserializeTask
 	}
-	fmt.Printf("[DEBUG] perform task %+v from %s\n", msg, q)
+	fmt.Printf("[DEBUG] perform task %+v from %s\n", msg, qname)
 	return &msg, nil
 }
 
-func (r *rdb) srem(key string, msg *taskMessage) error {
+func (r *rdb) lrem(key string, msg *taskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not encode task into JSON: %v", err)
 	}
-	err = r.client.SRem(key, string(bytes)).Err()
+	// NOTE: count ZERO means "remove all elements equal to val"
+	err = r.client.LRem(key, 0, string(bytes)).Err()
 	if err != nil {
-		return fmt.Errorf("command SREM %s %s failed: %v", key, string(bytes), err)
+		return fmt.Errorf("command LREM %s 0 %s failed: %v", key, string(bytes), err)
 	}
 	return nil
 }
@@ -147,24 +141,6 @@ func (r *rdb) move(from string, msg *taskMessage) error {
 	return nil
 }
 
-func (r *rdb) heartbeat(id uuid.UUID, timestamp time.Time) error {
-	key := heartbeatPrefix + id.String()
-	err := r.client.Set(key, timestamp, 0).Err() // zero expiration means no expiration
-	if err != nil {
-		return fmt.Errorf("command SET %s %v failed: %v", key, timestamp, err)
-	}
-	return nil
-}
-
-func (r *rdb) clearHeartbeat(id uuid.UUID) error {
-	key := heartbeatPrefix + id.String()
-	err := r.client.Del(key).Err()
-	if err != nil {
-		return fmt.Errorf("command DEL %s failed: %v", key, err)
-	}
-	return nil
-}
-
 const maxDeadTask = 100
 const deadExpirationInDays = 90
 
@@ -194,4 +170,17 @@ func (r *rdb) listQueues() []string {
 		queues = append(queues, queuePrefix+"default")
 	}
 	return queues
+}
+
+// moveAll moves all tasks from src list to dst list.
+func (r *rdb) moveAll(src, dst string) error {
+	// TODO(hibiken): Lua script
+	txf := func(tx *redis.Tx) error {
+		length := tx.LLen(src).Val()
+		for i := 0; i < int(length); i++ {
+			tx.RPopLPush(src, dst)
+		}
+		return nil
+	}
+	return r.client.Watch(txf, src)
 }
