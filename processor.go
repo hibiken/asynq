@@ -81,30 +81,11 @@ func (p *processor) exec() {
 	task := &Task{Type: msg.Type, Payload: msg.Payload}
 	p.sema <- struct{}{} // acquire token
 	go func(task *Task) {
-		quit := make(chan struct{}) // channel to signal heartbeat goroutine
 		defer func() {
-			quit <- struct{}{}
 			if err := p.rdb.srem(inProgress, msg); err != nil {
 				log.Printf("[SERVER ERROR] SREM failed: %v\n", err)
 			}
-			if err := p.rdb.clearHeartbeat(msg.ID); err != nil {
-				log.Printf("[SERVER ERROR] DEL heartbeat failed: %v\n", err)
-			}
 			<-p.sema // release token
-		}()
-		// start "heartbeat" goroutine
-		go func() {
-			ticker := time.NewTicker(5 * time.Second)
-			for {
-				select {
-				case <-quit:
-					return
-				case t := <-ticker.C:
-					if err := p.rdb.heartbeat(msg.ID, t); err != nil {
-						log.Printf("[ERROR] heartbeat failed for %v at %v: %v", msg.ID, t, err)
-					}
-				}
-			}
 		}()
 		err := p.handler(task) // TODO(hibiken): maybe also handle panic?
 		if err != nil {
