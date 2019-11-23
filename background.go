@@ -1,6 +1,8 @@
 package asynq
 
 import (
+	"os"
+	"os/signal"
 	"sync"
 	"time"
 
@@ -32,8 +34,22 @@ func NewBackground(numWorkers int, opt *RedisOpt) *Background {
 // TaskHandler handles a given task and reports any error.
 type TaskHandler func(*Task) error
 
-// Start starts the background-task processing.
-func (bg *Background) Start(handler TaskHandler) {
+// Run starts the background-task processing and blocks until
+// an os signal to exit the program is received. Once it receives
+// a signal, it gracefully shuts down all pending workers and other
+// goroutines to process the tasks.
+func (bg *Background) Run(handler TaskHandler) {
+	bg.start(handler)
+	defer bg.stop()
+
+	// Wait for a signal to exit.
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, os.Kill)
+	<-sigs
+}
+
+// starts the background-task processing.
+func (bg *Background) start(handler TaskHandler) {
 	bg.mu.Lock()
 	defer bg.mu.Unlock()
 	if bg.running {
@@ -46,8 +62,8 @@ func (bg *Background) Start(handler TaskHandler) {
 	bg.processor.start()
 }
 
-// Stop stops the background-task processing.
-func (bg *Background) Stop() {
+// stops the background-task processing.
+func (bg *Background) stop() {
 	bg.mu.Lock()
 	defer bg.mu.Unlock()
 	if !bg.running {
