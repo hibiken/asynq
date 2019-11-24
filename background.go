@@ -11,9 +11,8 @@ import (
 
 // Background is a top-level entity for the background-task processing.
 type Background struct {
-	// running indicates whether processor and poller are both running.
-	running bool
 	mu      sync.Mutex
+	running bool
 
 	poller    *poller
 	processor *processor
