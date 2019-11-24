@@ -124,6 +124,7 @@ func (r *rdb) zRangeByScore(key string, opt *redis.ZRangeBy) ([]*taskMessage, er
 
 // move moves taskMessage from zfrom to the specified queue.
 func (r *rdb) move(from string, msg *taskMessage) error {
+	// TODO(hibiken): Lua script, make this atomic.
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return errSerializeTask
