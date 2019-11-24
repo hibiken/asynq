@@ -55,6 +55,7 @@ func (bg *Background) start(handler TaskHandler) {
 	if bg.running {
 		return
 	}
+
 	bg.running = true
 	bg.processor.handler = handler
 
@@ -69,9 +70,10 @@ func (bg *Background) stop() {
 	if !bg.running {
 		return
 	}
-	bg.running = false
-	bg.processor.handler = nil
 
 	bg.poller.terminate()
 	bg.processor.terminate()
+
+	bg.processor.handler = nil
+	bg.running = false
 }
