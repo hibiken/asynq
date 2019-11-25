@@ -14,7 +14,11 @@ type Client struct {
 
 // NewClient creates and returns a new client.
 func NewClient(opt *RedisOpt) *Client {
-	client := redis.NewClient(&redis.Options{Addr: opt.Addr, Password: opt.Password})
+	client := redis.NewClient(&redis.Options{
+		Addr:     opt.Addr,
+		Password: opt.Password,
+		DB:       opt.DB,
+	})
 	return &Client{rdb: newRDB(client)}
 }
 

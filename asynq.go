@@ -54,4 +54,7 @@ type taskMessage struct {
 type RedisOpt struct {
 	Addr     string
 	Password string
+
+	// DB specifies which redis database to select.
+	DB int
 }
