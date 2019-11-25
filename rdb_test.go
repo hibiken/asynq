@@ -126,3 +126,40 @@ func TestMoveAll(t *testing.T) {
 		t.Errorf("LLEN %q = %d, want %d", defaultQueue, l, len(seed))
 	}
 }
+
+func TestForward(t *testing.T) {
+	r := setup()
+	t1 := randomTask("send_email", defaultQueue)
+	t2 := randomTask("generate_csv", defaultQueue)
+	secondAgo := time.Now().Add(-time.Second) // use timestamp for the past to avoid advancing time
+	json1, err := json.Marshal(t1)
+	if err != nil {
+		t.Fatalf("json.Marshal() failed: %v", err)
+	}
+	json2, err := json.Marshal(t2)
+	if err != nil {
+		t.Fatalf("json.Marshal() failed: %v", err)
+	}
+	client.ZAdd(scheduled, &redis.Z{
+		Member: string(json1),
+		Score:  float64(secondAgo.Unix()),
+	}, &redis.Z{
+		Member: string(json2),
+		Score:  float64(secondAgo.Unix()),
+	})
+
+	err = r.forward(scheduled)
+	if err != nil {
+		t.Fatalf("r.forward() failed: %v", err)
+	}
+
+	if c := client.ZCard(scheduled).Val(); c != 0 {
+		t.Errorf("ZCARD %q = %d, want 0", scheduled, c)
+	}
+	if l := client.LLen(defaultQueue).Val(); l != 2 {
+		t.Errorf("LLEN %q = %d, want 2", defaultQueue, l)
+	}
+	if c := client.SCard(allQueues).Val(); c != 1 {
+		t.Errorf("SCARD %q = %d, want 1", allQueues, c)
+	}
+}

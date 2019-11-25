@@ -185,3 +185,21 @@ func (r *rdb) moveAll(src, dst string) error {
 	}
 	return r.client.Watch(txf, src)
 }
+
+// forward moves all tasks with a score less than the current unix time
+// from the given zset to the default queue.
+func (r *rdb) forward(from string) error {
+	script := redis.NewScript(`
+	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+	for _, msg in ipairs(msgs) do
+		redis.call("ZREM", KEYS[1], msg)
+		redis.call("SADD", KEYS[2], KEYS[3])
+		redis.call("LPUSH", KEYS[3], msg)
+	end
+	return msgs
+	`)
+	now := float64(time.Now().Unix())
+	res, err := script.Run(r.client, []string{from, allQueues, defaultQueue}, now).Result()
+	fmt.Printf("[DEBUGGING LUA} %v, %v\n", res, err)
+	return err
+}
