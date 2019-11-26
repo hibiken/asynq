@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"time"
 
@@ -28,7 +27,7 @@ var (
 	errDeserializeTask = errors.New("could not decode task message from json")
 )
 
-// rdb encapsulates the interaction with redis server.
+// rdb encapsulates the interactions with redis server.
 type rdb struct {
 	client *redis.Client
 }
@@ -37,28 +36,28 @@ func newRDB(client *redis.Client) *rdb {
 	return &rdb{client}
 }
 
-// push enqueues the task to queue.
-func (r *rdb) push(msg *taskMessage) error {
+// enqueue inserts the given task to the end of the queue.
+// It also adds the queue name to the "all-queues" list.
+func (r *rdb) enqueue(msg *taskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not encode task into JSON: %v", err)
 	}
 	qname := queuePrefix + msg.Queue
-	err = r.client.SAdd(allQueues, qname).Err()
+	pipe := r.client.Pipeline()
+	pipe.SAdd(allQueues, qname)
+	pipe.LPush(qname, string(bytes))
+	_, err = pipe.Exec()
 	if err != nil {
-		return fmt.Errorf("command SADD %q %q failed: %v",
-			allQueues, qname, err)
-	}
-	err = r.client.LPush(qname, string(bytes)).Err()
-	if err != nil {
-		return fmt.Errorf("command RPUSH %q %q failed: %v",
-			qname, string(bytes), err)
+		return fmt.Errorf("could not enqueue task %+v to %q: %v",
+			msg, qname, err)
 	}
 	return nil
 }
 
-// dequeue blocks until there is a taskMessage available to be processed,
-// once available, it adds the task to "in progress" list and returns the task.
+// dequeue blocks until there is a task available to be processed,
+// once a task is available, it adds the task to "in progress" list
+// and returns the task.
 func (r *rdb) dequeue(qname string, timeout time.Duration) (*taskMessage, error) {
 	data, err := r.client.BRPopLPush(qname, inProgress, timeout).Result()
 	if err != nil {
@@ -103,45 +102,6 @@ func (r *rdb) zadd(zset string, zscore float64, msg *taskMessage) error {
 	return nil
 }
 
-func (r *rdb) zRangeByScore(key string, opt *redis.ZRangeBy) ([]*taskMessage, error) {
-	jobs, err := r.client.ZRangeByScore(key, opt).Result()
-	if err != nil {
-		return nil, fmt.Errorf("command ZRANGEBYSCORE %s %v failed: %v", key, opt, err)
-	}
-	var msgs []*taskMessage
-	for _, j := range jobs {
-		fmt.Printf("[debug] j = %v\n", j)
-		var msg taskMessage
-		err = json.Unmarshal([]byte(j), &msg)
-		if err != nil {
-			log.Printf("[WARNING] could not unmarshal task data %s: %v\n", j, err)
-			continue
-		}
-		msgs = append(msgs, &msg)
-	}
-	return msgs, nil
-}
-
-// move moves taskMessage from zfrom to the specified queue.
-func (r *rdb) move(from string, msg *taskMessage) error {
-	// TODO(hibiken): Lua script, make this atomic.
-	bytes, err := json.Marshal(msg)
-	if err != nil {
-		return errSerializeTask
-	}
-	if r.client.ZRem(from, string(bytes)).Val() > 0 {
-		err = r.push(msg)
-		if err != nil {
-			log.Printf("[SERVERE ERROR] could not push task to queue %q: %v\n",
-				msg.Queue, err)
-			// TODO(hibiken): Handle this error properly.
-			// Add back to zfrom?
-			return fmt.Errorf("could not push task %v from %q: %v", msg, msg.Queue, err)
-		}
-	}
-	return nil
-}
-
 const maxDeadTask = 100
 const deadExpirationInDays = 90
 
@@ -175,13 +135,32 @@ func (r *rdb) listQueues() []string {
 
 // moveAll moves all tasks from src list to dst list.
 func (r *rdb) moveAll(src, dst string) error {
-	// TODO(hibiken): Lua script
-	txf := func(tx *redis.Tx) error {
-		length := tx.LLen(src).Val()
-		for i := 0; i < int(length); i++ {
-			tx.RPopLPush(src, dst)
-		}
-		return nil
-	}
-	return r.client.Watch(txf, src)
+	script := redis.NewScript(`
+	local len = redis.call("LLEN", KEYS[1])
+	for i = len, 1, -1 do
+		redis.call("RPOPLPUSH", KEYS[1], KEYS[2])
+	end
+	return len
+	`)
+	_, err := script.Run(r.client, []string{src, dst}).Result()
+	return err
+}
+
+// forward moves all tasks with a score less than the current unix time
+// from the given zset to the default queue.
+// TODO(hibiken): Find a better method name that reflects what this does.
+func (r *rdb) forward(from string) error {
+	script := redis.NewScript(`
+	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+	for _, msg in ipairs(msgs) do
+		redis.call("ZREM", KEYS[1], msg)
+		redis.call("SADD", KEYS[2], KEYS[3])
+		redis.call("LPUSH", KEYS[3], msg)
+	end
+	return msgs
+	`)
+	now := float64(time.Now().Unix())
+	res, err := script.Run(r.client, []string{from, allQueues, defaultQueue}, now).Result()
+	fmt.Printf("[DEBUG] got %d tasks from %q\n", len(res.([]interface{})), from)
+	return err
 }

@@ -37,7 +37,7 @@ func (c *Client) Process(task *Task, executeAt time.Time) error {
 // enqueue pushes a given task to the specified queue.
 func (c *Client) enqueue(msg *taskMessage, executeAt time.Time) error {
 	if time.Now().After(executeAt) {
-		return c.rdb.push(msg)
+		return c.rdb.enqueue(msg)
 	}
 	return c.rdb.zadd(scheduled, float64(executeAt.Unix()), msg)
 }
