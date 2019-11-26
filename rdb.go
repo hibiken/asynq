@@ -199,7 +199,6 @@ func (r *rdb) forward(from string) error {
 	return msgs
 	`)
 	now := float64(time.Now().Unix())
-	res, err := script.Run(r.client, []string{from, allQueues, defaultQueue}, now).Result()
-	fmt.Printf("[DEBUGGING LUA} %v, %v\n", res, err)
+	_, err := script.Run(r.client, []string{from, allQueues, defaultQueue}, now).Result()
 	return err
 }
