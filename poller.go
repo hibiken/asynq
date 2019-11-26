@@ -3,10 +3,7 @@ package asynq
 import (
 	"fmt"
 	"log"
-	"strconv"
 	"time"
-
-	"github.com/go-redis/redis/v7"
 )
 
 type poller struct {
@@ -56,21 +53,8 @@ func (p *poller) start() {
 
 func (p *poller) exec() {
 	for _, zset := range p.zsets {
-		// Get next items in the queue with scores (time to execute) <= now.
-		now := time.Now().Unix()
-		msgs, err := p.rdb.zRangeByScore(zset, &redis.ZRangeBy{Min: "-inf", Max: strconv.Itoa(int(now))})
-		if err != nil {
-			log.Printf("radis command ZRANGEBYSCORE failed: %v\n", err)
-			continue
-		}
-		fmt.Printf("[DEBUG] got %d tasks from %q\n", len(msgs), zset)
-
-		for _, m := range msgs {
-			// TODO(hibiken): Make this move operation atomic.
-			if err := p.rdb.move(zset, m); err != nil {
-				log.Printf("could not move task %+v to queue %q: %v", m, m.Queue, err)
-				continue
-			}
+		if err := p.rdb.forward(zset); err != nil {
+			log.Printf("[ERROR] could not forward scheduled tasks from %q: %v", zset, err)
 		}
 	}
 }
