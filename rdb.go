@@ -135,15 +135,15 @@ func (r *rdb) listQueues() []string {
 
 // moveAll moves all tasks from src list to dst list.
 func (r *rdb) moveAll(src, dst string) error {
-	// TODO(hibiken): Lua script
-	txf := func(tx *redis.Tx) error {
-		length := tx.LLen(src).Val()
-		for i := 0; i < int(length); i++ {
-			tx.RPopLPush(src, dst)
-		}
-		return nil
-	}
-	return r.client.Watch(txf, src)
+	script := redis.NewScript(`
+	local len = redis.call("LLEN", KEYS[1])
+	for i = len, 1, -1 do
+		redis.call("RPOPLPUSH", KEYS[1], KEYS[2])
+	end
+	return len
+	`)
+	_, err := script.Run(r.client, []string{src, dst}).Result()
+	return err
 }
 
 // forward moves all tasks with a score less than the current unix time
