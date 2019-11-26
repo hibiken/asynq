@@ -42,7 +42,7 @@ func randomTask(taskType, qname string, payload map[string]interface{}) *taskMes
 	}
 }
 
-func TestPush(t *testing.T) {
+func TestEnqueue(t *testing.T) {
 	r := setup(t)
 	tests := []struct {
 		msg *taskMessage
@@ -53,7 +53,7 @@ func TestPush(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		err := r.push(tc.msg)
+		err := r.enqueue(tc.msg)
 		if err != nil {
 			t.Error(err)
 		}
@@ -83,7 +83,7 @@ func TestPush(t *testing.T) {
 func TestDequeueImmediateReturn(t *testing.T) {
 	r := setup(t)
 	msg := randomTask("export_csv", "csv", nil)
-	r.push(msg)
+	r.enqueue(msg)
 
 	res, err := r.dequeue("asynq:queues:csv", time.Second)
 	if err != nil {

@@ -37,8 +37,9 @@ func newRDB(client *redis.Client) *rdb {
 	return &rdb{client}
 }
 
-// push enqueues the task to queue.
-func (r *rdb) push(msg *taskMessage) error {
+// enqueue inserts the given task to the end of the queue.
+// It also adds the queue name to the "all-queues" list.
+func (r *rdb) enqueue(msg *taskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not encode task into JSON: %v", err)
@@ -130,7 +131,7 @@ func (r *rdb) move(from string, msg *taskMessage) error {
 		return errSerializeTask
 	}
 	if r.client.ZRem(from, string(bytes)).Val() > 0 {
-		err = r.push(msg)
+		err = r.enqueue(msg)
 		if err != nil {
 			log.Printf("[SERVERE ERROR] could not push task to queue %q: %v\n",
 				msg.Queue, err)
