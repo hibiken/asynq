@@ -88,7 +88,7 @@ func (p *processor) exec() {
 			}
 			<-p.sema // release token
 		}()
-		err := p.handler(task) // TODO(hibiken): maybe also handle panic?
+		err := perform(p.handler, task)
 		if err != nil {
 			retryTask(p.rdb, msg, err)
 		}
@@ -102,4 +102,16 @@ func (p *processor) restore() {
 	if err != nil {
 		log.Printf("[ERROR] could not move tasks from %q to %q\n", inProgress, defaultQueue)
 	}
+}
+
+// perform calls the handler with the given task.
+// If the call returns without panic, it simply returns the value,
+// otherwise, it recovers from panic and returns an error.
+func perform(handler TaskHandler, task *Task) (err error) {
+	defer func() {
+		if x := recover(); x != nil {
+			err = fmt.Errorf("panic: %v", x)
+		}
+	}()
+	return handler(task)
 }
