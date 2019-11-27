@@ -29,15 +29,16 @@ func newProcessor(rdb *rdb, numWorkers int, handler TaskHandler) *processor {
 }
 
 func (p *processor) terminate() {
+	fmt.Print("Processor shutting down...")
 	// Signal the processor goroutine to stop processing tasks from the queue.
 	p.done <- struct{}{}
 
-	fmt.Println("--- Waiting for all workers to finish ---")
+	fmt.Print("Waiting for all workers to finish...")
 	for i := 0; i < cap(p.sema); i++ {
 		// block until all workers have released the token
 		p.sema <- struct{}{}
 	}
-	fmt.Println("--- All workers have finished! ----")
+	fmt.Println("Done")
 }
 
 func (p *processor) start() {
@@ -48,9 +49,7 @@ func (p *processor) start() {
 		for {
 			select {
 			case <-p.done:
-				fmt.Println("-------------[Processor]---------------")
-				fmt.Println("Processor shutting down...")
-				fmt.Println("-------------------------------------")
+				fmt.Println("Done")
 				return
 			default:
 				p.exec()

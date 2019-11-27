@@ -29,6 +29,7 @@ func newPoller(rdb *rdb, avgInterval time.Duration, zsets []string) *poller {
 }
 
 func (p *poller) terminate() {
+	fmt.Print("Poller shutting down...")
 	// Signal the poller goroutine to stop polling.
 	p.done <- struct{}{}
 }
@@ -39,9 +40,7 @@ func (p *poller) start() {
 		for {
 			select {
 			case <-p.done:
-				fmt.Println("-------------[Poller]---------------")
-				fmt.Println("Poller shutting down...")
-				fmt.Println("------------------------------------")
+				fmt.Println("Done")
 				return
 			default:
 				p.exec()
