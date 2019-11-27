@@ -54,7 +54,7 @@ func (p *poller) start() {
 func (p *poller) exec() {
 	for _, zset := range p.zsets {
 		if err := p.rdb.forward(zset); err != nil {
-			log.Printf("[ERROR] could not forward scheduled tasks from %q: %v", zset, err)
+			log.Printf("[ERROR] could not forward scheduled tasks from %q: %v\n", zset, err)
 		}
 	}
 }

@@ -12,7 +12,7 @@ func retryTask(rdb *rdb, msg *taskMessage, err error) {
 	if msg.Retried >= msg.Retry {
 		fmt.Println("[DEBUG] Retry exhausted!!!")
 		if err := rdb.kill(msg); err != nil {
-			log.Printf("[SERVER ERROR] could not add task %+v to 'dead' set\n", err)
+			log.Printf("[ERROR] could not add task %+v to 'dead' set\n", err)
 		}
 		return
 	}
@@ -22,7 +22,7 @@ func retryTask(rdb *rdb, msg *taskMessage, err error) {
 	msg.ErrorMsg = err.Error()
 	if err := rdb.zadd(retry, float64(retryAt.Unix()), msg); err != nil {
 		// TODO(hibiken): Not sure how to handle this error
-		log.Printf("[SEVERE ERROR] could not add msg %+v to 'retry' set: %v\n", msg, err)
+		log.Printf("[ERROR] could not add msg %+v to 'retry' set: %v\n", msg, err)
 		return
 	}
 }

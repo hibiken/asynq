@@ -72,10 +72,10 @@ func (p *processor) exec() {
 			// timed out, this is a normal behavior.
 			return
 		case errDeserializeTask:
-			log.Println("[Servere Error] could not parse json encoded message")
+			log.Println("[Error] could not parse json encoded message")
 			return
 		default:
-			log.Printf("[Servere Error] unexpected error while pulling message out of queues: %v\n", err)
+			log.Printf("[Error] unexpected error while pulling message out of queues: %v\n", err)
 			return
 		}
 	}
@@ -85,7 +85,7 @@ func (p *processor) exec() {
 	go func(task *Task) {
 		defer func() {
 			if err := p.rdb.lrem(inProgress, msg); err != nil {
-				log.Printf("[SERVER ERROR] LREM failed: %v\n", err)
+				log.Printf("[ERROR] could not remove %+v from %q: %v\n", msg, inProgress, err)
 			}
 			<-p.sema // release token
 		}()
@@ -101,6 +101,6 @@ func (p *processor) exec() {
 func (p *processor) restore() {
 	err := p.rdb.moveAll(inProgress, defaultQueue)
 	if err != nil {
-		log.Printf("[SERVER ERROR] could not move tasks from %q to %q\n", inProgress, defaultQueue)
+		log.Printf("[ERROR] could not move tasks from %q to %q\n", inProgress, defaultQueue)
 	}
 }
