@@ -93,16 +93,17 @@ func (r *rdb) lrem(key string, msg *taskMessage) error {
 	return nil
 }
 
-// zadd adds the taskMessage to the specified zset (sorted set) with the given score.
-func (r *rdb) zadd(zset string, zscore float64, msg *taskMessage) error {
+// schedule adds the task to the zset to be processd at the specified time.
+func (r *rdb) schedule(zset string, processAt time.Time, msg *taskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not encode task into JSON: %v", err)
 	}
-	err = r.client.ZAdd(zset, &redis.Z{Member: string(bytes), Score: zscore}).Err()
+	score := float64(processAt.Unix())
+	err = r.client.ZAdd(zset, &redis.Z{Member: string(bytes), Score: score}).Err()
 	if err != nil {
 		return fmt.Errorf("command ZADD %s %.1f %s failed: %v",
-			zset, zscore, string(bytes), err)
+			zset, score, string(bytes), err)
 	}
 	return nil
 }

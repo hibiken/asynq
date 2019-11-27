@@ -20,7 +20,7 @@ func retryTask(rdb *rdb, msg *taskMessage, err error) {
 	fmt.Printf("[DEBUG] Retrying the task in %v\n", retryAt.Sub(time.Now()))
 	msg.Retried++
 	msg.ErrorMsg = err.Error()
-	if err := rdb.zadd(retry, float64(retryAt.Unix()), msg); err != nil {
+	if err := rdb.schedule(retry, retryAt, msg); err != nil {
 		// TODO(hibiken): Not sure how to handle this error
 		log.Printf("[ERROR] could not add msg %+v to 'retry' set: %v\n", msg, err)
 		return

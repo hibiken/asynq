@@ -17,7 +17,7 @@ func NewClient(opt *RedisOpt) *Client {
 }
 
 // Process enqueues the task to be performed at a given time.
-func (c *Client) Process(task *Task, executeAt time.Time) error {
+func (c *Client) Process(task *Task, processAt time.Time) error {
 	msg := &taskMessage{
 		ID:      uuid.New(),
 		Type:    task.Type,
@@ -25,13 +25,13 @@ func (c *Client) Process(task *Task, executeAt time.Time) error {
 		Queue:   "default",
 		Retry:   defaultMaxRetry,
 	}
-	return c.enqueue(msg, executeAt)
+	return c.enqueue(msg, processAt)
 }
 
 // enqueue pushes a given task to the specified queue.
-func (c *Client) enqueue(msg *taskMessage, executeAt time.Time) error {
-	if time.Now().After(executeAt) {
+func (c *Client) enqueue(msg *taskMessage, processAt time.Time) error {
+	if time.Now().After(processAt) {
 		return c.rdb.enqueue(msg)
 	}
-	return c.rdb.zadd(scheduled, float64(executeAt.Unix()), msg)
+	return c.rdb.schedule(scheduled, processAt, msg)
 }

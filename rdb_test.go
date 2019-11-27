@@ -2,6 +2,7 @@ package asynq
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"sort"
 	"testing"
@@ -261,6 +262,51 @@ func TestForward(t *testing.T) {
 		gotScheduled := r.client.ZRangeByScore(scheduled, &redis.ZRangeBy{Min: "-inf", Max: "+inf"}).Val()
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortStrOpt); diff != "" {
 			t.Errorf("%q has %d tasks, want %d tasks; (-want, +got)\n%s", scheduled, len(gotScheduled), len(tc.wantScheduled), diff)
+			continue
+		}
+	}
+}
+
+func TestSchedule(t *testing.T) {
+	r := setup(t)
+	tests := []struct {
+		msg       *taskMessage
+		processAt time.Time
+		zset      string
+	}{
+		{
+			randomTask("send_email", "default", map[string]interface{}{"subject": "hello"}),
+			time.Now().Add(15 * time.Minute),
+			scheduled,
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+
+		err := r.schedule(tc.zset, tc.processAt, tc.msg)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+
+		res, err := r.client.ZRangeWithScores(tc.zset, 0, -1).Result()
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+
+		desc := fmt.Sprintf("(*rdb).schedule(%q, %v, %v)", tc.zset, tc.processAt, tc.msg)
+		if len(res) != 1 {
+			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), tc.zset)
+			continue
+		}
+
+		if res[0].Score != float64(tc.processAt.Unix()) {
+			t.Errorf("%s inserted an item with score %f, want %f", desc, res[0].Score, float64(tc.processAt.Unix()))
 			continue
 		}
 	}
