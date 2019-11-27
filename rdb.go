@@ -32,7 +32,12 @@ type rdb struct {
 	client *redis.Client
 }
 
-func newRDB(client *redis.Client) *rdb {
+func newRDB(opt *RedisOpt) *rdb {
+	client := redis.NewClient(&redis.Options{
+		Addr:     opt.Addr,
+		Password: opt.Password,
+		DB:       opt.DB,
+	})
 	return &rdb{client}
 }
 

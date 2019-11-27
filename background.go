@@ -6,8 +6,6 @@ import (
 	"os/signal"
 	"sync"
 	"time"
-
-	"github.com/go-redis/redis/v7"
 )
 
 // Background is a top-level entity for the background-task processing.
@@ -21,12 +19,7 @@ type Background struct {
 
 // NewBackground returns a new Background instance.
 func NewBackground(numWorkers int, opt *RedisOpt) *Background {
-	client := redis.NewClient(&redis.Options{
-		Addr:     opt.Addr,
-		Password: opt.Password,
-		DB:       opt.DB,
-	})
-	rdb := newRDB(client)
+	rdb := newRDB(opt)
 	poller := newPoller(rdb, 5*time.Second, []string{scheduled, retry})
 	processor := newProcessor(rdb, numWorkers, nil)
 	return &Background{

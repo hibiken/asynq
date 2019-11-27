@@ -3,7 +3,6 @@ package asynq
 import (
 	"time"
 
-	"github.com/go-redis/redis/v7"
 	"github.com/google/uuid"
 )
 
@@ -14,12 +13,7 @@ type Client struct {
 
 // NewClient creates and returns a new client.
 func NewClient(opt *RedisOpt) *Client {
-	client := redis.NewClient(&redis.Options{
-		Addr:     opt.Addr,
-		Password: opt.Password,
-		DB:       opt.DB,
-	})
-	return &Client{rdb: newRDB(client)}
+	return &Client{rdb: newRDB(opt)}
 }
 
 // Process enqueues the task to be performed at a given time.
