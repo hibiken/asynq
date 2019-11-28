@@ -22,7 +22,7 @@ const (
 )
 
 var (
-	errQueuePopTimeout = errors.New("blocking queue pop operation timed out")
+	errDequeueTimeout  = errors.New("blocking dequeue operation timed out")
 	errSerializeTask   = errors.New("could not encode task message into json")
 	errDeserializeTask = errors.New("could not decode task message from json")
 )
@@ -65,11 +65,11 @@ func (r *rdb) enqueue(msg *taskMessage) error {
 // and returns the task.
 func (r *rdb) dequeue(qname string, timeout time.Duration) (*taskMessage, error) {
 	data, err := r.client.BRPopLPush(qname, inProgress, timeout).Result()
+	if err == redis.Nil {
+		return nil, errDequeueTimeout
+	}
 	if err != nil {
-		if err != redis.Nil {
-			return nil, fmt.Errorf("command BRPOPLPUSH %q %q %v failed: %v", qname, inProgress, timeout, err)
-		}
-		return nil, errQueuePopTimeout
+		return nil, fmt.Errorf("command BRPOPLPUSH %q %q %v failed: %v", qname, inProgress, timeout, err)
 	}
 	var msg taskMessage
 	err = json.Unmarshal([]byte(data), &msg)

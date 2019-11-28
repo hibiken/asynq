@@ -98,7 +98,7 @@ func TestDequeue(t *testing.T) {
 		inProgress int64 // length of "in-progress" tasks after dequeue
 	}{
 		{queued: []*taskMessage{t1}, want: t1, err: nil, inProgress: 1},
-		{queued: []*taskMessage{}, want: nil, err: errQueuePopTimeout, inProgress: 0},
+		{queued: []*taskMessage{}, want: nil, err: errDequeueTimeout, inProgress: 0},
 	}
 
 	for _, tc := range tests {

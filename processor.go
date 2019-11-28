@@ -34,8 +34,8 @@ func (p *processor) terminate() {
 	p.done <- struct{}{}
 
 	fmt.Print("Waiting for all workers to finish...")
+	// block until all workers have released the token
 	for i := 0; i < cap(p.sema); i++ {
-		// block until all workers have released the token
 		p.sema <- struct{}{}
 	}
 	fmt.Println("Done")
@@ -65,18 +65,13 @@ func (p *processor) exec() {
 	// in case of a program shutdown or additon of a new queue.
 	const timeout = 5 * time.Second
 	msg, err := p.rdb.dequeue(defaultQueue, timeout)
+	if err == errDequeueTimeout {
+		// timed out, this is a normal behavior.
+		return
+	}
 	if err != nil {
-		switch err {
-		case errQueuePopTimeout:
-			// timed out, this is a normal behavior.
-			return
-		case errDeserializeTask:
-			log.Println("[Error] could not parse json encoded message")
-			return
-		default:
-			log.Printf("[Error] unexpected error while pulling message out of queues: %v\n", err)
-			return
-		}
+		log.Printf("[ERROR] unexpected error while pulling a task out of queue: %v\n", err)
+		return
 	}
 
 	task := &Task{Type: msg.Type, Payload: msg.Payload}
