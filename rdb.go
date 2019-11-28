@@ -75,7 +75,8 @@ func (r *rdb) dequeue(qname string, timeout time.Duration) (*taskMessage, error)
 	return &msg, nil
 }
 
-func (r *rdb) lrem(key string, msg *taskMessage) error {
+// remove deletes all elements equal to msg from a redis list with the given key.
+func (r *rdb) remove(key string, msg *taskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
@@ -120,17 +121,6 @@ func (r *rdb) kill(msg *taskMessage) error {
 	pipe.ZRemRangeByRank(dead, 0, -maxDeadTask) // trim the set to 100
 	_, err = pipe.Exec()
 	return err
-}
-
-// listQueues returns the list of all queues.
-// NOTE: Add default to the slice if empty because
-// BLPOP will error out if empty list is passed.
-func (r *rdb) listQueues() []string {
-	queues := r.client.SMembers(allQueues).Val()
-	if len(queues) == 0 {
-		queues = append(queues, queuePrefix+"default")
-	}
-	return queues
 }
 
 // moveAll moves all tasks from src list to dst list.

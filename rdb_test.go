@@ -68,6 +68,7 @@ func TestEnqueue(t *testing.T) {
 		err := r.enqueue(tc.msg)
 		if err != nil {
 			t.Error(err)
+			continue
 		}
 		res := r.client.LRange(defaultQueue, 0, -1).Val()
 		if len(res) != 1 {
