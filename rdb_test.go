@@ -210,6 +210,52 @@ func TestRemove(t *testing.T) {
 
 		if diff := cmp.Diff(tc.final, got, sortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q after calling (*rdb).remove: (-want, +got):\n%s", defaultQueue, diff)
+			continue
+		}
+	}
+}
+
+func TestKill(t *testing.T) {
+	r := setup(t)
+	t1 := randomTask("send_email", "default", nil)
+
+	// TODO(hibiken): add test cases for trimming
+	tests := []struct {
+		initial []*taskMessage //  inital state of "dead" set
+		target  *taskMessage   // task to kill
+		want    []*taskMessage // final state of "dead" set
+	}{
+		{
+			initial: []*taskMessage{},
+			target:  t1,
+			want:    []*taskMessage{t1},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// set up initial state
+		for _, task := range tc.initial {
+			err := r.client.ZAdd(dead, &redis.Z{Member: mustMarshal(t, task), Score: float64(time.Now().Unix())}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := r.kill(tc.target)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+
+		actual := r.client.ZRange(dead, 0, -1).Val()
+		got := mustUnmarshalSlice(t, actual)
+		if diff := cmp.Diff(tc.want, got, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q after calling (*rdb).kill: (-want, +got):\n%s", dead, diff)
+			continue
 		}
 	}
 }
