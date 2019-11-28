@@ -23,6 +23,14 @@ var sortStrOpt = cmp.Transformer("SortStr", func(in []string) []string {
 	return out
 })
 
+var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*taskMessage) []*taskMessage {
+	out := append([]*taskMessage(nil), in...) // Copy input to avoid mutating it
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].ID.String() < out[j].ID.String()
+	})
+	return out
+})
+
 // setup connects to a redis database and flush all keys
 // before returning an instance of rdb.
 func setup(t *testing.T) *rdb {
@@ -46,6 +54,25 @@ func randomTask(taskType, qname string, payload map[string]interface{}) *taskMes
 		Retry:   rand.Intn(100),
 		Payload: make(map[string]interface{}),
 	}
+}
+
+func mustMarshal(t *testing.T, task *taskMessage) string {
+	t.Helper()
+	data, err := json.Marshal(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func mustUnmarshal(t *testing.T, data string) *taskMessage {
+	t.Helper()
+	var task taskMessage
+	err := json.Unmarshal([]byte(data), &task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &task
 }
 
 func TestEnqueue(t *testing.T) {
@@ -118,6 +145,64 @@ func TestDequeue(t *testing.T) {
 		}
 		if l := r.client.LLen(inProgress).Val(); l != tc.inProgress {
 			t.Errorf("LIST %q has length %d, want %d", inProgress, l, tc.inProgress)
+		}
+	}
+}
+
+func TestRemove(t *testing.T) {
+	r := setup(t)
+	t1 := randomTask("send_email", "default", nil)
+	t2 := randomTask("export_csv", "csv", nil)
+
+	tests := []struct {
+		initial []*taskMessage // initial state of the list
+		target  *taskMessage   // task to remove
+		final   []*taskMessage // final state of the list
+	}{
+		{
+			initial: []*taskMessage{t1, t2},
+			target:  t1,
+			final:   []*taskMessage{t2},
+		},
+		{
+			initial: []*taskMessage{t2},
+			target:  t1,
+			final:   []*taskMessage{t2},
+		},
+		{
+			initial: []*taskMessage{t1},
+			target:  t1,
+			final:   []*taskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// set up initial state
+		for _, task := range tc.initial {
+			err := r.client.LPush(defaultQueue, mustMarshal(t, task)).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := r.remove(defaultQueue, tc.target)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+
+		var got []*taskMessage
+		data := r.client.LRange(defaultQueue, 0, -1).Val()
+		for _, s := range data {
+			got = append(got, mustUnmarshal(t, s))
+		}
+
+		if diff := cmp.Diff(tc.final, got, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q after calling (*rdb).remove: (-want, +got):\n%s", defaultQueue, diff)
 		}
 	}
 }
