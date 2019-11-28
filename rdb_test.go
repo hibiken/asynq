@@ -17,12 +17,6 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-var sortStrOpt = cmp.Transformer("SortStr", func(in []string) []string {
-	out := append([]string(nil), in...) // Copy input to avoid mutating it
-	sort.Strings(out)
-	return out
-})
-
 var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*taskMessage) []*taskMessage {
 	out := append([]*taskMessage(nil), in...) // Copy input to avoid mutating it
 	sort.Slice(out, func(i, j int) bool {
@@ -75,6 +69,24 @@ func mustUnmarshal(t *testing.T, data string) *taskMessage {
 	return &task
 }
 
+func mustMarshalSlice(t *testing.T, tasks []*taskMessage) []string {
+	t.Helper()
+	var data []string
+	for _, task := range tasks {
+		data = append(data, mustMarshal(t, task))
+	}
+	return data
+}
+
+func mustUnmarshalSlice(t *testing.T, data []string) []*taskMessage {
+	t.Helper()
+	var tasks []*taskMessage
+	for _, s := range data {
+		tasks = append(tasks, mustUnmarshal(t, s))
+	}
+	return tasks
+}
+
 func TestEnqueue(t *testing.T) {
 	r := setup(t)
 	tests := []struct {
@@ -105,12 +117,7 @@ func TestEnqueue(t *testing.T) {
 		if !r.client.SIsMember(allQueues, defaultQueue).Val() {
 			t.Errorf("SISMEMBER %q %q = false, want true", allQueues, defaultQueue)
 		}
-		var persisted taskMessage
-		if err := json.Unmarshal([]byte(res[0]), &persisted); err != nil {
-			t.Error(err)
-			continue
-		}
-		if diff := cmp.Diff(*tc.msg, persisted); diff != "" {
+		if diff := cmp.Diff(*tc.msg, *mustUnmarshal(t, res[0])); diff != "" {
 			t.Errorf("persisted data differed from the original input (-want, +got)\n%s", diff)
 		}
 	}
@@ -212,42 +219,30 @@ func TestMoveAll(t *testing.T) {
 	t1 := randomTask("send_email", "default", nil)
 	t2 := randomTask("export_csv", "csv", nil)
 	t3 := randomTask("sync_stuff", "sync", nil)
-	json1, err := json.Marshal(t1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	json2, err := json.Marshal(t2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	json3, err := json.Marshal(t3)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	tests := []struct {
-		beforeSrc []string
-		beforeDst []string
-		afterSrc  []string
-		afterDst  []string
+		beforeSrc []*taskMessage
+		beforeDst []*taskMessage
+		afterSrc  []*taskMessage
+		afterDst  []*taskMessage
 	}{
 		{
-			beforeSrc: []string{string(json1), string(json2), string(json3)},
-			beforeDst: []string{},
-			afterSrc:  []string{},
-			afterDst:  []string{string(json1), string(json2), string(json3)},
+			beforeSrc: []*taskMessage{t1, t2, t3},
+			beforeDst: []*taskMessage{},
+			afterSrc:  []*taskMessage{},
+			afterDst:  []*taskMessage{t1, t2, t3},
 		},
 		{
-			beforeSrc: []string{},
-			beforeDst: []string{string(json1), string(json2), string(json3)},
-			afterSrc:  []string{},
-			afterDst:  []string{string(json1), string(json2), string(json3)},
+			beforeSrc: []*taskMessage{},
+			beforeDst: []*taskMessage{t1, t2, t3},
+			afterSrc:  []*taskMessage{},
+			afterDst:  []*taskMessage{t1, t2, t3},
 		},
 		{
-			beforeSrc: []string{string(json2), string(json3)},
-			beforeDst: []string{string(json1)},
-			afterSrc:  []string{},
-			afterDst:  []string{string(json1), string(json2), string(json3)},
+			beforeSrc: []*taskMessage{t2, t3},
+			beforeDst: []*taskMessage{t1},
+			afterSrc:  []*taskMessage{},
+			afterDst:  []*taskMessage{t1, t2, t3},
 		},
 	}
 
@@ -259,11 +254,11 @@ func TestMoveAll(t *testing.T) {
 		}
 		// seed src list.
 		for _, msg := range tc.beforeSrc {
-			r.client.LPush(inProgress, msg)
+			r.client.LPush(inProgress, mustMarshal(t, msg))
 		}
 		// seed dst list.
 		for _, msg := range tc.beforeDst {
-			r.client.LPush(defaultQueue, msg)
+			r.client.LPush(defaultQueue, mustMarshal(t, msg))
 		}
 
 		if err := r.moveAll(inProgress, defaultQueue); err != nil {
@@ -271,12 +266,14 @@ func TestMoveAll(t *testing.T) {
 			continue
 		}
 
-		gotSrc := r.client.LRange(inProgress, 0, -1).Val()
-		if diff := cmp.Diff(tc.afterSrc, gotSrc, sortStrOpt); diff != "" {
+		src := r.client.LRange(inProgress, 0, -1).Val()
+		gotSrc := mustUnmarshalSlice(t, src)
+		if diff := cmp.Diff(tc.afterSrc, gotSrc, sortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q (-want, +got)\n%s", inProgress, diff)
 		}
-		gotDst := r.client.LRange(defaultQueue, 0, -1).Val()
-		if diff := cmp.Diff(tc.afterDst, gotDst, sortStrOpt); diff != "" {
+		dst := r.client.LRange(defaultQueue, 0, -1).Val()
+		gotDst := mustUnmarshalSlice(t, dst)
+		if diff := cmp.Diff(tc.afterDst, gotDst, sortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q (-want, +got)\n%s", defaultQueue, diff)
 		}
 	}
@@ -286,42 +283,34 @@ func TestForward(t *testing.T) {
 	r := setup(t)
 	t1 := randomTask("send_email", defaultQueue, nil)
 	t2 := randomTask("generate_csv", defaultQueue, nil)
-	json1, err := json.Marshal(t1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	json2, err := json.Marshal(t2)
-	if err != nil {
-		t.Fatal(err)
-	}
 	secondAgo := time.Now().Add(-time.Second)
 	hourFromNow := time.Now().Add(time.Hour)
 
 	tests := []struct {
-		tasks         []*redis.Z // scheduled tasks with timestamp as a score
-		wantQueued    []string   // queue after calling forward
-		wantScheduled []string   // scheduled queue after calling forward
+		tasks         []*redis.Z     // scheduled tasks with timestamp as a score
+		wantQueued    []*taskMessage // queue after calling forward
+		wantScheduled []*taskMessage // scheduled queue after calling forward
 	}{
 		{
 			tasks: []*redis.Z{
-				&redis.Z{Member: string(json1), Score: float64(secondAgo.Unix())},
-				&redis.Z{Member: string(json2), Score: float64(secondAgo.Unix())}},
-			wantQueued:    []string{string(json1), string(json2)},
-			wantScheduled: []string{},
+				&redis.Z{Member: mustMarshal(t, t1), Score: float64(secondAgo.Unix())},
+				&redis.Z{Member: mustMarshal(t, t2), Score: float64(secondAgo.Unix())}},
+			wantQueued:    []*taskMessage{t1, t2},
+			wantScheduled: []*taskMessage{},
 		},
 		{
 			tasks: []*redis.Z{
-				&redis.Z{Member: string(json1), Score: float64(hourFromNow.Unix())},
-				&redis.Z{Member: string(json2), Score: float64(secondAgo.Unix())}},
-			wantQueued:    []string{string(json2)},
-			wantScheduled: []string{string(json1)},
+				&redis.Z{Member: mustMarshal(t, t1), Score: float64(hourFromNow.Unix())},
+				&redis.Z{Member: mustMarshal(t, t2), Score: float64(secondAgo.Unix())}},
+			wantQueued:    []*taskMessage{t2},
+			wantScheduled: []*taskMessage{t1},
 		},
 		{
 			tasks: []*redis.Z{
-				&redis.Z{Member: string(json1), Score: float64(hourFromNow.Unix())},
-				&redis.Z{Member: string(json2), Score: float64(hourFromNow.Unix())}},
-			wantQueued:    []string{},
-			wantScheduled: []string{string(json1), string(json2)},
+				&redis.Z{Member: mustMarshal(t, t1), Score: float64(hourFromNow.Unix())},
+				&redis.Z{Member: mustMarshal(t, t2), Score: float64(hourFromNow.Unix())}},
+			wantQueued:    []*taskMessage{},
+			wantScheduled: []*taskMessage{t1, t2},
 		},
 	}
 
@@ -335,18 +324,20 @@ func TestForward(t *testing.T) {
 			continue
 		}
 
-		err = r.forward(scheduled)
+		err := r.forward(scheduled)
 		if err != nil {
 			t.Errorf("(*rdb).forward(%q) = %v, want nil", scheduled, err)
 			continue
 		}
-		gotQueued := r.client.LRange(defaultQueue, 0, -1).Val()
-		if diff := cmp.Diff(tc.wantQueued, gotQueued, sortStrOpt); diff != "" {
+		queued := r.client.LRange(defaultQueue, 0, -1).Val()
+		gotQueued := mustUnmarshalSlice(t, queued)
+		if diff := cmp.Diff(tc.wantQueued, gotQueued, sortMsgOpt); diff != "" {
 			t.Errorf("%q has %d tasks, want %d tasks; (-want, +got)\n%s", defaultQueue, len(gotQueued), len(tc.wantQueued), diff)
 			continue
 		}
-		gotScheduled := r.client.ZRangeByScore(scheduled, &redis.ZRangeBy{Min: "-inf", Max: "+inf"}).Val()
-		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortStrOpt); diff != "" {
+		scheduled := r.client.ZRangeByScore(scheduled, &redis.ZRangeBy{Min: "-inf", Max: "+inf"}).Val()
+		gotScheduled := mustUnmarshalSlice(t, scheduled)
+		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
 			t.Errorf("%q has %d tasks, want %d tasks; (-want, +got)\n%s", scheduled, len(gotScheduled), len(tc.wantScheduled), diff)
 			continue
 		}
