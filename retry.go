@@ -1,7 +1,6 @@
 package asynq
 
 import (
-	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -9,20 +8,19 @@ import (
 )
 
 func retryTask(rdb *rdb, msg *taskMessage, err error) {
+	msg.ErrorMsg = err.Error()
 	if msg.Retried >= msg.Retry {
-		fmt.Println("[DEBUG] Retry exhausted!!!")
+		log.Printf("[WARN] Retry exhausted for task(Type: %q, ID: %v)\n", msg.Type, msg.ID)
 		if err := rdb.kill(msg); err != nil {
-			log.Printf("[ERROR] could not add task %+v to 'dead' set\n", err)
+			log.Printf("[ERROR] Could not add task %+v to 'dead'\n", err)
 		}
 		return
 	}
 	retryAt := time.Now().Add(delaySeconds((msg.Retried)))
-	fmt.Printf("[DEBUG] Retrying the task in %v\n", retryAt.Sub(time.Now()))
+	log.Printf("[INFO] Retrying task(Type: %q, ID: %v) in %v\n", msg.Type, msg.ID, retryAt.Sub(time.Now()))
 	msg.Retried++
-	msg.ErrorMsg = err.Error()
 	if err := rdb.schedule(retry, retryAt, msg); err != nil {
-		// TODO(hibiken): Not sure how to handle this error
-		log.Printf("[ERROR] could not add msg %+v to 'retry' set: %v\n", msg, err)
+		log.Printf("[ERROR] Could not add msg %+v to 'retry': %v\n", msg, err)
 		return
 	}
 }
