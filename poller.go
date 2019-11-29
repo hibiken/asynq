@@ -1,7 +1,6 @@
 package asynq
 
 import (
-	"fmt"
 	"log"
 	"time"
 )
@@ -29,7 +28,7 @@ func newPoller(rdb *rdb, avgInterval time.Duration, zsets []string) *poller {
 }
 
 func (p *poller) terminate() {
-	fmt.Print("Poller shutting down...")
+	log.Println("[INFO] Poller shutting down...")
 	// Signal the poller goroutine to stop polling.
 	p.done <- struct{}{}
 }
@@ -40,7 +39,7 @@ func (p *poller) start() {
 		for {
 			select {
 			case <-p.done:
-				fmt.Println("Done")
+				log.Println("[INFO] Poller done.")
 				return
 			default:
 				p.exec()

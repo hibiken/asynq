@@ -2,6 +2,7 @@ package asynq
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -43,7 +44,8 @@ func (bg *Background) Run(handler TaskHandler) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, os.Kill)
 	<-sigs
-	fmt.Printf("\nStarting graceful shutdown...\n")
+	fmt.Println()
+	log.Println("[INFO] Starting graceful shutdown...")
 }
 
 // starts the background-task processing.
