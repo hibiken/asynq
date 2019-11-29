@@ -11,8 +11,13 @@ type processor struct {
 
 	handler TaskHandler
 
+	// timeout for blocking dequeue operation.
+	// dequeue needs to timeout to avoid blocking forever
+	// in case of a program shutdown or additon of a new queue.
+	dequeueTimeout time.Duration
+
 	// sema is a counting semaphore to ensure the number of active workers
-	// does not exceed the limit
+	// does not exceed the limit.
 	sema chan struct{}
 
 	// channel to communicate back to the long running "processor" goroutine.
@@ -21,13 +26,15 @@ type processor struct {
 
 func newProcessor(rdb *rdb, numWorkers int, handler TaskHandler) *processor {
 	return &processor{
-		rdb:     rdb,
-		handler: handler,
-		sema:    make(chan struct{}, numWorkers),
-		done:    make(chan struct{}),
+		rdb:            rdb,
+		handler:        handler,
+		dequeueTimeout: 5 * time.Second,
+		sema:           make(chan struct{}, numWorkers),
+		done:           make(chan struct{}),
 	}
 }
 
+// NOTE: once terminated, processor cannot be re-started.
 func (p *processor) terminate() {
 	log.Println("[INFO] Processor shutting down...")
 	// Signal the processor goroutine to stop processing tasks from the queue.
@@ -61,10 +68,7 @@ func (p *processor) start() {
 // exec pulls a task out of the queue and starts a worker goroutine to
 // process the task.
 func (p *processor) exec() {
-	// NOTE: dequeue needs to timeout to avoid blocking forever
-	// in case of a program shutdown or additon of a new queue.
-	const timeout = 5 * time.Second
-	msg, err := p.rdb.dequeue(defaultQueue, timeout)
+	msg, err := p.rdb.dequeue(defaultQueue, p.dequeueTimeout)
 	if err == errDequeueTimeout {
 		// timed out, this is a normal behavior.
 		return

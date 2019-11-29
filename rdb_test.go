@@ -25,6 +25,14 @@ var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*taskMessage) []*taskMessa
 	return out
 })
 
+var sortTaskOpt = cmp.Transformer("SortMsg", func(in []*Task) []*Task {
+	out := append([]*Task(nil), in...) // Copy input to avoid mutating it
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Type < out[j].Type
+	})
+	return out
+})
+
 // setup connects to a redis database and flush all keys
 // before returning an instance of rdb.
 func setup(t *testing.T) *rdb {
