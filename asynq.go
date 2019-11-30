@@ -4,7 +4,7 @@ import "github.com/google/uuid"
 
 /*
 TODOs:
-- [P0] README + Other docs
+- [P0] Go docs + CONTRIBUTION.md
 - [P1] Add Support for multiple queues and priority
 - [P1] User defined max-retry count
 - [P2] Web UI
