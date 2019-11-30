@@ -14,6 +14,7 @@ type Background struct {
 	mu      sync.Mutex
 	running bool
 
+	rdb       *rdb
 	poller    *poller
 	processor *processor
 }
@@ -24,6 +25,7 @@ func NewBackground(numWorkers int, opt *RedisOpt) *Background {
 	poller := newPoller(rdb, 5*time.Second, []string{scheduled, retry})
 	processor := newProcessor(rdb, numWorkers, nil)
 	return &Background{
+		rdb:       rdb,
 		poller:    poller,
 		processor: processor,
 	}
@@ -74,6 +76,7 @@ func (bg *Background) stop() {
 	bg.poller.terminate()
 	bg.processor.terminate()
 
+	bg.rdb.client.Close()
 	bg.processor.handler = nil
 	bg.running = false
 }
