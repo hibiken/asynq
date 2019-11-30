@@ -4,8 +4,8 @@ import "github.com/google/uuid"
 
 /*
 TODOs:
-- [P0] Write tests
-- [P0] Make all moving operations atomic
+- [P0] CI
+- [P0] README + Other docs
 - [P1] Add Support for multiple queues and priority
 - [P1] User defined max-retry count
 - [P2] Web UI
