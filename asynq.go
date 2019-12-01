@@ -1,6 +1,10 @@
 package asynq
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 /*
 TODOs:
@@ -56,4 +60,14 @@ type RedisConfig struct {
 
 	// DB specifies which redis database to select.
 	DB int
+}
+
+// Stats represents a state of queues at a certain time.
+type Stats struct {
+	Queued     int
+	InProgress int
+	Scheduled  int
+	Retry      int
+	Dead       int
+	Timestamp  time.Time
 }

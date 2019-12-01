@@ -154,3 +154,24 @@ func (r *rdb) forward(from string) error {
 	fmt.Printf("[DEBUG] got %d tasks from %q\n", len(res.([]interface{})), from)
 	return err
 }
+
+func (r *rdb) currentStats() (*Stats, error) {
+	pipe := r.client.Pipeline()
+	qlen := pipe.LLen(defaultQueue)
+	plen := pipe.LLen(inProgress)
+	slen := pipe.ZCard(scheduled)
+	rlen := pipe.ZCard(retry)
+	dlen := pipe.ZCard(dead)
+	_, err := pipe.Exec()
+	if err != nil {
+		return nil, err
+	}
+	return &Stats{
+		Queued:     int(qlen.Val()),
+		InProgress: int(plen.Val()),
+		Scheduled:  int(slen.Val()),
+		Retry:      int(rlen.Val()),
+		Dead:       int(dlen.Val()),
+		Timestamp:  time.Now(),
+	}, nil
+}
