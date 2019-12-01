@@ -175,3 +175,54 @@ func (r *rdb) currentStats() (*Stats, error) {
 		Timestamp:  time.Now(),
 	}, nil
 }
+
+func (r *rdb) listEnqueued() ([]*taskMessage, error) {
+	return r.rangeList(defaultQueue)
+}
+
+func (r *rdb) listInProgress() ([]*taskMessage, error) {
+	return r.rangeList(inProgress)
+}
+
+func (r *rdb) listScheduled() ([]*taskMessage, error) {
+	return r.rangeZSet(scheduled)
+}
+
+func (r *rdb) listRetry() ([]*taskMessage, error) {
+	return r.rangeZSet(retry)
+}
+
+func (r *rdb) listDead() ([]*taskMessage, error) {
+	return r.rangeZSet(dead)
+}
+
+func (r *rdb) rangeList(key string) ([]*taskMessage, error) {
+	data, err := r.client.LRange(key, 0, -1).Result()
+	if err != nil {
+		return nil, err
+	}
+	return r.toMessageSlice(data), nil
+}
+
+func (r *rdb) rangeZSet(key string) ([]*taskMessage, error) {
+	data, err := r.client.ZRange(key, 0, -1).Result()
+	if err != nil {
+		return nil, err
+	}
+	return r.toMessageSlice(data), nil
+}
+
+// toMessageSlice convers json strings to a slice of task messages.
+func (r *rdb) toMessageSlice(data []string) []*taskMessage {
+	var msgs []*taskMessage
+	for _, s := range data {
+		var msg taskMessage
+		err := json.Unmarshal([]byte(s), &msg)
+		if err != nil {
+			// bad data; ignore and continue
+			continue
+		}
+		msgs = append(msgs, &msg)
+	}
+	return msgs
+}
