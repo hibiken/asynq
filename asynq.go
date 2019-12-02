@@ -71,3 +71,49 @@ type Stats struct {
 	Dead       int
 	Timestamp  time.Time
 }
+
+// EnqueuedTask is a task in a queue and is ready to be processed.
+// This is read only and used for inspection purpose.
+type EnqueuedTask struct {
+	ID      uuid.UUID
+	Type    string
+	Payload map[string]interface{}
+}
+
+// InProgressTask is a task that's currently being processed.
+// This is read only and used for inspection purpose.
+type InProgressTask struct {
+	ID      uuid.UUID
+	Type    string
+	Payload map[string]interface{}
+}
+
+// ScheduledTask is a task that's scheduled to be processed in the future.
+// This is read only and used for inspection purpose.
+type ScheduledTask struct {
+	ID        uuid.UUID
+	Type      string
+	Payload   map[string]interface{}
+	ProcessAt time.Time
+}
+
+// RetryTask is a task that's in retry queue because worker failed to process the task.
+// This is read only and used for inspection purpose.
+type RetryTask struct {
+	ID      uuid.UUID
+	Type    string
+	Payload map[string]interface{}
+	// TODO(hibiken): add LastRetry time.Time
+	NextRetry time.Time
+	ErrorMsg  string
+}
+
+// DeadTask is a task in that has exhausted all retries.
+// This is read only and used for inspection purpose.
+type DeadTask struct {
+	ID      uuid.UUID
+	Type    string
+	Payload map[string]interface{}
+	// TODO(hibiken): add LastRetry time.Time
+	ErrorMsg string
+}
