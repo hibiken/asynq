@@ -184,16 +184,89 @@ func (r *rdb) listInProgress() ([]*taskMessage, error) {
 	return r.rangeList(inProgress)
 }
 
-func (r *rdb) listScheduled() ([]*taskMessage, error) {
-	return r.rangeZSet(scheduled)
+func (r *rdb) listScheduled() ([]*ScheduledTask, error) {
+	data, err := r.client.ZRangeWithScores(scheduled, 0, -1).Result()
+	if err != nil {
+		return nil, err
+	}
+	var tasks []*ScheduledTask
+	for _, z := range data {
+		s, ok := z.Member.(string)
+		if !ok {
+			continue // bad data, ignore and continue
+		}
+		var msg taskMessage
+		err := json.Unmarshal([]byte(s), &msg)
+		if err != nil {
+			continue // bad data, ignore and continue
+		}
+		processAt := time.Unix(int64(z.Score), 0)
+		tasks = append(tasks, &ScheduledTask{
+			ID:        msg.ID,
+			Type:      msg.Type,
+			Payload:   msg.Payload,
+			ProcessAt: processAt,
+		})
+	}
+	return tasks, nil
 }
 
-func (r *rdb) listRetry() ([]*taskMessage, error) {
-	return r.rangeZSet(retry)
+func (r *rdb) listRetry() ([]*RetryTask, error) {
+	data, err := r.client.ZRangeWithScores(retry, 0, -1).Result()
+	if err != nil {
+		return nil, err
+	}
+	var tasks []*RetryTask
+	for _, z := range data {
+		s, ok := z.Member.(string)
+		if !ok {
+			continue // bad data, ignore and continue
+		}
+		var msg taskMessage
+		err := json.Unmarshal([]byte(s), &msg)
+		if err != nil {
+			continue // bad data, ignore and continue
+		}
+		processAt := time.Unix(int64(z.Score), 0)
+		tasks = append(tasks, &RetryTask{
+			ID:        msg.ID,
+			Type:      msg.Type,
+			Payload:   msg.Payload,
+			ErrorMsg:  msg.ErrorMsg,
+			Retry:     msg.Retry,
+			Retried:   msg.Retried,
+			ProcessAt: processAt,
+		})
+	}
+	return tasks, nil
 }
 
-func (r *rdb) listDead() ([]*taskMessage, error) {
-	return r.rangeZSet(dead)
+func (r *rdb) listDead() ([]*DeadTask, error) {
+	data, err := r.client.ZRangeWithScores(dead, 0, -1).Result()
+	if err != nil {
+		return nil, err
+	}
+	var tasks []*DeadTask
+	for _, z := range data {
+		s, ok := z.Member.(string)
+		if !ok {
+			continue // bad data, ignore and continue
+		}
+		var msg taskMessage
+		err := json.Unmarshal([]byte(s), &msg)
+		if err != nil {
+			continue // bad data, ignore and continue
+		}
+		lastFailedAt := time.Unix(int64(z.Score), 0)
+		tasks = append(tasks, &DeadTask{
+			ID:           msg.ID,
+			Type:         msg.Type,
+			Payload:      msg.Payload,
+			ErrorMsg:     msg.ErrorMsg,
+			LastFailedAt: lastFailedAt,
+		})
+	}
+	return tasks, nil
 }
 
 func (r *rdb) rangeList(key string) ([]*taskMessage, error) {

@@ -103,17 +103,19 @@ type RetryTask struct {
 	ID      uuid.UUID
 	Type    string
 	Payload map[string]interface{}
-	// TODO(hibiken): add LastRetry time.Time
-	NextRetry time.Time
+	// TODO(hibiken): add LastFailedAt time.Time
+	ProcessAt time.Time
 	ErrorMsg  string
+	Retried   int
+	Retry     int
 }
 
 // DeadTask is a task in that has exhausted all retries.
 // This is read only and used for inspection purpose.
 type DeadTask struct {
-	ID      uuid.UUID
-	Type    string
-	Payload map[string]interface{}
-	// TODO(hibiken): add LastRetry time.Time
-	ErrorMsg string
+	ID           uuid.UUID
+	Type         string
+	Payload      map[string]interface{}
+	LastFailedAt time.Time
+	ErrorMsg     string
 }
