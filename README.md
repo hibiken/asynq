@@ -31,22 +31,22 @@ func main() {
 
     t1 := &asynq.Task{
         Type: "send_welcome_email",
-        Payload: map[string]interface{
+        Payload: map[string]interface{}{
           "recipient_id": 1234,
         },
     }
 
     t2 := &asynq.Task{
         Type: "send_reminder_email",
-        Payload: map[string]interface{
+        Payload: map[string]interface{}{
           "recipient_id": 1234,
         },
     }
 
-    // send welcome email now.
+    // process the task immediately.
     client.Process(t1, time.Now())
 
-    // send reminder email 24 hours later.
+    // process the task 24 hours later.
     client.Process(t2, time.Now().Add(24 * time.Hour))
 }
 ```
@@ -62,6 +62,7 @@ func main() {
     bg.Run(handler)
 }
 
+// if handler returns an error or panics, the task will be retried after some delay.
 func handler(t *Task) error {
     switch t.Type {
         case "send_welcome_email":
