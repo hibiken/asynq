@@ -31,14 +31,33 @@ func NewBackground(numWorkers int, opt *RedisOpt) *Background {
 	}
 }
 
-// TaskHandler handles a given task and reports any error.
-type TaskHandler func(*Task) error
+// A Handler processes a task.
+//
+// ProcessTask should return nil if the processing of a task
+// is successful.
+//
+// If ProcessTask return a non-nil error or panics, the task
+// will be retried after delay.
+type Handler interface {
+	ProcessTask(*Task) error
+}
+
+// The HandlerFunc type is an adapter to allow the use of
+// ordinary functions as a Handler. If f is a function
+// with the appropriate signature, HandlerFunc(f) is a
+// Handler that calls f.
+type HandlerFunc func(*Task) error
+
+// ProcessTask calls fn(task)
+func (fn HandlerFunc) ProcessTask(task *Task) error {
+	return fn(task)
+}
 
 // Run starts the background-task processing and blocks until
 // an os signal to exit the program is received. Once it receives
 // a signal, it gracefully shuts down all pending workers and other
 // goroutines to process the tasks.
-func (bg *Background) Run(handler TaskHandler) {
+func (bg *Background) Run(handler Handler) {
 	bg.start(handler)
 	defer bg.stop()
 
@@ -51,7 +70,7 @@ func (bg *Background) Run(handler TaskHandler) {
 }
 
 // starts the background-task processing.
-func (bg *Background) start(handler TaskHandler) {
+func (bg *Background) start(handler Handler) {
 	bg.mu.Lock()
 	defer bg.mu.Unlock()
 	if bg.running {
