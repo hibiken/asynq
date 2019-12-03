@@ -59,7 +59,7 @@ func main() {
         Addr: "localhost:6379",
     })
 
-    bg.Run(handler)
+    bg.Run(asynq.HandlerFunc(handler))
 }
 
 // if handler returns an error or panics, the task will be retried after some delay.

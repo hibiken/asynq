@@ -9,7 +9,7 @@ import (
 type processor struct {
 	rdb *rdb
 
-	handler TaskHandler
+	handler Handler
 
 	// timeout for blocking dequeue operation.
 	// dequeue needs to timeout to avoid blocking forever
@@ -24,7 +24,7 @@ type processor struct {
 	done chan struct{}
 }
 
-func newProcessor(rdb *rdb, numWorkers int, handler TaskHandler) *processor {
+func newProcessor(rdb *rdb, numWorkers int, handler Handler) *processor {
 	return &processor{
 		rdb:            rdb,
 		handler:        handler,
@@ -108,11 +108,11 @@ func (p *processor) restore() {
 // perform calls the handler with the given task.
 // If the call returns without panic, it simply returns the value,
 // otherwise, it recovers from panic and returns an error.
-func perform(handler TaskHandler, task *Task) (err error) {
+func perform(h Handler, task *Task) (err error) {
 	defer func() {
 		if x := recover(); x != nil {
 			err = fmt.Errorf("panic: %v", x)
 		}
 	}()
-	return handler(task)
+	return h.ProcessTask(task)
 }

@@ -27,7 +27,7 @@ func TestBackground(t *testing.T) {
 		return nil
 	}
 
-	bg.start(h)
+	bg.start(HandlerFunc(h))
 
 	client.Process(&Task{
 		Type:    "send_email",

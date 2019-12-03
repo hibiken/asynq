@@ -50,7 +50,8 @@ func TestProcessorSuccess(t *testing.T) {
 		// instantiate a new processor
 		var mu sync.Mutex
 		var processed []*Task
-		h := func(task *Task) error {
+		var h HandlerFunc
+		h = func(task *Task) error {
 			mu.Lock()
 			defer mu.Unlock()
 			processed = append(processed, task)
@@ -133,7 +134,8 @@ func TestProcessorRetry(t *testing.T) {
 			t.Fatal(err)
 		}
 		// instantiate a new processor
-		h := func(task *Task) error {
+		var h HandlerFunc
+		h = func(task *Task) error {
 			return fmt.Errorf(errMsg)
 		}
 		p := newProcessor(r, 10, h)
@@ -178,7 +180,7 @@ func TestProcessorRetry(t *testing.T) {
 func TestPerform(t *testing.T) {
 	tests := []struct {
 		desc    string
-		handler TaskHandler
+		handler HandlerFunc
 		task    *Task
 		wantErr bool
 	}{
