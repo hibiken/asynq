@@ -258,7 +258,7 @@ func TestKill(t *testing.T) {
 	}
 }
 
-func TestMoveAll(t *testing.T) {
+func TestRestoreUnfinished(t *testing.T) {
 	r := setup(t)
 	t1 := randomTask("send_email", "default", nil)
 	t2 := randomTask("export_csv", "csv", nil)
@@ -305,8 +305,8 @@ func TestMoveAll(t *testing.T) {
 			r.client.LPush(DefaultQueue, mustMarshal(t, msg))
 		}
 
-		if err := r.MoveAll(InProgress, DefaultQueue); err != nil {
-			t.Errorf("(*RDB).MoveAll(%q, %q) = %v, want nil", InProgress, DefaultQueue, err)
+		if err := r.RestoreUnfinished(); err != nil {
+			t.Errorf("(*RDB).RestoreUnfinished() = %v, want nil", err)
 			continue
 		}
 

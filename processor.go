@@ -101,7 +101,7 @@ func (p *processor) exec() {
 // restore moves all tasks from "in-progress" back to queue
 // to restore all unfinished tasks.
 func (p *processor) restore() {
-	err := p.rdb.MoveAll(rdb.InProgress, rdb.DefaultQueue)
+	err := p.rdb.RestoreUnfinished()
 	if err != nil {
 		log.Printf("[ERROR] could not move tasks from %q to %q\n", rdb.InProgress, rdb.DefaultQueue)
 	}

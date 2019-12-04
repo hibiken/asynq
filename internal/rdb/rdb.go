@@ -197,12 +197,11 @@ func (r *RDB) schedule(zset string, processAt time.Time, msg *TaskMessage) error
 	return nil
 }
 
-const maxDeadTask = 100
-const deadExpirationInDays = 90
-
-// Kill sends the taskMessage to "dead" set.
-// It also trims the sorted set by timestamp and set size.
+// Kill sends the task to "dead" set.
+// It also trims the set by timestamp and set size.
 func (r *RDB) Kill(msg *TaskMessage) error {
+	const maxDeadTask = 10
+	const deadExpirationInDays = 90
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
@@ -217,8 +216,8 @@ func (r *RDB) Kill(msg *TaskMessage) error {
 	return err
 }
 
-// MoveAll moves all tasks from src list to dst list.
-func (r *RDB) MoveAll(src, dst string) error {
+// RestoreUnfinished  moves all tasks from in-progress list to the queue.
+func (r *RDB) RestoreUnfinished() error {
 	script := redis.NewScript(`
 	local len = redis.call("LLEN", KEYS[1])
 	for i = len, 1, -1 do
@@ -226,7 +225,7 @@ func (r *RDB) MoveAll(src, dst string) error {
 	end
 	return len
 	`)
-	_, err := script.Run(r.client, []string{src, dst}).Result()
+	_, err := script.Run(r.client, []string{InProgress, DefaultQueue}).Result()
 	return err
 }
 
