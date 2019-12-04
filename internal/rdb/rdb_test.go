@@ -142,7 +142,7 @@ func TestDequeue(t *testing.T) {
 		for _, m := range tc.queued {
 			r.Enqueue(m)
 		}
-		got, err := r.Dequeue(DefaultQueue, time.Second)
+		got, err := r.Dequeue(time.Second)
 		if !cmp.Equal(got, tc.want) || err != tc.err {
 			t.Errorf("(*rdb).dequeue(%q, time.Second) = %v, %v; want %v, %v",
 				DefaultQueue, got, err, tc.want, tc.err)

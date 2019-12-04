@@ -70,7 +70,7 @@ func (p *processor) start() {
 // exec pulls a task out of the queue and starts a worker goroutine to
 // process the task.
 func (p *processor) exec() {
-	msg, err := p.rdb.Dequeue(rdb.DefaultQueue, p.dequeueTimeout)
+	msg, err := p.rdb.Dequeue(p.dequeueTimeout)
 	if err == rdb.ErrDequeueTimeout {
 		// timed out, this is a normal behavior.
 		return
