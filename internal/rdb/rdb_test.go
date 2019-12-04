@@ -323,38 +323,50 @@ func TestRestoreUnfinished(t *testing.T) {
 	}
 }
 
-func TestForward(t *testing.T) {
+func TestCheckScheduled(t *testing.T) {
 	r := setup(t)
 	t1 := randomTask("send_email", "default", nil)
 	t2 := randomTask("generate_csv", "default", nil)
+	t3 := randomTask("gen_thumbnail", "default", nil)
 	secondAgo := time.Now().Add(-time.Second)
 	hourFromNow := time.Now().Add(time.Hour)
 
 	tests := []struct {
-		tasks         []*redis.Z     // scheduled tasks with timestamp as a score
+		initScheduled []*redis.Z     // tasks to be processed later
+		initRetry     []*redis.Z     // tasks to be retired later
 		wantQueued    []*TaskMessage // queue after calling forward
-		wantScheduled []*TaskMessage // scheduled queue after calling forward
+		wantScheduled []*TaskMessage // tasks in scheduled queue after calling CheckScheduled
+		wantRetry     []*TaskMessage // tasks in retry queue after calling CheckScheduled
 	}{
 		{
-			tasks: []*redis.Z{
+			initScheduled: []*redis.Z{
 				&redis.Z{Member: mustMarshal(t, t1), Score: float64(secondAgo.Unix())},
 				&redis.Z{Member: mustMarshal(t, t2), Score: float64(secondAgo.Unix())}},
-			wantQueued:    []*TaskMessage{t1, t2},
+			initRetry: []*redis.Z{
+				&redis.Z{Member: mustMarshal(t, t3), Score: float64(secondAgo.Unix())}},
+			wantQueued:    []*TaskMessage{t1, t2, t3},
 			wantScheduled: []*TaskMessage{},
+			wantRetry:     []*TaskMessage{},
 		},
 		{
-			tasks: []*redis.Z{
+			initScheduled: []*redis.Z{
 				&redis.Z{Member: mustMarshal(t, t1), Score: float64(hourFromNow.Unix())},
 				&redis.Z{Member: mustMarshal(t, t2), Score: float64(secondAgo.Unix())}},
-			wantQueued:    []*TaskMessage{t2},
+			initRetry: []*redis.Z{
+				&redis.Z{Member: mustMarshal(t, t3), Score: float64(secondAgo.Unix())}},
+			wantQueued:    []*TaskMessage{t2, t3},
 			wantScheduled: []*TaskMessage{t1},
+			wantRetry:     []*TaskMessage{},
 		},
 		{
-			tasks: []*redis.Z{
+			initScheduled: []*redis.Z{
 				&redis.Z{Member: mustMarshal(t, t1), Score: float64(hourFromNow.Unix())},
 				&redis.Z{Member: mustMarshal(t, t2), Score: float64(hourFromNow.Unix())}},
+			initRetry: []*redis.Z{
+				&redis.Z{Member: mustMarshal(t, t3), Score: float64(hourFromNow.Unix())}},
 			wantQueued:    []*TaskMessage{},
 			wantScheduled: []*TaskMessage{t1, t2},
+			wantRetry:     []*TaskMessage{t3},
 		},
 	}
 
@@ -363,14 +375,18 @@ func TestForward(t *testing.T) {
 		if err := r.client.FlushDB().Err(); err != nil {
 			t.Fatal(err)
 		}
-		if err := r.client.ZAdd(Scheduled, tc.tasks...).Err(); err != nil {
+		if err := r.client.ZAdd(Scheduled, tc.initScheduled...).Err(); err != nil {
+			t.Error(err)
+			continue
+		}
+		if err := r.client.ZAdd(Retry, tc.initRetry...).Err(); err != nil {
 			t.Error(err)
 			continue
 		}
 
-		err := r.Forward(Scheduled)
+		err := r.CheckScheduled()
 		if err != nil {
-			t.Errorf("(*RDB).Forward(%q) = %v, want nil", Scheduled, err)
+			t.Errorf("(*RDB).CheckScheduled() = %v, want nil", err)
 			continue
 		}
 		queued := r.client.LRange(DefaultQueue, 0, -1).Val()

@@ -24,7 +24,7 @@ type Background struct {
 // NewBackground returns a new Background instance.
 func NewBackground(numWorkers int, config *RedisConfig) *Background {
 	r := rdb.NewRDB(newRedisClient(config))
-	poller := newPoller(r, 5*time.Second, []string{rdb.Scheduled, rdb.Retry})
+	poller := newPoller(r, 5*time.Second)
 	processor := newProcessor(r, numWorkers, nil)
 	return &Background{
 		rdb:       r,

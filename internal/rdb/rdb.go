@@ -229,10 +229,21 @@ func (r *RDB) RestoreUnfinished() error {
 	return err
 }
 
+// CheckScheduled checks for all scheduled tasks and moves any tasks that
+// have to be processed to the queue.
+func (r *RDB) CheckScheduled() error {
+	delayed := []string{Scheduled, Retry}
+	for _, zset := range delayed {
+		if err := r.forward(zset); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Forward moves all tasks with a score less than the current unix time
 // from the given zset to the default queue.
-// TODO(hibiken): Find a better method name that reflects what this does.
-func (r *RDB) Forward(from string) error {
+func (r *RDB) forward(from string) error {
 	script := redis.NewScript(`
 	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
 	for _, msg in ipairs(msgs) do

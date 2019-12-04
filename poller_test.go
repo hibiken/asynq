@@ -16,7 +16,7 @@ func TestPoller(t *testing.T) {
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
 	const pollInterval = time.Second
-	p := newPoller(rdbClient, pollInterval, []string{rdb.Scheduled, rdb.Retry})
+	p := newPoller(rdbClient, pollInterval)
 	t1 := randomTask("gen_thumbnail", "default", nil)
 	t2 := randomTask("send_email", "default", nil)
 	t3 := randomTask("reindex", "default", nil)
