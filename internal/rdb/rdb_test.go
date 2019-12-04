@@ -21,7 +21,7 @@ func setup(t *testing.T) *RDB {
 	t.Helper()
 	r := NewRDB(redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
-		DB:   15,
+		DB:   13,
 	}))
 	// Start each test with a clean slate.
 	if err := r.client.FlushDB().Err(); err != nil {
