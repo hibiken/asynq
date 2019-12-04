@@ -173,8 +173,18 @@ func (r *RDB) Done(msg *TaskMessage) error {
 	return nil
 }
 
-// Schedule adds the task to the zset to be processd at the specified time.
-func (r *RDB) Schedule(zset string, processAt time.Time, msg *TaskMessage) error {
+// Schedule adds the task to the backlog queue to be processed in the future.
+func (r *RDB) Schedule(msg *TaskMessage, processAt time.Time) error {
+	return r.schedule(Scheduled, processAt, msg)
+}
+
+// RetryLater adds the task to the backlog queue to be retried in the future.
+func (r *RDB) RetryLater(msg *TaskMessage, processAt time.Time) error {
+	return r.schedule(Retry, processAt, msg)
+}
+
+// schedule adds the task to the zset to be processd at the specified time.
+func (r *RDB) schedule(zset string, processAt time.Time, msg *TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)

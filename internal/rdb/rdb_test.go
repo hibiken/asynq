@@ -144,8 +144,8 @@ func TestDequeue(t *testing.T) {
 		}
 		got, err := r.Dequeue(time.Second)
 		if !cmp.Equal(got, tc.want) || err != tc.err {
-			t.Errorf("(*rdb).dequeue(%q, time.Second) = %v, %v; want %v, %v",
-				DefaultQueue, got, err, tc.want, tc.err)
+			t.Errorf("(*RDB).Dequeue(time.Second) = %v, %v; want %v, %v",
+				got, err, tc.want, tc.err)
 			continue
 		}
 		if l := r.client.LLen(InProgress).Val(); l != tc.inProgress {
@@ -306,7 +306,7 @@ func TestMoveAll(t *testing.T) {
 		}
 
 		if err := r.MoveAll(InProgress, DefaultQueue); err != nil {
-			t.Errorf("(*rdb).moveAll(%q, %q) = %v, want nil", InProgress, DefaultQueue, err)
+			t.Errorf("(*RDB).MoveAll(%q, %q) = %v, want nil", InProgress, DefaultQueue, err)
 			continue
 		}
 
@@ -370,7 +370,7 @@ func TestForward(t *testing.T) {
 
 		err := r.Forward(Scheduled)
 		if err != nil {
-			t.Errorf("(*rdb).forward(%q) = %v, want nil", Scheduled, err)
+			t.Errorf("(*RDB).Forward(%q) = %v, want nil", Scheduled, err)
 			continue
 		}
 		queued := r.client.LRange(DefaultQueue, 0, -1).Val()
@@ -391,12 +391,10 @@ func TestSchedule(t *testing.T) {
 	tests := []struct {
 		msg       *TaskMessage
 		processAt time.Time
-		zset      string
 	}{
 		{
 			randomTask("send_email", "default", map[string]interface{}{"subject": "hello"}),
 			time.Now().Add(15 * time.Minute),
-			Scheduled,
 		},
 	}
 
@@ -406,21 +404,64 @@ func TestSchedule(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err := r.Schedule(tc.zset, tc.processAt, tc.msg)
+		err := r.Schedule(tc.msg, tc.processAt)
 		if err != nil {
 			t.Error(err)
 			continue
 		}
 
-		res, err := r.client.ZRangeWithScores(tc.zset, 0, -1).Result()
+		res, err := r.client.ZRangeWithScores(Scheduled, 0, -1).Result()
 		if err != nil {
 			t.Error(err)
 			continue
 		}
 
-		desc := fmt.Sprintf("(*rdb).schedule(%q, %v, %v)", tc.zset, tc.processAt, tc.msg)
+		desc := fmt.Sprintf("(*RDB).Schedule(%v, %v)", tc.msg, tc.processAt)
 		if len(res) != 1 {
-			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), tc.zset)
+			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), Scheduled)
+			continue
+		}
+
+		if res[0].Score != float64(tc.processAt.Unix()) {
+			t.Errorf("%s inserted an item with score %f, want %f", desc, res[0].Score, float64(tc.processAt.Unix()))
+			continue
+		}
+	}
+}
+
+func TestRetryLater(t *testing.T) {
+	r := setup(t)
+	tests := []struct {
+		msg       *TaskMessage
+		processAt time.Time
+	}{
+		{
+			randomTask("send_email", "default", map[string]interface{}{"subject": "hello"}),
+			time.Now().Add(15 * time.Minute),
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+
+		err := r.RetryLater(tc.msg, tc.processAt)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+
+		res, err := r.client.ZRangeWithScores(Retry, 0, -1).Result()
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+
+		desc := fmt.Sprintf("(*RDB).RetryLater(%v, %v)", tc.msg, tc.processAt)
+		if len(res) != 1 {
+			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), Retry)
 			continue
 		}
 

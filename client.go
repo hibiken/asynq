@@ -35,5 +35,5 @@ func (c *Client) enqueue(msg *rdb.TaskMessage, processAt time.Time) error {
 	if time.Now().After(processAt) {
 		return c.rdb.Enqueue(msg)
 	}
-	return c.rdb.Schedule(rdb.Scheduled, processAt, msg)
+	return c.rdb.Schedule(msg, processAt)
 }

@@ -21,7 +21,7 @@ func retryTask(r *rdb.RDB, msg *rdb.TaskMessage, err error) {
 	retryAt := time.Now().Add(delaySeconds((msg.Retried)))
 	log.Printf("[INFO] Retrying task(Type: %q, ID: %v) in %v\n", msg.Type, msg.ID, retryAt.Sub(time.Now()))
 	msg.Retried++
-	if err := r.Schedule(rdb.Retry, retryAt, msg); err != nil {
+	if err := r.RetryLater(msg, retryAt); err != nil {
 		log.Printf("[ERROR] Could not add msg %+v to 'retry': %v\n", msg, err)
 		return
 	}

@@ -67,14 +67,14 @@ func TestPoller(t *testing.T) {
 		}
 		// initialize scheduled queue
 		for _, st := range tc.initScheduled {
-			err := rdbClient.Schedule(rdb.Scheduled, st.processAt, st.msg)
+			err := rdbClient.Schedule(st.msg, st.processAt)
 			if err != nil {
 				t.Fatal(err)
 			}
 		}
 		// initialize retry queue
 		for _, st := range tc.initRetry {
-			err := rdbClient.Schedule(rdb.Retry, st.processAt, st.msg)
+			err := rdbClient.RetryLater(st.msg, st.processAt)
 			if err != nil {
 				t.Fatal(err)
 			}
