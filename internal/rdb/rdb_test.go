@@ -154,15 +154,15 @@ func TestDequeue(t *testing.T) {
 	}
 }
 
-func TestRemove(t *testing.T) {
+func TestDone(t *testing.T) {
 	r := setup(t)
 	t1 := randomTask("send_email", "default", nil)
 	t2 := randomTask("export_csv", "csv", nil)
 
 	tests := []struct {
-		initial []*TaskMessage // initial state of the list
+		initial []*TaskMessage // initial state of the in-progress list
 		target  *TaskMessage   // task to remove
-		final   []*TaskMessage // final state of the list
+		final   []*TaskMessage // final state of the in-progress list
 	}{
 		{
 			initial: []*TaskMessage{t1, t2},
@@ -188,20 +188,20 @@ func TestRemove(t *testing.T) {
 		}
 		// set up initial state
 		for _, task := range tc.initial {
-			err := r.client.LPush(DefaultQueue, mustMarshal(t, task)).Err()
+			err := r.client.LPush(InProgress, mustMarshal(t, task)).Err()
 			if err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		err := r.Remove(DefaultQueue, tc.target)
+		err := r.Done(tc.target)
 		if err != nil {
 			t.Error(err)
 			continue
 		}
 
 		var got []*TaskMessage
-		data := r.client.LRange(DefaultQueue, 0, -1).Val()
+		data := r.client.LRange(InProgress, 0, -1).Val()
 		for _, s := range data {
 			got = append(got, mustUnmarshal(t, s))
 		}

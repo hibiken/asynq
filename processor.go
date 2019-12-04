@@ -86,7 +86,7 @@ func (p *processor) exec() {
 		// NOTE: This deferred anonymous function needs to take taskMessage as a value because
 		// the message can be mutated by the time this function is called.
 		defer func(msg rdb.TaskMessage) {
-			if err := p.rdb.Remove(rdb.InProgress, &msg); err != nil {
+			if err := p.rdb.Done(&msg); err != nil {
 				log.Printf("[ERROR] could not remove %+v from %q: %v\n", msg, rdb.InProgress, err)
 			}
 			<-p.sema // release token

@@ -159,16 +159,16 @@ func (r *RDB) Dequeue(timeout time.Duration) (*TaskMessage, error) {
 	return &msg, nil
 }
 
-// Remove deletes all elements equal to msg from a redis list with the given key.
-func (r *RDB) Remove(key string, msg *TaskMessage) error {
+// Done removes the task from in-progress queue to mark the task as done.
+func (r *RDB) Done(msg *TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
 	}
 	// NOTE: count ZERO means "remove all elements equal to val"
-	err = r.client.LRem(key, 0, string(bytes)).Err()
+	err = r.client.LRem(InProgress, 0, string(bytes)).Err()
 	if err != nil {
-		return fmt.Errorf("command `LREM %s 0 %s` failed: %v", key, string(bytes), err)
+		return fmt.Errorf("command `LREM %s 0 %s` failed: %v", InProgress, string(bytes), err)
 	}
 	return nil
 }
