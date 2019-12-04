@@ -49,8 +49,8 @@ type taskMessage struct {
 	ErrorMsg string
 }
 
-// RedisOpt specifies redis options.
-type RedisOpt struct {
+// RedisConfig specifies redis configurations.
+type RedisConfig struct {
 	Addr     string
 	Password string
 

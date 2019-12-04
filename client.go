@@ -12,8 +12,8 @@ type Client struct {
 }
 
 // NewClient creates and returns a new client.
-func NewClient(opt *RedisOpt) *Client {
-	return &Client{rdb: newRDB(opt)}
+func NewClient(config *RedisConfig) *Client {
+	return &Client{rdb: newRDB(config)}
 }
 
 // Process enqueues the task to be performed at a given time.

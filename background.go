@@ -20,8 +20,8 @@ type Background struct {
 }
 
 // NewBackground returns a new Background instance.
-func NewBackground(numWorkers int, opt *RedisOpt) *Background {
-	rdb := newRDB(opt)
+func NewBackground(numWorkers int, config *RedisConfig) *Background {
+	rdb := newRDB(config)
 	poller := newPoller(rdb, 5*time.Second, []string{scheduled, retry})
 	processor := newProcessor(rdb, numWorkers, nil)
 	return &Background{

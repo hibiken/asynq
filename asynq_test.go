@@ -38,7 +38,7 @@ var sortTaskOpt = cmp.Transformer("SortMsg", func(in []*Task) []*Task {
 // before returning an instance of rdb.
 func setup(t *testing.T) *rdb {
 	t.Helper()
-	r := newRDB(&RedisOpt{
+	r := newRDB(&RedisConfig{
 		Addr: "localhost:6379",
 		DB:   15, // use database 15 to separate from other applications
 	})
