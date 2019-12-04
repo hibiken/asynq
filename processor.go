@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/hibiken/asynq/internal/rdb"
 )
 
 type processor struct {
-	rdb *rdb
+	rdb *rdb.RDB
 
 	handler Handler
 
@@ -24,9 +26,9 @@ type processor struct {
 	done chan struct{}
 }
 
-func newProcessor(rdb *rdb, numWorkers int, handler Handler) *processor {
+func newProcessor(r *rdb.RDB, numWorkers int, handler Handler) *processor {
 	return &processor{
-		rdb:            rdb,
+		rdb:            r,
 		handler:        handler,
 		dequeueTimeout: 5 * time.Second,
 		sema:           make(chan struct{}, numWorkers),
@@ -68,8 +70,8 @@ func (p *processor) start() {
 // exec pulls a task out of the queue and starts a worker goroutine to
 // process the task.
 func (p *processor) exec() {
-	msg, err := p.rdb.dequeue(defaultQueue, p.dequeueTimeout)
-	if err == errDequeueTimeout {
+	msg, err := p.rdb.Dequeue(rdb.DefaultQueue, p.dequeueTimeout)
+	if err == rdb.ErrDequeueTimeout {
 		// timed out, this is a normal behavior.
 		return
 	}
@@ -83,9 +85,9 @@ func (p *processor) exec() {
 	go func(task *Task) {
 		// NOTE: This deferred anonymous function needs to take taskMessage as a value because
 		// the message can be mutated by the time this function is called.
-		defer func(msg taskMessage) {
-			if err := p.rdb.remove(inProgress, &msg); err != nil {
-				log.Printf("[ERROR] could not remove %+v from %q: %v\n", msg, inProgress, err)
+		defer func(msg rdb.TaskMessage) {
+			if err := p.rdb.Remove(rdb.InProgress, &msg); err != nil {
+				log.Printf("[ERROR] could not remove %+v from %q: %v\n", msg, rdb.InProgress, err)
 			}
 			<-p.sema // release token
 		}(*msg)
@@ -99,9 +101,9 @@ func (p *processor) exec() {
 // restore moves all tasks from "in-progress" back to queue
 // to restore all unfinished tasks.
 func (p *processor) restore() {
-	err := p.rdb.moveAll(inProgress, defaultQueue)
+	err := p.rdb.MoveAll(rdb.InProgress, rdb.DefaultQueue)
 	if err != nil {
-		log.Printf("[ERROR] could not move tasks from %q to %q\n", inProgress, defaultQueue)
+		log.Printf("[ERROR] could not move tasks from %q to %q\n", rdb.InProgress, rdb.DefaultQueue)
 	}
 }
 

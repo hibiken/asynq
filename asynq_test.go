@@ -2,29 +2,30 @@ package asynq
 
 import (
 	"encoding/json"
-	"math/rand"
 	"sort"
 	"testing"
-	"time"
 
+	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq/internal/rdb"
 )
 
 // This file defines test helper functions used by
 // other test files.
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
-var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*taskMessage) []*taskMessage {
-	out := append([]*taskMessage(nil), in...) // Copy input to avoid mutating it
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].ID.String() < out[j].ID.String()
+func setup(t *testing.T) *redis.Client {
+	t.Helper()
+	r := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+		DB:   2,
 	})
-	return out
-})
+	// Start each test with a clean slate.
+	if err := r.FlushDB().Err(); err != nil {
+		panic(err)
+	}
+	return r
+}
 
 var sortTaskOpt = cmp.Transformer("SortMsg", func(in []*Task) []*Task {
 	out := append([]*Task(nil), in...) // Copy input to avoid mutating it
@@ -34,32 +35,25 @@ var sortTaskOpt = cmp.Transformer("SortMsg", func(in []*Task) []*Task {
 	return out
 })
 
-// setup connects to a redis database and flush all keys
-// before returning an instance of rdb.
-func setup(t *testing.T) *rdb {
-	t.Helper()
-	r := newRDB(&RedisConfig{
-		Addr: "localhost:6379",
-		DB:   15, // use database 15 to separate from other applications
+var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*rdb.TaskMessage) []*rdb.TaskMessage {
+	out := append([]*rdb.TaskMessage(nil), in...) // Copy input to avoid mutating it
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].ID.String() < out[j].ID.String()
 	})
-	// Start each test with a clean slate.
-	if err := r.client.FlushDB().Err(); err != nil {
-		panic(err)
-	}
-	return r
-}
+	return out
+})
 
-func randomTask(taskType, qname string, payload map[string]interface{}) *taskMessage {
-	return &taskMessage{
+func randomTask(taskType, qname string, payload map[string]interface{}) *rdb.TaskMessage {
+	return &rdb.TaskMessage{
 		ID:      uuid.New(),
 		Type:    taskType,
 		Queue:   qname,
-		Retry:   rand.Intn(100),
+		Retry:   defaultMaxRetry,
 		Payload: make(map[string]interface{}),
 	}
 }
 
-func mustMarshal(t *testing.T, task *taskMessage) string {
+func mustMarshal(t *testing.T, task *rdb.TaskMessage) string {
 	t.Helper()
 	data, err := json.Marshal(task)
 	if err != nil {
@@ -68,9 +62,9 @@ func mustMarshal(t *testing.T, task *taskMessage) string {
 	return string(data)
 }
 
-func mustUnmarshal(t *testing.T, data string) *taskMessage {
+func mustUnmarshal(t *testing.T, data string) *rdb.TaskMessage {
 	t.Helper()
-	var task taskMessage
+	var task rdb.TaskMessage
 	err := json.Unmarshal([]byte(data), &task)
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +72,7 @@ func mustUnmarshal(t *testing.T, data string) *taskMessage {
 	return &task
 }
 
-func mustMarshalSlice(t *testing.T, tasks []*taskMessage) []string {
+func mustMarshalSlice(t *testing.T, tasks []*rdb.TaskMessage) []string {
 	t.Helper()
 	var data []string
 	for _, task := range tasks {
@@ -87,9 +81,9 @@ func mustMarshalSlice(t *testing.T, tasks []*taskMessage) []string {
 	return data
 }
 
-func mustUnmarshalSlice(t *testing.T, data []string) []*taskMessage {
+func mustUnmarshalSlice(t *testing.T, data []string) []*rdb.TaskMessage {
 	t.Helper()
-	var tasks []*taskMessage
+	var tasks []*rdb.TaskMessage
 	for _, s := range data {
 		tasks = append(tasks, mustUnmarshal(t, s))
 	}

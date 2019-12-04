@@ -1,4 +1,4 @@
-package asynq
+package rdb
 
 import (
 	"encoding/json"
@@ -8,38 +8,124 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
+	"github.com/google/uuid"
 )
 
 // Redis keys
 const (
-	queuePrefix  = "asynq:queues:"         // LIST - asynq:queues:<qname>
-	defaultQueue = queuePrefix + "default" // LIST
 	allQueues    = "asynq:queues"          // SET
-	scheduled    = "asynq:scheduled"       // ZSET
-	retry        = "asynq:retry"           // ZSET
-	dead         = "asynq:dead"            // ZSET
-	inProgress   = "asynq:in_progress"     // SET
+	queuePrefix  = "asynq:queues:"         // LIST - asynq:queues:<qname>
+	DefaultQueue = queuePrefix + "default" // LIST
+	Scheduled    = "asynq:scheduled"       // ZSET
+	Retry        = "asynq:retry"           // ZSET
+	Dead         = "asynq:dead"            // ZSET
+	InProgress   = "asynq:in_progress"     // SET
 )
 
-var errDequeueTimeout = errors.New("blocking dequeue operation timed out")
+var ErrDequeueTimeout = errors.New("blocking dequeue operation timed out")
 
-// rdb encapsulates the interactions with redis server.
-type rdb struct {
+// RDB encapsulates the interactions with redis server.
+type RDB struct {
 	client *redis.Client
 }
 
-func newRDB(config *RedisConfig) *rdb {
-	client := redis.NewClient(&redis.Options{
-		Addr:     config.Addr,
-		Password: config.Password,
-		DB:       config.DB,
-	})
-	return &rdb{client}
+// NewRDB returns a new instance of RDB.
+func NewRDB(client *redis.Client) *RDB {
+	return &RDB{client}
 }
 
-// enqueue inserts the given task to the end of the queue.
+// TaskMessage is an internal representation of a task with additional metadata fields.
+// This data gets written in redis.
+type TaskMessage struct {
+	//-------- Task fields --------
+
+	Type    string
+	Payload map[string]interface{}
+
+	//-------- metadata fields --------
+
+	// unique identifier for each task
+	ID uuid.UUID
+
+	// queue name this message should be enqueued to
+	Queue string
+
+	// max number of retry for this task.
+	Retry int
+
+	// number of times we've retried so far
+	Retried int
+
+	// error message from the last failure
+	ErrorMsg string
+}
+
+// Stats represents a state of queues at a certain time.
+type Stats struct {
+	Queued     int
+	InProgress int
+	Scheduled  int
+	Retry      int
+	Dead       int
+	Timestamp  time.Time
+}
+
+// EnqueuedTask is a task in a queue and is ready to be processed.
+// This is read only and used for inspection purpose.
+type EnqueuedTask struct {
+	ID      uuid.UUID
+	Type    string
+	Payload map[string]interface{}
+}
+
+// InProgressTask is a task that's currently being processed.
+// This is read only and used for inspection purpose.
+type InProgressTask struct {
+	ID      uuid.UUID
+	Type    string
+	Payload map[string]interface{}
+}
+
+// ScheduledTask is a task that's scheduled to be processed in the future.
+// This is read only and used for inspection purpose.
+type ScheduledTask struct {
+	ID        uuid.UUID
+	Type      string
+	Payload   map[string]interface{}
+	ProcessAt time.Time
+}
+
+// RetryTask is a task that's in retry queue because worker failed to process the task.
+// This is read only and used for inspection purpose.
+type RetryTask struct {
+	ID      uuid.UUID
+	Type    string
+	Payload map[string]interface{}
+	// TODO(hibiken): add LastFailedAt time.Time
+	ProcessAt time.Time
+	ErrorMsg  string
+	Retried   int
+	Retry     int
+}
+
+// DeadTask is a task in that has exhausted all retries.
+// This is read only and used for inspection purpose.
+type DeadTask struct {
+	ID           uuid.UUID
+	Type         string
+	Payload      map[string]interface{}
+	LastFailedAt time.Time
+	ErrorMsg     string
+}
+
+// Close closes the connection with redis server.
+func (r *RDB) Close() error {
+	return r.client.Close()
+}
+
+// Enqueue inserts the given task to the end of the queue.
 // It also adds the queue name to the "all-queues" list.
-func (r *rdb) enqueue(msg *taskMessage) error {
+func (r *RDB) Enqueue(msg *TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
@@ -55,18 +141,18 @@ func (r *rdb) enqueue(msg *taskMessage) error {
 	return nil
 }
 
-// dequeue blocks until there is a task available to be processed,
+// Dequeue blocks until there is a task available to be processed,
 // once a task is available, it adds the task to "in progress" list
 // and returns the task.
-func (r *rdb) dequeue(qname string, timeout time.Duration) (*taskMessage, error) {
-	data, err := r.client.BRPopLPush(qname, inProgress, timeout).Result()
+func (r *RDB) Dequeue(qname string, timeout time.Duration) (*TaskMessage, error) {
+	data, err := r.client.BRPopLPush(qname, InProgress, timeout).Result()
 	if err == redis.Nil {
-		return nil, errDequeueTimeout
+		return nil, ErrDequeueTimeout
 	}
 	if err != nil {
-		return nil, fmt.Errorf("command `BRPOPLPUSH %q %q %v` failed: %v", qname, inProgress, timeout, err)
+		return nil, fmt.Errorf("command `BRPOPLPUSH %q %q %v` failed: %v", qname, InProgress, timeout, err)
 	}
-	var msg taskMessage
+	var msg TaskMessage
 	err = json.Unmarshal([]byte(data), &msg)
 	if err != nil {
 		return nil, fmt.Errorf("could not unmarshal %v to json: %v", data, err)
@@ -75,8 +161,8 @@ func (r *rdb) dequeue(qname string, timeout time.Duration) (*taskMessage, error)
 	return &msg, nil
 }
 
-// remove deletes all elements equal to msg from a redis list with the given key.
-func (r *rdb) remove(key string, msg *taskMessage) error {
+// Remove deletes all elements equal to msg from a redis list with the given key.
+func (r *RDB) Remove(key string, msg *TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
@@ -89,8 +175,8 @@ func (r *rdb) remove(key string, msg *taskMessage) error {
 	return nil
 }
 
-// schedule adds the task to the zset to be processd at the specified time.
-func (r *rdb) schedule(zset string, processAt time.Time, msg *taskMessage) error {
+// Schedule adds the task to the zset to be processd at the specified time.
+func (r *RDB) Schedule(zset string, processAt time.Time, msg *TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
@@ -106,25 +192,25 @@ func (r *rdb) schedule(zset string, processAt time.Time, msg *taskMessage) error
 const maxDeadTask = 100
 const deadExpirationInDays = 90
 
-// kill sends the taskMessage to "dead" set.
+// Kill sends the taskMessage to "dead" set.
 // It also trims the sorted set by timestamp and set size.
-func (r *rdb) kill(msg *taskMessage) error {
+func (r *RDB) Kill(msg *TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
 	}
 	now := time.Now()
 	pipe := r.client.Pipeline()
-	pipe.ZAdd(dead, &redis.Z{Member: string(bytes), Score: float64(now.Unix())})
+	pipe.ZAdd(Dead, &redis.Z{Member: string(bytes), Score: float64(now.Unix())})
 	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
-	pipe.ZRemRangeByScore(dead, "-inf", strconv.Itoa(int(limit)))
-	pipe.ZRemRangeByRank(dead, 0, -maxDeadTask) // trim the set to 100
+	pipe.ZRemRangeByScore(Dead, "-inf", strconv.Itoa(int(limit)))
+	pipe.ZRemRangeByRank(Dead, 0, -maxDeadTask) // trim the set to 100
 	_, err = pipe.Exec()
 	return err
 }
 
-// moveAll moves all tasks from src list to dst list.
-func (r *rdb) moveAll(src, dst string) error {
+// MoveAll moves all tasks from src list to dst list.
+func (r *RDB) MoveAll(src, dst string) error {
 	script := redis.NewScript(`
 	local len = redis.call("LLEN", KEYS[1])
 	for i = len, 1, -1 do
@@ -136,10 +222,10 @@ func (r *rdb) moveAll(src, dst string) error {
 	return err
 }
 
-// forward moves all tasks with a score less than the current unix time
+// Forward moves all tasks with a score less than the current unix time
 // from the given zset to the default queue.
 // TODO(hibiken): Find a better method name that reflects what this does.
-func (r *rdb) forward(from string) error {
+func (r *RDB) Forward(from string) error {
 	script := redis.NewScript(`
 	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
 	for _, msg in ipairs(msgs) do
@@ -150,18 +236,19 @@ func (r *rdb) forward(from string) error {
 	return msgs
 	`)
 	now := float64(time.Now().Unix())
-	res, err := script.Run(r.client, []string{from, allQueues, defaultQueue}, now).Result()
+	res, err := script.Run(r.client, []string{from, allQueues, DefaultQueue}, now).Result()
 	fmt.Printf("[DEBUG] got %d tasks from %q\n", len(res.([]interface{})), from)
 	return err
 }
 
-func (r *rdb) currentStats() (*Stats, error) {
+// CurrentStats returns a current state of the queues.
+func (r *RDB) CurrentStats() (*Stats, error) {
 	pipe := r.client.Pipeline()
-	qlen := pipe.LLen(defaultQueue)
-	plen := pipe.LLen(inProgress)
-	slen := pipe.ZCard(scheduled)
-	rlen := pipe.ZCard(retry)
-	dlen := pipe.ZCard(dead)
+	qlen := pipe.LLen(DefaultQueue)
+	plen := pipe.LLen(InProgress)
+	slen := pipe.ZCard(Scheduled)
+	rlen := pipe.ZCard(Retry)
+	dlen := pipe.ZCard(Dead)
 	_, err := pipe.Exec()
 	if err != nil {
 		return nil, err
@@ -176,16 +263,16 @@ func (r *rdb) currentStats() (*Stats, error) {
 	}, nil
 }
 
-func (r *rdb) listEnqueued() ([]*taskMessage, error) {
-	return r.rangeList(defaultQueue)
+func (r *RDB) ListEnqueued() ([]*TaskMessage, error) {
+	return r.rangeList(DefaultQueue)
 }
 
-func (r *rdb) listInProgress() ([]*taskMessage, error) {
-	return r.rangeList(inProgress)
+func (r *RDB) ListInProgress() ([]*TaskMessage, error) {
+	return r.rangeList(InProgress)
 }
 
-func (r *rdb) listScheduled() ([]*ScheduledTask, error) {
-	data, err := r.client.ZRangeWithScores(scheduled, 0, -1).Result()
+func (r *RDB) ListScheduled() ([]*ScheduledTask, error) {
+	data, err := r.client.ZRangeWithScores(Scheduled, 0, -1).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +282,7 @@ func (r *rdb) listScheduled() ([]*ScheduledTask, error) {
 		if !ok {
 			continue // bad data, ignore and continue
 		}
-		var msg taskMessage
+		var msg TaskMessage
 		err := json.Unmarshal([]byte(s), &msg)
 		if err != nil {
 			continue // bad data, ignore and continue
@@ -211,8 +298,8 @@ func (r *rdb) listScheduled() ([]*ScheduledTask, error) {
 	return tasks, nil
 }
 
-func (r *rdb) listRetry() ([]*RetryTask, error) {
-	data, err := r.client.ZRangeWithScores(retry, 0, -1).Result()
+func (r *RDB) ListRetry() ([]*RetryTask, error) {
+	data, err := r.client.ZRangeWithScores(Retry, 0, -1).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +309,7 @@ func (r *rdb) listRetry() ([]*RetryTask, error) {
 		if !ok {
 			continue // bad data, ignore and continue
 		}
-		var msg taskMessage
+		var msg TaskMessage
 		err := json.Unmarshal([]byte(s), &msg)
 		if err != nil {
 			continue // bad data, ignore and continue
@@ -241,8 +328,8 @@ func (r *rdb) listRetry() ([]*RetryTask, error) {
 	return tasks, nil
 }
 
-func (r *rdb) listDead() ([]*DeadTask, error) {
-	data, err := r.client.ZRangeWithScores(dead, 0, -1).Result()
+func (r *RDB) ListDead() ([]*DeadTask, error) {
+	data, err := r.client.ZRangeWithScores(Dead, 0, -1).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +339,7 @@ func (r *rdb) listDead() ([]*DeadTask, error) {
 		if !ok {
 			continue // bad data, ignore and continue
 		}
-		var msg taskMessage
+		var msg TaskMessage
 		err := json.Unmarshal([]byte(s), &msg)
 		if err != nil {
 			continue // bad data, ignore and continue
@@ -269,7 +356,7 @@ func (r *rdb) listDead() ([]*DeadTask, error) {
 	return tasks, nil
 }
 
-func (r *rdb) rangeList(key string) ([]*taskMessage, error) {
+func (r *RDB) rangeList(key string) ([]*TaskMessage, error) {
 	data, err := r.client.LRange(key, 0, -1).Result()
 	if err != nil {
 		return nil, err
@@ -277,7 +364,7 @@ func (r *rdb) rangeList(key string) ([]*taskMessage, error) {
 	return r.toMessageSlice(data), nil
 }
 
-func (r *rdb) rangeZSet(key string) ([]*taskMessage, error) {
+func (r *RDB) rangeZSet(key string) ([]*TaskMessage, error) {
 	data, err := r.client.ZRange(key, 0, -1).Result()
 	if err != nil {
 		return nil, err
@@ -286,10 +373,10 @@ func (r *rdb) rangeZSet(key string) ([]*taskMessage, error) {
 }
 
 // toMessageSlice convers json strings to a slice of task messages.
-func (r *rdb) toMessageSlice(data []string) []*taskMessage {
-	var msgs []*taskMessage
+func (r *RDB) toMessageSlice(data []string) []*TaskMessage {
+	var msgs []*TaskMessage
 	for _, s := range data {
-		var msg taskMessage
+		var msg TaskMessage
 		err := json.Unmarshal([]byte(s), &msg)
 		if err != nil {
 			// bad data; ignore and continue

@@ -5,13 +5,15 @@ import (
 	"math"
 	"math/rand"
 	"time"
+
+	"github.com/hibiken/asynq/internal/rdb"
 )
 
-func retryTask(rdb *rdb, msg *taskMessage, err error) {
+func retryTask(r *rdb.RDB, msg *rdb.TaskMessage, err error) {
 	msg.ErrorMsg = err.Error()
 	if msg.Retried >= msg.Retry {
 		log.Printf("[WARN] Retry exhausted for task(Type: %q, ID: %v)\n", msg.Type, msg.ID)
-		if err := rdb.kill(msg); err != nil {
+		if err := r.Kill(msg); err != nil {
 			log.Printf("[ERROR] Could not add task %+v to 'dead'\n", err)
 		}
 		return
@@ -19,7 +21,7 @@ func retryTask(rdb *rdb, msg *taskMessage, err error) {
 	retryAt := time.Now().Add(delaySeconds((msg.Retried)))
 	log.Printf("[INFO] Retrying task(Type: %q, ID: %v) in %v\n", msg.Type, msg.ID, retryAt.Sub(time.Now()))
 	msg.Retried++
-	if err := rdb.schedule(retry, retryAt, msg); err != nil {
+	if err := r.Schedule(rdb.Retry, retryAt, msg); err != nil {
 		log.Printf("[ERROR] Could not add msg %+v to 'retry': %v\n", msg, err)
 		return
 	}
