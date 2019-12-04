@@ -20,7 +20,7 @@ func main() {
 		Addr: "localhost:6379",
 		DB:   2,
 	})
-	r := rdb.NewClient(c)
+	r := rdb.NewRDB(c)
 
 	for {
 		stats, err := r.CurrentStats()
