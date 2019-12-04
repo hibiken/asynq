@@ -323,7 +323,7 @@ func TestRestoreUnfinished(t *testing.T) {
 	}
 }
 
-func TestCheckScheduled(t *testing.T) {
+func TestCheckAndEnqueue(t *testing.T) {
 	r := setup(t)
 	t1 := randomTask("send_email", "default", nil)
 	t2 := randomTask("generate_csv", "default", nil)
@@ -335,8 +335,8 @@ func TestCheckScheduled(t *testing.T) {
 		initScheduled []*redis.Z     // tasks to be processed later
 		initRetry     []*redis.Z     // tasks to be retired later
 		wantQueued    []*TaskMessage // queue after calling forward
-		wantScheduled []*TaskMessage // tasks in scheduled queue after calling CheckScheduled
-		wantRetry     []*TaskMessage // tasks in retry queue after calling CheckScheduled
+		wantScheduled []*TaskMessage // tasks in scheduled queue after calling the method
+		wantRetry     []*TaskMessage // tasks in retry queue after calling the method
 	}{
 		{
 			initScheduled: []*redis.Z{
@@ -384,7 +384,7 @@ func TestCheckScheduled(t *testing.T) {
 			continue
 		}
 
-		err := r.CheckScheduled()
+		err := r.CheckAndEnqueue()
 		if err != nil {
 			t.Errorf("(*RDB).CheckScheduled() = %v, want nil", err)
 			continue

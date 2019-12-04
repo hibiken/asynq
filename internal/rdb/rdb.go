@@ -229,9 +229,9 @@ func (r *RDB) RestoreUnfinished() error {
 	return err
 }
 
-// CheckScheduled checks for all scheduled tasks and moves any tasks that
-// have to be processed to the queue.
-func (r *RDB) CheckScheduled() error {
+// CheckAndEnqueue checks for all scheduled tasks and enqueues any tasks that
+// have to be processed.
+func (r *RDB) CheckAndEnqueue() error {
 	delayed := []string{Scheduled, Retry}
 	for _, zset := range delayed {
 		if err := r.forward(zset); err != nil {

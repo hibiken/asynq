@@ -48,7 +48,7 @@ func (p *poller) start() {
 }
 
 func (p *poller) exec() {
-	if err := p.rdb.CheckScheduled(); err != nil {
+	if err := p.rdb.CheckAndEnqueue(); err != nil {
 		log.Printf("[ERROR] could not forward scheduled tasks: %v\n", err)
 	}
 }
