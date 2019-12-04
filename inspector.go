@@ -6,9 +6,9 @@ type Inspector struct {
 }
 
 // NewInspector returns a new Inspector instance.
-func NewInspector(opt *RedisOpt) *Inspector {
+func NewInspector(config *RedisConfig) *Inspector {
 	return &Inspector{
-		rdb: newRDB(opt),
+		rdb: newRDB(config),
 	}
 }
 
