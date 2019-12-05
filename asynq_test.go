@@ -2,8 +2,10 @@ package asynq
 
 import (
 	"encoding/json"
+	"math/rand"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
@@ -13,6 +15,20 @@ import (
 
 // This file defines test helper functions used by
 // other test files.
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
+// Redis keys
+const (
+	queuePrefix = "asynq:queues:"         // LIST - asynq:queues:<qname>
+	defaultQ    = queuePrefix + "default" // LIST
+	scheduledQ  = "asynq:scheduled"       // ZSET
+	retryQ      = "asynq:retry"           // ZSET
+	deadQ       = "asynq:dead"            // ZSET
+	inProgressQ = "asynq:in_progress"     // LIST
+)
 
 func setup(t *testing.T) *redis.Client {
 	t.Helper()

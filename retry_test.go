@@ -56,16 +56,16 @@ func TestRetry(t *testing.T) {
 
 		retryTask(rdbClient, tc.msg, tc.err)
 
-		deadQueue := r.ZRange(rdb.Dead, 0, -1).Val()
+		deadQueue := r.ZRange(deadQ, 0, -1).Val()
 		gotDead := mustUnmarshalSlice(t, deadQueue)
 		if diff := cmp.Diff(tc.wantDead, gotDead, sortMsgOpt); diff != "" {
-			t.Errorf("%s;\nmismatch found in %q after retryTask(); (-want, +got)\n%s", tc.desc, rdb.Dead, diff)
+			t.Errorf("%s;\nmismatch found in %q after retryTask(); (-want, +got)\n%s", tc.desc, deadQ, diff)
 		}
 
-		retryQueue := r.ZRange(rdb.Retry, 0, -1).Val()
+		retryQueue := r.ZRange(retryQ, 0, -1).Val()
 		gotRetry := mustUnmarshalSlice(t, retryQueue)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
-			t.Errorf("%s;\nmismatch found in %q after retryTask(); (-want, +got)\n%s", tc.desc, rdb.Dead, diff)
+			t.Errorf("%s;\nmismatch found in %q after retryTask(); (-want, +got)\n%s", tc.desc, deadQ, diff)
 		}
 	}
 }

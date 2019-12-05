@@ -42,12 +42,12 @@ func TestClient(t *testing.T) {
 			continue
 		}
 
-		if l := r.LLen(rdb.DefaultQueue).Val(); l != tc.wantQueueSize {
-			t.Errorf("%q has length %d, want %d", rdb.DefaultQueue, l, tc.wantQueueSize)
+		if l := r.LLen(defaultQ).Val(); l != tc.wantQueueSize {
+			t.Errorf("%q has length %d, want %d", defaultQ, l, tc.wantQueueSize)
 		}
 
-		if l := r.ZCard(rdb.Scheduled).Val(); l != tc.wantScheduledSize {
-			t.Errorf("%q has length %d, want %d", rdb.Scheduled, l, tc.wantScheduledSize)
+		if l := r.ZCard(scheduledQ).Val(); l != tc.wantScheduledSize {
+			t.Errorf("%q has length %d, want %d", scheduledQ, l, tc.wantScheduledSize)
 		}
 	}
 }

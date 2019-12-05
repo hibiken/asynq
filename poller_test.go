@@ -91,22 +91,22 @@ func TestPoller(t *testing.T) {
 		time.Sleep(tc.wait)
 		p.terminate()
 
-		gotScheduledRaw := r.ZRange(rdb.Scheduled, 0, -1).Val()
+		gotScheduledRaw := r.ZRange(scheduledQ, 0, -1).Val()
 		gotScheduled := mustUnmarshalSlice(t, gotScheduledRaw)
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", rdb.Scheduled, diff)
+			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", scheduledQ, diff)
 		}
 
-		gotRetryRaw := r.ZRange(rdb.Retry, 0, -1).Val()
+		gotRetryRaw := r.ZRange(retryQ, 0, -1).Val()
 		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", rdb.Retry, diff)
+			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", retryQ, diff)
 		}
 
-		gotQueueRaw := r.LRange(rdb.DefaultQueue, 0, -1).Val()
+		gotQueueRaw := r.LRange(defaultQ, 0, -1).Val()
 		gotQueue := mustUnmarshalSlice(t, gotQueueRaw)
 		if diff := cmp.Diff(tc.wantQueue, gotQueue, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", rdb.DefaultQueue, diff)
+			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", defaultQ, diff)
 		}
 	}
 }

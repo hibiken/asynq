@@ -85,8 +85,8 @@ func TestProcessorSuccess(t *testing.T) {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 
-		if l := r.LLen(rdb.InProgress).Val(); l != 0 {
-			t.Errorf("%q has %d tasks, want 0", rdb.InProgress, l)
+		if l := r.LLen(inProgressQ).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", inProgressQ, l)
 		}
 	}
 }
@@ -162,20 +162,20 @@ func TestProcessorRetry(t *testing.T) {
 		time.Sleep(tc.wait)
 		p.terminate()
 
-		gotRetryRaw := r.ZRange(rdb.Retry, 0, -1).Val()
+		gotRetryRaw := r.ZRange(retryQ, 0, -1).Val()
 		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", rdb.Retry, diff)
+			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", retryQ, diff)
 		}
 
-		gotDeadRaw := r.ZRange(rdb.Dead, 0, -1).Val()
+		gotDeadRaw := r.ZRange(deadQ, 0, -1).Val()
 		gotDead := mustUnmarshalSlice(t, gotDeadRaw)
 		if diff := cmp.Diff(tc.wantDead, gotDead, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", rdb.Dead, diff)
+			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", deadQ, diff)
 		}
 
-		if l := r.LLen(rdb.InProgress).Val(); l != 0 {
-			t.Errorf("%q has %d tasks, want 0", rdb.InProgress, l)
+		if l := r.LLen(inProgressQ).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", inProgressQ, l)
 		}
 	}
 }

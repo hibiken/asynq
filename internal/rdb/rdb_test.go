@@ -107,13 +107,13 @@ func TestEnqueue(t *testing.T) {
 			t.Error(err)
 			continue
 		}
-		res := r.client.LRange(DefaultQueue, 0, -1).Val()
+		res := r.client.LRange(defaultQ, 0, -1).Val()
 		if len(res) != 1 {
-			t.Errorf("LIST %q has length %d, want 1", DefaultQueue, len(res))
+			t.Errorf("LIST %q has length %d, want 1", defaultQ, len(res))
 			continue
 		}
-		if !r.client.SIsMember(allQueues, DefaultQueue).Val() {
-			t.Errorf("SISMEMBER %q %q = false, want true", allQueues, DefaultQueue)
+		if !r.client.SIsMember(allQueues, defaultQ).Val() {
+			t.Errorf("SISMEMBER %q %q = false, want true", allQueues, defaultQ)
 		}
 		if diff := cmp.Diff(*tc.msg, *mustUnmarshal(t, res[0])); diff != "" {
 			t.Errorf("persisted data differed from the original input (-want, +got)\n%s", diff)
@@ -148,8 +148,8 @@ func TestDequeue(t *testing.T) {
 				got, err, tc.want, tc.err)
 			continue
 		}
-		if l := r.client.LLen(InProgress).Val(); l != tc.inProgress {
-			t.Errorf("LIST %q has length %d, want %d", InProgress, l, tc.inProgress)
+		if l := r.client.LLen(inProgressQ).Val(); l != tc.inProgress {
+			t.Errorf("LIST %q has length %d, want %d", inProgressQ, l, tc.inProgress)
 		}
 	}
 }
@@ -188,7 +188,7 @@ func TestDone(t *testing.T) {
 		}
 		// set up initial state
 		for _, task := range tc.initial {
-			err := r.client.LPush(InProgress, mustMarshal(t, task)).Err()
+			err := r.client.LPush(inProgressQ, mustMarshal(t, task)).Err()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -201,13 +201,13 @@ func TestDone(t *testing.T) {
 		}
 
 		var got []*TaskMessage
-		data := r.client.LRange(InProgress, 0, -1).Val()
+		data := r.client.LRange(inProgressQ, 0, -1).Val()
 		for _, s := range data {
 			got = append(got, mustUnmarshal(t, s))
 		}
 
 		if diff := cmp.Diff(tc.final, got, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after calling (*rdb).remove: (-want, +got):\n%s", DefaultQueue, diff)
+			t.Errorf("mismatch found in %q after calling (*rdb).remove: (-want, +got):\n%s", defaultQ, diff)
 			continue
 		}
 	}
@@ -237,7 +237,7 @@ func TestKill(t *testing.T) {
 		}
 		// set up initial state
 		for _, task := range tc.initial {
-			err := r.client.ZAdd(Dead, &redis.Z{Member: mustMarshal(t, task), Score: float64(time.Now().Unix())}).Err()
+			err := r.client.ZAdd(deadQ, &redis.Z{Member: mustMarshal(t, task), Score: float64(time.Now().Unix())}).Err()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -249,10 +249,10 @@ func TestKill(t *testing.T) {
 			continue
 		}
 
-		actual := r.client.ZRange(Dead, 0, -1).Val()
+		actual := r.client.ZRange(deadQ, 0, -1).Val()
 		got := mustUnmarshalSlice(t, actual)
 		if diff := cmp.Diff(tc.want, got, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after calling (*rdb).kill: (-want, +got):\n%s", Dead, diff)
+			t.Errorf("mismatch found in %q after calling (*rdb).kill: (-want, +got):\n%s", deadQ, diff)
 			continue
 		}
 	}
@@ -298,11 +298,11 @@ func TestRestoreUnfinished(t *testing.T) {
 		}
 		// seed src list.
 		for _, msg := range tc.beforeSrc {
-			r.client.LPush(InProgress, mustMarshal(t, msg))
+			r.client.LPush(inProgressQ, mustMarshal(t, msg))
 		}
 		// seed dst list.
 		for _, msg := range tc.beforeDst {
-			r.client.LPush(DefaultQueue, mustMarshal(t, msg))
+			r.client.LPush(defaultQ, mustMarshal(t, msg))
 		}
 
 		if err := r.RestoreUnfinished(); err != nil {
@@ -310,15 +310,15 @@ func TestRestoreUnfinished(t *testing.T) {
 			continue
 		}
 
-		src := r.client.LRange(InProgress, 0, -1).Val()
+		src := r.client.LRange(inProgressQ, 0, -1).Val()
 		gotSrc := mustUnmarshalSlice(t, src)
 		if diff := cmp.Diff(tc.afterSrc, gotSrc, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q (-want, +got)\n%s", InProgress, diff)
+			t.Errorf("mismatch found in %q (-want, +got)\n%s", inProgressQ, diff)
 		}
-		dst := r.client.LRange(DefaultQueue, 0, -1).Val()
+		dst := r.client.LRange(defaultQ, 0, -1).Val()
 		gotDst := mustUnmarshalSlice(t, dst)
 		if diff := cmp.Diff(tc.afterDst, gotDst, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q (-want, +got)\n%s", DefaultQueue, diff)
+			t.Errorf("mismatch found in %q (-want, +got)\n%s", defaultQ, diff)
 		}
 	}
 }
@@ -375,11 +375,11 @@ func TestCheckAndEnqueue(t *testing.T) {
 		if err := r.client.FlushDB().Err(); err != nil {
 			t.Fatal(err)
 		}
-		if err := r.client.ZAdd(Scheduled, tc.initScheduled...).Err(); err != nil {
+		if err := r.client.ZAdd(scheduledQ, tc.initScheduled...).Err(); err != nil {
 			t.Error(err)
 			continue
 		}
-		if err := r.client.ZAdd(Retry, tc.initRetry...).Err(); err != nil {
+		if err := r.client.ZAdd(retryQ, tc.initRetry...).Err(); err != nil {
 			t.Error(err)
 			continue
 		}
@@ -389,12 +389,12 @@ func TestCheckAndEnqueue(t *testing.T) {
 			t.Errorf("(*RDB).CheckScheduled() = %v, want nil", err)
 			continue
 		}
-		queued := r.client.LRange(DefaultQueue, 0, -1).Val()
+		queued := r.client.LRange(defaultQ, 0, -1).Val()
 		gotQueued := mustUnmarshalSlice(t, queued)
 		if diff := cmp.Diff(tc.wantQueued, gotQueued, sortMsgOpt); diff != "" {
-			t.Errorf("%q has %d tasks, want %d tasks; (-want, +got)\n%s", DefaultQueue, len(gotQueued), len(tc.wantQueued), diff)
+			t.Errorf("%q has %d tasks, want %d tasks; (-want, +got)\n%s", defaultQ, len(gotQueued), len(tc.wantQueued), diff)
 		}
-		scheduled := r.client.ZRangeByScore(Scheduled, &redis.ZRangeBy{Min: "-inf", Max: "+inf"}).Val()
+		scheduled := r.client.ZRangeByScore(scheduledQ, &redis.ZRangeBy{Min: "-inf", Max: "+inf"}).Val()
 		gotScheduled := mustUnmarshalSlice(t, scheduled)
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
 			t.Errorf("%q has %d tasks, want %d tasks; (-want, +got)\n%s", scheduled, len(gotScheduled), len(tc.wantScheduled), diff)
@@ -426,7 +426,7 @@ func TestSchedule(t *testing.T) {
 			continue
 		}
 
-		res, err := r.client.ZRangeWithScores(Scheduled, 0, -1).Result()
+		res, err := r.client.ZRangeWithScores(scheduledQ, 0, -1).Result()
 		if err != nil {
 			t.Error(err)
 			continue
@@ -434,7 +434,7 @@ func TestSchedule(t *testing.T) {
 
 		desc := fmt.Sprintf("(*RDB).Schedule(%v, %v)", tc.msg, tc.processAt)
 		if len(res) != 1 {
-			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), Scheduled)
+			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), scheduledQ)
 			continue
 		}
 
@@ -469,7 +469,7 @@ func TestRetryLater(t *testing.T) {
 			continue
 		}
 
-		res, err := r.client.ZRangeWithScores(Retry, 0, -1).Result()
+		res, err := r.client.ZRangeWithScores(retryQ, 0, -1).Result()
 		if err != nil {
 			t.Error(err)
 			continue
@@ -477,7 +477,7 @@ func TestRetryLater(t *testing.T) {
 
 		desc := fmt.Sprintf("(*RDB).RetryLater(%v, %v)", tc.msg, tc.processAt)
 		if len(res) != 1 {
-			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), Retry)
+			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), retryQ)
 			continue
 		}
 
