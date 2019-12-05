@@ -38,6 +38,6 @@ func printStats(s *rdb.Stats) {
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
 	fmt.Fprintf(tw, format, "Enqueued", "InProgress", "Scheduled", "Retry", "Dead")
 	fmt.Fprintf(tw, format, "--------", "----------", "---------", "-----", "----")
-	fmt.Fprintf(tw, format, s.Queued, s.InProgress, s.Scheduled, s.Retry, s.Dead)
+	fmt.Fprintf(tw, format, s.Enqueued, s.InProgress, s.Scheduled, s.Retry, s.Dead)
 	tw.Flush()
 }

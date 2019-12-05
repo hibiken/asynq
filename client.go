@@ -30,7 +30,6 @@ func (c *Client) Process(task *Task, processAt time.Time) error {
 	return c.enqueue(msg, processAt)
 }
 
-// enqueue pushes a given task to the specified queue.
 func (c *Client) enqueue(msg *rdb.TaskMessage, processAt time.Time) error {
 	if time.Now().After(processAt) {
 		return c.rdb.Enqueue(msg)

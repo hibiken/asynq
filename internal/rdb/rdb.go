@@ -60,7 +60,7 @@ type TaskMessage struct {
 
 // Stats represents a state of queues at a certain time.
 type Stats struct {
-	Queued     int
+	Enqueued   int
 	InProgress int
 	Scheduled  int
 	Retry      int
@@ -272,7 +272,7 @@ func (r *RDB) CurrentStats() (*Stats, error) {
 		return nil, err
 	}
 	return &Stats{
-		Queued:     int(qlen.Val()),
+		Enqueued:   int(qlen.Val()),
 		InProgress: int(plen.Val()),
 		Scheduled:  int(slen.Val()),
 		Retry:      int(rlen.Val()),

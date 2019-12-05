@@ -87,7 +87,7 @@ func (p *processor) exec() {
 		// the message can be mutated by the time this function is called.
 		defer func(msg rdb.TaskMessage) {
 			if err := p.rdb.Done(&msg); err != nil {
-				log.Printf("[ERROR] could not remove %+v from %q: %v\n", msg, rdb.InProgress, err)
+				log.Printf("[ERROR] could not mark task %+v as done: %v\n", msg, err)
 			}
 			<-p.sema // release token
 		}(*msg)
@@ -103,7 +103,7 @@ func (p *processor) exec() {
 func (p *processor) restore() {
 	err := p.rdb.RestoreUnfinished()
 	if err != nil {
-		log.Printf("[ERROR] could not move tasks from %q to %q\n", rdb.InProgress, rdb.DefaultQueue)
+		log.Printf("[ERROR] could not restore unfinished tasks: %v\n", err)
 	}
 }
 
