@@ -1,19 +1,17 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 	"text/tabwriter"
-	"time"
 
 	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
-var pollInterval = flag.Duration("interval", 3*time.Second, "polling interval")
+// Example usage: watch -n5 asynqmon
 
 func main() {
 	c := redis.NewClient(&redis.Options{
@@ -22,15 +20,12 @@ func main() {
 	})
 	r := rdb.NewRDB(c)
 
-	for {
-		stats, err := r.CurrentStats()
-		if err != nil {
-			log.Fatal(err)
-		}
-		printStats(stats)
-		fmt.Println()
-		time.Sleep(*pollInterval)
+	stats, err := r.CurrentStats()
+	if err != nil {
+		log.Fatal(err)
 	}
+	printStats(stats)
+	fmt.Println()
 }
 
 func printStats(s *rdb.Stats) {

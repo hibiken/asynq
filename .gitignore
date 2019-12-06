@@ -13,3 +13,6 @@
 
 # Ignore examples for now
 /examples
+
+# Ignore command binary
+/cmd/asynqmon/asynqmon
