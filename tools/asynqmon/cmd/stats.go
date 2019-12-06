@@ -12,6 +12,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Flags
+var uri string
+var db int
+
 // statsCmd represents the stats command
 var statsCmd = &cobra.Command{
 	Use:   "stats",
@@ -39,12 +43,15 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// statsCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+
+	statsCmd.Flags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "Redis server URI")
+	statsCmd.Flags().IntVarP(&db, "db", "n", 0, "Redis database number")
 }
 
 func stats(cmd *cobra.Command, args []string) {
 	c := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   2,
+		Addr: uri,
+		DB:   db,
 	})
 	r := rdb.NewRDB(c)
 
