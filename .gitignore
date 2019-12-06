@@ -15,4 +15,4 @@
 /examples
 
 # Ignore command binary
-/cmd/asynqmon/asynqmon
+/tools/asynqmon/asynqmon
