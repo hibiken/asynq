@@ -3,27 +3,25 @@ package asynq
 import (
 	"log"
 	"time"
+
+	"github.com/hibiken/asynq/internal/rdb"
 )
 
 type poller struct {
-	rdb *rdb
+	rdb *rdb.RDB
 
 	// channel to communicate back to the long running "poller" goroutine.
 	done chan struct{}
 
 	// poll interval on average
 	avgInterval time.Duration
-
-	// redis ZSETs to poll
-	zsets []string
 }
 
-func newPoller(rdb *rdb, avgInterval time.Duration, zsets []string) *poller {
+func newPoller(r *rdb.RDB, avgInterval time.Duration) *poller {
 	return &poller{
-		rdb:         rdb,
+		rdb:         r,
 		done:        make(chan struct{}),
 		avgInterval: avgInterval,
-		zsets:       zsets,
 	}
 }
 
@@ -50,9 +48,7 @@ func (p *poller) start() {
 }
 
 func (p *poller) exec() {
-	for _, zset := range p.zsets {
-		if err := p.rdb.forward(zset); err != nil {
-			log.Printf("[ERROR] could not forward scheduled tasks from %q: %v\n", zset, err)
-		}
+	if err := p.rdb.CheckAndEnqueue(); err != nil {
+		log.Printf("[ERROR] could not forward scheduled tasks: %v\n", err)
 	}
 }

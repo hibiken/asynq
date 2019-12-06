@@ -7,6 +7,8 @@ import (
 	"os/signal"
 	"sync"
 	"time"
+
+	"github.com/hibiken/asynq/internal/rdb"
 )
 
 // Background is a top-level entity for the background-task processing.
@@ -14,18 +16,18 @@ type Background struct {
 	mu      sync.Mutex
 	running bool
 
-	rdb       *rdb
+	rdb       *rdb.RDB
 	poller    *poller
 	processor *processor
 }
 
 // NewBackground returns a new Background instance.
 func NewBackground(numWorkers int, config *RedisConfig) *Background {
-	rdb := newRDB(config)
-	poller := newPoller(rdb, 5*time.Second, []string{scheduled, retry})
-	processor := newProcessor(rdb, numWorkers, nil)
+	r := rdb.NewRDB(newRedisClient(config))
+	poller := newPoller(r, 5*time.Second)
+	processor := newProcessor(r, numWorkers, nil)
 	return &Background{
-		rdb:       rdb,
+		rdb:       r,
 		poller:    poller,
 		processor: processor,
 	}
@@ -95,7 +97,7 @@ func (bg *Background) stop() {
 	bg.poller.terminate()
 	bg.processor.terminate()
 
-	bg.rdb.client.Close()
+	bg.rdb.Close()
 	bg.processor.handler = nil
 	bg.running = false
 }

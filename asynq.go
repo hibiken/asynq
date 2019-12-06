@@ -1,6 +1,6 @@
 package asynq
 
-import "github.com/google/uuid"
+import "github.com/go-redis/redis/v7"
 
 /*
 TODOs:
@@ -23,32 +23,6 @@ type Task struct {
 	Payload map[string]interface{}
 }
 
-// taskMessage is an internal representation of a task with additional metadata fields.
-// This data gets written in redis.
-type taskMessage struct {
-	//-------- Task fields --------
-
-	Type    string
-	Payload map[string]interface{}
-
-	//-------- metadata fields --------
-
-	// unique identifier for each task
-	ID uuid.UUID
-
-	// queue name this message should be enqueued to
-	Queue string
-
-	// max number of retry for this task.
-	Retry int
-
-	// number of times we've retried so far
-	Retried int
-
-	// error message from the last failure
-	ErrorMsg string
-}
-
 // RedisConfig specifies redis configurations.
 type RedisConfig struct {
 	Addr     string
@@ -56,4 +30,12 @@ type RedisConfig struct {
 
 	// DB specifies which redis database to select.
 	DB int
+}
+
+func newRedisClient(config *RedisConfig) *redis.Client {
+	return redis.NewClient(&redis.Options{
+		Addr:     config.Addr,
+		Password: config.Password,
+		DB:       config.DB,
+	})
 }

@@ -1,13 +1,14 @@
 package asynq
 
 import (
+	"github.com/hibiken/asynq/internal/rdb"
 	"testing"
 	"time"
 )
 
 func TestClient(t *testing.T) {
 	r := setup(t)
-	client := &Client{rdb: r}
+	client := &Client{rdb.NewRDB(r)}
 
 	tests := []struct {
 		task              *Task
@@ -31,7 +32,7 @@ func TestClient(t *testing.T) {
 
 	for _, tc := range tests {
 		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
+		if err := r.FlushDB().Err(); err != nil {
 			t.Fatal(err)
 		}
 
@@ -41,12 +42,12 @@ func TestClient(t *testing.T) {
 			continue
 		}
 
-		if l := r.client.LLen(defaultQueue).Val(); l != tc.wantQueueSize {
-			t.Errorf("%q has length %d, want %d", defaultQueue, l, tc.wantQueueSize)
+		if l := r.LLen(defaultQ).Val(); l != tc.wantQueueSize {
+			t.Errorf("%q has length %d, want %d", defaultQ, l, tc.wantQueueSize)
 		}
 
-		if l := r.client.ZCard(scheduled).Val(); l != tc.wantScheduledSize {
-			t.Errorf("%q has length %d, want %d", scheduled, l, tc.wantScheduledSize)
+		if l := r.ZCard(scheduledQ).Val(); l != tc.wantScheduledSize {
+			t.Errorf("%q has length %d, want %d", scheduledQ, l, tc.wantScheduledSize)
 		}
 	}
 }
