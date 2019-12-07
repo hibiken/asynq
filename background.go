@@ -11,7 +11,17 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
-// Background is a top-level entity for the background-task processing.
+// Background is responsible for managing the background-task processing.
+//
+// Background manages background queues to process tasks and retry if
+// necessary. If the processing of a task is unsuccessful, background will
+// schedule it for a retry with an exponential backoff until either the task
+// gets processed successfully or it exhausts its max retry count.
+//
+// Once a task exhausts its retries, it will be moved to the "dead" queue and
+// will be kept in the queue for some time until a certain condition is met
+// (e.g., queue size reaches a certain limit, or the task has been in the
+// queue for a certain amount of time).
 type Background struct {
 	mu      sync.Mutex
 	running bool
@@ -21,7 +31,8 @@ type Background struct {
 	processor *processor
 }
 
-// NewBackground returns a new Background instance.
+// NewBackground returns a new Background with the specified number of workers
+// given a redis configuration .
 func NewBackground(numWorkers int, config *RedisConfig) *Background {
 	r := rdb.NewRDB(newRedisClient(config))
 	poller := newPoller(r, 5*time.Second)

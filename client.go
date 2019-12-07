@@ -7,18 +7,26 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
-// Client is an interface for scheduling tasks.
+// A Client is responsible for scheduling tasks.
+//
+// A Client is used to register task that should be processed
+// immediately or some time in the future.
+//
+// Clients are safe for concurrent use by multiple goroutines.
 type Client struct {
 	rdb *rdb.RDB
 }
 
-// NewClient creates and returns a new client.
+// NewClient and returns a new Client given a redis configuration.
 func NewClient(config *RedisConfig) *Client {
 	r := rdb.NewRDB(newRedisClient(config))
 	return &Client{r}
 }
 
-// Process enqueues the task to be performed at a given time.
+// Process registers a task to be processed at the specified time.
+//
+// Process returns nil if the task was registered successfully,
+// otherwise returns non-nil error.
 func (c *Client) Process(task *Task, processAt time.Time) error {
 	msg := &rdb.TaskMessage{
 		ID:      uuid.New(),
