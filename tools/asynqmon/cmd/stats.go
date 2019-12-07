@@ -12,23 +12,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Flags
-var uri string
-var db int
-
 // statsCmd represents the stats command
 var statsCmd = &cobra.Command{
 	Use:   "stats",
-	Short: "Shows current state of the queues",
-	Long: `Stats command shows the number of tasks in each queue at that instant.
+	Short: "shows current state of the queues",
+	Long: `The stats command shows the number of tasks in each queue at that instant.
 
 To monitor the queues continuously, it's recommended that you run this
 command in conjunction with the watch command.
 
 Example: watch -n 5 asynqmon stats`,
-	Run: func(cmd *cobra.Command, args []string) {
-		stats(cmd, args)
-	},
+	Args: cobra.NoArgs,
+	Run:  stats,
 }
 
 func init() {
@@ -43,9 +38,6 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// statsCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-
-	statsCmd.Flags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "Redis server URI")
-	statsCmd.Flags().IntVarP(&db, "db", "n", 0, "Redis database number")
 }
 
 func stats(cmd *cobra.Command, args []string) {
