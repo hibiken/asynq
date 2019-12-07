@@ -97,7 +97,6 @@ func (r *RDB) Dequeue(timeout time.Duration) (*TaskMessage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not unmarshal %v to json: %v", data, err)
 	}
-	fmt.Printf("[DEBUG] perform task %+v from %s\n", msg, defaultQ)
 	return &msg, nil
 }
 
@@ -196,7 +195,6 @@ func (r *RDB) forward(from string) error {
 	return msgs
 	`)
 	now := float64(time.Now().Unix())
-	res, err := script.Run(r.client, []string{from, allQueues, defaultQ}, now).Result()
-	fmt.Printf("[DEBUG] got %d tasks from %q\n", len(res.([]interface{})), from)
+	_, err := script.Run(r.client, []string{from, allQueues, defaultQ}, now).Result()
 	return err
 }
