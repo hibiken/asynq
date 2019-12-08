@@ -63,7 +63,7 @@ func main() {
 }
 
 // if handler returns an error or panics, the task will be retried after some delay.
-func handler(t *Task) error {
+func handler(t *asynq.Task) error {
     switch t.Type {
         case "send_welcome_email":
             rid, ok := t.Payload["recipient_id"]
