@@ -112,9 +112,6 @@ func TestEnqueue(t *testing.T) {
 			t.Errorf("LIST %q has length %d, want 1", defaultQ, len(res))
 			continue
 		}
-		if !r.client.SIsMember(allQueues, defaultQ).Val() {
-			t.Errorf("SISMEMBER %q %q = false, want true", allQueues, defaultQ)
-		}
 		if diff := cmp.Diff(*tc.msg, *mustUnmarshal(t, res[0])); diff != "" {
 			t.Errorf("persisted data differed from the original input (-want, +got)\n%s", diff)
 		}

@@ -10,6 +10,44 @@ import (
 	"github.com/google/uuid"
 )
 
+// TODO(hibiken): Replace this with cmpopts.EquateApproxTime once it becomes availalble.
+// https://github.com/google/go-cmp/issues/166
+//
+// EquateApproxTime returns a Comparer options that
+// determine two time.Time values to be equal if they
+// are within the given time interval of one another.
+// Note that if both times have a monotonic clock reading,
+// the monotonic time difference will be used.
+//
+// The zero time is treated specially: it is only considered
+// equal to another zero time value.
+//
+// It will panic if margin is negative.
+func EquateApproxTime(margin time.Duration) cmp.Option {
+	if margin < 0 {
+		panic("negative duration in EquateApproxTime")
+	}
+	return cmp.FilterValues(func(x, y time.Time) bool {
+		return !x.IsZero() && !y.IsZero()
+	}, cmp.Comparer(timeApproximator{margin}.compare))
+}
+
+type timeApproximator struct {
+	margin time.Duration
+}
+
+func (a timeApproximator) compare(x, y time.Time) bool {
+	// Avoid subtracting times to avoid overflow when the
+	// difference is larger than the largest representible duration.
+	if x.After(y) {
+		// Ensure x is always before y
+		x, y = y, x
+	}
+	// We're within the margin if x+margin >= y.
+	// Note: time.Time doesn't have AfterOrEqual method hence the negation.
+	return !x.Add(a.margin).Before(y)
+}
+
 func TestCurrentStats(t *testing.T) {
 	r := setup(t)
 	m1 := randomTask("send_email", "default", map[string]interface{}{"subject": "hello"})
@@ -429,40 +467,230 @@ func TestListDead(t *testing.T) {
 
 var timeCmpOpt = EquateApproxTime(time.Second)
 
-// TODO(hibiken): Replace this with cmpopts.EquateApproxTime once it becomes availalble.
-// https://github.com/google/go-cmp/issues/166
-//
-// EquateApproxTime returns a Comparer options that
-// determine two time.Time values to be equal if they
-// are within the given time interval of one another.
-// Note that if both times have a monotonic clock reading,
-// the monotonic time difference will be used.
-//
-// The zero time is treated specially: it is only considered
-// equal to another zero time value.
-//
-// It will panic if margin is negative.
-func EquateApproxTime(margin time.Duration) cmp.Option {
-	if margin < 0 {
-		panic("negative duration in EquateApproxTime")
+func TestRescue(t *testing.T) {
+	r := setup(t)
+
+	t1 := randomTask("send_email", "default", nil)
+	t2 := randomTask("gen_thumbnail", "default", nil)
+	s1 := float64(time.Now().Add(-5 * time.Minute).Unix())
+	s2 := float64(time.Now().Add(-time.Hour).Unix())
+	type deadEntry struct {
+		msg   *TaskMessage
+		score float64
 	}
-	return cmp.FilterValues(func(x, y time.Time) bool {
-		return !x.IsZero() && !y.IsZero()
-	}, cmp.Comparer(timeApproximator{margin}.compare))
+	tests := []struct {
+		dead         []deadEntry
+		score        float64
+		id           string
+		want         error // expected return value from calling Rescue
+		wantDead     []*TaskMessage
+		wantEnqueued []*TaskMessage
+	}{
+		{
+			dead: []deadEntry{
+				{t1, s1},
+				{t2, s2},
+			},
+			score:        s2,
+			id:           t2.ID.String(),
+			want:         nil,
+			wantDead:     []*TaskMessage{t1},
+			wantEnqueued: []*TaskMessage{t2},
+		},
+		{
+			dead: []deadEntry{
+				{t1, s1},
+				{t2, s2},
+			},
+			score:        123.0,
+			id:           t2.ID.String(),
+			want:         ErrTaskNotFound,
+			wantDead:     []*TaskMessage{t1, t2},
+			wantEnqueued: []*TaskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// initialize dead queue
+		for _, d := range tc.dead {
+			err := r.client.ZAdd(deadQ, &redis.Z{Member: mustMarshal(t, d.msg), Score: d.score}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		got := r.Rescue(tc.id, tc.score)
+		if got != tc.want {
+			t.Errorf("r.Rescue(%s, %0.f) = %v, want %v", tc.id, tc.score, got, tc.want)
+			continue
+		}
+
+		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
+		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", defaultQ, diff)
+		}
+
+		gotDeadRaw := r.client.ZRange(deadQ, 0, -1).Val()
+		gotDead := mustUnmarshalSlice(t, gotDeadRaw)
+		if diff := cmp.Diff(tc.wantDead, gotDead, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q, (-want, +got)\n%s", deadQ, diff)
+		}
+	}
 }
 
-type timeApproximator struct {
-	margin time.Duration
+func TestRetryNow(t *testing.T) {
+	r := setup(t)
+
+	t1 := randomTask("send_email", "default", nil)
+	t2 := randomTask("gen_thumbnail", "default", nil)
+	s1 := float64(time.Now().Add(-5 * time.Minute).Unix())
+	s2 := float64(time.Now().Add(-time.Hour).Unix())
+	type retryEntry struct {
+		msg   *TaskMessage
+		score float64
+	}
+	tests := []struct {
+		dead         []retryEntry
+		score        float64
+		id           string
+		want         error // expected return value from calling RetryNow
+		wantRetry    []*TaskMessage
+		wantEnqueued []*TaskMessage
+	}{
+		{
+			dead: []retryEntry{
+				{t1, s1},
+				{t2, s2},
+			},
+			score:        s2,
+			id:           t2.ID.String(),
+			want:         nil,
+			wantRetry:    []*TaskMessage{t1},
+			wantEnqueued: []*TaskMessage{t2},
+		},
+		{
+			dead: []retryEntry{
+				{t1, s1},
+				{t2, s2},
+			},
+			score:        123.0,
+			id:           t2.ID.String(),
+			want:         ErrTaskNotFound,
+			wantRetry:    []*TaskMessage{t1, t2},
+			wantEnqueued: []*TaskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// initialize retry queue
+		for _, d := range tc.dead {
+			err := r.client.ZAdd(retryQ, &redis.Z{Member: mustMarshal(t, d.msg), Score: d.score}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		got := r.RetryNow(tc.id, tc.score)
+		if got != tc.want {
+			t.Errorf("r.RetryNow(%s, %0.f) = %v, want %v", tc.id, tc.score, got, tc.want)
+			continue
+		}
+
+		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
+		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", defaultQ, diff)
+		}
+
+		gotRetryRaw := r.client.ZRange(retryQ, 0, -1).Val()
+		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
+		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q, (-want, +got)\n%s", retryQ, diff)
+		}
+	}
 }
 
-func (a timeApproximator) compare(x, y time.Time) bool {
-	// Avoid subtracting times to avoid overflow when the
-	// difference is larger than the largest representible duration.
-	if x.After(y) {
-		// Ensure x is always before y
-		x, y = y, x
+func TestProcessNow(t *testing.T) {
+	r := setup(t)
+
+	t1 := randomTask("send_email", "default", nil)
+	t2 := randomTask("gen_thumbnail", "default", nil)
+	s1 := float64(time.Now().Add(-5 * time.Minute).Unix())
+	s2 := float64(time.Now().Add(-time.Hour).Unix())
+	type scheduledEntry struct {
+		msg   *TaskMessage
+		score float64
 	}
-	// We're within the margin if x+margin >= y.
-	// Note: time.Time doesn't have AfterOrEqual method hence the negation.
-	return !x.Add(a.margin).Before(y)
+	tests := []struct {
+		dead          []scheduledEntry
+		score         float64
+		id            string
+		want          error // expected return value from calling ProcessNow
+		wantScheduled []*TaskMessage
+		wantEnqueued  []*TaskMessage
+	}{
+		{
+			dead: []scheduledEntry{
+				{t1, s1},
+				{t2, s2},
+			},
+			score:         s2,
+			id:            t2.ID.String(),
+			want:          nil,
+			wantScheduled: []*TaskMessage{t1},
+			wantEnqueued:  []*TaskMessage{t2},
+		},
+		{
+			dead: []scheduledEntry{
+				{t1, s1},
+				{t2, s2},
+			},
+			score:         123.0,
+			id:            t2.ID.String(),
+			want:          ErrTaskNotFound,
+			wantScheduled: []*TaskMessage{t1, t2},
+			wantEnqueued:  []*TaskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// initialize scheduled queue
+		for _, d := range tc.dead {
+			err := r.client.ZAdd(scheduledQ, &redis.Z{Member: mustMarshal(t, d.msg), Score: d.score}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		got := r.ProcessNow(tc.id, tc.score)
+		if got != tc.want {
+			t.Errorf("r.RetryNow(%s, %0.f) = %v, want %v", tc.id, tc.score, got, tc.want)
+			continue
+		}
+
+		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
+		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", defaultQ, diff)
+		}
+
+		gotScheduledRaw := r.client.ZRange(scheduledQ, 0, -1).Val()
+		gotScheduled := mustUnmarshalSlice(t, gotScheduledRaw)
+		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q, (-want, +got)\n%s", scheduledQ, diff)
+		}
+	}
 }

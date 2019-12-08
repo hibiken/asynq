@@ -2,8 +2,10 @@ package rdb
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
+	"github.com/go-redis/redis/v7"
 	"github.com/google/uuid"
 )
 
@@ -220,4 +222,70 @@ func (r *RDB) ListDead() ([]*DeadTask, error) {
 		})
 	}
 	return tasks, nil
+}
+
+// Rescue finds a task that matches the given id and score from dead queue
+// and enqueues it for processing. If a task that matches the id and score
+// does not exist, it returns ErrTaskNotFound.
+func (r *RDB) Rescue(id string, score float64) error {
+	n, err := r.removeAndEnqueue(deadQ, id, score)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrTaskNotFound
+	}
+	return nil
+}
+
+// RetryNow finds a task that matches the given id and score from retry queue
+// and enqueues it for processing. If a task that matches the id and score
+// does not exist, it returns ErrTaskNotFound.
+func (r *RDB) RetryNow(id string, score float64) error {
+	n, err := r.removeAndEnqueue(retryQ, id, score)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrTaskNotFound
+	}
+	return nil
+}
+
+// ProcessNow finds a task that matches the given id and score from scheduled queue
+// and enqueues it for processing. If a task that matches the id and score does not
+// exist, it returns ErrTaskNotFound.
+func (r *RDB) ProcessNow(id string, score float64) error {
+	n, err := r.removeAndEnqueue(scheduledQ, id, score)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrTaskNotFound
+	}
+	return nil
+}
+
+func (r *RDB) removeAndEnqueue(zset, id string, score float64) (int64, error) {
+	script := redis.NewScript(`
+	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
+	for _, msg in ipairs(msgs) do
+		local decoded = cjson.decode(msg)
+		if decoded["ID"] == ARGV[2] then
+			redis.call("ZREM", KEYS[1], msg)
+			redis.call("LPUSH", KEYS[2], msg)
+			return 1
+		end
+	end
+	return 0
+	`)
+	res, err := script.Run(r.client, []string{zset, defaultQ}, score, id).Result()
+	if err != nil {
+		return 0, err
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, fmt.Errorf("could not cast %v to int64", res)
+	}
+	return n, nil
 }
