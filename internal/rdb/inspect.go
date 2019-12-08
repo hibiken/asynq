@@ -225,8 +225,8 @@ func (r *RDB) ListDead() ([]*DeadTask, error) {
 }
 
 // Rescue finds a task that matches the given id and score from dead queue
-// and enqueues it processing. If a task that maches the id and score does
-// not exist, it returns ErrTaskNotFound.
+// and enqueues it for processing. If a task that matches the id and score
+// does not exist, it returns ErrTaskNotFound.
 func (r *RDB) Rescue(id string, score float64) error {
 	n, err := r.removeAndEnqueue(deadQ, id, score)
 	if err != nil {
@@ -239,8 +239,8 @@ func (r *RDB) Rescue(id string, score float64) error {
 }
 
 // RetryNow finds a task that matches the given id and score from retry queue
-// and enqueues it for processing. If a task that maches the id and score does
-// not exist, it returns ErrTaskNotFound.
+// and enqueues it for processing. If a task that matches the id and score
+// does not exist, it returns ErrTaskNotFound.
 func (r *RDB) RetryNow(id string, score float64) error {
 	n, err := r.removeAndEnqueue(retryQ, id, score)
 	if err != nil {
@@ -253,7 +253,7 @@ func (r *RDB) RetryNow(id string, score float64) error {
 }
 
 // ProcessNow finds a task that matches the given id and score from scheduled queue
-// and enqueues it for processing. If a task that maches the id and score does not
+// and enqueues it for processing. If a task that matches the id and score does not
 // exist, it returns ErrTaskNotFound.
 func (r *RDB) ProcessNow(id string, score float64) error {
 	n, err := r.removeAndEnqueue(scheduledQ, id, score)
