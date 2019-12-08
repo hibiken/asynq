@@ -4,9 +4,8 @@ import "github.com/go-redis/redis/v7"
 
 /*
 TODOs:
-- [P0] Go docs + CONTRIBUTION.md
-- [P0] command to list each queue tasks
 - [P0] command to retry tasks from "retry", "dead" queue
+- [P0] Go docs + CONTRIBUTION.md + Github issue template
 - [P1] Add Support for multiple queues and priority
 - [P1] User defined max-retry count
 */
