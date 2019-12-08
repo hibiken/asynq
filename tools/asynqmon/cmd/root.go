@@ -19,12 +19,13 @@ var db int
 var rootCmd = &cobra.Command{
 	Use:   "asynqmon",
 	Short: "A monitoring tool for asynq queues",
-	Long: `TODO(hibiken): A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Long: `Asynqmon is a CLI tool to inspect and monitor queues managed by asynq package.
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+Asynqmon has a few subcommands to show the current state of the queues, while others were
+used to make manual changes to the queues. Monitoring commands can be used in conjunction 
+with the "watch" command to continuously run the command at a certain interval.
+	
+Example: watch -n 5 asynqmon stats`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	//	Run: func(cmd *cobra.Command, args []string) { },

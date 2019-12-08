@@ -20,10 +20,10 @@ var validArgs = []string{"enqueued", "inprogress", "scheduled", "retry", "dead"}
 var lsCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "lists queue contents",
-	Long: `The ls command lists all tasks from the given queue in a table format.
+	Long: `The ls command lists all tasks from the specified queue in a table format.
 
-The command takes one argument which specifies the queue. The value
-for the argument should be one of "enqueued", "inprogress", "scheduled",
+The command takes one argument which specifies the queue to inspect. The value
+of the argument should be one of "enqueued", "inprogress", "scheduled",
 "retry", or "dead".
 
 Example: asynqmon ls dead`,
@@ -64,7 +64,7 @@ func ls(cmd *cobra.Command, args []string) {
 	case "dead":
 		listDead(r)
 	default:
-		fmt.Printf("error: `asynqmon ls <queue>` only accepts %v as the argument for queue.\n", validArgs)
+		fmt.Printf("error: `asynqmon ls <queue>` only accepts %v as the argument.\n", validArgs)
 		return
 	}
 }
