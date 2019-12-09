@@ -18,8 +18,8 @@ type Client struct {
 }
 
 // NewClient and returns a new Client given a redis configuration.
-func NewClient(config *RedisConfig) *Client {
-	r := rdb.NewRDB(newRedisClient(config))
+func NewClient(cfg *RedisConfig) *Client {
+	r := rdb.NewRDB(newRedisClient(cfg))
 	return &Client{r}
 }
 

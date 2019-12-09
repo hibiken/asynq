@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -49,7 +48,8 @@ func stats(cmd *cobra.Command, args []string) {
 
 	stats, err := r.CurrentStats()
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	printStats(stats)
 	fmt.Println()

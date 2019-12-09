@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -105,7 +104,8 @@ func parseQueryID(queryID string) (id uuid.UUID, score float64, qtype string, er
 func listEnqueued(r *rdb.RDB) {
 	tasks, err := r.ListEnqueued()
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	if len(tasks) == 0 {
 		fmt.Println("No enqueued tasks")
@@ -123,7 +123,8 @@ func listEnqueued(r *rdb.RDB) {
 func listInProgress(r *rdb.RDB) {
 	tasks, err := r.ListInProgress()
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	if len(tasks) == 0 {
 		fmt.Println("No in-progress tasks")
@@ -141,7 +142,8 @@ func listInProgress(r *rdb.RDB) {
 func listScheduled(r *rdb.RDB) {
 	tasks, err := r.ListScheduled()
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	if len(tasks) == 0 {
 		fmt.Println("No scheduled tasks")
@@ -160,7 +162,8 @@ func listScheduled(r *rdb.RDB) {
 func listRetry(r *rdb.RDB) {
 	tasks, err := r.ListRetry()
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	if len(tasks) == 0 {
 		fmt.Println("No retry tasks")
@@ -179,7 +182,8 @@ func listRetry(r *rdb.RDB) {
 func listDead(r *rdb.RDB) {
 	tasks, err := r.ListDead()
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	if len(tasks) == 0 {
 		fmt.Println("No dead tasks")

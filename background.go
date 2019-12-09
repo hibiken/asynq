@@ -33,8 +33,8 @@ type Background struct {
 
 // NewBackground returns a new Background with the specified number of workers
 // given a redis configuration .
-func NewBackground(numWorkers int, config *RedisConfig) *Background {
-	r := rdb.NewRDB(newRedisClient(config))
+func NewBackground(numWorkers int, cfg *RedisConfig) *Background {
+	r := rdb.NewRDB(newRedisClient(cfg))
 	poller := newPoller(r, 5*time.Second)
 	processor := newProcessor(r, numWorkers, nil)
 	return &Background{

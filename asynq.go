@@ -32,10 +32,10 @@ type RedisConfig struct {
 	DB int
 }
 
-func newRedisClient(config *RedisConfig) *redis.Client {
+func newRedisClient(cfg *RedisConfig) *redis.Client {
 	return redis.NewClient(&redis.Options{
-		Addr:     config.Addr,
-		Password: config.Password,
-		DB:       config.DB,
+		Addr:     cfg.Addr,
+		Password: cfg.Password,
+		DB:       cfg.DB,
 	})
 }

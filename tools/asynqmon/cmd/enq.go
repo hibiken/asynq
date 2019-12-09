@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"log"
+	"os"
 
 	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/rdb"
@@ -42,7 +42,8 @@ func init() {
 func enq(cmd *cobra.Command, args []string) {
 	id, score, qtype, err := parseQueryID(args[0])
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	r := rdb.NewRDB(redis.NewClient(&redis.Options{
 		Addr: uri,
@@ -56,10 +57,12 @@ func enq(cmd *cobra.Command, args []string) {
 	case "d":
 		err = r.Rescue(id.String(), float64(score))
 	default:
-		log.Fatalln("invalid argument")
+		fmt.Println("invalid argument")
+		os.Exit(1)
 	}
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	fmt.Printf("Successfully enqueued %v\n", args[0])
 }
