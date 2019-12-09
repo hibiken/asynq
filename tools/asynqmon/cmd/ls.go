@@ -5,11 +5,13 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/go-redis/redis/v7"
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
 )
@@ -19,7 +21,7 @@ var validArgs = []string{"enqueued", "inprogress", "scheduled", "retry", "dead"}
 // lsCmd represents the ls command
 var lsCmd = &cobra.Command{
 	Use:   "ls",
-	Short: "lists queue contents",
+	Short: "Lists queue contents",
 	Long: `The ls command lists all tasks from the specified queue in a table format.
 
 The command takes one argument which specifies the queue to inspect. The value
@@ -69,10 +71,41 @@ func ls(cmd *cobra.Command, args []string) {
 	}
 }
 
+// queryID returns an identifier used for "enq" command.
+// score is the zset score and queryType should be one
+// of "s", "r" or "d" (scheduled, retry, dead respectively).
+func queryID(id uuid.UUID, score int64, qtype string) string {
+	const format = "%v:%v:%v"
+	return fmt.Sprintf(format, qtype, score, id)
+}
+
+// parseQueryID is a reverse operation of queryID function.
+// It takes a queryID and return each part of id with proper
+// type if valid, otherwise it reports an error.
+func parseQueryID(queryID string) (id uuid.UUID, score float64, qtype string, err error) {
+	parts := strings.Split(queryID, ":")
+	if len(parts) != 3 {
+		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
+	}
+	id, err = uuid.Parse(parts[2])
+	if err != nil {
+		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
+	}
+	score, err = strconv.ParseFloat(parts[1], 64)
+	if err != nil {
+		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
+	}
+	qtype = parts[0]
+	if len(qtype) != 1 || !strings.Contains("srd", qtype) {
+		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
+	}
+	return id, score, qtype, nil
+}
+
 func listEnqueued(r *rdb.RDB) {
 	tasks, err := r.ListEnqueued()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 	if len(tasks) == 0 {
 		fmt.Println("No enqueued tasks")
@@ -90,7 +123,7 @@ func listEnqueued(r *rdb.RDB) {
 func listInProgress(r *rdb.RDB) {
 	tasks, err := r.ListInProgress()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 	if len(tasks) == 0 {
 		fmt.Println("No in-progress tasks")
@@ -108,7 +141,7 @@ func listInProgress(r *rdb.RDB) {
 func listScheduled(r *rdb.RDB) {
 	tasks, err := r.ListScheduled()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 	if len(tasks) == 0 {
 		fmt.Println("No scheduled tasks")
@@ -118,7 +151,7 @@ func listScheduled(r *rdb.RDB) {
 	printRows := func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
 			processIn := fmt.Sprintf("%.0f seconds", t.ProcessAt.Sub(time.Now()).Seconds())
-			fmt.Fprintf(w, tmpl, t.ID, t.Type, t.Payload, processIn)
+			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "s"), t.Type, t.Payload, processIn)
 		}
 	}
 	printTable(cols, printRows)
@@ -127,7 +160,7 @@ func listScheduled(r *rdb.RDB) {
 func listRetry(r *rdb.RDB) {
 	tasks, err := r.ListRetry()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 	if len(tasks) == 0 {
 		fmt.Println("No retry tasks")
@@ -137,7 +170,7 @@ func listRetry(r *rdb.RDB) {
 	printRows := func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
 			retryIn := fmt.Sprintf("%.0f seconds", t.ProcessAt.Sub(time.Now()).Seconds())
-			fmt.Fprintf(w, tmpl, t.ID, t.Type, t.Payload, retryIn, t.ErrorMsg, t.Retried, t.Retry)
+			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "r"), t.Type, t.Payload, retryIn, t.ErrorMsg, t.Retried, t.Retry)
 		}
 	}
 	printTable(cols, printRows)
@@ -146,7 +179,7 @@ func listRetry(r *rdb.RDB) {
 func listDead(r *rdb.RDB) {
 	tasks, err := r.ListDead()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 	if len(tasks) == 0 {
 		fmt.Println("No dead tasks")
@@ -155,7 +188,7 @@ func listDead(r *rdb.RDB) {
 	cols := []string{"ID", "Type", "Payload", "Last Failed", "Last Error"}
 	printRows := func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
-			fmt.Fprintf(w, tmpl, t.ID, t.Type, t.Payload, t.LastFailedAt, t.ErrorMsg)
+			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "d"), t.Type, t.Payload, t.LastFailedAt, t.ErrorMsg)
 		}
 	}
 	printTable(cols, printRows)

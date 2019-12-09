@@ -15,7 +15,7 @@ import (
 // statsCmd represents the stats command
 var statsCmd = &cobra.Command{
 	Use:   "stats",
-	Short: "shows current state of the queues",
+	Short: "Shows current state of the queues",
 	Long: `The stats command shows the number of tasks in each queue at that instant.
 
 To monitor the queues continuously, it's recommended that you run this

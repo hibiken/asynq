@@ -249,8 +249,8 @@ func TestListScheduled(t *testing.T) {
 	m2 := randomTask("reindex", "default", nil)
 	p1 := time.Now().Add(30 * time.Minute)
 	p2 := time.Now().Add(24 * time.Hour)
-	t1 := &ScheduledTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, ProcessAt: p1}
-	t2 := &ScheduledTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, ProcessAt: p2}
+	t1 := &ScheduledTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, ProcessAt: p1, Score: p1.Unix()}
+	t2 := &ScheduledTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, ProcessAt: p2, Score: p2.Unix()}
 
 	type scheduledEntry struct {
 		msg       *TaskMessage
@@ -330,9 +330,11 @@ func TestListRetry(t *testing.T) {
 	p1 := time.Now().Add(5 * time.Minute)
 	p2 := time.Now().Add(24 * time.Hour)
 	t1 := &RetryTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload,
-		ProcessAt: p1, ErrorMsg: m1.ErrorMsg, Retried: m1.Retried, Retry: m1.Retry}
+		ProcessAt: p1, ErrorMsg: m1.ErrorMsg, Retried: m1.Retried,
+		Retry: m1.Retry, Score: p1.Unix()}
 	t2 := &RetryTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload,
-		ProcessAt: p2, ErrorMsg: m2.ErrorMsg, Retried: m2.Retried, Retry: m2.Retry}
+		ProcessAt: p2, ErrorMsg: m2.ErrorMsg, Retried: m2.Retried,
+		Retry: m2.Retry, Score: p2.Unix()}
 
 	type retryEntry struct {
 		msg       *TaskMessage
@@ -407,8 +409,10 @@ func TestListDead(t *testing.T) {
 	}
 	f1 := time.Now().Add(-5 * time.Minute)
 	f2 := time.Now().Add(-24 * time.Hour)
-	t1 := &DeadTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, LastFailedAt: f1, ErrorMsg: m1.ErrorMsg}
-	t2 := &DeadTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, LastFailedAt: f2, ErrorMsg: m2.ErrorMsg}
+	t1 := &DeadTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload,
+		LastFailedAt: f1, ErrorMsg: m1.ErrorMsg, Score: f1.Unix()}
+	t2 := &DeadTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload,
+		LastFailedAt: f2, ErrorMsg: m2.ErrorMsg, Score: f2.Unix()}
 
 	type deadEntry struct {
 		msg          *TaskMessage
