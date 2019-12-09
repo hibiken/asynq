@@ -9,7 +9,7 @@ import (
 
 // A Client is responsible for scheduling tasks.
 //
-// A Client is used to register task that should be processed
+// A Client is used to register tasks that should be processed
 // immediately or some time in the future.
 //
 // Clients are safe for concurrent use by multiple goroutines.
@@ -25,7 +25,7 @@ func NewClient(cfg *RedisConfig) *Client {
 
 // Process registers a task to be processed at the specified time.
 //
-// Process returns nil if the task was registered successfully,
+// Process returns nil if the task is registered successfully,
 // otherwise returns non-nil error.
 func (c *Client) Process(task *Task, processAt time.Time) error {
 	msg := &rdb.TaskMessage{
