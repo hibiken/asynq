@@ -471,7 +471,7 @@ func TestListDead(t *testing.T) {
 
 var timeCmpOpt = EquateApproxTime(time.Second)
 
-func TestRescue(t *testing.T) {
+func TestEnqueueDeadTask(t *testing.T) {
 	r := setup(t)
 
 	t1 := randomTask("send_email", "default", nil)
@@ -486,7 +486,7 @@ func TestRescue(t *testing.T) {
 		dead         []deadEntry
 		score        float64
 		id           string
-		want         error // expected return value from calling Rescue
+		want         error // expected return value from calling EnqueueDeadTask
 		wantDead     []*TaskMessage
 		wantEnqueued []*TaskMessage
 	}{
@@ -527,9 +527,9 @@ func TestRescue(t *testing.T) {
 			}
 		}
 
-		got := r.Rescue(tc.id, tc.score)
+		got := r.EnqueueDeadTask(tc.id, tc.score)
 		if got != tc.want {
-			t.Errorf("r.Rescue(%s, %0.f) = %v, want %v", tc.id, tc.score, got, tc.want)
+			t.Errorf("r.EnqueueDeadTask(%s, %0.f) = %v, want %v", tc.id, tc.score, got, tc.want)
 			continue
 		}
 
@@ -547,7 +547,7 @@ func TestRescue(t *testing.T) {
 	}
 }
 
-func TestRetryNow(t *testing.T) {
+func TestEnqueueRetryTask(t *testing.T) {
 	r := setup(t)
 
 	t1 := randomTask("send_email", "default", nil)
@@ -562,7 +562,7 @@ func TestRetryNow(t *testing.T) {
 		dead         []retryEntry
 		score        float64
 		id           string
-		want         error // expected return value from calling RetryNow
+		want         error // expected return value from calling EnqueueRetryTask
 		wantRetry    []*TaskMessage
 		wantEnqueued []*TaskMessage
 	}{
@@ -603,9 +603,9 @@ func TestRetryNow(t *testing.T) {
 			}
 		}
 
-		got := r.RetryNow(tc.id, tc.score)
+		got := r.EnqueueRetryTask(tc.id, tc.score)
 		if got != tc.want {
-			t.Errorf("r.RetryNow(%s, %0.f) = %v, want %v", tc.id, tc.score, got, tc.want)
+			t.Errorf("r.EnqueueRetryTask(%s, %0.f) = %v, want %v", tc.id, tc.score, got, tc.want)
 			continue
 		}
 
@@ -623,7 +623,7 @@ func TestRetryNow(t *testing.T) {
 	}
 }
 
-func TestProcessNow(t *testing.T) {
+func TestEnqueueScheduledTask(t *testing.T) {
 	r := setup(t)
 
 	t1 := randomTask("send_email", "default", nil)
@@ -638,7 +638,7 @@ func TestProcessNow(t *testing.T) {
 		dead          []scheduledEntry
 		score         float64
 		id            string
-		want          error // expected return value from calling ProcessNow
+		want          error // expected return value from calling EnqueueScheduledTask
 		wantScheduled []*TaskMessage
 		wantEnqueued  []*TaskMessage
 	}{
@@ -679,9 +679,9 @@ func TestProcessNow(t *testing.T) {
 			}
 		}
 
-		got := r.ProcessNow(tc.id, tc.score)
+		got := r.EnqueueScheduledTask(tc.id, tc.score)
 		if got != tc.want {
-			t.Errorf("r.RetryNow(%s, %0.f) = %v, want %v", tc.id, tc.score, got, tc.want)
+			t.Errorf("r.EnqueueRetryTask(%s, %0.f) = %v, want %v", tc.id, tc.score, got, tc.want)
 			continue
 		}
 
