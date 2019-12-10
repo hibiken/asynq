@@ -81,7 +81,7 @@ func queryID(id uuid.UUID, score int64, qtype string) string {
 // parseQueryID is a reverse operation of queryID function.
 // It takes a queryID and return each part of id with proper
 // type if valid, otherwise it reports an error.
-func parseQueryID(queryID string) (id uuid.UUID, score float64, qtype string, err error) {
+func parseQueryID(queryID string) (id uuid.UUID, score int64, qtype string, err error) {
 	parts := strings.Split(queryID, ":")
 	if len(parts) != 3 {
 		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
@@ -90,7 +90,7 @@ func parseQueryID(queryID string) (id uuid.UUID, score float64, qtype string, er
 	if err != nil {
 		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
 	}
-	score, err = strconv.ParseFloat(parts[1], 64)
+	score, err = strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
 		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
 	}

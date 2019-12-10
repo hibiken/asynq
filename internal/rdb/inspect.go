@@ -233,8 +233,8 @@ func (r *RDB) ListDead() ([]*DeadTask, error) {
 // EnqueueDeadTask finds a task that matches the given id and score from dead queue
 // and enqueues it for processing. If a task that matches the id and score
 // does not exist, it returns ErrTaskNotFound.
-func (r *RDB) EnqueueDeadTask(id string, score float64) error {
-	n, err := r.removeAndEnqueue(deadQ, id, score)
+func (r *RDB) EnqueueDeadTask(id uuid.UUID, score int64) error {
+	n, err := r.removeAndEnqueue(deadQ, id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -247,8 +247,8 @@ func (r *RDB) EnqueueDeadTask(id string, score float64) error {
 // EnqueueRetryTask finds a task that matches the given id and score from retry queue
 // and enqueues it for processing. If a task that matches the id and score
 // does not exist, it returns ErrTaskNotFound.
-func (r *RDB) EnqueueRetryTask(id string, score float64) error {
-	n, err := r.removeAndEnqueue(retryQ, id, score)
+func (r *RDB) EnqueueRetryTask(id uuid.UUID, score int64) error {
+	n, err := r.removeAndEnqueue(retryQ, id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -261,8 +261,8 @@ func (r *RDB) EnqueueRetryTask(id string, score float64) error {
 // EnqueueScheduledTask finds a task that matches the given id and score from scheduled queue
 // and enqueues it for processing. If a task that matches the id and score does not
 // exist, it returns ErrTaskNotFound.
-func (r *RDB) EnqueueScheduledTask(id string, score float64) error {
-	n, err := r.removeAndEnqueue(scheduledQ, id, score)
+func (r *RDB) EnqueueScheduledTask(id uuid.UUID, score int64) error {
+	n, err := r.removeAndEnqueue(scheduledQ, id.String(), float64(score))
 	if err != nil {
 		return err
 	}

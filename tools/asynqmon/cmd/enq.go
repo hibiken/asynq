@@ -53,11 +53,11 @@ func enq(cmd *cobra.Command, args []string) {
 	}))
 	switch qtype {
 	case "s":
-		err = r.EnqueueScheduledTask(id.String(), float64(score))
+		err = r.EnqueueScheduledTask(id, score)
 	case "r":
-		err = r.EnqueueRetryTask(id.String(), float64(score))
+		err = r.EnqueueRetryTask(id, score)
 	case "d":
-		err = r.EnqueueDeadTask(id.String(), float64(score))
+		err = r.EnqueueDeadTask(id, score)
 	default:
 		fmt.Println("invalid argument")
 		os.Exit(1)
