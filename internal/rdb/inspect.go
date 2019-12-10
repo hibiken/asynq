@@ -42,6 +42,7 @@ type ScheduledTask struct {
 	Type      string
 	Payload   map[string]interface{}
 	ProcessAt time.Time
+	Score     int64
 }
 
 // RetryTask is a task that's in retry queue because worker failed to process the task.
@@ -55,6 +56,7 @@ type RetryTask struct {
 	ErrorMsg  string
 	Retried   int
 	Retry     int
+	Score     int64
 }
 
 // DeadTask is a task in that has exhausted all retries.
@@ -65,6 +67,7 @@ type DeadTask struct {
 	Payload      map[string]interface{}
 	LastFailedAt time.Time
 	ErrorMsg     string
+	Score        int64
 }
 
 // CurrentStats returns a current state of the queues.
@@ -158,6 +161,7 @@ func (r *RDB) ListScheduled() ([]*ScheduledTask, error) {
 			Type:      msg.Type,
 			Payload:   msg.Payload,
 			ProcessAt: processAt,
+			Score:     int64(z.Score),
 		})
 	}
 	return tasks, nil
@@ -190,6 +194,7 @@ func (r *RDB) ListRetry() ([]*RetryTask, error) {
 			Retry:     msg.Retry,
 			Retried:   msg.Retried,
 			ProcessAt: processAt,
+			Score:     int64(z.Score),
 		})
 	}
 	return tasks, nil
@@ -219,16 +224,17 @@ func (r *RDB) ListDead() ([]*DeadTask, error) {
 			Payload:      msg.Payload,
 			ErrorMsg:     msg.ErrorMsg,
 			LastFailedAt: lastFailedAt,
+			Score:        int64(z.Score),
 		})
 	}
 	return tasks, nil
 }
 
-// Rescue finds a task that matches the given id and score from dead queue
+// EnqueueDeadTask finds a task that matches the given id and score from dead queue
 // and enqueues it for processing. If a task that matches the id and score
 // does not exist, it returns ErrTaskNotFound.
-func (r *RDB) Rescue(id string, score float64) error {
-	n, err := r.removeAndEnqueue(deadQ, id, score)
+func (r *RDB) EnqueueDeadTask(id uuid.UUID, score int64) error {
+	n, err := r.removeAndEnqueue(deadQ, id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -238,11 +244,11 @@ func (r *RDB) Rescue(id string, score float64) error {
 	return nil
 }
 
-// RetryNow finds a task that matches the given id and score from retry queue
+// EnqueueRetryTask finds a task that matches the given id and score from retry queue
 // and enqueues it for processing. If a task that matches the id and score
 // does not exist, it returns ErrTaskNotFound.
-func (r *RDB) RetryNow(id string, score float64) error {
-	n, err := r.removeAndEnqueue(retryQ, id, score)
+func (r *RDB) EnqueueRetryTask(id uuid.UUID, score int64) error {
+	n, err := r.removeAndEnqueue(retryQ, id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -252,11 +258,11 @@ func (r *RDB) RetryNow(id string, score float64) error {
 	return nil
 }
 
-// ProcessNow finds a task that matches the given id and score from scheduled queue
+// EnqueueScheduledTask finds a task that matches the given id and score from scheduled queue
 // and enqueues it for processing. If a task that matches the id and score does not
 // exist, it returns ErrTaskNotFound.
-func (r *RDB) ProcessNow(id string, score float64) error {
-	n, err := r.removeAndEnqueue(scheduledQ, id, score)
+func (r *RDB) EnqueueScheduledTask(id uuid.UUID, score int64) error {
+	n, err := r.removeAndEnqueue(scheduledQ, id.String(), float64(score))
 	if err != nil {
 		return err
 	}

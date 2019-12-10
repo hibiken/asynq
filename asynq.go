@@ -4,7 +4,7 @@ import "github.com/go-redis/redis/v7"
 
 /*
 TODOs:
-- [P0] command to retry tasks from "retry", "dead" queue
+- [P0] enqall command to enq all tasks from "scheduled" "retry", "dead" queue
 - [P0] Go docs + CONTRIBUTION.md + Github issue template
 - [P1] Add Support for multiple queues and priority
 - [P1] User defined max-retry count
@@ -24,6 +24,7 @@ type Task struct {
 }
 
 // RedisConfig specifies redis configurations.
+// TODO(hibiken): Support more configuration.
 type RedisConfig struct {
 	Addr     string
 	Password string
@@ -32,10 +33,10 @@ type RedisConfig struct {
 	DB int
 }
 
-func newRedisClient(config *RedisConfig) *redis.Client {
+func newRedisClient(cfg *RedisConfig) *redis.Client {
 	return redis.NewClient(&redis.Options{
-		Addr:     config.Addr,
-		Password: config.Password,
-		DB:       config.DB,
+		Addr:     cfg.Addr,
+		Password: cfg.Password,
+		DB:       cfg.DB,
 	})
 }

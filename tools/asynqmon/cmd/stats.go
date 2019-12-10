@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -15,7 +14,7 @@ import (
 // statsCmd represents the stats command
 var statsCmd = &cobra.Command{
 	Use:   "stats",
-	Short: "shows current state of the queues",
+	Short: "Shows current state of the queues",
 	Long: `The stats command shows the number of tasks in each queue at that instant.
 
 To monitor the queues continuously, it's recommended that you run this
@@ -49,7 +48,8 @@ func stats(cmd *cobra.Command, args []string) {
 
 	stats, err := r.CurrentStats()
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
 	}
 	printStats(stats)
 	fmt.Println()

@@ -249,8 +249,8 @@ func TestListScheduled(t *testing.T) {
 	m2 := randomTask("reindex", "default", nil)
 	p1 := time.Now().Add(30 * time.Minute)
 	p2 := time.Now().Add(24 * time.Hour)
-	t1 := &ScheduledTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, ProcessAt: p1}
-	t2 := &ScheduledTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, ProcessAt: p2}
+	t1 := &ScheduledTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, ProcessAt: p1, Score: p1.Unix()}
+	t2 := &ScheduledTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, ProcessAt: p2, Score: p2.Unix()}
 
 	type scheduledEntry struct {
 		msg       *TaskMessage
@@ -330,9 +330,11 @@ func TestListRetry(t *testing.T) {
 	p1 := time.Now().Add(5 * time.Minute)
 	p2 := time.Now().Add(24 * time.Hour)
 	t1 := &RetryTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload,
-		ProcessAt: p1, ErrorMsg: m1.ErrorMsg, Retried: m1.Retried, Retry: m1.Retry}
+		ProcessAt: p1, ErrorMsg: m1.ErrorMsg, Retried: m1.Retried,
+		Retry: m1.Retry, Score: p1.Unix()}
 	t2 := &RetryTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload,
-		ProcessAt: p2, ErrorMsg: m2.ErrorMsg, Retried: m2.Retried, Retry: m2.Retry}
+		ProcessAt: p2, ErrorMsg: m2.ErrorMsg, Retried: m2.Retried,
+		Retry: m2.Retry, Score: p2.Unix()}
 
 	type retryEntry struct {
 		msg       *TaskMessage
@@ -407,8 +409,10 @@ func TestListDead(t *testing.T) {
 	}
 	f1 := time.Now().Add(-5 * time.Minute)
 	f2 := time.Now().Add(-24 * time.Hour)
-	t1 := &DeadTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, LastFailedAt: f1, ErrorMsg: m1.ErrorMsg}
-	t2 := &DeadTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, LastFailedAt: f2, ErrorMsg: m2.ErrorMsg}
+	t1 := &DeadTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload,
+		LastFailedAt: f1, ErrorMsg: m1.ErrorMsg, Score: f1.Unix()}
+	t2 := &DeadTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload,
+		LastFailedAt: f2, ErrorMsg: m2.ErrorMsg, Score: f2.Unix()}
 
 	type deadEntry struct {
 		msg          *TaskMessage
@@ -467,22 +471,22 @@ func TestListDead(t *testing.T) {
 
 var timeCmpOpt = EquateApproxTime(time.Second)
 
-func TestRescue(t *testing.T) {
+func TestEnqueueDeadTask(t *testing.T) {
 	r := setup(t)
 
 	t1 := randomTask("send_email", "default", nil)
 	t2 := randomTask("gen_thumbnail", "default", nil)
-	s1 := float64(time.Now().Add(-5 * time.Minute).Unix())
-	s2 := float64(time.Now().Add(-time.Hour).Unix())
+	s1 := time.Now().Add(-5 * time.Minute).Unix()
+	s2 := time.Now().Add(-time.Hour).Unix()
 	type deadEntry struct {
 		msg   *TaskMessage
-		score float64
+		score int64
 	}
 	tests := []struct {
 		dead         []deadEntry
-		score        float64
-		id           string
-		want         error // expected return value from calling Rescue
+		score        int64
+		id           uuid.UUID
+		want         error // expected return value from calling EnqueueDeadTask
 		wantDead     []*TaskMessage
 		wantEnqueued []*TaskMessage
 	}{
@@ -492,7 +496,7 @@ func TestRescue(t *testing.T) {
 				{t2, s2},
 			},
 			score:        s2,
-			id:           t2.ID.String(),
+			id:           t2.ID,
 			want:         nil,
 			wantDead:     []*TaskMessage{t1},
 			wantEnqueued: []*TaskMessage{t2},
@@ -502,8 +506,8 @@ func TestRescue(t *testing.T) {
 				{t1, s1},
 				{t2, s2},
 			},
-			score:        123.0,
-			id:           t2.ID.String(),
+			score:        123,
+			id:           t2.ID,
 			want:         ErrTaskNotFound,
 			wantDead:     []*TaskMessage{t1, t2},
 			wantEnqueued: []*TaskMessage{},
@@ -517,15 +521,15 @@ func TestRescue(t *testing.T) {
 		}
 		// initialize dead queue
 		for _, d := range tc.dead {
-			err := r.client.ZAdd(deadQ, &redis.Z{Member: mustMarshal(t, d.msg), Score: d.score}).Err()
+			err := r.client.ZAdd(deadQ, &redis.Z{Member: mustMarshal(t, d.msg), Score: float64(d.score)}).Err()
 			if err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		got := r.Rescue(tc.id, tc.score)
+		got := r.EnqueueDeadTask(tc.id, tc.score)
 		if got != tc.want {
-			t.Errorf("r.Rescue(%s, %0.f) = %v, want %v", tc.id, tc.score, got, tc.want)
+			t.Errorf("r.EnqueueDeadTask(%s, %d) = %v, want %v", tc.id, tc.score, got, tc.want)
 			continue
 		}
 
@@ -543,22 +547,22 @@ func TestRescue(t *testing.T) {
 	}
 }
 
-func TestRetryNow(t *testing.T) {
+func TestEnqueueRetryTask(t *testing.T) {
 	r := setup(t)
 
 	t1 := randomTask("send_email", "default", nil)
 	t2 := randomTask("gen_thumbnail", "default", nil)
-	s1 := float64(time.Now().Add(-5 * time.Minute).Unix())
-	s2 := float64(time.Now().Add(-time.Hour).Unix())
+	s1 := time.Now().Add(-5 * time.Minute).Unix()
+	s2 := time.Now().Add(-time.Hour).Unix()
 	type retryEntry struct {
 		msg   *TaskMessage
-		score float64
+		score int64
 	}
 	tests := []struct {
 		dead         []retryEntry
-		score        float64
-		id           string
-		want         error // expected return value from calling RetryNow
+		score        int64
+		id           uuid.UUID
+		want         error // expected return value from calling EnqueueRetryTask
 		wantRetry    []*TaskMessage
 		wantEnqueued []*TaskMessage
 	}{
@@ -568,7 +572,7 @@ func TestRetryNow(t *testing.T) {
 				{t2, s2},
 			},
 			score:        s2,
-			id:           t2.ID.String(),
+			id:           t2.ID,
 			want:         nil,
 			wantRetry:    []*TaskMessage{t1},
 			wantEnqueued: []*TaskMessage{t2},
@@ -578,8 +582,8 @@ func TestRetryNow(t *testing.T) {
 				{t1, s1},
 				{t2, s2},
 			},
-			score:        123.0,
-			id:           t2.ID.String(),
+			score:        123,
+			id:           t2.ID,
 			want:         ErrTaskNotFound,
 			wantRetry:    []*TaskMessage{t1, t2},
 			wantEnqueued: []*TaskMessage{},
@@ -593,15 +597,15 @@ func TestRetryNow(t *testing.T) {
 		}
 		// initialize retry queue
 		for _, d := range tc.dead {
-			err := r.client.ZAdd(retryQ, &redis.Z{Member: mustMarshal(t, d.msg), Score: d.score}).Err()
+			err := r.client.ZAdd(retryQ, &redis.Z{Member: mustMarshal(t, d.msg), Score: float64(d.score)}).Err()
 			if err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		got := r.RetryNow(tc.id, tc.score)
+		got := r.EnqueueRetryTask(tc.id, tc.score)
 		if got != tc.want {
-			t.Errorf("r.RetryNow(%s, %0.f) = %v, want %v", tc.id, tc.score, got, tc.want)
+			t.Errorf("r.EnqueueRetryTask(%s, %d) = %v, want %v", tc.id, tc.score, got, tc.want)
 			continue
 		}
 
@@ -619,22 +623,22 @@ func TestRetryNow(t *testing.T) {
 	}
 }
 
-func TestProcessNow(t *testing.T) {
+func TestEnqueueScheduledTask(t *testing.T) {
 	r := setup(t)
 
 	t1 := randomTask("send_email", "default", nil)
 	t2 := randomTask("gen_thumbnail", "default", nil)
-	s1 := float64(time.Now().Add(-5 * time.Minute).Unix())
-	s2 := float64(time.Now().Add(-time.Hour).Unix())
+	s1 := time.Now().Add(-5 * time.Minute).Unix()
+	s2 := time.Now().Add(-time.Hour).Unix()
 	type scheduledEntry struct {
 		msg   *TaskMessage
-		score float64
+		score int64
 	}
 	tests := []struct {
 		dead          []scheduledEntry
-		score         float64
-		id            string
-		want          error // expected return value from calling ProcessNow
+		score         int64
+		id            uuid.UUID
+		want          error // expected return value from calling EnqueueScheduledTask
 		wantScheduled []*TaskMessage
 		wantEnqueued  []*TaskMessage
 	}{
@@ -644,7 +648,7 @@ func TestProcessNow(t *testing.T) {
 				{t2, s2},
 			},
 			score:         s2,
-			id:            t2.ID.String(),
+			id:            t2.ID,
 			want:          nil,
 			wantScheduled: []*TaskMessage{t1},
 			wantEnqueued:  []*TaskMessage{t2},
@@ -654,8 +658,8 @@ func TestProcessNow(t *testing.T) {
 				{t1, s1},
 				{t2, s2},
 			},
-			score:         123.0,
-			id:            t2.ID.String(),
+			score:         123,
+			id:            t2.ID,
 			want:          ErrTaskNotFound,
 			wantScheduled: []*TaskMessage{t1, t2},
 			wantEnqueued:  []*TaskMessage{},
@@ -669,15 +673,15 @@ func TestProcessNow(t *testing.T) {
 		}
 		// initialize scheduled queue
 		for _, d := range tc.dead {
-			err := r.client.ZAdd(scheduledQ, &redis.Z{Member: mustMarshal(t, d.msg), Score: d.score}).Err()
+			err := r.client.ZAdd(scheduledQ, &redis.Z{Member: mustMarshal(t, d.msg), Score: float64(d.score)}).Err()
 			if err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		got := r.ProcessNow(tc.id, tc.score)
+		got := r.EnqueueScheduledTask(tc.id, tc.score)
 		if got != tc.want {
-			t.Errorf("r.RetryNow(%s, %0.f) = %v, want %v", tc.id, tc.score, got, tc.want)
+			t.Errorf("r.EnqueueRetryTask(%s, %d) = %v, want %v", tc.id, tc.score, got, tc.want)
 			continue
 		}
 
