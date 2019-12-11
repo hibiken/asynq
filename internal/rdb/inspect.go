@@ -272,13 +272,13 @@ func (r *RDB) EnqueueScheduledTask(id uuid.UUID, score int64) error {
 	return nil
 }
 
-// EnqueueAllScheduledTasks enqueues all tasks from scheduled queue.
+// EnqueueAllScheduledTasks enqueues all tasks from scheduled queue
 // and returns the number of tasks enqueued.
 func (r *RDB) EnqueueAllScheduledTasks() (int64, error) {
 	return r.removeAndEnqueueAll(scheduledQ)
 }
 
-// EnqueueAllRetryTasks enqueues all tasks from retry queue.
+// EnqueueAllRetryTasks enqueues all tasks from retry queue
 // and returns the number of tasks enqueued.
 func (r *RDB) EnqueueAllRetryTasks() (int64, error) {
 	return r.removeAndEnqueueAll(retryQ)

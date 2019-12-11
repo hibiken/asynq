@@ -58,7 +58,7 @@ func enqall(cmd *cobra.Command, args []string) {
 	case "dead":
 		n, err = r.EnqueueAllDeadTasks()
 	default:
-		fmt.Printf("error: `asynqmon enqall <queue>` only accepts %v as the argument.\n", enqallValidArgs)
+		fmt.Printf("error: `asynqmon enqall [queue name]` only accepts %v as the argument.\n", enqallValidArgs)
 		os.Exit(1)
 	}
 	if err != nil {

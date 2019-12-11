@@ -65,7 +65,7 @@ func ls(cmd *cobra.Command, args []string) {
 	case "dead":
 		listDead(r)
 	default:
-		fmt.Printf("error: `asynqmon ls <queue>` only accepts %v as the argument.\n", lsValidArgs)
+		fmt.Printf("error: `asynqmon ls [queue name]` only accepts %v as the argument.\n", lsValidArgs)
 		os.Exit(1)
 	}
 }
