@@ -50,6 +50,7 @@ func init() {
 }
 
 // initConfig reads in config file and ENV variables if set.
+// TODO(hibiken): Remove this if not necessary.
 func initConfig() {
 	if cfgFile != "" {
 		// Use config file from the flag.

@@ -708,16 +708,19 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 	tests := []struct {
 		description  string
 		scheduled    []*TaskMessage
+		want         int64
 		wantEnqueued []*TaskMessage
 	}{
 		{
 			description:  "with tasks in scheduled queue",
 			scheduled:    []*TaskMessage{t1, t2, t3},
+			want:         3,
 			wantEnqueued: []*TaskMessage{t1, t2, t3},
 		},
 		{
 			description:  "with empty scheduled queue",
 			scheduled:    []*TaskMessage{},
+			want:         0,
 			wantEnqueued: []*TaskMessage{},
 		},
 	}
@@ -737,9 +740,16 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 			}
 		}
 
-		err := r.EnqueueAllScheduledTasks()
+		got, err := r.EnqueueAllScheduledTasks()
 		if err != nil {
-			t.Errorf("%s; r.EnqueueAllScheduledTasks = %v, want nil", tc.description, err)
+			t.Errorf("%s; r.EnqueueAllScheduledTasks = %v, %v; want %v, nil",
+				tc.description, got, err, tc.want)
+			continue
+		}
+
+		if got != tc.want {
+			t.Errorf("%s; r.EnqueueAllScheduledTasks = %v, %v; want %v, nil",
+				tc.description, got, err, tc.want)
 		}
 
 		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
@@ -759,16 +769,19 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 	tests := []struct {
 		description  string
 		retry        []*TaskMessage
+		want         int64
 		wantEnqueued []*TaskMessage
 	}{
 		{
 			description:  "with tasks in retry queue",
 			retry:        []*TaskMessage{t1, t2, t3},
+			want:         3,
 			wantEnqueued: []*TaskMessage{t1, t2, t3},
 		},
 		{
 			description:  "with empty retry queue",
 			retry:        []*TaskMessage{},
+			want:         0,
 			wantEnqueued: []*TaskMessage{},
 		},
 	}
@@ -788,9 +801,16 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 			}
 		}
 
-		err := r.EnqueueAllRetryTasks()
+		got, err := r.EnqueueAllRetryTasks()
 		if err != nil {
-			t.Errorf("%s; r.EnqueueAllRetryTasks = %v, want nil", tc.description, err)
+			t.Errorf("%s; r.EnqueueAllRetryTasks = %v, %v; want %v, nil",
+				tc.description, got, err, tc.want)
+			continue
+		}
+
+		if got != tc.want {
+			t.Errorf("%s; r.EnqueueAllRetryTasks = %v, %v; want %v, nil",
+				tc.description, got, err, tc.want)
 		}
 
 		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
@@ -810,16 +830,19 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 	tests := []struct {
 		description  string
 		dead         []*TaskMessage
+		want         int64
 		wantEnqueued []*TaskMessage
 	}{
 		{
 			description:  "with tasks in dead queue",
 			dead:         []*TaskMessage{t1, t2, t3},
+			want:         3,
 			wantEnqueued: []*TaskMessage{t1, t2, t3},
 		},
 		{
 			description:  "with empty dead queue",
 			dead:         []*TaskMessage{},
+			want:         0,
 			wantEnqueued: []*TaskMessage{},
 		},
 	}
@@ -839,9 +862,16 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 			}
 		}
 
-		err := r.EnqueueAllDeadTasks()
+		got, err := r.EnqueueAllDeadTasks()
 		if err != nil {
-			t.Errorf("%s; r.EnqueueAllDeadTasks = %v, want nil", tc.description, err)
+			t.Errorf("%s; r.EnqueueAllDeadTasks = %v, %v; want %v, nil",
+				tc.description, got, err, tc.want)
+			continue
+		}
+
+		if got != tc.want {
+			t.Errorf("%s; r.EnqueueAllDeadTasks = %v, %v; want %v, nil",
+				tc.description, got, err, tc.want)
 		}
 
 		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()

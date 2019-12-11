@@ -16,7 +16,7 @@ TODOs:
 */
 
 // Max retry count by default
-const defaultMaxRetry = 1
+const defaultMaxRetry = 25
 
 // Task represents a task to be performed.
 type Task struct {
