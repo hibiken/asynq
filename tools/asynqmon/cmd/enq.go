@@ -22,7 +22,7 @@ Identifier for a task should be obtained by running "asynqmon ls" command.
 The task enqueued by this command will be processed as soon as the task 
 gets dequeued by a processor.
 
-Example: asynqmon enq d:1575732274:b0415aa2-fd33-4b63-87c4-2f1a954ea4bf`,
+Example: asynqmon enq d:1575732274:bnogo8gt6toe23vhef0g`,
 	Args: cobra.ExactArgs(1),
 	Run:  enq,
 }

@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/uuid"
+	"github.com/rs/xid"
 )
 
 // TODO(hibiken): Replace this with cmpopts.EquateApproxTime once it becomes availalble.
@@ -310,7 +310,7 @@ func TestListScheduled(t *testing.T) {
 func TestListRetry(t *testing.T) {
 	r := setup(t)
 	m1 := &TaskMessage{
-		ID:       uuid.New(),
+		ID:       xid.New(),
 		Type:     "send_email",
 		Queue:    "default",
 		Payload:  map[string]interface{}{"subject": "hello"},
@@ -319,7 +319,7 @@ func TestListRetry(t *testing.T) {
 		Retried:  10,
 	}
 	m2 := &TaskMessage{
-		ID:       uuid.New(),
+		ID:       xid.New(),
 		Type:     "reindex",
 		Queue:    "default",
 		Payload:  nil,
@@ -394,14 +394,14 @@ func TestListRetry(t *testing.T) {
 func TestListDead(t *testing.T) {
 	r := setup(t)
 	m1 := &TaskMessage{
-		ID:       uuid.New(),
+		ID:       xid.New(),
 		Type:     "send_email",
 		Queue:    "default",
 		Payload:  map[string]interface{}{"subject": "hello"},
 		ErrorMsg: "email server not responding",
 	}
 	m2 := &TaskMessage{
-		ID:       uuid.New(),
+		ID:       xid.New(),
 		Type:     "reindex",
 		Queue:    "default",
 		Payload:  nil,
@@ -485,7 +485,7 @@ func TestEnqueueDeadTask(t *testing.T) {
 	tests := []struct {
 		dead         []deadEntry
 		score        int64
-		id           uuid.UUID
+		id           xid.ID
 		want         error // expected return value from calling EnqueueDeadTask
 		wantDead     []*TaskMessage
 		wantEnqueued []*TaskMessage
@@ -561,7 +561,7 @@ func TestEnqueueRetryTask(t *testing.T) {
 	tests := []struct {
 		dead         []retryEntry
 		score        int64
-		id           uuid.UUID
+		id           xid.ID
 		want         error // expected return value from calling EnqueueRetryTask
 		wantRetry    []*TaskMessage
 		wantEnqueued []*TaskMessage
@@ -637,7 +637,7 @@ func TestEnqueueScheduledTask(t *testing.T) {
 	tests := []struct {
 		dead          []scheduledEntry
 		score         int64
-		id            uuid.UUID
+		id            xid.ID
 		want          error // expected return value from calling EnqueueScheduledTask
 		wantScheduled []*TaskMessage
 		wantEnqueued  []*TaskMessage

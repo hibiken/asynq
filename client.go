@@ -3,7 +3,7 @@ package asynq
 import (
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/rs/xid"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
@@ -29,7 +29,7 @@ func NewClient(cfg *RedisConfig) *Client {
 // otherwise returns non-nil error.
 func (c *Client) Process(task *Task, processAt time.Time) error {
 	msg := &rdb.TaskMessage{
-		ID:      uuid.New(),
+		ID:      xid.New(),
 		Type:    task.Type,
 		Payload: task.Payload,
 		Queue:   "default",
