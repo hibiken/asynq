@@ -11,9 +11,9 @@ import (
 
 // enqCmd represents the enq command
 var enqCmd = &cobra.Command{
-	Use:   "enq",
+	Use:   "enq [task id]",
 	Short: "Enqueues a task given an identifier",
-	Long: `The enq command enqueues a task given an identifier.
+	Long: `Enq (asynqmon enq) will enqueue a task given an identifier.
 
 The command takes one argument which specifies the task to enqueue.
 The task should be in either scheduled, retry or dead queue.
