@@ -272,6 +272,21 @@ func (r *RDB) EnqueueScheduledTask(id uuid.UUID, score int64) error {
 	return nil
 }
 
+// EnqueueAllScheduledTasks enqueues all tasks from scheduled queue.
+func (r *RDB) EnqueueAllScheduledTasks() error {
+	return r.removeAndEnqueueAll(scheduledQ)
+}
+
+// EnqueueAllRetryTasks enqueues all tasks from retry queue.
+func (r *RDB) EnqueueAllRetryTasks() error {
+	return r.removeAndEnqueueAll(retryQ)
+}
+
+// EnqueueAllDeadTasks enqueues all tasks from dead queue.
+func (r *RDB) EnqueueAllDeadTasks() error {
+	return r.removeAndEnqueueAll(deadQ)
+}
+
 func (r *RDB) removeAndEnqueue(zset, id string, score float64) (int64, error) {
 	script := redis.NewScript(`
 	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
@@ -294,4 +309,20 @@ func (r *RDB) removeAndEnqueue(zset, id string, score float64) (int64, error) {
 		return 0, fmt.Errorf("could not cast %v to int64", res)
 	}
 	return n, nil
+}
+
+func (r *RDB) removeAndEnqueueAll(zset string) error {
+	script := redis.NewScript(`
+	local msgs = redis.call("ZRANGE", KEYS[1], 0, -1)
+	for _, msg in ipairs(msgs) do
+		redis.call("ZREM", KEYS[1], msg)
+		redis.call("LPUSH", KEYS[2], msg)
+	end
+	return table.getn(msgs)
+	`)
+	_, err := script.Run(r.client, []string{zset, defaultQ}).Result()
+	if err != nil {
+		return err
+	}
+	return nil
 }

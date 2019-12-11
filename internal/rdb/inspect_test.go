@@ -698,3 +698,156 @@ func TestEnqueueScheduledTask(t *testing.T) {
 		}
 	}
 }
+
+func TestEnqueueAllScheduledTasks(t *testing.T) {
+	r := setup(t)
+	t1 := randomTask("send_email", "default", nil)
+	t2 := randomTask("gen_thumbnail", "default", nil)
+	t3 := randomTask("reindex", "default", nil)
+
+	tests := []struct {
+		description  string
+		scheduled    []*TaskMessage
+		wantEnqueued []*TaskMessage
+	}{
+		{
+			description:  "with tasks in scheduled queue",
+			scheduled:    []*TaskMessage{t1, t2, t3},
+			wantEnqueued: []*TaskMessage{t1, t2, t3},
+		},
+		{
+			description:  "with empty scheduled queue",
+			scheduled:    []*TaskMessage{},
+			wantEnqueued: []*TaskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// initialize scheduled queue
+		for _, msg := range tc.scheduled {
+			err := r.client.ZAdd(scheduledQ, &redis.Z{
+				Member: mustMarshal(t, msg),
+				Score:  float64(time.Now().Add(time.Hour).Unix())}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := r.EnqueueAllScheduledTasks()
+		if err != nil {
+			t.Errorf("%s; r.EnqueueAllScheduledTasks = %v, want nil", tc.description, err)
+		}
+
+		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
+		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
+			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.description, defaultQ, diff)
+		}
+	}
+}
+
+func TestEnqueueAllRetryTasks(t *testing.T) {
+	r := setup(t)
+	t1 := randomTask("send_email", "default", nil)
+	t2 := randomTask("gen_thumbnail", "default", nil)
+	t3 := randomTask("reindex", "default", nil)
+
+	tests := []struct {
+		description  string
+		retry        []*TaskMessage
+		wantEnqueued []*TaskMessage
+	}{
+		{
+			description:  "with tasks in retry queue",
+			retry:        []*TaskMessage{t1, t2, t3},
+			wantEnqueued: []*TaskMessage{t1, t2, t3},
+		},
+		{
+			description:  "with empty retry queue",
+			retry:        []*TaskMessage{},
+			wantEnqueued: []*TaskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// initialize retry queue
+		for _, msg := range tc.retry {
+			err := r.client.ZAdd(retryQ, &redis.Z{
+				Member: mustMarshal(t, msg),
+				Score:  float64(time.Now().Add(time.Hour).Unix())}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := r.EnqueueAllRetryTasks()
+		if err != nil {
+			t.Errorf("%s; r.EnqueueAllRetryTasks = %v, want nil", tc.description, err)
+		}
+
+		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
+		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
+			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.description, defaultQ, diff)
+		}
+	}
+}
+
+func TestEnqueueAllDeadTasks(t *testing.T) {
+	r := setup(t)
+	t1 := randomTask("send_email", "default", nil)
+	t2 := randomTask("gen_thumbnail", "default", nil)
+	t3 := randomTask("reindex", "default", nil)
+
+	tests := []struct {
+		description  string
+		dead         []*TaskMessage
+		wantEnqueued []*TaskMessage
+	}{
+		{
+			description:  "with tasks in dead queue",
+			dead:         []*TaskMessage{t1, t2, t3},
+			wantEnqueued: []*TaskMessage{t1, t2, t3},
+		},
+		{
+			description:  "with empty dead queue",
+			dead:         []*TaskMessage{},
+			wantEnqueued: []*TaskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// initialize dead queue
+		for _, msg := range tc.dead {
+			err := r.client.ZAdd(deadQ, &redis.Z{
+				Member: mustMarshal(t, msg),
+				Score:  float64(time.Now().Add(time.Hour).Unix())}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := r.EnqueueAllDeadTasks()
+		if err != nil {
+			t.Errorf("%s; r.EnqueueAllDeadTasks = %v, want nil", tc.description, err)
+		}
+
+		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
+		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
+			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.description, defaultQ, diff)
+		}
+	}
+}

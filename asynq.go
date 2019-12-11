@@ -5,13 +5,18 @@ import "github.com/go-redis/redis/v7"
 /*
 TODOs:
 - [P0] enqall command to enq all tasks from "scheduled" "retry", "dead" queue
+- [P0] asynqmon del <taskID>, asynqmon delall <qname>
+- [P0] asynqmon kill <taskID>, asynqmon killall <qname>
+- [P0] Redis Memory Usage, Connection info in stats
+- [P0] Processed, Failed count for today
 - [P0] Go docs + CONTRIBUTION.md + Github issue template
+- [P0] Redis Sentinel support
 - [P1] Add Support for multiple queues and priority
 - [P1] User defined max-retry count
 */
 
 // Max retry count by default
-const defaultMaxRetry = 25
+const defaultMaxRetry = 1
 
 // Task represents a task to be performed.
 type Task struct {
