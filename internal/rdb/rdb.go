@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
-	"github.com/google/uuid"
+	"github.com/rs/xid"
 )
 
 // Redis keys
@@ -51,7 +51,7 @@ type TaskMessage struct {
 
 	//-------- Metadata fields --------
 	// ID is a unique identifier for each task
-	ID uuid.UUID
+	ID xid.ID
 	// Queue is a name this message should be enqueued to
 	Queue string
 	// Retry is the max number of retry for this task.

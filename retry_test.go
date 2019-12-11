@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/uuid"
+	"github.com/rs/xid"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
@@ -14,12 +14,12 @@ func TestRetry(t *testing.T) {
 	rdbClient := rdb.NewRDB(r)
 	errMsg := "email server not responding"
 	// t1 is a task with max-retry count reached.
-	t1 := &rdb.TaskMessage{Type: "send_email", Retry: 10, Retried: 10, Queue: "default", ID: uuid.New()}
+	t1 := &rdb.TaskMessage{Type: "send_email", Retry: 10, Retried: 10, Queue: "default", ID: xid.New()}
 	// t2 is t1 with updated error message.
 	t2 := *t1
 	t2.ErrorMsg = errMsg
 	// t3 is a task which hasn't reached max-retry count.
-	t3 := &rdb.TaskMessage{Type: "send_email", Retry: 10, Retried: 5, Queue: "default", ID: uuid.New()}
+	t3 := &rdb.TaskMessage{Type: "send_email", Retry: 10, Retried: 5, Queue: "default", ID: xid.New()}
 	// t4 is t3 after retry.
 	t4 := *t3
 	t4.Retried++

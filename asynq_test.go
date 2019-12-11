@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/rs/xid"
 )
 
 // This file defines test helper functions used by
@@ -61,7 +61,7 @@ var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*rdb.TaskMessage) []*rdb.T
 
 func randomTask(taskType, qname string, payload map[string]interface{}) *rdb.TaskMessage {
 	return &rdb.TaskMessage{
-		ID:      uuid.New(),
+		ID:      xid.New(),
 		Type:    taskType,
 		Queue:   qname,
 		Retry:   defaultMaxRetry,

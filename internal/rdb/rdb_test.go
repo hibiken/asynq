@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/uuid"
+	"github.com/rs/xid"
 )
 
 func init() {
@@ -40,7 +40,7 @@ var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*TaskMessage) []*TaskMessa
 
 func randomTask(taskType, qname string, payload map[string]interface{}) *TaskMessage {
 	return &TaskMessage{
-		ID:      uuid.New(),
+		ID:      xid.New(),
 		Type:    taskType,
 		Queue:   qname,
 		Retry:   25,
