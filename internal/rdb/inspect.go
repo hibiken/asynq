@@ -333,3 +333,50 @@ func (r *RDB) removeAndEnqueueAll(zset string) (int64, error) {
 	}
 	return n, nil
 }
+
+// DeleteDeadTask finds a task that matches the given id and score from dead queue
+// and deletes it. If a task that matches the id and score does not exist,
+// it returns ErrTaskNotFound.
+func (r *RDB) DeleteDeadTask(id xid.ID, score int64) error {
+	return r.deleteTask(deadQ, id.String(), float64(score))
+}
+
+// DeleteRetryTask finds a task that matches the given id and score from retry queue
+// and deletes it. If a task that matches the id and score does not exist,
+// it returns ErrTaskNotFound.
+func (r *RDB) DeleteRetryTask(id xid.ID, score int64) error {
+	return r.deleteTask(retryQ, id.String(), float64(score))
+}
+
+// DeleteScheduledTask finds a task that matches the given id and score from
+// scheduled queue  and deletes it. If a task that matches the id and score
+//does not exist, it returns ErrTaskNotFound.
+func (r *RDB) DeleteScheduledTask(id xid.ID, score int64) error {
+	return r.deleteTask(scheduledQ, id.String(), float64(score))
+}
+
+func (r *RDB) deleteTask(zset, id string, score float64) error {
+	script := redis.NewScript(`
+	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
+	for _, msg in ipairs(msgs) do
+		local decoded = cjson.decode(msg)
+		if decoded["ID"] == ARGV[2] then
+			redis.call("ZREM", KEYS[1], msg)
+			return 1
+		end
+	end
+	return 0
+	`)
+	res, err := script.Run(r.client, []string{zset}, score, id).Result()
+	if err != nil {
+		return err
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return fmt.Errorf("could not cast %v to int64", res)
+	}
+	if n == 0 {
+		return ErrTaskNotFound
+	}
+	return nil
+}
