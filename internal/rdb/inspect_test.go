@@ -881,3 +881,218 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteDeadTask(t *testing.T) {
+	r := setup(t)
+	m1 := randomTask("send_email", "default", nil)
+	m2 := randomTask("reindex", "default", nil)
+	t1 := time.Now().Add(-5 * time.Minute)
+	t2 := time.Now().Add(-time.Hour)
+
+	type deadEntry struct {
+		msg   *TaskMessage
+		score int64
+	}
+	tests := []struct {
+		dead     []deadEntry
+		id       xid.ID
+		score    int64
+		want     error
+		wantDead []*TaskMessage
+	}{
+		{
+			dead: []deadEntry{
+				{m1, t1.Unix()},
+				{m2, t2.Unix()},
+			},
+			id:       m1.ID,
+			score:    t1.Unix(),
+			want:     nil,
+			wantDead: []*TaskMessage{m2},
+		},
+		{
+			dead: []deadEntry{
+				{m1, t1.Unix()},
+				{m2, t2.Unix()},
+			},
+			id:       m1.ID,
+			score:    t2.Unix(), // id and score mismatch
+			want:     ErrTaskNotFound,
+			wantDead: []*TaskMessage{m1, m2},
+		},
+		{
+			dead:     []deadEntry{},
+			id:       m1.ID,
+			score:    t1.Unix(),
+			want:     ErrTaskNotFound,
+			wantDead: []*TaskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// initialize dead queue.
+		for _, d := range tc.dead {
+			err := r.client.ZAdd(deadQ, &redis.Z{
+				Member: mustMarshal(t, d.msg),
+				Score:  float64(d.score),
+			}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		got := r.DeleteDeadTask(tc.id, tc.score)
+		if got != tc.want {
+			t.Errorf("r.DeleteDeadTask(%v, %v) = %v, want %v", tc.id, tc.score, got, tc.want)
+			continue
+		}
+
+		gotDeadRaw := r.client.ZRange(deadQ, 0, -1).Val()
+		gotDead := mustUnmarshalSlice(t, gotDeadRaw)
+		if diff := cmp.Diff(tc.wantDead, gotDead, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", deadQ, diff)
+		}
+	}
+}
+
+func TestDeleteRetryTask(t *testing.T) {
+	r := setup(t)
+	m1 := randomTask("send_email", "default", nil)
+	m2 := randomTask("reindex", "default", nil)
+	t1 := time.Now().Add(5 * time.Minute)
+	t2 := time.Now().Add(time.Hour)
+
+	type retryEntry struct {
+		msg   *TaskMessage
+		score int64
+	}
+	tests := []struct {
+		retry     []retryEntry
+		id        xid.ID
+		score     int64
+		want      error
+		wantRetry []*TaskMessage
+	}{
+		{
+			retry: []retryEntry{
+				{m1, t1.Unix()},
+				{m2, t2.Unix()},
+			},
+			id:        m1.ID,
+			score:     t1.Unix(),
+			want:      nil,
+			wantRetry: []*TaskMessage{m2},
+		},
+		{
+			retry: []retryEntry{
+				{m1, t1.Unix()},
+			},
+			id:        m2.ID,
+			score:     t2.Unix(),
+			want:      ErrTaskNotFound,
+			wantRetry: []*TaskMessage{m1},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// initialize retry queue.
+		for _, e := range tc.retry {
+			err := r.client.ZAdd(retryQ, &redis.Z{
+				Member: mustMarshal(t, e.msg),
+				Score:  float64(e.score),
+			}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		got := r.DeleteRetryTask(tc.id, tc.score)
+		if got != tc.want {
+			t.Errorf("r.DeleteRetryTask(%v, %v) = %v, want %v", tc.id, tc.score, got, tc.want)
+			continue
+		}
+
+		gotRetryRaw := r.client.ZRange(retryQ, 0, -1).Val()
+		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
+		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", retryQ, diff)
+		}
+	}
+}
+
+func TestDeleteScheduledTask(t *testing.T) {
+	r := setup(t)
+	m1 := randomTask("send_email", "default", nil)
+	m2 := randomTask("reindex", "default", nil)
+	t1 := time.Now().Add(5 * time.Minute)
+	t2 := time.Now().Add(time.Hour)
+
+	type scheduledEntry struct {
+		msg   *TaskMessage
+		score int64
+	}
+	tests := []struct {
+		scheduled     []scheduledEntry
+		id            xid.ID
+		score         int64
+		want          error
+		wantScheduled []*TaskMessage
+	}{
+		{
+			scheduled: []scheduledEntry{
+				{m1, t1.Unix()},
+				{m2, t2.Unix()},
+			},
+			id:            m1.ID,
+			score:         t1.Unix(),
+			want:          nil,
+			wantScheduled: []*TaskMessage{m2},
+		},
+		{
+			scheduled: []scheduledEntry{
+				{m1, t1.Unix()},
+			},
+			id:            m2.ID,
+			score:         t2.Unix(),
+			want:          ErrTaskNotFound,
+			wantScheduled: []*TaskMessage{m1},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// initialize scheduled queue.
+		for _, e := range tc.scheduled {
+			err := r.client.ZAdd(scheduledQ, &redis.Z{
+				Member: mustMarshal(t, e.msg),
+				Score:  float64(e.score),
+			}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		got := r.DeleteScheduledTask(tc.id, tc.score)
+		if got != tc.want {
+			t.Errorf("r.DeleteScheduledTask(%v, %v) = %v, want %v", tc.id, tc.score, got, tc.want)
+			continue
+		}
+
+		gotScheduledRaw := r.client.ZRange(scheduledQ, 0, -1).Val()
+		gotScheduled := mustUnmarshalSlice(t, gotScheduledRaw)
+		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", scheduledQ, diff)
+		}
+	}
+}
