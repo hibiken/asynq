@@ -1096,3 +1096,138 @@ func TestDeleteScheduledTask(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteAllDeadTasks(t *testing.T) {
+	r := setup(t)
+	m1 := randomTask("send_email", "default", nil)
+	m2 := randomTask("reindex", "default", nil)
+	m3 := randomTask("gen_thumbnail", "default", nil)
+
+	tests := []struct {
+		initDead []*TaskMessage
+		wantDead []*TaskMessage
+	}{
+		{
+			initDead: []*TaskMessage{m1, m2, m3},
+			wantDead: []*TaskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// initialize dead queue.
+		for _, msg := range tc.initDead {
+			err := r.client.ZAdd(deadQ, &redis.Z{
+				Member: mustMarshal(t, msg),
+				Score:  float64(time.Now().Unix()),
+			}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := r.DeleteAllDeadTasks()
+		if err != nil {
+			t.Errorf("r.DeleteAllDeaadTasks = %v, want nil", err)
+		}
+
+		gotDeadRaw := r.client.ZRange(deadQ, 0, -1).Val()
+		gotDead := mustUnmarshalSlice(t, gotDeadRaw)
+		if diff := cmp.Diff(tc.wantDead, gotDead, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", deadQ, diff)
+		}
+	}
+}
+
+func TestDeleteAllRetryTasks(t *testing.T) {
+	r := setup(t)
+	m1 := randomTask("send_email", "default", nil)
+	m2 := randomTask("reindex", "default", nil)
+	m3 := randomTask("gen_thumbnail", "default", nil)
+
+	tests := []struct {
+		initRetry []*TaskMessage
+		wantRetry []*TaskMessage
+	}{
+		{
+			initRetry: []*TaskMessage{m1, m2, m3},
+			wantRetry: []*TaskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// initialize retry queue.
+		for _, msg := range tc.initRetry {
+			err := r.client.ZAdd(retryQ, &redis.Z{
+				Member: mustMarshal(t, msg),
+				Score:  float64(time.Now().Unix()),
+			}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := r.DeleteAllRetryTasks()
+		if err != nil {
+			t.Errorf("r.DeleteAllDeaadTasks = %v, want nil", err)
+		}
+
+		gotRetryRaw := r.client.ZRange(retryQ, 0, -1).Val()
+		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
+		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", retryQ, diff)
+		}
+	}
+}
+
+func TestDeleteAllScheduledTasks(t *testing.T) {
+	r := setup(t)
+	m1 := randomTask("send_email", "default", nil)
+	m2 := randomTask("reindex", "default", nil)
+	m3 := randomTask("gen_thumbnail", "default", nil)
+
+	tests := []struct {
+		initScheduled []*TaskMessage
+		wantScheduled []*TaskMessage
+	}{
+		{
+			initScheduled: []*TaskMessage{m1, m2, m3},
+			wantScheduled: []*TaskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		// clean up db before each test case.
+		if err := r.client.FlushDB().Err(); err != nil {
+			t.Fatal(err)
+		}
+		// initialize scheduled queue.
+		for _, msg := range tc.initScheduled {
+			err := r.client.ZAdd(scheduledQ, &redis.Z{
+				Member: mustMarshal(t, msg),
+				Score:  float64(time.Now().Unix()),
+			}).Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := r.DeleteAllScheduledTasks()
+		if err != nil {
+			t.Errorf("r.DeleteAllDeaadTasks = %v, want nil", err)
+		}
+
+		gotScheduledRaw := r.client.ZRange(scheduledQ, 0, -1).Val()
+		gotScheduled := mustUnmarshalSlice(t, gotScheduledRaw)
+		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", scheduledQ, diff)
+		}
+	}
+}

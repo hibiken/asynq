@@ -380,3 +380,18 @@ func (r *RDB) deleteTask(zset, id string, score float64) error {
 	}
 	return nil
 }
+
+// DeleteAllDeadTasks deletes all tasks from the dead queue.
+func (r *RDB) DeleteAllDeadTasks() error {
+	return r.client.Del(deadQ).Err()
+}
+
+// DeleteAllRetryTasks deletes all tasks from the dead queue.
+func (r *RDB) DeleteAllRetryTasks() error {
+	return r.client.Del(retryQ).Err()
+}
+
+// DeleteAllScheduledTasks deletes all tasks from the dead queue.
+func (r *RDB) DeleteAllScheduledTasks() error {
+	return r.client.Del(scheduledQ).Err()
+}
