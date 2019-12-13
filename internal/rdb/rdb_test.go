@@ -17,6 +17,7 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+// TODO(hibiken): Get Redis address and db number from ENV variables.
 func setup(t *testing.T) *RDB {
 	t.Helper()
 	r := NewRDB(redis.NewClient(&redis.Options{
@@ -25,7 +26,7 @@ func setup(t *testing.T) *RDB {
 	}))
 	// Start each test with a clean slate.
 	if err := r.client.FlushDB().Err(); err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	return r
 }
@@ -38,13 +39,13 @@ var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*TaskMessage) []*TaskMessa
 	return out
 })
 
-func randomTask(taskType, qname string, payload map[string]interface{}) *TaskMessage {
+func newTaskMessage(taskType string, payload map[string]interface{}) *TaskMessage {
 	return &TaskMessage{
 		ID:      xid.New(),
 		Type:    taskType,
-		Queue:   qname,
+		Queue:   "default",
 		Retry:   25,
-		Payload: make(map[string]interface{}),
+		Payload: payload,
 	}
 }
 
@@ -90,11 +91,9 @@ func TestEnqueue(t *testing.T) {
 	tests := []struct {
 		msg *TaskMessage
 	}{
-		{msg: randomTask("send_email", "default",
-			map[string]interface{}{"to": "exampleuser@gmail.com", "from": "noreply@example.com"})},
-		{msg: randomTask("generate_csv", "default",
-			map[string]interface{}{})},
-		{msg: randomTask("sync", "default", nil)},
+		{msg: newTaskMessage("send_email", map[string]interface{}{"to": "exampleuser@gmail.com", "from": "noreply@example.com"})},
+		{msg: newTaskMessage("generate_csv", map[string]interface{}{})},
+		{msg: newTaskMessage("sync", nil)},
 	}
 
 	for _, tc := range tests {
@@ -120,7 +119,7 @@ func TestEnqueue(t *testing.T) {
 
 func TestDequeue(t *testing.T) {
 	r := setup(t)
-	t1 := randomTask("send_email", "default", map[string]interface{}{"subject": "hello!"})
+	t1 := newTaskMessage("send_email", map[string]interface{}{"subject": "hello!"})
 	tests := []struct {
 		queued     []*TaskMessage
 		want       *TaskMessage
@@ -153,8 +152,8 @@ func TestDequeue(t *testing.T) {
 
 func TestDone(t *testing.T) {
 	r := setup(t)
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("export_csv", "csv", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("export_csv", nil)
 
 	tests := []struct {
 		initial []*TaskMessage // initial state of the in-progress list
@@ -212,7 +211,7 @@ func TestDone(t *testing.T) {
 
 func TestKill(t *testing.T) {
 	r := setup(t)
-	t1 := randomTask("send_email", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
 
 	// TODO(hibiken): add test cases for trimming
 	tests := []struct {
@@ -257,9 +256,9 @@ func TestKill(t *testing.T) {
 
 func TestRestoreUnfinished(t *testing.T) {
 	r := setup(t)
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("export_csv", "csv", nil)
-	t3 := randomTask("sync_stuff", "sync", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("export_csv", nil)
+	t3 := newTaskMessage("sync_stuff", nil)
 
 	tests := []struct {
 		beforeSrc []*TaskMessage
@@ -322,9 +321,9 @@ func TestRestoreUnfinished(t *testing.T) {
 
 func TestCheckAndEnqueue(t *testing.T) {
 	r := setup(t)
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("generate_csv", "default", nil)
-	t3 := randomTask("gen_thumbnail", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("generate_csv", nil)
+	t3 := newTaskMessage("gen_thumbnail", nil)
 	secondAgo := time.Now().Add(-time.Second)
 	hourFromNow := time.Now().Add(time.Hour)
 
@@ -406,7 +405,7 @@ func TestSchedule(t *testing.T) {
 		processAt time.Time
 	}{
 		{
-			randomTask("send_email", "default", map[string]interface{}{"subject": "hello"}),
+			newTaskMessage("send_email", map[string]interface{}{"subject": "hello"}),
 			time.Now().Add(15 * time.Minute),
 		},
 	}
@@ -449,7 +448,7 @@ func TestRetryLater(t *testing.T) {
 		processAt time.Time
 	}{
 		{
-			randomTask("send_email", "default", map[string]interface{}{"subject": "hello"}),
+			newTaskMessage("send_email", map[string]interface{}{"subject": "hello"}),
 			time.Now().Add(15 * time.Minute),
 		},
 	}

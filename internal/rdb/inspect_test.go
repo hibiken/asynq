@@ -50,10 +50,10 @@ func (a timeApproximator) compare(x, y time.Time) bool {
 
 func TestCurrentStats(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", map[string]interface{}{"subject": "hello"})
-	m2 := randomTask("reindex", "default", nil)
-	m3 := randomTask("gen_thumbnail", "default", map[string]interface{}{"src": "some/path/to/img"})
-	m4 := randomTask("sync", "default", nil)
+	m1 := newTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
+	m2 := newTaskMessage("reindex", nil)
+	m3 := newTaskMessage("gen_thumbnail", map[string]interface{}{"src": "some/path/to/img"})
+	m4 := newTaskMessage("sync", nil)
 
 	tests := []struct {
 		enqueued   []*TaskMessage
@@ -144,8 +144,8 @@ func TestCurrentStats(t *testing.T) {
 func TestListEnqueued(t *testing.T) {
 	r := setup(t)
 
-	m1 := randomTask("send_email", "default", map[string]interface{}{"subject": "hello"})
-	m2 := randomTask("reindex", "default", nil)
+	m1 := newTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
+	m2 := newTaskMessage("reindex", nil)
 	t1 := &EnqueuedTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload}
 	t2 := &EnqueuedTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload}
 	tests := []struct {
@@ -195,8 +195,8 @@ func TestListEnqueued(t *testing.T) {
 func TestListInProgress(t *testing.T) {
 	r := setup(t)
 
-	m1 := randomTask("send_email", "default", map[string]interface{}{"subject": "hello"})
-	m2 := randomTask("reindex", "default", nil)
+	m1 := newTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
+	m2 := newTaskMessage("reindex", nil)
 	t1 := &InProgressTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload}
 	t2 := &InProgressTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload}
 	tests := []struct {
@@ -245,8 +245,8 @@ func TestListInProgress(t *testing.T) {
 
 func TestListScheduled(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", map[string]interface{}{"subject": "hello"})
-	m2 := randomTask("reindex", "default", nil)
+	m1 := newTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
+	m2 := newTaskMessage("reindex", nil)
 	p1 := time.Now().Add(30 * time.Minute)
 	p2 := time.Now().Add(24 * time.Hour)
 	t1 := &ScheduledTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, ProcessAt: p1, Score: p1.Unix()}
@@ -474,8 +474,8 @@ var timeCmpOpt = EquateApproxTime(time.Second)
 func TestEnqueueDeadTask(t *testing.T) {
 	r := setup(t)
 
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("gen_thumbnail", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("gen_thumbnail", nil)
 	s1 := time.Now().Add(-5 * time.Minute).Unix()
 	s2 := time.Now().Add(-time.Hour).Unix()
 	type deadEntry struct {
@@ -550,8 +550,8 @@ func TestEnqueueDeadTask(t *testing.T) {
 func TestEnqueueRetryTask(t *testing.T) {
 	r := setup(t)
 
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("gen_thumbnail", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("gen_thumbnail", nil)
 	s1 := time.Now().Add(-5 * time.Minute).Unix()
 	s2 := time.Now().Add(-time.Hour).Unix()
 	type retryEntry struct {
@@ -626,8 +626,8 @@ func TestEnqueueRetryTask(t *testing.T) {
 func TestEnqueueScheduledTask(t *testing.T) {
 	r := setup(t)
 
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("gen_thumbnail", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("gen_thumbnail", nil)
 	s1 := time.Now().Add(-5 * time.Minute).Unix()
 	s2 := time.Now().Add(-time.Hour).Unix()
 	type scheduledEntry struct {
@@ -701,9 +701,9 @@ func TestEnqueueScheduledTask(t *testing.T) {
 
 func TestEnqueueAllScheduledTasks(t *testing.T) {
 	r := setup(t)
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("gen_thumbnail", "default", nil)
-	t3 := randomTask("reindex", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("gen_thumbnail", nil)
+	t3 := newTaskMessage("reindex", nil)
 
 	tests := []struct {
 		description  string
@@ -762,9 +762,9 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 
 func TestEnqueueAllRetryTasks(t *testing.T) {
 	r := setup(t)
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("gen_thumbnail", "default", nil)
-	t3 := randomTask("reindex", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("gen_thumbnail", nil)
+	t3 := newTaskMessage("reindex", nil)
 
 	tests := []struct {
 		description  string
@@ -823,9 +823,9 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 
 func TestEnqueueAllDeadTasks(t *testing.T) {
 	r := setup(t)
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("gen_thumbnail", "default", nil)
-	t3 := randomTask("reindex", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("gen_thumbnail", nil)
+	t3 := newTaskMessage("reindex", nil)
 
 	tests := []struct {
 		description  string
@@ -884,8 +884,8 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 
 func TestDeleteDeadTask(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("reindex", "default", nil)
+	m1 := newTaskMessage("send_email", nil)
+	m2 := newTaskMessage("reindex", nil)
 	t1 := time.Now().Add(-5 * time.Minute)
 	t2 := time.Now().Add(-time.Hour)
 
@@ -961,8 +961,8 @@ func TestDeleteDeadTask(t *testing.T) {
 
 func TestDeleteRetryTask(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("reindex", "default", nil)
+	m1 := newTaskMessage("send_email", nil)
+	m2 := newTaskMessage("reindex", nil)
 	t1 := time.Now().Add(5 * time.Minute)
 	t2 := time.Now().Add(time.Hour)
 
@@ -1030,8 +1030,8 @@ func TestDeleteRetryTask(t *testing.T) {
 
 func TestDeleteScheduledTask(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("reindex", "default", nil)
+	m1 := newTaskMessage("send_email", nil)
+	m2 := newTaskMessage("reindex", nil)
 	t1 := time.Now().Add(5 * time.Minute)
 	t2 := time.Now().Add(time.Hour)
 
@@ -1099,9 +1099,9 @@ func TestDeleteScheduledTask(t *testing.T) {
 
 func TestDeleteAllDeadTasks(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("reindex", "default", nil)
-	m3 := randomTask("gen_thumbnail", "default", nil)
+	m1 := newTaskMessage("send_email", nil)
+	m2 := newTaskMessage("reindex", nil)
+	m3 := newTaskMessage("gen_thumbnail", nil)
 
 	tests := []struct {
 		initDead []*TaskMessage
@@ -1144,9 +1144,9 @@ func TestDeleteAllDeadTasks(t *testing.T) {
 
 func TestDeleteAllRetryTasks(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("reindex", "default", nil)
-	m3 := randomTask("gen_thumbnail", "default", nil)
+	m1 := newTaskMessage("send_email", nil)
+	m2 := newTaskMessage("reindex", nil)
+	m3 := newTaskMessage("gen_thumbnail", nil)
 
 	tests := []struct {
 		initRetry []*TaskMessage
@@ -1189,9 +1189,9 @@ func TestDeleteAllRetryTasks(t *testing.T) {
 
 func TestDeleteAllScheduledTasks(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("reindex", "default", nil)
-	m3 := randomTask("gen_thumbnail", "default", nil)
+	m1 := newTaskMessage("send_email", nil)
+	m2 := newTaskMessage("reindex", nil)
+	m3 := newTaskMessage("gen_thumbnail", nil)
 
 	tests := []struct {
 		initScheduled []*TaskMessage
