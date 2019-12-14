@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
 	"github.com/rs/xid"
 )
@@ -50,25 +49,27 @@ func (a timeApproximator) compare(x, y time.Time) bool {
 
 func TestCurrentStats(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", map[string]interface{}{"subject": "hello"})
-	m2 := randomTask("reindex", "default", nil)
-	m3 := randomTask("gen_thumbnail", "default", map[string]interface{}{"src": "some/path/to/img"})
-	m4 := randomTask("sync", "default", nil)
+	m1 := newTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
+	m2 := newTaskMessage("reindex", nil)
+	m3 := newTaskMessage("gen_thumbnail", map[string]interface{}{"src": "some/path/to/img"})
+	m4 := newTaskMessage("sync", nil)
 
 	tests := []struct {
 		enqueued   []*TaskMessage
 		inProgress []*TaskMessage
-		scheduled  []*TaskMessage
-		retry      []*TaskMessage
-		dead       []*TaskMessage
+		scheduled  []sortedSetEntry
+		retry      []sortedSetEntry
+		dead       []sortedSetEntry
 		want       *Stats
 	}{
 		{
 			enqueued:   []*TaskMessage{m1},
 			inProgress: []*TaskMessage{m2},
-			scheduled:  []*TaskMessage{m3, m4},
-			retry:      []*TaskMessage{},
-			dead:       []*TaskMessage{},
+			scheduled: []sortedSetEntry{
+				{m3, time.Now().Add(time.Hour).Unix()},
+				{m4, time.Now().Unix()}},
+			retry: []sortedSetEntry{},
+			dead:  []sortedSetEntry{},
 			want: &Stats{
 				Enqueued:   1,
 				InProgress: 1,
@@ -81,9 +82,13 @@ func TestCurrentStats(t *testing.T) {
 		{
 			enqueued:   []*TaskMessage{},
 			inProgress: []*TaskMessage{},
-			scheduled:  []*TaskMessage{m3, m4},
-			retry:      []*TaskMessage{m1},
-			dead:       []*TaskMessage{m2},
+			scheduled: []sortedSetEntry{
+				{m3, time.Now().Unix()},
+				{m4, time.Now().Unix()}},
+			retry: []sortedSetEntry{
+				{m1, time.Now().Add(time.Minute).Unix()}},
+			dead: []sortedSetEntry{
+				{m2, time.Now().Add(-time.Hour).Unix()}},
 			want: &Stats{
 				Enqueued:   0,
 				InProgress: 0,
@@ -96,36 +101,12 @@ func TestCurrentStats(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize the queues.
-		for _, msg := range tc.enqueued {
-			if err := r.Enqueue(msg); err != nil {
-				t.Fatal(err)
-			}
-		}
-		for _, msg := range tc.inProgress {
-			if err := r.client.LPush(inProgressQ, mustMarshal(t, msg)).Err(); err != nil {
-				t.Fatal(err)
-			}
-		}
-		for _, msg := range tc.scheduled {
-			if err := r.Schedule(msg, time.Now().Add(time.Hour)); err != nil {
-				t.Fatal(err)
-			}
-		}
-		for _, msg := range tc.retry {
-			if err := r.RetryLater(msg, time.Now().Add(time.Hour)); err != nil {
-				t.Fatal(err)
-			}
-		}
-		for _, msg := range tc.dead {
-			if err := r.Kill(msg); err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedDefaultQueue(t, r, tc.enqueued)
+		seedInProgressQueue(t, r, tc.inProgress)
+		seedScheduledQueue(t, r, tc.scheduled)
+		seedRetryQueue(t, r, tc.retry)
+		seedDeadQueue(t, r, tc.dead)
 
 		got, err := r.CurrentStats()
 		if err != nil {
@@ -144,8 +125,8 @@ func TestCurrentStats(t *testing.T) {
 func TestListEnqueued(t *testing.T) {
 	r := setup(t)
 
-	m1 := randomTask("send_email", "default", map[string]interface{}{"subject": "hello"})
-	m2 := randomTask("reindex", "default", nil)
+	m1 := newTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
+	m2 := newTaskMessage("reindex", nil)
 	t1 := &EnqueuedTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload}
 	t2 := &EnqueuedTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload}
 	tests := []struct {
@@ -163,16 +144,9 @@ func TestListEnqueued(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize the list
-		for _, msg := range tc.enqueued {
-			if err := r.Enqueue(msg); err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedDefaultQueue(t, r, tc.enqueued)
+
 		got, err := r.ListEnqueued()
 		if err != nil {
 			t.Errorf("r.ListEnqueued() = %v, %v, want %v, nil", got, err, tc.want)
@@ -195,35 +169,28 @@ func TestListEnqueued(t *testing.T) {
 func TestListInProgress(t *testing.T) {
 	r := setup(t)
 
-	m1 := randomTask("send_email", "default", map[string]interface{}{"subject": "hello"})
-	m2 := randomTask("reindex", "default", nil)
+	m1 := newTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
+	m2 := newTaskMessage("reindex", nil)
 	t1 := &InProgressTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload}
 	t2 := &InProgressTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload}
 	tests := []struct {
-		enqueued []*TaskMessage
-		want     []*InProgressTask
+		inProgress []*TaskMessage
+		want       []*InProgressTask
 	}{
 		{
-			enqueued: []*TaskMessage{m1, m2},
-			want:     []*InProgressTask{t1, t2},
+			inProgress: []*TaskMessage{m1, m2},
+			want:       []*InProgressTask{t1, t2},
 		},
 		{
-			enqueued: []*TaskMessage{},
-			want:     []*InProgressTask{},
+			inProgress: []*TaskMessage{},
+			want:       []*InProgressTask{},
 		},
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize the list
-		for _, msg := range tc.enqueued {
-			if err := r.client.LPush(inProgressQ, mustMarshal(t, msg)).Err(); err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedInProgressQueue(t, r, tc.inProgress)
+
 		got, err := r.ListInProgress()
 		if err != nil {
 			t.Errorf("r.ListInProgress() = %v, %v, want %v, nil", got, err, tc.want)
@@ -245,47 +212,33 @@ func TestListInProgress(t *testing.T) {
 
 func TestListScheduled(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", map[string]interface{}{"subject": "hello"})
-	m2 := randomTask("reindex", "default", nil)
+	m1 := newTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
+	m2 := newTaskMessage("reindex", nil)
 	p1 := time.Now().Add(30 * time.Minute)
 	p2 := time.Now().Add(24 * time.Hour)
 	t1 := &ScheduledTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, ProcessAt: p1, Score: p1.Unix()}
 	t2 := &ScheduledTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, ProcessAt: p2, Score: p2.Unix()}
 
-	type scheduledEntry struct {
-		msg       *TaskMessage
-		processAt time.Time
-	}
-
 	tests := []struct {
-		scheduled []scheduledEntry
+		scheduled []sortedSetEntry
 		want      []*ScheduledTask
 	}{
 		{
-			scheduled: []scheduledEntry{
-				{m1, p1},
-				{m2, p2},
+			scheduled: []sortedSetEntry{
+				{m1, p1.Unix()},
+				{m2, p2.Unix()},
 			},
 			want: []*ScheduledTask{t1, t2},
 		},
 		{
-			scheduled: []scheduledEntry{},
+			scheduled: []sortedSetEntry{},
 			want:      []*ScheduledTask{},
 		},
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize the scheduled queue
-		for _, s := range tc.scheduled {
-			err := r.Schedule(s.msg, s.processAt)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedScheduledQueue(t, r, tc.scheduled)
 
 		got, err := r.ListScheduled()
 		if err != nil {
@@ -329,47 +282,47 @@ func TestListRetry(t *testing.T) {
 	}
 	p1 := time.Now().Add(5 * time.Minute)
 	p2 := time.Now().Add(24 * time.Hour)
-	t1 := &RetryTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload,
-		ProcessAt: p1, ErrorMsg: m1.ErrorMsg, Retried: m1.Retried,
-		Retry: m1.Retry, Score: p1.Unix()}
-	t2 := &RetryTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload,
-		ProcessAt: p2, ErrorMsg: m2.ErrorMsg, Retried: m2.Retried,
-		Retry: m2.Retry, Score: p2.Unix()}
-
-	type retryEntry struct {
-		msg       *TaskMessage
-		processAt time.Time
+	t1 := &RetryTask{
+		ID:        m1.ID,
+		Type:      m1.Type,
+		Payload:   m1.Payload,
+		ProcessAt: p1,
+		ErrorMsg:  m1.ErrorMsg,
+		Retried:   m1.Retried,
+		Retry:     m1.Retry,
+		Score:     p1.Unix(),
+	}
+	t2 := &RetryTask{
+		ID:        m2.ID,
+		Type:      m2.Type,
+		Payload:   m2.Payload,
+		ProcessAt: p2,
+		ErrorMsg:  m2.ErrorMsg,
+		Retried:   m2.Retried,
+		Retry:     m2.Retry,
+		Score:     p2.Unix(),
 	}
 
 	tests := []struct {
-		dead []retryEntry
-		want []*RetryTask
+		retry []sortedSetEntry
+		want  []*RetryTask
 	}{
 		{
-			dead: []retryEntry{
-				{m1, p1},
-				{m2, p2},
+			retry: []sortedSetEntry{
+				{m1, p1.Unix()},
+				{m2, p2.Unix()},
 			},
 			want: []*RetryTask{t1, t2},
 		},
 		{
-			dead: []retryEntry{},
-			want: []*RetryTask{},
+			retry: []sortedSetEntry{},
+			want:  []*RetryTask{},
 		},
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize the scheduled queue
-		for _, d := range tc.dead {
-			r.client.ZAdd(retryQ, &redis.Z{
-				Member: mustMarshal(t, d.msg),
-				Score:  float64(d.processAt.Unix()),
-			})
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedRetryQueue(t, r, tc.retry)
 
 		got, err := r.ListRetry()
 		if err != nil {
@@ -409,45 +362,43 @@ func TestListDead(t *testing.T) {
 	}
 	f1 := time.Now().Add(-5 * time.Minute)
 	f2 := time.Now().Add(-24 * time.Hour)
-	t1 := &DeadTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload,
-		LastFailedAt: f1, ErrorMsg: m1.ErrorMsg, Score: f1.Unix()}
-	t2 := &DeadTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload,
-		LastFailedAt: f2, ErrorMsg: m2.ErrorMsg, Score: f2.Unix()}
-
-	type deadEntry struct {
-		msg          *TaskMessage
-		lastFailedAt time.Time
+	t1 := &DeadTask{
+		ID:           m1.ID,
+		Type:         m1.Type,
+		Payload:      m1.Payload,
+		LastFailedAt: f1,
+		ErrorMsg:     m1.ErrorMsg,
+		Score:        f1.Unix(),
+	}
+	t2 := &DeadTask{
+		ID:           m2.ID,
+		Type:         m2.Type,
+		Payload:      m2.Payload,
+		LastFailedAt: f2,
+		ErrorMsg:     m2.ErrorMsg,
+		Score:        f2.Unix(),
 	}
 
 	tests := []struct {
-		dead []deadEntry
+		dead []sortedSetEntry
 		want []*DeadTask
 	}{
 		{
-			dead: []deadEntry{
-				{m1, f1},
-				{m2, f2},
+			dead: []sortedSetEntry{
+				{m1, f1.Unix()},
+				{m2, f2.Unix()},
 			},
 			want: []*DeadTask{t1, t2},
 		},
 		{
-			dead: []deadEntry{},
+			dead: []sortedSetEntry{},
 			want: []*DeadTask{},
 		},
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize the scheduled queue
-		for _, d := range tc.dead {
-			r.client.ZAdd(deadQ, &redis.Z{
-				Member: mustMarshal(t, d.msg),
-				Score:  float64(d.lastFailedAt.Unix()),
-			})
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedDeadQueue(t, r, tc.dead)
 
 		got, err := r.ListDead()
 		if err != nil {
@@ -473,17 +424,13 @@ var timeCmpOpt = EquateApproxTime(time.Second)
 
 func TestEnqueueDeadTask(t *testing.T) {
 	r := setup(t)
-
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("gen_thumbnail", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("gen_thumbnail", nil)
 	s1 := time.Now().Add(-5 * time.Minute).Unix()
 	s2 := time.Now().Add(-time.Hour).Unix()
-	type deadEntry struct {
-		msg   *TaskMessage
-		score int64
-	}
+
 	tests := []struct {
-		dead         []deadEntry
+		dead         []sortedSetEntry
 		score        int64
 		id           xid.ID
 		want         error // expected return value from calling EnqueueDeadTask
@@ -491,7 +438,7 @@ func TestEnqueueDeadTask(t *testing.T) {
 		wantEnqueued []*TaskMessage
 	}{
 		{
-			dead: []deadEntry{
+			dead: []sortedSetEntry{
 				{t1, s1},
 				{t2, s2},
 			},
@@ -502,7 +449,7 @@ func TestEnqueueDeadTask(t *testing.T) {
 			wantEnqueued: []*TaskMessage{t2},
 		},
 		{
-			dead: []deadEntry{
+			dead: []sortedSetEntry{
 				{t1, s1},
 				{t2, s2},
 			},
@@ -515,30 +462,19 @@ func TestEnqueueDeadTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize dead queue
-		for _, d := range tc.dead {
-			err := r.client.ZAdd(deadQ, &redis.Z{Member: mustMarshal(t, d.msg), Score: float64(d.score)}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedDeadQueue(t, r, tc.dead)
 
 		got := r.EnqueueDeadTask(tc.id, tc.score)
 		if got != tc.want {
 			t.Errorf("r.EnqueueDeadTask(%s, %d) = %v, want %v", tc.id, tc.score, got, tc.want)
 			continue
 		}
-
 		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q; (-want, +got)\n%s", defaultQ, diff)
 		}
-
 		gotDeadRaw := r.client.ZRange(deadQ, 0, -1).Val()
 		gotDead := mustUnmarshalSlice(t, gotDeadRaw)
 		if diff := cmp.Diff(tc.wantDead, gotDead, sortMsgOpt); diff != "" {
@@ -550,16 +486,12 @@ func TestEnqueueDeadTask(t *testing.T) {
 func TestEnqueueRetryTask(t *testing.T) {
 	r := setup(t)
 
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("gen_thumbnail", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("gen_thumbnail", nil)
 	s1 := time.Now().Add(-5 * time.Minute).Unix()
 	s2 := time.Now().Add(-time.Hour).Unix()
-	type retryEntry struct {
-		msg   *TaskMessage
-		score int64
-	}
 	tests := []struct {
-		dead         []retryEntry
+		retry        []sortedSetEntry
 		score        int64
 		id           xid.ID
 		want         error // expected return value from calling EnqueueRetryTask
@@ -567,7 +499,7 @@ func TestEnqueueRetryTask(t *testing.T) {
 		wantEnqueued []*TaskMessage
 	}{
 		{
-			dead: []retryEntry{
+			retry: []sortedSetEntry{
 				{t1, s1},
 				{t2, s2},
 			},
@@ -578,7 +510,7 @@ func TestEnqueueRetryTask(t *testing.T) {
 			wantEnqueued: []*TaskMessage{t2},
 		},
 		{
-			dead: []retryEntry{
+			retry: []sortedSetEntry{
 				{t1, s1},
 				{t2, s2},
 			},
@@ -591,30 +523,20 @@ func TestEnqueueRetryTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize retry queue
-		for _, d := range tc.dead {
-			err := r.client.ZAdd(retryQ, &redis.Z{Member: mustMarshal(t, d.msg), Score: float64(d.score)}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+
+		seedRetryQueue(t, r, tc.retry) // initialize retry queue
 
 		got := r.EnqueueRetryTask(tc.id, tc.score)
 		if got != tc.want {
 			t.Errorf("r.EnqueueRetryTask(%s, %d) = %v, want %v", tc.id, tc.score, got, tc.want)
 			continue
 		}
-
 		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q; (-want, +got)\n%s", defaultQ, diff)
 		}
-
 		gotRetryRaw := r.client.ZRange(retryQ, 0, -1).Val()
 		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
@@ -625,17 +547,13 @@ func TestEnqueueRetryTask(t *testing.T) {
 
 func TestEnqueueScheduledTask(t *testing.T) {
 	r := setup(t)
-
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("gen_thumbnail", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("gen_thumbnail", nil)
 	s1 := time.Now().Add(-5 * time.Minute).Unix()
 	s2 := time.Now().Add(-time.Hour).Unix()
-	type scheduledEntry struct {
-		msg   *TaskMessage
-		score int64
-	}
+
 	tests := []struct {
-		dead          []scheduledEntry
+		scheduled     []sortedSetEntry
 		score         int64
 		id            xid.ID
 		want          error // expected return value from calling EnqueueScheduledTask
@@ -643,7 +561,7 @@ func TestEnqueueScheduledTask(t *testing.T) {
 		wantEnqueued  []*TaskMessage
 	}{
 		{
-			dead: []scheduledEntry{
+			scheduled: []sortedSetEntry{
 				{t1, s1},
 				{t2, s2},
 			},
@@ -654,7 +572,7 @@ func TestEnqueueScheduledTask(t *testing.T) {
 			wantEnqueued:  []*TaskMessage{t2},
 		},
 		{
-			dead: []scheduledEntry{
+			scheduled: []sortedSetEntry{
 				{t1, s1},
 				{t2, s2},
 			},
@@ -667,30 +585,19 @@ func TestEnqueueScheduledTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize scheduled queue
-		for _, d := range tc.dead {
-			err := r.client.ZAdd(scheduledQ, &redis.Z{Member: mustMarshal(t, d.msg), Score: float64(d.score)}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedScheduledQueue(t, r, tc.scheduled)
 
 		got := r.EnqueueScheduledTask(tc.id, tc.score)
 		if got != tc.want {
 			t.Errorf("r.EnqueueRetryTask(%s, %d) = %v, want %v", tc.id, tc.score, got, tc.want)
 			continue
 		}
-
 		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q; (-want, +got)\n%s", defaultQ, diff)
 		}
-
 		gotScheduledRaw := r.client.ZRange(scheduledQ, 0, -1).Val()
 		gotScheduled := mustUnmarshalSlice(t, gotScheduledRaw)
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
@@ -701,105 +608,91 @@ func TestEnqueueScheduledTask(t *testing.T) {
 
 func TestEnqueueAllScheduledTasks(t *testing.T) {
 	r := setup(t)
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("gen_thumbnail", "default", nil)
-	t3 := randomTask("reindex", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("gen_thumbnail", nil)
+	t3 := newTaskMessage("reindex", nil)
 
 	tests := []struct {
-		description  string
-		scheduled    []*TaskMessage
+		desc         string
+		scheduled    []sortedSetEntry
 		want         int64
 		wantEnqueued []*TaskMessage
 	}{
 		{
-			description:  "with tasks in scheduled queue",
-			scheduled:    []*TaskMessage{t1, t2, t3},
+			desc: "with tasks in scheduled queue",
+			scheduled: []sortedSetEntry{
+				{t1, time.Now().Add(time.Hour).Unix()},
+				{t2, time.Now().Add(time.Hour).Unix()},
+				{t3, time.Now().Add(time.Hour).Unix()},
+			},
 			want:         3,
 			wantEnqueued: []*TaskMessage{t1, t2, t3},
 		},
 		{
-			description:  "with empty scheduled queue",
-			scheduled:    []*TaskMessage{},
+			desc:         "with empty scheduled queue",
+			scheduled:    []sortedSetEntry{},
 			want:         0,
 			wantEnqueued: []*TaskMessage{},
 		},
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize scheduled queue
-		for _, msg := range tc.scheduled {
-			err := r.client.ZAdd(scheduledQ, &redis.Z{
-				Member: mustMarshal(t, msg),
-				Score:  float64(time.Now().Add(time.Hour).Unix())}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedScheduledQueue(t, r, tc.scheduled)
 
 		got, err := r.EnqueueAllScheduledTasks()
 		if err != nil {
 			t.Errorf("%s; r.EnqueueAllScheduledTasks = %v, %v; want %v, nil",
-				tc.description, got, err, tc.want)
+				tc.desc, got, err, tc.want)
 			continue
 		}
 
 		if got != tc.want {
 			t.Errorf("%s; r.EnqueueAllScheduledTasks = %v, %v; want %v, nil",
-				tc.description, got, err, tc.want)
+				tc.desc, got, err, tc.want)
 		}
 
 		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
-			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.description, defaultQ, diff)
+			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, defaultQ, diff)
 		}
 	}
 }
 
 func TestEnqueueAllRetryTasks(t *testing.T) {
 	r := setup(t)
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("gen_thumbnail", "default", nil)
-	t3 := randomTask("reindex", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("gen_thumbnail", nil)
+	t3 := newTaskMessage("reindex", nil)
 
 	tests := []struct {
 		description  string
-		retry        []*TaskMessage
+		retry        []sortedSetEntry
 		want         int64
 		wantEnqueued []*TaskMessage
 	}{
 		{
-			description:  "with tasks in retry queue",
-			retry:        []*TaskMessage{t1, t2, t3},
+			description: "with tasks in retry queue",
+			retry: []sortedSetEntry{
+				{t1, time.Now().Add(time.Hour).Unix()},
+				{t2, time.Now().Add(time.Hour).Unix()},
+				{t3, time.Now().Add(time.Hour).Unix()},
+			},
 			want:         3,
 			wantEnqueued: []*TaskMessage{t1, t2, t3},
 		},
 		{
 			description:  "with empty retry queue",
-			retry:        []*TaskMessage{},
+			retry:        []sortedSetEntry{},
 			want:         0,
 			wantEnqueued: []*TaskMessage{},
 		},
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize retry queue
-		for _, msg := range tc.retry {
-			err := r.client.ZAdd(retryQ, &redis.Z{
-				Member: mustMarshal(t, msg),
-				Score:  float64(time.Now().Add(time.Hour).Unix())}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedRetryQueue(t, r, tc.retry)
 
 		got, err := r.EnqueueAllRetryTasks()
 		if err != nil {
@@ -823,85 +716,74 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 
 func TestEnqueueAllDeadTasks(t *testing.T) {
 	r := setup(t)
-	t1 := randomTask("send_email", "default", nil)
-	t2 := randomTask("gen_thumbnail", "default", nil)
-	t3 := randomTask("reindex", "default", nil)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("gen_thumbnail", nil)
+	t3 := newTaskMessage("reindex", nil)
 
 	tests := []struct {
-		description  string
-		dead         []*TaskMessage
+		desc         string
+		dead         []sortedSetEntry
 		want         int64
 		wantEnqueued []*TaskMessage
 	}{
 		{
-			description:  "with tasks in dead queue",
-			dead:         []*TaskMessage{t1, t2, t3},
+			desc: "with tasks in dead queue",
+			dead: []sortedSetEntry{
+				{t1, time.Now().Add(-time.Minute).Unix()},
+				{t2, time.Now().Add(-time.Minute).Unix()},
+				{t3, time.Now().Add(-time.Minute).Unix()},
+			},
 			want:         3,
 			wantEnqueued: []*TaskMessage{t1, t2, t3},
 		},
 		{
-			description:  "with empty dead queue",
-			dead:         []*TaskMessage{},
+			desc:         "with empty dead queue",
+			dead:         []sortedSetEntry{},
 			want:         0,
 			wantEnqueued: []*TaskMessage{},
 		},
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize dead queue
-		for _, msg := range tc.dead {
-			err := r.client.ZAdd(deadQ, &redis.Z{
-				Member: mustMarshal(t, msg),
-				Score:  float64(time.Now().Add(time.Hour).Unix())}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedDeadQueue(t, r, tc.dead)
 
 		got, err := r.EnqueueAllDeadTasks()
 		if err != nil {
 			t.Errorf("%s; r.EnqueueAllDeadTasks = %v, %v; want %v, nil",
-				tc.description, got, err, tc.want)
+				tc.desc, got, err, tc.want)
 			continue
 		}
 
 		if got != tc.want {
 			t.Errorf("%s; r.EnqueueAllDeadTasks = %v, %v; want %v, nil",
-				tc.description, got, err, tc.want)
+				tc.desc, got, err, tc.want)
 		}
 
 		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
-			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.description, defaultQ, diff)
+			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, defaultQ, diff)
 		}
 	}
 }
 
 func TestDeleteDeadTask(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("reindex", "default", nil)
+	m1 := newTaskMessage("send_email", nil)
+	m2 := newTaskMessage("reindex", nil)
 	t1 := time.Now().Add(-5 * time.Minute)
 	t2 := time.Now().Add(-time.Hour)
 
-	type deadEntry struct {
-		msg   *TaskMessage
-		score int64
-	}
 	tests := []struct {
-		dead     []deadEntry
+		dead     []sortedSetEntry
 		id       xid.ID
 		score    int64
 		want     error
 		wantDead []*TaskMessage
 	}{
 		{
-			dead: []deadEntry{
+			dead: []sortedSetEntry{
 				{m1, t1.Unix()},
 				{m2, t2.Unix()},
 			},
@@ -911,7 +793,7 @@ func TestDeleteDeadTask(t *testing.T) {
 			wantDead: []*TaskMessage{m2},
 		},
 		{
-			dead: []deadEntry{
+			dead: []sortedSetEntry{
 				{m1, t1.Unix()},
 				{m2, t2.Unix()},
 			},
@@ -921,7 +803,7 @@ func TestDeleteDeadTask(t *testing.T) {
 			wantDead: []*TaskMessage{m1, m2},
 		},
 		{
-			dead:     []deadEntry{},
+			dead:     []sortedSetEntry{},
 			id:       m1.ID,
 			score:    t1.Unix(),
 			want:     ErrTaskNotFound,
@@ -930,20 +812,8 @@ func TestDeleteDeadTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize dead queue.
-		for _, d := range tc.dead {
-			err := r.client.ZAdd(deadQ, &redis.Z{
-				Member: mustMarshal(t, d.msg),
-				Score:  float64(d.score),
-			}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedDeadQueue(t, r, tc.dead)
 
 		got := r.DeleteDeadTask(tc.id, tc.score)
 		if got != tc.want {
@@ -961,24 +831,20 @@ func TestDeleteDeadTask(t *testing.T) {
 
 func TestDeleteRetryTask(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("reindex", "default", nil)
+	m1 := newTaskMessage("send_email", nil)
+	m2 := newTaskMessage("reindex", nil)
 	t1 := time.Now().Add(5 * time.Minute)
 	t2 := time.Now().Add(time.Hour)
 
-	type retryEntry struct {
-		msg   *TaskMessage
-		score int64
-	}
 	tests := []struct {
-		retry     []retryEntry
+		retry     []sortedSetEntry
 		id        xid.ID
 		score     int64
 		want      error
 		wantRetry []*TaskMessage
 	}{
 		{
-			retry: []retryEntry{
+			retry: []sortedSetEntry{
 				{m1, t1.Unix()},
 				{m2, t2.Unix()},
 			},
@@ -988,7 +854,7 @@ func TestDeleteRetryTask(t *testing.T) {
 			wantRetry: []*TaskMessage{m2},
 		},
 		{
-			retry: []retryEntry{
+			retry: []sortedSetEntry{
 				{m1, t1.Unix()},
 			},
 			id:        m2.ID,
@@ -999,20 +865,8 @@ func TestDeleteRetryTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize retry queue.
-		for _, e := range tc.retry {
-			err := r.client.ZAdd(retryQ, &redis.Z{
-				Member: mustMarshal(t, e.msg),
-				Score:  float64(e.score),
-			}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedRetryQueue(t, r, tc.retry)
 
 		got := r.DeleteRetryTask(tc.id, tc.score)
 		if got != tc.want {
@@ -1030,24 +884,20 @@ func TestDeleteRetryTask(t *testing.T) {
 
 func TestDeleteScheduledTask(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("reindex", "default", nil)
+	m1 := newTaskMessage("send_email", nil)
+	m2 := newTaskMessage("reindex", nil)
 	t1 := time.Now().Add(5 * time.Minute)
 	t2 := time.Now().Add(time.Hour)
 
-	type scheduledEntry struct {
-		msg   *TaskMessage
-		score int64
-	}
 	tests := []struct {
-		scheduled     []scheduledEntry
+		scheduled     []sortedSetEntry
 		id            xid.ID
 		score         int64
 		want          error
 		wantScheduled []*TaskMessage
 	}{
 		{
-			scheduled: []scheduledEntry{
+			scheduled: []sortedSetEntry{
 				{m1, t1.Unix()},
 				{m2, t2.Unix()},
 			},
@@ -1057,7 +907,7 @@ func TestDeleteScheduledTask(t *testing.T) {
 			wantScheduled: []*TaskMessage{m2},
 		},
 		{
-			scheduled: []scheduledEntry{
+			scheduled: []sortedSetEntry{
 				{m1, t1.Unix()},
 			},
 			id:            m2.ID,
@@ -1068,20 +918,8 @@ func TestDeleteScheduledTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize scheduled queue.
-		for _, e := range tc.scheduled {
-			err := r.client.ZAdd(scheduledQ, &redis.Z{
-				Member: mustMarshal(t, e.msg),
-				Score:  float64(e.score),
-			}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedScheduledQueue(t, r, tc.scheduled)
 
 		got := r.DeleteScheduledTask(tc.id, tc.score)
 		if got != tc.want {
@@ -1099,35 +937,27 @@ func TestDeleteScheduledTask(t *testing.T) {
 
 func TestDeleteAllDeadTasks(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("reindex", "default", nil)
-	m3 := randomTask("gen_thumbnail", "default", nil)
+	m1 := newTaskMessage("send_email", nil)
+	m2 := newTaskMessage("reindex", nil)
+	m3 := newTaskMessage("gen_thumbnail", nil)
 
 	tests := []struct {
-		initDead []*TaskMessage
+		dead     []sortedSetEntry
 		wantDead []*TaskMessage
 	}{
 		{
-			initDead: []*TaskMessage{m1, m2, m3},
+			dead: []sortedSetEntry{
+				{m1, time.Now().Unix()},
+				{m2, time.Now().Unix()},
+				{m3, time.Now().Unix()},
+			},
 			wantDead: []*TaskMessage{},
 		},
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize dead queue.
-		for _, msg := range tc.initDead {
-			err := r.client.ZAdd(deadQ, &redis.Z{
-				Member: mustMarshal(t, msg),
-				Score:  float64(time.Now().Unix()),
-			}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedDeadQueue(t, r, tc.dead)
 
 		err := r.DeleteAllDeadTasks()
 		if err != nil {
@@ -1144,35 +974,27 @@ func TestDeleteAllDeadTasks(t *testing.T) {
 
 func TestDeleteAllRetryTasks(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("reindex", "default", nil)
-	m3 := randomTask("gen_thumbnail", "default", nil)
+	m1 := newTaskMessage("send_email", nil)
+	m2 := newTaskMessage("reindex", nil)
+	m3 := newTaskMessage("gen_thumbnail", nil)
 
 	tests := []struct {
-		initRetry []*TaskMessage
+		retry     []sortedSetEntry
 		wantRetry []*TaskMessage
 	}{
 		{
-			initRetry: []*TaskMessage{m1, m2, m3},
+			retry: []sortedSetEntry{
+				{m1, time.Now().Unix()},
+				{m2, time.Now().Unix()},
+				{m3, time.Now().Unix()},
+			},
 			wantRetry: []*TaskMessage{},
 		},
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize retry queue.
-		for _, msg := range tc.initRetry {
-			err := r.client.ZAdd(retryQ, &redis.Z{
-				Member: mustMarshal(t, msg),
-				Score:  float64(time.Now().Unix()),
-			}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedRetryQueue(t, r, tc.retry)
 
 		err := r.DeleteAllRetryTasks()
 		if err != nil {
@@ -1189,35 +1011,27 @@ func TestDeleteAllRetryTasks(t *testing.T) {
 
 func TestDeleteAllScheduledTasks(t *testing.T) {
 	r := setup(t)
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("reindex", "default", nil)
-	m3 := randomTask("gen_thumbnail", "default", nil)
+	m1 := newTaskMessage("send_email", nil)
+	m2 := newTaskMessage("reindex", nil)
+	m3 := newTaskMessage("gen_thumbnail", nil)
 
 	tests := []struct {
-		initScheduled []*TaskMessage
+		scheduled     []sortedSetEntry
 		wantScheduled []*TaskMessage
 	}{
 		{
-			initScheduled: []*TaskMessage{m1, m2, m3},
+			scheduled: []sortedSetEntry{
+				{m1, time.Now().Add(time.Minute).Unix()},
+				{m2, time.Now().Add(time.Minute).Unix()},
+				{m3, time.Now().Add(time.Minute).Unix()},
+			},
 			wantScheduled: []*TaskMessage{},
 		},
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.client.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize scheduled queue.
-		for _, msg := range tc.initScheduled {
-			err := r.client.ZAdd(scheduledQ, &redis.Z{
-				Member: mustMarshal(t, msg),
-				Score:  float64(time.Now().Unix()),
-			}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		flushDB(t, r) // clean up db before each test case
+		seedScheduledQueue(t, r, tc.scheduled)
 
 		err := r.DeleteAllScheduledTasks()
 		if err != nil {

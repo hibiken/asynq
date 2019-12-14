@@ -4,12 +4,11 @@ import "github.com/go-redis/redis/v7"
 
 /*
 TODOs:
-- [P0] asynqmon del <taskID>, asynqmon delall <qname>
 - [P0] asynqmon kill <taskID>, asynqmon killall <qname>
-- [P0] Test refactor - helpers to initialize queues and read queue contents
+- [P0] Assigning int or any number type to Payload will be converted to float64 in handler
 - [P0] Redis Memory Usage, Connection info in stats
 - [P0] Processed, Failed count for today
-- [P0] Go docs + CONTRIBUTION.md + Github issue template
+- [P0] Go docs + CONTRIBUTION.md + Github issue template + License comment
 - [P0] Redis Sentinel support
 - [P1] Add Support for multiple queues and priority
 - [P1] User defined max-retry count
