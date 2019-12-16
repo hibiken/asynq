@@ -3,6 +3,8 @@ package asynq
 import (
 	"fmt"
 	"log"
+	"math"
+	"math/rand"
 	"time"
 
 	"github.com/hibiken/asynq/internal/rdb"
@@ -24,6 +26,9 @@ type processor struct {
 
 	// channel to communicate back to the long running "processor" goroutine.
 	done chan struct{}
+
+	// quit channel communicates to the in-flight worker goroutines to stop.
+	quit chan struct{}
 }
 
 func newProcessor(r *rdb.RDB, numWorkers int, handler Handler) *processor {
@@ -33,6 +38,7 @@ func newProcessor(r *rdb.RDB, numWorkers int, handler Handler) *processor {
 		dequeueTimeout: 5 * time.Second,
 		sema:           make(chan struct{}, numWorkers),
 		done:           make(chan struct{}),
+		quit:           make(chan struct{}),
 	}
 }
 
@@ -42,12 +48,16 @@ func (p *processor) terminate() {
 	// Signal the processor goroutine to stop processing tasks from the queue.
 	p.done <- struct{}{}
 
+	// TODO(hibiken): Allow user to customize this timeout value.
+	const timeout = 8 * time.Second
+	time.AfterFunc(timeout, func() { close(p.quit) })
 	log.Println("[INFO] Waiting for all workers to finish...")
 	// block until all workers have released the token
 	for i := 0; i < cap(p.sema); i++ {
 		p.sema <- struct{}{}
 	}
 	log.Println("[INFO] All workers have finished.")
+	p.restore() // move any unfinished tasks back to the queue.
 }
 
 func (p *processor) start() {
@@ -80,22 +90,37 @@ func (p *processor) exec() {
 		return
 	}
 
-	task := &Task{Type: msg.Type, Payload: msg.Payload}
 	p.sema <- struct{}{} // acquire token
-	go func(task *Task) {
-		// NOTE: This deferred anonymous function needs to take taskMessage as a value because
-		// the message can be mutated by the time this function is called.
-		defer func(msg rdb.TaskMessage) {
-			if err := p.rdb.Done(&msg); err != nil {
-				log.Printf("[ERROR] could not mark task %+v as done: %v\n", msg, err)
+	go func() {
+		defer func() { <-p.sema /* release token */ }()
+
+		resCh := make(chan error)
+		task := &Task{Type: msg.Type, Payload: msg.Payload}
+		go func() {
+			resCh <- perform(p.handler, task)
+		}()
+
+		select {
+		case <-p.quit:
+			// time is up, quit this worker goroutine.
+			return
+		case resErr := <-resCh:
+			// Note: One of three things should happen.
+			// 1) Done  -> Removes the message from InProgress
+			// 2) Retry -> Removes the message from InProgress & Adds the message to Retry
+			// 3) Kill  -> Removes the message from InProgress & Adds the message to Dead
+			if resErr != nil {
+				if msg.Retried >= msg.Retry {
+					p.kill(msg, resErr.Error())
+					return
+				}
+				p.retry(msg, resErr.Error())
+				return
 			}
-			<-p.sema // release token
-		}(*msg)
-		err := perform(p.handler, task)
-		if err != nil {
-			retryTask(p.rdb, msg, err)
+			p.markAsDone(msg)
+			return
 		}
-	}(task)
+	}()
 }
 
 // restore moves all tasks from "in-progress" back to queue
@@ -103,7 +128,30 @@ func (p *processor) exec() {
 func (p *processor) restore() {
 	err := p.rdb.RestoreUnfinished()
 	if err != nil {
-		log.Printf("[ERROR] could not restore unfinished tasks: %v\n", err)
+		log.Printf("[ERROR] Could not restore unfinished tasks: %v\n", err)
+	}
+}
+
+func (p *processor) markAsDone(msg *rdb.TaskMessage) {
+	err := p.rdb.Done(msg)
+	if err != nil {
+		log.Printf("[ERROR] Could not remove task from InProgress queue: %v\n", err)
+	}
+}
+
+func (p *processor) retry(msg *rdb.TaskMessage, errMsg string) {
+	retryAt := time.Now().Add(delaySeconds(msg.Retried))
+	err := p.rdb.Retry(msg, retryAt, errMsg)
+	if err != nil {
+		log.Printf("[ERROR] Could not send task %+v to Retry queue: %v\n", msg, err)
+	}
+}
+
+func (p *processor) kill(msg *rdb.TaskMessage, errMsg string) {
+	log.Printf("[WARN] Retry exhausted for task(Type: %q, ID: %v)\n", msg.Type, msg.ID)
+	err := p.rdb.Kill(msg, errMsg)
+	if err != nil {
+		log.Printf("[ERROR] Could not send task %+v to Dead queue: %v\n", msg, err)
 	}
 }
 
@@ -117,4 +165,12 @@ func perform(h Handler, task *Task) (err error) {
 		}
 	}()
 	return h.ProcessTask(task)
+}
+
+// delaySeconds returns a number seconds to delay before retrying.
+// Formula taken from https://github.com/mperham/sidekiq.
+func delaySeconds(count int) time.Duration {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	s := int(math.Pow(float64(count), 4)) + 15 + (r.Intn(30) * (count + 1))
+	return time.Duration(s) * time.Second
 }
