@@ -118,12 +118,16 @@ func (r *RDB) Done(msg *TaskMessage) error {
 
 // Schedule adds the task to the backlog queue to be processed in the future.
 func (r *RDB) Schedule(msg *TaskMessage, processAt time.Time) error {
-	return r.schedule(scheduledQ, processAt, msg)
-}
-
-// RetryLater adds the task to the backlog queue to be retried in the future.
-func (r *RDB) RetryLater(msg *TaskMessage, processAt time.Time) error {
-	return r.schedule(retryQ, processAt, msg)
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
+	}
+	score := float64(processAt.Unix())
+	err = r.client.ZAdd(scheduledQ, &redis.Z{Member: string(bytes), Score: score}).Err()
+	if err != nil {
+		return fmt.Errorf("command `ZADD %s %.1f %s` failed: %v", scheduledQ, score, string(bytes), err)
+	}
+	return nil
 }
 
 // Retry moves the task from in-progress to retry queue, incrementing retry count
@@ -148,20 +152,6 @@ func (r *RDB) Retry(msg *TaskMessage, processAt time.Time, errMsg string) error 
 	`)
 	_, err = script.Run(r.client, []string{inProgressQ, retryQ}, string(bytes), errMsg, processAt.Unix()).Result()
 	return err
-}
-
-// schedule adds the task to the zset to be processd at the specified time.
-func (r *RDB) schedule(zset string, processAt time.Time, msg *TaskMessage) error {
-	bytes, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
-	}
-	score := float64(processAt.Unix())
-	err = r.client.ZAdd(zset, &redis.Z{Member: string(bytes), Score: score}).Err()
-	if err != nil {
-		return fmt.Errorf("command `ZADD %s %.1f %s` failed: %v", zset, score, string(bytes), err)
-	}
-	return nil
 }
 
 // Kill sends the task to "dead" queue from in-progress queue, assigning

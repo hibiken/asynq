@@ -357,40 +357,6 @@ func TestSchedule(t *testing.T) {
 	}
 }
 
-func TestRetryLater(t *testing.T) {
-	r := setup(t)
-	tests := []struct {
-		msg       *TaskMessage
-		processAt time.Time
-	}{
-		{
-			newTaskMessage("send_email", map[string]interface{}{"subject": "hello"}),
-			time.Now().Add(15 * time.Minute),
-		},
-	}
-
-	for _, tc := range tests {
-		flushDB(t, r) // clean up db before each test case
-
-		desc := fmt.Sprintf("(*RDB).RetryLater(%v, %v)", tc.msg, tc.processAt)
-		err := r.RetryLater(tc.msg, tc.processAt)
-		if err != nil {
-			t.Errorf("%s = %v, want nil", desc, err)
-			continue
-		}
-
-		res := r.client.ZRangeWithScores(retryQ, 0, -1).Val()
-		if len(res) != 1 {
-			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), retryQ)
-			continue
-		}
-		if res[0].Score != float64(tc.processAt.Unix()) {
-			t.Errorf("%s inserted an item with score %f, want %f", desc, res[0].Score, float64(tc.processAt.Unix()))
-			continue
-		}
-	}
-}
-
 func TestRetry(t *testing.T) {
 	r := setup(t)
 	t1 := newTaskMessage("send_email", map[string]interface{}{"subject": "Hola!"})
