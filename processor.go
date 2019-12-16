@@ -94,7 +94,7 @@ func (p *processor) exec() {
 	go func() {
 		defer func() { <-p.sema /* release token */ }()
 
-		resCh := make(chan error)
+		resCh := make(chan error, 1)
 		task := &Task{Type: msg.Type, Payload: msg.Payload}
 		go func() {
 			resCh <- perform(p.handler, task)
