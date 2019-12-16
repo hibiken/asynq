@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v7"
@@ -165,9 +164,10 @@ func (r *RDB) schedule(zset string, processAt time.Time, msg *TaskMessage) error
 	return nil
 }
 
-// Kill sends the task to "dead" set.
+// Kill sends the task to "dead" queue from in-progress queue, assigning
+// the error message to the task.
 // It also trims the set by timestamp and set size.
-func (r *RDB) Kill(msg *TaskMessage) error {
+func (r *RDB) Kill(msg *TaskMessage, errMsg string) error {
 	const maxDeadTask = 10
 	const deadExpirationInDays = 90
 	bytes, err := json.Marshal(msg)
@@ -175,12 +175,25 @@ func (r *RDB) Kill(msg *TaskMessage) error {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
 	}
 	now := time.Now()
-	pipe := r.client.Pipeline()
-	pipe.ZAdd(deadQ, &redis.Z{Member: string(bytes), Score: float64(now.Unix())})
 	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
-	pipe.ZRemRangeByScore(deadQ, "-inf", strconv.Itoa(int(limit)))
-	pipe.ZRemRangeByRank(deadQ, 0, -maxDeadTask) // trim the set to 100
-	_, err = pipe.Exec()
+	// KEYS[1] -> asynq:in_progress
+	// KEYS[2] -> asynq:dead
+	// ARGV[1] -> TaskMessage value
+	// ARGV[2] -> error message
+	// ARGV[3] -> died_at UNIX timestamp
+	// ARGV[4] -> cutoff timestamp (e.g., 90 days ago)
+	// ARGV[5] -> max number of tasks in dead queue (e.g., 100)
+	script := redis.NewScript(`
+	redis.call("LREM", KEYS[1], 0, ARGV[1])
+	local msg = cjson.decode(ARGV[1])
+	msg["ErrorMsg"] = ARGV[2]
+	redis.call("ZADD", KEYS[2], ARGV[3], cjson.encode(msg))
+	redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[4])
+	redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[5])
+	return redis.status_reply("OK")
+	`)
+	_, err = script.Run(r.client, []string{inProgressQ, deadQ},
+		string(bytes), errMsg, now.Unix(), limit, maxDeadTask).Result()
 	return err
 }
 

@@ -115,35 +115,80 @@ func TestDone(t *testing.T) {
 func TestKill(t *testing.T) {
 	r := setup(t)
 	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("reindex", nil)
+	t3 := newTaskMessage("generate_csv", nil)
+	errMsg := "SMTP server not responding"
+	t1AfterKill := &TaskMessage{
+		ID:       t1.ID,
+		Type:     t1.Type,
+		Payload:  t1.Payload,
+		Queue:    t1.Queue,
+		Retry:    t1.Retry,
+		Retried:  t1.Retried,
+		ErrorMsg: errMsg,
+	}
+	now := time.Now()
 
 	// TODO(hibiken): add test cases for trimming
 	tests := []struct {
-		dead     []sortedSetEntry // inital state of dead queue
-		target   *TaskMessage     // task to kill
-		wantDead []*TaskMessage   // final state of dead queue
+		inProgress     []*TaskMessage
+		dead           []sortedSetEntry
+		target         *TaskMessage // task to kill
+		wantInProgress []*TaskMessage
+		wantDead       []sortedSetEntry
 	}{
 		{
-			dead:     []sortedSetEntry{},
-			target:   t1,
-			wantDead: []*TaskMessage{t1},
+			inProgress: []*TaskMessage{t1, t2},
+			dead: []sortedSetEntry{
+				{t3, now.Add(-time.Hour).Unix()},
+			},
+			target:         t1,
+			wantInProgress: []*TaskMessage{t2},
+			wantDead: []sortedSetEntry{
+				{t1AfterKill, now.Unix()},
+				{t3, now.Add(-time.Hour).Unix()},
+			},
+		},
+		{
+			inProgress:     []*TaskMessage{t1, t2, t3},
+			dead:           []sortedSetEntry{},
+			target:         t1,
+			wantInProgress: []*TaskMessage{t2, t3},
+			wantDead: []sortedSetEntry{
+				{t1AfterKill, now.Unix()},
+			},
 		},
 	}
 
 	for _, tc := range tests {
 		flushDB(t, r) // clean up db before each test case
+		seedInProgressQueue(t, r, tc.inProgress)
 		seedDeadQueue(t, r, tc.dead)
 
-		err := r.Kill(tc.target)
+		err := r.Kill(tc.target, errMsg)
 		if err != nil {
-			t.Error(err)
+			t.Errorf("(*RDB).Kill(%v, %v) = %v, want nil", tc.target, errMsg, err)
 			continue
 		}
 
-		data := r.client.ZRange(deadQ, 0, -1).Val()
-		gotDead := mustUnmarshalSlice(t, data)
-		if diff := cmp.Diff(tc.wantDead, gotDead, sortMsgOpt); diff != "" {
+		gotInProgressRaw := r.client.LRange(inProgressQ, 0, -1).Val()
+		gotInProgress := mustUnmarshalSlice(t, gotInProgressRaw)
+		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", inProgressQ, diff)
+		}
+
+		var gotDead []sortedSetEntry
+		data := r.client.ZRangeWithScores(deadQ, 0, -1).Val()
+		for _, z := range data {
+			gotDead = append(gotDead, sortedSetEntry{
+				msg:   mustUnmarshal(t, z.Member.(string)),
+				score: int64(z.Score),
+			})
+		}
+
+		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})
+		if diff := cmp.Diff(tc.wantDead, gotDead, cmpOpt, sortZSetEntryOpt); diff != "" {
 			t.Errorf("mismatch found in %q after calling (*RDB).Kill: (-want, +got):\n%s", deadQ, diff)
-			continue
 		}
 	}
 }
