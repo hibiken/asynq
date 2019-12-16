@@ -345,3 +345,78 @@ func TestRetryLater(t *testing.T) {
 		}
 	}
 }
+
+func TestRetry(t *testing.T) {
+	r := setup(t)
+	t1 := newTaskMessage("send_email", map[string]interface{}{"subject": "Hola!"})
+	t2 := newTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/image.jpg"})
+	t3 := newTaskMessage("reindex", nil)
+	t1.Retried = 10
+	errMsg := "SMTP server is not responding"
+	t1AfterRetry := &TaskMessage{
+		ID:       t1.ID,
+		Type:     t1.Type,
+		Payload:  t1.Payload,
+		Queue:    t1.Queue,
+		Retry:    t1.Retry,
+		Retried:  t1.Retried + 1,
+		ErrorMsg: errMsg,
+	}
+	now := time.Now()
+
+	tests := []struct {
+		inProgress     []*TaskMessage
+		retry          []sortedSetEntry
+		msg            *TaskMessage
+		processAt      time.Time
+		errMsg         string
+		wantInProgress []*TaskMessage
+		wantRetry      []sortedSetEntry
+	}{
+		{
+			inProgress: []*TaskMessage{t1, t2},
+			retry: []sortedSetEntry{
+				{t3, now.Add(time.Minute).Unix()},
+			},
+			msg:            t1,
+			processAt:      now.Add(5 * time.Minute),
+			errMsg:         errMsg,
+			wantInProgress: []*TaskMessage{t2},
+			wantRetry: []sortedSetEntry{
+				{t1AfterRetry, now.Add(5 * time.Minute).Unix()},
+				{t3, now.Add(time.Minute).Unix()},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		flushDB(t, r)
+		seedInProgressQueue(t, r, tc.inProgress)
+		seedRetryQueue(t, r, tc.retry)
+
+		err := r.Retry(tc.msg, tc.processAt, tc.errMsg)
+		if err != nil {
+			t.Errorf("(*RDB).Retry = %v, want nil", err)
+			continue
+		}
+
+		gotInProgressRaw := r.client.LRange(inProgressQ, 0, -1).Val()
+		gotInProgress := mustUnmarshalSlice(t, gotInProgressRaw)
+		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", inProgressQ, diff)
+		}
+
+		gotRetryRaw := r.client.ZRangeWithScores(retryQ, 0, -1).Val()
+		var gotRetry []sortedSetEntry
+		for _, z := range gotRetryRaw {
+			gotRetry = append(gotRetry, sortedSetEntry{
+				msg:   mustUnmarshal(t, z.Member.(string)),
+				score: int64(z.Score),
+			})
+		}
+		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})
+		if diff := cmp.Diff(tc.wantRetry, gotRetry, cmpOpt, sortZSetEntryOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", retryQ, diff)
+		}
+	}
+}

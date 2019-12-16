@@ -127,6 +127,30 @@ func (r *RDB) RetryLater(msg *TaskMessage, processAt time.Time) error {
 	return r.schedule(retryQ, processAt, msg)
 }
 
+// Retry moves the task from in-progress to retry queue, incrementing retry count
+// and assigning error message to the task message.
+func (r *RDB) Retry(msg *TaskMessage, processAt time.Time, errMsg string) error {
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
+	}
+	// 	KEYS[1] -> asynq:in_progress
+	//  KEYS[2] -> asynq:retry
+	//  ARGV[1] -> TaskMessage value
+	//  ARGV[2] -> error message
+	//  ARGV[3] -> retry_at UNIX timestamp
+	script := redis.NewScript(`
+	redis.call("LREM", KEYS[1], 0, ARGV[1])
+	local msg = cjson.decode(ARGV[1])
+	msg["Retried"] = msg["Retried"] + 1
+	msg["ErrorMsg"] = ARGV[2]
+	redis.call("ZADD", KEYS[2], ARGV[3], cjson.encode(msg))
+	return redis.status_reply("OK")
+	`)
+	_, err = script.Run(r.client, []string{inProgressQ, retryQ}, string(bytes), errMsg, processAt.Unix()).Result()
+	return err
+}
+
 // schedule adds the task to the zset to be processd at the specified time.
 func (r *RDB) schedule(zset string, processAt time.Time, msg *TaskMessage) error {
 	bytes, err := json.Marshal(msg)

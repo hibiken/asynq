@@ -4,6 +4,8 @@ import "github.com/go-redis/redis/v7"
 
 /*
 TODOs:
+- [P0] Proper OS Signal handling
+- [P0] Wait for a certain amount of time for wokers to finish on TERM signal
 - [P0] asynqmon kill <taskID>, asynqmon killall <qname>
 - [P0] Assigning int or any number type to Payload will be converted to float64 in handler
 - [P0] Redis Memory Usage, Connection info in stats

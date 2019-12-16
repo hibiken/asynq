@@ -45,6 +45,14 @@ var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*TaskMessage) []*TaskMessa
 	return out
 })
 
+var sortZSetEntryOpt = cmp.Transformer("SortZSetEntry", func(in []sortedSetEntry) []sortedSetEntry {
+	out := append([]sortedSetEntry(nil), in...) // Copy input to avoid mutating it
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].msg.ID.String() < out[j].msg.ID.String()
+	})
+	return out
+})
+
 func newTaskMessage(taskType string, payload map[string]interface{}) *TaskMessage {
 	return &TaskMessage{
 		ID:      xid.New(),
