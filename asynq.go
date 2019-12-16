@@ -4,8 +4,9 @@ import "github.com/go-redis/redis/v7"
 
 /*
 TODOs:
+- [P0] Proper OS Signal handling - TTIN to stop the processor
 - [P0] asynqmon kill <taskID>, asynqmon killall <qname>
-- [P0] Assigning int or any number type to Payload will be converted to float64 in handler
+- [P0] Better Payload API - Assigning int or any number type to Payload will be converted to float64 in handler
 - [P0] Redis Memory Usage, Connection info in stats
 - [P0] Processed, Failed count for today
 - [P0] Go docs + CONTRIBUTION.md + Github issue template + License comment

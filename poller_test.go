@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
 	"github.com/hibiken/asynq/internal/rdb"
 )
@@ -74,7 +75,10 @@ func TestPoller(t *testing.T) {
 		}
 		// initialize retry queue
 		for _, st := range tc.initRetry {
-			err := rdbClient.RetryLater(st.msg, st.processAt)
+			err := r.ZAdd(retryQ, &redis.Z{
+				Member: mustMarshal(t, st.msg),
+				Score:  float64(st.processAt.Unix()),
+			}).Err()
 			if err != nil {
 				t.Fatal(err)
 			}
