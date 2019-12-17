@@ -80,9 +80,8 @@ func (bg *Background) Run(handler Handler) {
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
 	for {
 		sig := <-sigs
-		fmt.Printf("[DEBUG] Got %v\n", sig) // TODO: Remove this
 		if sig == syscall.SIGTSTP {
-			fmt.Println("[DEBUG] Stop processing tasks")
+			bg.processor.stop()
 			continue
 		}
 		break
