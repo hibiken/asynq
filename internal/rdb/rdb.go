@@ -144,7 +144,7 @@ func (r *RDB) Retry(msg *TaskMessage, processAt time.Time, errMsg string) error 
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", modified, err)
 	}
-	// 	KEYS[1] -> asynq:in_progress
+	//  KEYS[1] -> asynq:in_progress
 	//  KEYS[2] -> asynq:retry
 	//  ARGV[1] -> TaskMessage value to remove from InProgress queue
 	//  ARGV[2] -> TaskMessage value to add to Retry queue

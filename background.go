@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/hibiken/asynq/internal/rdb"
@@ -74,9 +75,9 @@ func (bg *Background) Run(handler Handler) {
 	bg.start(handler)
 	defer bg.stop()
 
-	// Wait for a signal to exit.
+	// Wait for a signal to terminate.
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, os.Kill)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
 	<-sigs
 	fmt.Println()
 	log.Println("[INFO] Starting graceful shutdown...")
