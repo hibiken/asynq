@@ -77,8 +77,16 @@ func (bg *Background) Run(handler Handler) {
 
 	// Wait for a signal to terminate.
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
-	<-sigs
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
+	for {
+		sig := <-sigs
+		fmt.Printf("[DEBUG] Got %v\n", sig) // TODO: Remove this
+		if sig == syscall.SIGTSTP {
+			fmt.Println("[DEBUG] Stop processing tasks")
+			continue
+		}
+		break
+	}
 	fmt.Println()
 	log.Println("[INFO] Starting graceful shutdown...")
 }
