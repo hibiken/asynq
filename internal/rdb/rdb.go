@@ -116,6 +116,25 @@ func (r *RDB) Done(msg *TaskMessage) error {
 	return nil
 }
 
+// Requeue moves the task from in-progress queue to the default
+// queue.
+func (r *RDB) Requeue(msg *TaskMessage) error {
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
+	}
+	// KEYS[1] -> asynq:in_progress
+	// KEYS[2] -> asynq:queues:default
+	// ARGV[1] -> taskMessage value
+	script := redis.NewScript(`
+	redis.call("LREM", KEYS[1], 0, ARGV[1])
+	redis.call("RPUSH", KEYS[2], ARGV[1])
+	return redis.status_reply("OK")
+	`)
+	_, err = script.Run(r.client, []string{inProgressQ, defaultQ}, string(bytes)).Result()
+	return err
+}
+
 // Schedule adds the task to the backlog queue to be processed in the future.
 func (r *RDB) Schedule(msg *TaskMessage, processAt time.Time) error {
 	bytes, err := json.Marshal(msg)
