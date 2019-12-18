@@ -123,6 +123,7 @@ func (r *RDB) Requeue(msg *TaskMessage) error {
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
 	}
+	// Note: Use RPUSH to push to the head of the queue.
 	// KEYS[1] -> asynq:in_progress
 	// KEYS[2] -> asynq:queues:default
 	// ARGV[1] -> taskMessage value
