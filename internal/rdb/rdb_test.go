@@ -255,24 +255,28 @@ func TestRestoreUnfinished(t *testing.T) {
 	tests := []struct {
 		inProgress     []*TaskMessage
 		enqueued       []*TaskMessage
+		want           int64
 		wantInProgress []*TaskMessage
 		wantEnqueued   []*TaskMessage
 	}{
 		{
 			inProgress:     []*TaskMessage{t1, t2, t3},
 			enqueued:       []*TaskMessage{},
+			want:           3,
 			wantInProgress: []*TaskMessage{},
 			wantEnqueued:   []*TaskMessage{t1, t2, t3},
 		},
 		{
 			inProgress:     []*TaskMessage{},
 			enqueued:       []*TaskMessage{t1, t2, t3},
+			want:           0,
 			wantInProgress: []*TaskMessage{},
 			wantEnqueued:   []*TaskMessage{t1, t2, t3},
 		},
 		{
 			inProgress:     []*TaskMessage{t2, t3},
 			enqueued:       []*TaskMessage{t1},
+			want:           2,
 			wantInProgress: []*TaskMessage{},
 			wantEnqueued:   []*TaskMessage{t1, t2, t3},
 		},
@@ -283,8 +287,10 @@ func TestRestoreUnfinished(t *testing.T) {
 		seedInProgressQueue(t, r, tc.inProgress)
 		seedDefaultQueue(t, r, tc.enqueued)
 
-		if err := r.RestoreUnfinished(); err != nil {
-			t.Errorf("(*RDB).RestoreUnfinished() = %v, want nil", err)
+		got, err := r.RestoreUnfinished()
+
+		if got != tc.want || err != nil {
+			t.Errorf("(*RDB).RestoreUnfinished() = %v %v, want %v nil", got, err, tc.want)
 			continue
 		}
 

@@ -216,8 +216,9 @@ func (r *RDB) Kill(msg *TaskMessage, errMsg string) error {
 	return err
 }
 
-// RestoreUnfinished  moves all tasks from in-progress list to the queue.
-func (r *RDB) RestoreUnfinished() error {
+// RestoreUnfinished  moves all tasks from in-progress list to the queue
+// and reports the number of tasks restored.
+func (r *RDB) RestoreUnfinished() (int64, error) {
 	script := redis.NewScript(`
 	local len = redis.call("LLEN", KEYS[1])
 	for i = len, 1, -1 do
@@ -225,8 +226,15 @@ func (r *RDB) RestoreUnfinished() error {
 	end
 	return len
 	`)
-	_, err := script.Run(r.client, []string{inProgressQ, defaultQ}).Result()
-	return err
+	res, err := script.Run(r.client, []string{inProgressQ, defaultQ}).Result()
+	if err != nil {
+		return 0, err
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, fmt.Errorf("could not cast %v to int64", res)
+	}
+	return n, nil
 }
 
 // CheckAndEnqueue checks for all scheduled tasks and enqueues any tasks that

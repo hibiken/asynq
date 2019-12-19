@@ -126,6 +126,7 @@ func (p *processor) exec() {
 			select {
 			case <-p.quit:
 				// time is up, quit this worker goroutine.
+				log.Printf("[WARN] Terminating in-progress task %+v\n", msg)
 				return
 			case resErr := <-resCh:
 				// Note: One of three things should happen.
@@ -150,9 +151,12 @@ func (p *processor) exec() {
 // restore moves all tasks from "in-progress" back to queue
 // to restore all unfinished tasks.
 func (p *processor) restore() {
-	err := p.rdb.RestoreUnfinished()
+	n, err := p.rdb.RestoreUnfinished()
 	if err != nil {
 		log.Printf("[ERROR] Could not restore unfinished tasks: %v\n", err)
+	}
+	if n > 0 {
+		log.Printf("[INFO] Restored %d unfinished tasks back to queue.\n", n)
 	}
 }
 
