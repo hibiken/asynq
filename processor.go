@@ -30,8 +30,8 @@ type processor struct {
 	done chan struct{}
 	once sync.Once
 
-	// shutdown channel is closed when the shutdown of the "processor" goroutine starts.
-	shutdown chan struct{}
+	// abort channel is closed when the shutdown of the "processor" goroutine starts.
+	abort chan struct{}
 
 	// quit channel communicates to the in-flight worker goroutines to stop.
 	quit chan struct{}
@@ -44,7 +44,7 @@ func newProcessor(r *rdb.RDB, numWorkers int, handler Handler) *processor {
 		dequeueTimeout: 2 * time.Second,
 		sema:           make(chan struct{}, numWorkers),
 		done:           make(chan struct{}),
-		shutdown:       make(chan struct{}),
+		abort:          make(chan struct{}),
 		quit:           make(chan struct{}),
 	}
 }
@@ -55,7 +55,7 @@ func (p *processor) stop() {
 	p.once.Do(func() {
 		log.Println("[INFO] Processor shutting down...")
 		// Unblock if processor is waiting for sema token.
-		close(p.shutdown)
+		close(p.abort)
 		// Signal the processor goroutine to stop processing tasks
 		// from the queue.
 		p.done <- struct{}{}
@@ -109,7 +109,7 @@ func (p *processor) exec() {
 	}
 
 	select {
-	case <-p.shutdown:
+	case <-p.abort:
 		// shutdown is starting, return immediately after requeuing the message.
 		p.requeue(msg)
 		return
