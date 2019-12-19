@@ -24,9 +24,8 @@ type Task struct {
 	// Type indicates the kind of the task to be performed.
 	Type string
 
-	// Payload is an arbitrary data needed for task execution.
-	// The value has to be serializable.
-	Payload map[string]interface{}
+	// Payload holds data needed for the task execution.
+	Payload Payload
 }
 
 // RedisConfig specifies redis configurations.
