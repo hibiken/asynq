@@ -112,6 +112,59 @@ func TestDone(t *testing.T) {
 	}
 }
 
+func TestRequeue(t *testing.T) {
+	r := setup(t)
+	t1 := newTaskMessage("send_email", nil)
+	t2 := newTaskMessage("export_csv", nil)
+
+	tests := []struct {
+		enqueued       []*TaskMessage // initial state of the default queue
+		inProgress     []*TaskMessage // initial state of the in-progress list
+		target         *TaskMessage   // task to requeue
+		wantEnqueued   []*TaskMessage // final state of the default queue
+		wantInProgress []*TaskMessage // final state of the in-progress list
+	}{
+		{
+			enqueued:       []*TaskMessage{},
+			inProgress:     []*TaskMessage{t1, t2},
+			target:         t1,
+			wantEnqueued:   []*TaskMessage{t1},
+			wantInProgress: []*TaskMessage{t2},
+		},
+		{
+			enqueued:       []*TaskMessage{t1},
+			inProgress:     []*TaskMessage{t2},
+			target:         t2,
+			wantEnqueued:   []*TaskMessage{t1, t2},
+			wantInProgress: []*TaskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		flushDB(t, r) // clean up db before each test case
+		seedDefaultQueue(t, r, tc.enqueued)
+		seedInProgressQueue(t, r, tc.inProgress)
+
+		err := r.Requeue(tc.target)
+		if err != nil {
+			t.Errorf("(*RDB).Requeue(task) = %v, want nil", err)
+			continue
+		}
+
+		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
+		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q: (-want, +got):\n%s", defaultQ, diff)
+		}
+
+		gotInProgressRaw := r.client.LRange(inProgressQ, 0, -1).Val()
+		gotInProgress := mustUnmarshalSlice(t, gotInProgressRaw)
+		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q: (-want, +got):\n%s", inProgressQ, diff)
+		}
+	}
+}
+
 func TestKill(t *testing.T) {
 	r := setup(t)
 	t1 := newTaskMessage("send_email", nil)
@@ -202,24 +255,28 @@ func TestRestoreUnfinished(t *testing.T) {
 	tests := []struct {
 		inProgress     []*TaskMessage
 		enqueued       []*TaskMessage
+		want           int64
 		wantInProgress []*TaskMessage
 		wantEnqueued   []*TaskMessage
 	}{
 		{
 			inProgress:     []*TaskMessage{t1, t2, t3},
 			enqueued:       []*TaskMessage{},
+			want:           3,
 			wantInProgress: []*TaskMessage{},
 			wantEnqueued:   []*TaskMessage{t1, t2, t3},
 		},
 		{
 			inProgress:     []*TaskMessage{},
 			enqueued:       []*TaskMessage{t1, t2, t3},
+			want:           0,
 			wantInProgress: []*TaskMessage{},
 			wantEnqueued:   []*TaskMessage{t1, t2, t3},
 		},
 		{
 			inProgress:     []*TaskMessage{t2, t3},
 			enqueued:       []*TaskMessage{t1},
+			want:           2,
 			wantInProgress: []*TaskMessage{},
 			wantEnqueued:   []*TaskMessage{t1, t2, t3},
 		},
@@ -230,8 +287,10 @@ func TestRestoreUnfinished(t *testing.T) {
 		seedInProgressQueue(t, r, tc.inProgress)
 		seedDefaultQueue(t, r, tc.enqueued)
 
-		if err := r.RestoreUnfinished(); err != nil {
-			t.Errorf("(*RDB).RestoreUnfinished() = %v, want nil", err)
+		got, err := r.RestoreUnfinished()
+
+		if got != tc.want || err != nil {
+			t.Errorf("(*RDB).RestoreUnfinished() = %v %v, want %v nil", got, err, tc.want)
 			continue
 		}
 

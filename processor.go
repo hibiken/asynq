@@ -5,6 +5,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/hibiken/asynq/internal/rdb"
@@ -25,7 +26,12 @@ type processor struct {
 	sema chan struct{}
 
 	// channel to communicate back to the long running "processor" goroutine.
+	// once is used to send value to the channel only once.
 	done chan struct{}
+	once sync.Once
+
+	// abort channel is closed when the shutdown of the "processor" goroutine starts.
+	abort chan struct{}
 
 	// quit channel communicates to the in-flight worker goroutines to stop.
 	quit chan struct{}
@@ -35,18 +41,30 @@ func newProcessor(r *rdb.RDB, numWorkers int, handler Handler) *processor {
 	return &processor{
 		rdb:            r,
 		handler:        handler,
-		dequeueTimeout: 5 * time.Second,
+		dequeueTimeout: 2 * time.Second,
 		sema:           make(chan struct{}, numWorkers),
 		done:           make(chan struct{}),
+		abort:          make(chan struct{}),
 		quit:           make(chan struct{}),
 	}
 }
 
+// Note: stops only the "processor" goroutine, does not stop workers.
+// It's safe to call this method multiple times.
+func (p *processor) stop() {
+	p.once.Do(func() {
+		log.Println("[INFO] Processor shutting down...")
+		// Unblock if processor is waiting for sema token.
+		close(p.abort)
+		// Signal the processor goroutine to stop processing tasks
+		// from the queue.
+		p.done <- struct{}{}
+	})
+}
+
 // NOTE: once terminated, processor cannot be re-started.
 func (p *processor) terminate() {
-	log.Println("[INFO] Processor shutting down...")
-	// Signal the processor goroutine to stop processing tasks from the queue.
-	p.done <- struct{}{}
+	p.stop()
 
 	// TODO(hibiken): Allow user to customize this timeout value.
 	const timeout = 8 * time.Second
@@ -90,45 +108,62 @@ func (p *processor) exec() {
 		return
 	}
 
-	p.sema <- struct{}{} // acquire token
-	go func() {
-		defer func() { <-p.sema /* release token */ }()
-
-		resCh := make(chan error, 1)
-		task := &Task{Type: msg.Type, Payload: msg.Payload}
+	select {
+	case <-p.abort:
+		// shutdown is starting, return immediately after requeuing the message.
+		p.requeue(msg)
+		return
+	case p.sema <- struct{}{}: // acquire token
 		go func() {
-			resCh <- perform(p.handler, task)
-		}()
+			defer func() { <-p.sema /* release token */ }()
 
-		select {
-		case <-p.quit:
-			// time is up, quit this worker goroutine.
-			return
-		case resErr := <-resCh:
-			// Note: One of three things should happen.
-			// 1) Done  -> Removes the message from InProgress
-			// 2) Retry -> Removes the message from InProgress & Adds the message to Retry
-			// 3) Kill  -> Removes the message from InProgress & Adds the message to Dead
-			if resErr != nil {
-				if msg.Retried >= msg.Retry {
-					p.kill(msg, resErr.Error())
+			resCh := make(chan error, 1)
+			task := &Task{Type: msg.Type, Payload: msg.Payload}
+			go func() {
+				resCh <- perform(p.handler, task)
+			}()
+
+			select {
+			case <-p.quit:
+				// time is up, quit this worker goroutine.
+				log.Printf("[WARN] Terminating in-progress task %+v\n", msg)
+				return
+			case resErr := <-resCh:
+				// Note: One of three things should happen.
+				// 1) Done  -> Removes the message from InProgress
+				// 2) Retry -> Removes the message from InProgress & Adds the message to Retry
+				// 3) Kill  -> Removes the message from InProgress & Adds the message to Dead
+				if resErr != nil {
+					if msg.Retried >= msg.Retry {
+						p.kill(msg, resErr.Error())
+						return
+					}
+					p.retry(msg, resErr.Error())
 					return
 				}
-				p.retry(msg, resErr.Error())
+				p.markAsDone(msg)
 				return
 			}
-			p.markAsDone(msg)
-			return
-		}
-	}()
+		}()
+	}
 }
 
 // restore moves all tasks from "in-progress" back to queue
 // to restore all unfinished tasks.
 func (p *processor) restore() {
-	err := p.rdb.RestoreUnfinished()
+	n, err := p.rdb.RestoreUnfinished()
 	if err != nil {
 		log.Printf("[ERROR] Could not restore unfinished tasks: %v\n", err)
+	}
+	if n > 0 {
+		log.Printf("[INFO] Restored %d unfinished tasks back to queue.\n", n)
+	}
+}
+
+func (p *processor) requeue(msg *rdb.TaskMessage) {
+	err := p.rdb.Requeue(msg)
+	if err != nil {
+		log.Printf("[ERROR] Could not move task from InProgress back to queue: %v\n", err)
 	}
 }
 

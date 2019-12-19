@@ -116,6 +116,26 @@ func (r *RDB) Done(msg *TaskMessage) error {
 	return nil
 }
 
+// Requeue moves the task from in-progress queue to the default
+// queue.
+func (r *RDB) Requeue(msg *TaskMessage) error {
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
+	}
+	// Note: Use RPUSH to push to the head of the queue.
+	// KEYS[1] -> asynq:in_progress
+	// KEYS[2] -> asynq:queues:default
+	// ARGV[1] -> taskMessage value
+	script := redis.NewScript(`
+	redis.call("LREM", KEYS[1], 0, ARGV[1])
+	redis.call("RPUSH", KEYS[2], ARGV[1])
+	return redis.status_reply("OK")
+	`)
+	_, err = script.Run(r.client, []string{inProgressQ, defaultQ}, string(bytes)).Result()
+	return err
+}
+
 // Schedule adds the task to the backlog queue to be processed in the future.
 func (r *RDB) Schedule(msg *TaskMessage, processAt time.Time) error {
 	bytes, err := json.Marshal(msg)
@@ -144,7 +164,7 @@ func (r *RDB) Retry(msg *TaskMessage, processAt time.Time, errMsg string) error 
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", modified, err)
 	}
-	// 	KEYS[1] -> asynq:in_progress
+	//  KEYS[1] -> asynq:in_progress
 	//  KEYS[2] -> asynq:retry
 	//  ARGV[1] -> TaskMessage value to remove from InProgress queue
 	//  ARGV[2] -> TaskMessage value to add to Retry queue
@@ -196,8 +216,9 @@ func (r *RDB) Kill(msg *TaskMessage, errMsg string) error {
 	return err
 }
 
-// RestoreUnfinished  moves all tasks from in-progress list to the queue.
-func (r *RDB) RestoreUnfinished() error {
+// RestoreUnfinished  moves all tasks from in-progress list to the queue
+// and reports the number of tasks restored.
+func (r *RDB) RestoreUnfinished() (int64, error) {
 	script := redis.NewScript(`
 	local len = redis.call("LLEN", KEYS[1])
 	for i = len, 1, -1 do
@@ -205,8 +226,15 @@ func (r *RDB) RestoreUnfinished() error {
 	end
 	return len
 	`)
-	_, err := script.Run(r.client, []string{inProgressQ, defaultQ}).Result()
-	return err
+	res, err := script.Run(r.client, []string{inProgressQ, defaultQ}).Result()
+	if err != nil {
+		return 0, err
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, fmt.Errorf("could not cast %v to int64", res)
+	}
+	return n, nil
 }
 
 // CheckAndEnqueue checks for all scheduled tasks and enqueues any tasks that

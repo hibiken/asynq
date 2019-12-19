@@ -39,9 +39,8 @@ func (p *poller) start() {
 			case <-p.done:
 				log.Println("[INFO] Poller done.")
 				return
-			default:
+			case <-time.After(p.avgInterval):
 				p.exec()
-				time.Sleep(p.avgInterval)
 			}
 		}
 	}()
