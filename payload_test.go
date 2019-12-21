@@ -8,7 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestPayload(t *testing.T) {
+func TestPayloadGet(t *testing.T) {
 	names := []string{"luke", "anakin", "ray"}
 	primes := []int{2, 3, 5, 7, 11, 13, 17}
 	user := map[string]interface{}{"name": "Ken", "score": 3.14}
@@ -125,7 +125,7 @@ func TestPayload(t *testing.T) {
 	}
 }
 
-func TestPayloadWithMarshaling(t *testing.T) {
+func TestPayloadGetWithMarshaling(t *testing.T) {
 	names := []string{"luke", "anakin", "ray"}
 	primes := []int{2, 3, 5, 7, 11, 13, 17}
 	user := map[string]interface{}{"name": "Ken", "score": 3.14}
@@ -250,5 +250,18 @@ func TestPayloadWithMarshaling(t *testing.T) {
 	if gotDuration != duration {
 		t.Errorf("Payload.GetDuration(%q) = %v, %v, want %v, nil",
 			"duration", gotDuration, err, duration)
+	}
+}
+
+func TestPayloadHas(t *testing.T) {
+	payload := Payload{
+		"user_id": 123,
+	}
+
+	if !payload.Has("user_id") {
+		t.Errorf("Payload.Has(%q) = false, want true", "user_id")
+	}
+	if payload.Has("name") {
+		t.Errorf("Payload.Has(%q) = true, want false", "name")
 	}
 }

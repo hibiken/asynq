@@ -6,7 +6,6 @@ import "github.com/go-redis/redis/v7"
 TODOs:
 - [P0] asynqmon kill <taskID>, asynqmon killall <qname>
 - [P0] Pagination for `asynqmon ls` command
-- [P0] Better Payload API - Assigning int or any number type to Payload will be converted to float64 in handler
 - [P0] Show elapsed time for InProgress tasks (asynqmon ls inprogress)
 - [P0] Redis Memory Usage, Connection info in stats
 - [P0] Processed, Failed count for today

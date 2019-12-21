@@ -19,6 +19,12 @@ func (e *errKeyNotFound) Error() string {
 	return fmt.Sprintf("key %q does not exist", e.key)
 }
 
+// Has reports whether key exists.
+func (p Payload) Has(key string) bool {
+	_, ok := p[key]
+	return ok
+}
+
 // GetString returns a string value if a string type is associated with
 // the key, otherwise reports an error.
 func (p Payload) GetString(key string) (string, error) {
