@@ -66,11 +66,11 @@ func main() {
 func handler(t *asynq.Task) error {
     switch t.Type {
         case "send_welcome_email":
-            rid, ok := t.Payload["recipient_id"]
-            if !ok {
-                return fmt.Errorf("recipient_id not found in payload")
+            id, err := t.Payload.GetInt("recipient_id")
+            if err != nil{
+                return err
             }
-            fmt.Printf("Send Welcome Email to %d\n", rid.(int))
+            fmt.Printf("Send Welcome Email to %d\n", id)
 
         // ... handle other task types.
 

@@ -6,7 +6,6 @@ import "github.com/go-redis/redis/v7"
 TODOs:
 - [P0] asynqmon kill <taskID>, asynqmon killall <qname>
 - [P0] Pagination for `asynqmon ls` command
-- [P0] Better Payload API - Assigning int or any number type to Payload will be converted to float64 in handler
 - [P0] Show elapsed time for InProgress tasks (asynqmon ls inprogress)
 - [P0] Redis Memory Usage, Connection info in stats
 - [P0] Processed, Failed count for today
@@ -24,9 +23,8 @@ type Task struct {
 	// Type indicates the kind of the task to be performed.
 	Type string
 
-	// Payload is an arbitrary data needed for task execution.
-	// The value has to be serializable.
-	Payload map[string]interface{}
+	// Payload holds data needed for the task execution.
+	Payload Payload
 }
 
 // RedisConfig specifies redis configurations.
