@@ -68,6 +68,9 @@ const (
 //
 // Process returns nil if the task is registered successfully,
 // otherwise returns non-nil error.
+//
+// opts specifies the behavior of task processing. If there are conflicting
+// Option the last one overrides the ones before.
 func (c *Client) Process(task *Task, processAt time.Time, opts ...Option) error {
 	opt := composeOptions(opts...)
 	msg := &rdb.TaskMessage{

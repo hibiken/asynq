@@ -89,6 +89,24 @@ func TestClient(t *testing.T) {
 			},
 			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
 		},
+		{
+			desc:      "Conflicting options",
+			task:      task,
+			processAt: time.Now(),
+			opts: []Option{
+				MaxRetry(2),
+				MaxRetry(10),
+			},
+			wantEnqueued: []*rdb.TaskMessage{
+				&rdb.TaskMessage{
+					Type:    task.Type,
+					Payload: task.Payload,
+					Retry:   10, // Last option takes precedence
+					Queue:   "default",
+				},
+			},
+			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
+		},
 	}
 
 	for _, tc := range tests {
