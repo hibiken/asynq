@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/rs/xid"
 )
@@ -29,6 +30,12 @@ const (
 	deadQ       = "asynq:dead"            // ZSET
 	inProgressQ = "asynq:in_progress"     // LIST
 )
+
+// scheduledEntry represents an item in redis sorted set (aka ZSET).
+type sortedSetEntry struct {
+	msg   *rdb.TaskMessage
+	score int64
+}
 
 func setup(t *testing.T) *redis.Client {
 	t.Helper()
@@ -58,6 +65,16 @@ var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*rdb.TaskMessage) []*rdb.T
 	})
 	return out
 })
+
+var sortZSetEntryOpt = cmp.Transformer("SortZSetEntry", func(in []sortedSetEntry) []sortedSetEntry {
+	out := append([]sortedSetEntry(nil), in...) // Copy input to avoid mutating it
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].msg.ID.String() < out[j].msg.ID.String()
+	})
+	return out
+})
+
+var ignoreIDOpt = cmpopts.IgnoreFields(rdb.TaskMessage{}, "ID")
 
 func randomTask(taskType, qname string, payload map[string]interface{}) *rdb.TaskMessage {
 	return &rdb.TaskMessage{
