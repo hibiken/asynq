@@ -12,11 +12,7 @@ TODOs:
 - [P0] Go docs + CONTRIBUTION.md + Github issue template + License comment
 - [P0] Redis Sentinel support
 - [P1] Add Support for multiple queues and priority
-- [P1] User defined max-retry count
 */
-
-// Max retry count by default
-const defaultMaxRetry = 25
 
 // Task represents a task to be performed.
 type Task struct {
