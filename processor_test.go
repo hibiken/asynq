@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
@@ -25,20 +26,20 @@ func TestProcessorSuccess(t *testing.T) {
 	t4 := &Task{Type: m4.Type, Payload: m4.Payload}
 
 	tests := []struct {
-		initQueue     []*rdb.TaskMessage // initial default queue state
-		incoming      []*rdb.TaskMessage // tasks to be enqueued during run
-		wait          time.Duration      // wait duration between starting and stopping processor for this test case
-		wantProcessed []*Task            // tasks to be processed at the end
+		initQueue     []*base.TaskMessage // initial default queue state
+		incoming      []*base.TaskMessage // tasks to be enqueued during run
+		wait          time.Duration       // wait duration between starting and stopping processor for this test case
+		wantProcessed []*Task             // tasks to be processed at the end
 	}{
 		{
-			initQueue:     []*rdb.TaskMessage{m1},
-			incoming:      []*rdb.TaskMessage{m2, m3, m4},
+			initQueue:     []*base.TaskMessage{m1},
+			incoming:      []*base.TaskMessage{m2, m3, m4},
 			wait:          time.Second,
 			wantProcessed: []*Task{t1, t2, t3, t4},
 		},
 		{
-			initQueue:     []*rdb.TaskMessage{},
-			incoming:      []*rdb.TaskMessage{m1},
+			initQueue:     []*base.TaskMessage{},
+			incoming:      []*base.TaskMessage{m1},
 			wait:          time.Second,
 			wantProcessed: []*Task{t1},
 		},
@@ -85,8 +86,8 @@ func TestProcessorSuccess(t *testing.T) {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 
-		if l := r.LLen(inProgressQ).Val(); l != 0 {
-			t.Errorf("%q has %d tasks, want 0", inProgressQ, l)
+		if l := r.LLen(base.InProgressQueue).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", base.InProgressQueue, l)
 		}
 	}
 }
@@ -116,18 +117,18 @@ func TestProcessorRetry(t *testing.T) {
 	r4.Retried = m4.Retried + 1
 
 	tests := []struct {
-		initQueue []*rdb.TaskMessage // initial default queue state
-		incoming  []*rdb.TaskMessage // tasks to be enqueued during run
-		wait      time.Duration      // wait duration between starting and stopping processor for this test case
-		wantRetry []*rdb.TaskMessage // tasks in retry queue at the end
-		wantDead  []*rdb.TaskMessage // tasks in dead queue at the end
+		initQueue []*base.TaskMessage // initial default queue state
+		incoming  []*base.TaskMessage // tasks to be enqueued during run
+		wait      time.Duration       // wait duration between starting and stopping processor for this test case
+		wantRetry []*base.TaskMessage // tasks in retry queue at the end
+		wantDead  []*base.TaskMessage // tasks in dead queue at the end
 	}{
 		{
-			initQueue: []*rdb.TaskMessage{m1, m2},
-			incoming:  []*rdb.TaskMessage{m3, m4},
+			initQueue: []*base.TaskMessage{m1, m2},
+			incoming:  []*base.TaskMessage{m3, m4},
 			wait:      time.Second,
-			wantRetry: []*rdb.TaskMessage{&r2, &r3, &r4},
-			wantDead:  []*rdb.TaskMessage{&r1},
+			wantRetry: []*base.TaskMessage{&r2, &r3, &r4},
+			wantDead:  []*base.TaskMessage{&r1},
 		},
 	}
 
@@ -162,20 +163,20 @@ func TestProcessorRetry(t *testing.T) {
 		time.Sleep(tc.wait)
 		p.terminate()
 
-		gotRetryRaw := r.ZRange(retryQ, 0, -1).Val()
+		gotRetryRaw := r.ZRange(base.RetryQueue, 0, -1).Val()
 		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", retryQ, diff)
+			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 
-		gotDeadRaw := r.ZRange(deadQ, 0, -1).Val()
+		gotDeadRaw := r.ZRange(base.DeadQueue, 0, -1).Val()
 		gotDead := mustUnmarshalSlice(t, gotDeadRaw)
 		if diff := cmp.Diff(tc.wantDead, gotDead, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", deadQ, diff)
+			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.DeadQueue, diff)
 		}
 
-		if l := r.LLen(inProgressQ).Val(); l != 0 {
-			t.Errorf("%q has %d tasks, want 0", inProgressQ, l)
+		if l := r.LLen(base.InProgressQueue).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", base.InProgressQueue, l)
 		}
 	}
 }

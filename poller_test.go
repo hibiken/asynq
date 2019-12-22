@@ -6,12 +6,13 @@ import (
 
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
+	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
 func TestPoller(t *testing.T) {
 	type scheduledTask struct {
-		msg       *rdb.TaskMessage
+		msg       *base.TaskMessage
 		processAt time.Time
 	}
 	r := setup(t)
@@ -24,13 +25,13 @@ func TestPoller(t *testing.T) {
 	t4 := randomTask("sync", "default", nil)
 
 	tests := []struct {
-		initScheduled []scheduledTask    // scheduled queue initial state
-		initRetry     []scheduledTask    // retry queue initial state
-		initQueue     []*rdb.TaskMessage // default queue initial state
-		wait          time.Duration      // wait duration before checking for final state
-		wantScheduled []*rdb.TaskMessage // schedule queue final state
-		wantRetry     []*rdb.TaskMessage // retry queue final state
-		wantQueue     []*rdb.TaskMessage // default queue final state
+		initScheduled []scheduledTask     // scheduled queue initial state
+		initRetry     []scheduledTask     // retry queue initial state
+		initQueue     []*base.TaskMessage // default queue initial state
+		wait          time.Duration       // wait duration before checking for final state
+		wantScheduled []*base.TaskMessage // schedule queue final state
+		wantRetry     []*base.TaskMessage // retry queue final state
+		wantQueue     []*base.TaskMessage // default queue final state
 	}{
 		{
 			initScheduled: []scheduledTask{
@@ -40,11 +41,11 @@ func TestPoller(t *testing.T) {
 			initRetry: []scheduledTask{
 				{t3, time.Now().Add(-500 * time.Millisecond)},
 			},
-			initQueue:     []*rdb.TaskMessage{t4},
+			initQueue:     []*base.TaskMessage{t4},
 			wait:          pollInterval * 2,
-			wantScheduled: []*rdb.TaskMessage{t1},
-			wantRetry:     []*rdb.TaskMessage{},
-			wantQueue:     []*rdb.TaskMessage{t2, t3, t4},
+			wantScheduled: []*base.TaskMessage{t1},
+			wantRetry:     []*base.TaskMessage{},
+			wantQueue:     []*base.TaskMessage{t2, t3, t4},
 		},
 		{
 			initScheduled: []scheduledTask{
@@ -53,11 +54,11 @@ func TestPoller(t *testing.T) {
 				{t3, time.Now().Add(-500 * time.Millisecond)},
 			},
 			initRetry:     []scheduledTask{},
-			initQueue:     []*rdb.TaskMessage{t4},
+			initQueue:     []*base.TaskMessage{t4},
 			wait:          pollInterval * 2,
-			wantScheduled: []*rdb.TaskMessage{},
-			wantRetry:     []*rdb.TaskMessage{},
-			wantQueue:     []*rdb.TaskMessage{t1, t2, t3, t4},
+			wantScheduled: []*base.TaskMessage{},
+			wantRetry:     []*base.TaskMessage{},
+			wantQueue:     []*base.TaskMessage{t1, t2, t3, t4},
 		},
 	}
 
@@ -75,7 +76,7 @@ func TestPoller(t *testing.T) {
 		}
 		// initialize retry queue
 		for _, st := range tc.initRetry {
-			err := r.ZAdd(retryQ, &redis.Z{
+			err := r.ZAdd(base.RetryQueue, &redis.Z{
 				Member: mustMarshal(t, st.msg),
 				Score:  float64(st.processAt.Unix()),
 			}).Err()
@@ -95,22 +96,22 @@ func TestPoller(t *testing.T) {
 		time.Sleep(tc.wait)
 		p.terminate()
 
-		gotScheduledRaw := r.ZRange(scheduledQ, 0, -1).Val()
+		gotScheduledRaw := r.ZRange(base.ScheduledQueue, 0, -1).Val()
 		gotScheduled := mustUnmarshalSlice(t, gotScheduledRaw)
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", scheduledQ, diff)
+			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", base.ScheduledQueue, diff)
 		}
 
-		gotRetryRaw := r.ZRange(retryQ, 0, -1).Val()
+		gotRetryRaw := r.ZRange(base.RetryQueue, 0, -1).Val()
 		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", retryQ, diff)
+			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 
-		gotQueueRaw := r.LRange(defaultQ, 0, -1).Val()
+		gotQueueRaw := r.LRange(base.DefaultQueue, 0, -1).Val()
 		gotQueue := mustUnmarshalSlice(t, gotQueueRaw)
 		if diff := cmp.Diff(tc.wantQueue, gotQueue, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", defaultQ, diff)
+			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", base.DefaultQueue, diff)
 		}
 	}
 }

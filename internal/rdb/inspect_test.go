@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/hibiken/asynq/internal/base"
 	"github.com/rs/xid"
 )
 
@@ -55,16 +56,16 @@ func TestCurrentStats(t *testing.T) {
 	m4 := newTaskMessage("sync", nil)
 
 	tests := []struct {
-		enqueued   []*TaskMessage
-		inProgress []*TaskMessage
+		enqueued   []*base.TaskMessage
+		inProgress []*base.TaskMessage
 		scheduled  []sortedSetEntry
 		retry      []sortedSetEntry
 		dead       []sortedSetEntry
 		want       *Stats
 	}{
 		{
-			enqueued:   []*TaskMessage{m1},
-			inProgress: []*TaskMessage{m2},
+			enqueued:   []*base.TaskMessage{m1},
+			inProgress: []*base.TaskMessage{m2},
 			scheduled: []sortedSetEntry{
 				{m3, time.Now().Add(time.Hour).Unix()},
 				{m4, time.Now().Unix()}},
@@ -80,8 +81,8 @@ func TestCurrentStats(t *testing.T) {
 			},
 		},
 		{
-			enqueued:   []*TaskMessage{},
-			inProgress: []*TaskMessage{},
+			enqueued:   []*base.TaskMessage{},
+			inProgress: []*base.TaskMessage{},
 			scheduled: []sortedSetEntry{
 				{m3, time.Now().Unix()},
 				{m4, time.Now().Unix()}},
@@ -130,15 +131,15 @@ func TestListEnqueued(t *testing.T) {
 	t1 := &EnqueuedTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload}
 	t2 := &EnqueuedTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload}
 	tests := []struct {
-		enqueued []*TaskMessage
+		enqueued []*base.TaskMessage
 		want     []*EnqueuedTask
 	}{
 		{
-			enqueued: []*TaskMessage{m1, m2},
+			enqueued: []*base.TaskMessage{m1, m2},
 			want:     []*EnqueuedTask{t1, t2},
 		},
 		{
-			enqueued: []*TaskMessage{},
+			enqueued: []*base.TaskMessage{},
 			want:     []*EnqueuedTask{},
 		},
 	}
@@ -174,15 +175,15 @@ func TestListInProgress(t *testing.T) {
 	t1 := &InProgressTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload}
 	t2 := &InProgressTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload}
 	tests := []struct {
-		inProgress []*TaskMessage
+		inProgress []*base.TaskMessage
 		want       []*InProgressTask
 	}{
 		{
-			inProgress: []*TaskMessage{m1, m2},
+			inProgress: []*base.TaskMessage{m1, m2},
 			want:       []*InProgressTask{t1, t2},
 		},
 		{
-			inProgress: []*TaskMessage{},
+			inProgress: []*base.TaskMessage{},
 			want:       []*InProgressTask{},
 		},
 	}
@@ -262,7 +263,7 @@ func TestListScheduled(t *testing.T) {
 
 func TestListRetry(t *testing.T) {
 	r := setup(t)
-	m1 := &TaskMessage{
+	m1 := &base.TaskMessage{
 		ID:       xid.New(),
 		Type:     "send_email",
 		Queue:    "default",
@@ -271,7 +272,7 @@ func TestListRetry(t *testing.T) {
 		Retry:    25,
 		Retried:  10,
 	}
-	m2 := &TaskMessage{
+	m2 := &base.TaskMessage{
 		ID:       xid.New(),
 		Type:     "reindex",
 		Queue:    "default",
@@ -346,14 +347,14 @@ func TestListRetry(t *testing.T) {
 
 func TestListDead(t *testing.T) {
 	r := setup(t)
-	m1 := &TaskMessage{
+	m1 := &base.TaskMessage{
 		ID:       xid.New(),
 		Type:     "send_email",
 		Queue:    "default",
 		Payload:  map[string]interface{}{"subject": "hello"},
 		ErrorMsg: "email server not responding",
 	}
-	m2 := &TaskMessage{
+	m2 := &base.TaskMessage{
 		ID:       xid.New(),
 		Type:     "reindex",
 		Queue:    "default",
@@ -434,8 +435,8 @@ func TestEnqueueDeadTask(t *testing.T) {
 		score        int64
 		id           xid.ID
 		want         error // expected return value from calling EnqueueDeadTask
-		wantDead     []*TaskMessage
-		wantEnqueued []*TaskMessage
+		wantDead     []*base.TaskMessage
+		wantEnqueued []*base.TaskMessage
 	}{
 		{
 			dead: []sortedSetEntry{
@@ -445,8 +446,8 @@ func TestEnqueueDeadTask(t *testing.T) {
 			score:        s2,
 			id:           t2.ID,
 			want:         nil,
-			wantDead:     []*TaskMessage{t1},
-			wantEnqueued: []*TaskMessage{t2},
+			wantDead:     []*base.TaskMessage{t1},
+			wantEnqueued: []*base.TaskMessage{t2},
 		},
 		{
 			dead: []sortedSetEntry{
@@ -456,8 +457,8 @@ func TestEnqueueDeadTask(t *testing.T) {
 			score:        123,
 			id:           t2.ID,
 			want:         ErrTaskNotFound,
-			wantDead:     []*TaskMessage{t1, t2},
-			wantEnqueued: []*TaskMessage{},
+			wantDead:     []*base.TaskMessage{t1, t2},
+			wantEnqueued: []*base.TaskMessage{},
 		},
 	}
 
@@ -470,15 +471,15 @@ func TestEnqueueDeadTask(t *testing.T) {
 			t.Errorf("r.EnqueueDeadTask(%s, %d) = %v, want %v", tc.id, tc.score, got, tc.want)
 			continue
 		}
-		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueuedRaw := r.client.LRange(base.DefaultQueue, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", defaultQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DefaultQueue, diff)
 		}
-		gotDeadRaw := r.client.ZRange(deadQ, 0, -1).Val()
+		gotDeadRaw := r.client.ZRange(base.DeadQueue, 0, -1).Val()
 		gotDead := mustUnmarshalSlice(t, gotDeadRaw)
 		if diff := cmp.Diff(tc.wantDead, gotDead, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q, (-want, +got)\n%s", deadQ, diff)
+			t.Errorf("mismatch found in %q, (-want, +got)\n%s", base.DeadQueue, diff)
 		}
 	}
 }
@@ -495,8 +496,8 @@ func TestEnqueueRetryTask(t *testing.T) {
 		score        int64
 		id           xid.ID
 		want         error // expected return value from calling EnqueueRetryTask
-		wantRetry    []*TaskMessage
-		wantEnqueued []*TaskMessage
+		wantRetry    []*base.TaskMessage
+		wantEnqueued []*base.TaskMessage
 	}{
 		{
 			retry: []sortedSetEntry{
@@ -506,8 +507,8 @@ func TestEnqueueRetryTask(t *testing.T) {
 			score:        s2,
 			id:           t2.ID,
 			want:         nil,
-			wantRetry:    []*TaskMessage{t1},
-			wantEnqueued: []*TaskMessage{t2},
+			wantRetry:    []*base.TaskMessage{t1},
+			wantEnqueued: []*base.TaskMessage{t2},
 		},
 		{
 			retry: []sortedSetEntry{
@@ -517,8 +518,8 @@ func TestEnqueueRetryTask(t *testing.T) {
 			score:        123,
 			id:           t2.ID,
 			want:         ErrTaskNotFound,
-			wantRetry:    []*TaskMessage{t1, t2},
-			wantEnqueued: []*TaskMessage{},
+			wantRetry:    []*base.TaskMessage{t1, t2},
+			wantEnqueued: []*base.TaskMessage{},
 		},
 	}
 
@@ -532,15 +533,15 @@ func TestEnqueueRetryTask(t *testing.T) {
 			t.Errorf("r.EnqueueRetryTask(%s, %d) = %v, want %v", tc.id, tc.score, got, tc.want)
 			continue
 		}
-		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueuedRaw := r.client.LRange(base.DefaultQueue, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", defaultQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DefaultQueue, diff)
 		}
-		gotRetryRaw := r.client.ZRange(retryQ, 0, -1).Val()
+		gotRetryRaw := r.client.ZRange(base.RetryQueue, 0, -1).Val()
 		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q, (-want, +got)\n%s", retryQ, diff)
+			t.Errorf("mismatch found in %q, (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 	}
 }
@@ -557,8 +558,8 @@ func TestEnqueueScheduledTask(t *testing.T) {
 		score         int64
 		id            xid.ID
 		want          error // expected return value from calling EnqueueScheduledTask
-		wantScheduled []*TaskMessage
-		wantEnqueued  []*TaskMessage
+		wantScheduled []*base.TaskMessage
+		wantEnqueued  []*base.TaskMessage
 	}{
 		{
 			scheduled: []sortedSetEntry{
@@ -568,8 +569,8 @@ func TestEnqueueScheduledTask(t *testing.T) {
 			score:         s2,
 			id:            t2.ID,
 			want:          nil,
-			wantScheduled: []*TaskMessage{t1},
-			wantEnqueued:  []*TaskMessage{t2},
+			wantScheduled: []*base.TaskMessage{t1},
+			wantEnqueued:  []*base.TaskMessage{t2},
 		},
 		{
 			scheduled: []sortedSetEntry{
@@ -579,8 +580,8 @@ func TestEnqueueScheduledTask(t *testing.T) {
 			score:         123,
 			id:            t2.ID,
 			want:          ErrTaskNotFound,
-			wantScheduled: []*TaskMessage{t1, t2},
-			wantEnqueued:  []*TaskMessage{},
+			wantScheduled: []*base.TaskMessage{t1, t2},
+			wantEnqueued:  []*base.TaskMessage{},
 		},
 	}
 
@@ -593,15 +594,15 @@ func TestEnqueueScheduledTask(t *testing.T) {
 			t.Errorf("r.EnqueueRetryTask(%s, %d) = %v, want %v", tc.id, tc.score, got, tc.want)
 			continue
 		}
-		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueuedRaw := r.client.LRange(base.DefaultQueue, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", defaultQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DefaultQueue, diff)
 		}
-		gotScheduledRaw := r.client.ZRange(scheduledQ, 0, -1).Val()
+		gotScheduledRaw := r.client.ZRange(base.ScheduledQueue, 0, -1).Val()
 		gotScheduled := mustUnmarshalSlice(t, gotScheduledRaw)
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q, (-want, +got)\n%s", scheduledQ, diff)
+			t.Errorf("mismatch found in %q, (-want, +got)\n%s", base.ScheduledQueue, diff)
 		}
 	}
 }
@@ -616,7 +617,7 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 		desc         string
 		scheduled    []sortedSetEntry
 		want         int64
-		wantEnqueued []*TaskMessage
+		wantEnqueued []*base.TaskMessage
 	}{
 		{
 			desc: "with tasks in scheduled queue",
@@ -626,13 +627,13 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 				{t3, time.Now().Add(time.Hour).Unix()},
 			},
 			want:         3,
-			wantEnqueued: []*TaskMessage{t1, t2, t3},
+			wantEnqueued: []*base.TaskMessage{t1, t2, t3},
 		},
 		{
 			desc:         "with empty scheduled queue",
 			scheduled:    []sortedSetEntry{},
 			want:         0,
-			wantEnqueued: []*TaskMessage{},
+			wantEnqueued: []*base.TaskMessage{},
 		},
 	}
 
@@ -652,10 +653,10 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 				tc.desc, got, err, tc.want)
 		}
 
-		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueuedRaw := r.client.LRange(base.DefaultQueue, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
-			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, defaultQ, diff)
+			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.DefaultQueue, diff)
 		}
 	}
 }
@@ -670,7 +671,7 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 		description  string
 		retry        []sortedSetEntry
 		want         int64
-		wantEnqueued []*TaskMessage
+		wantEnqueued []*base.TaskMessage
 	}{
 		{
 			description: "with tasks in retry queue",
@@ -680,13 +681,13 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 				{t3, time.Now().Add(time.Hour).Unix()},
 			},
 			want:         3,
-			wantEnqueued: []*TaskMessage{t1, t2, t3},
+			wantEnqueued: []*base.TaskMessage{t1, t2, t3},
 		},
 		{
 			description:  "with empty retry queue",
 			retry:        []sortedSetEntry{},
 			want:         0,
-			wantEnqueued: []*TaskMessage{},
+			wantEnqueued: []*base.TaskMessage{},
 		},
 	}
 
@@ -706,10 +707,10 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 				tc.description, got, err, tc.want)
 		}
 
-		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueuedRaw := r.client.LRange(base.DefaultQueue, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
-			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.description, defaultQ, diff)
+			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.description, base.DefaultQueue, diff)
 		}
 	}
 }
@@ -724,7 +725,7 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 		desc         string
 		dead         []sortedSetEntry
 		want         int64
-		wantEnqueued []*TaskMessage
+		wantEnqueued []*base.TaskMessage
 	}{
 		{
 			desc: "with tasks in dead queue",
@@ -734,13 +735,13 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 				{t3, time.Now().Add(-time.Minute).Unix()},
 			},
 			want:         3,
-			wantEnqueued: []*TaskMessage{t1, t2, t3},
+			wantEnqueued: []*base.TaskMessage{t1, t2, t3},
 		},
 		{
 			desc:         "with empty dead queue",
 			dead:         []sortedSetEntry{},
 			want:         0,
-			wantEnqueued: []*TaskMessage{},
+			wantEnqueued: []*base.TaskMessage{},
 		},
 	}
 
@@ -760,10 +761,10 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 				tc.desc, got, err, tc.want)
 		}
 
-		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueuedRaw := r.client.LRange(base.DefaultQueue, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
-			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, defaultQ, diff)
+			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.DefaultQueue, diff)
 		}
 	}
 }
@@ -780,7 +781,7 @@ func TestDeleteDeadTask(t *testing.T) {
 		id       xid.ID
 		score    int64
 		want     error
-		wantDead []*TaskMessage
+		wantDead []*base.TaskMessage
 	}{
 		{
 			dead: []sortedSetEntry{
@@ -790,7 +791,7 @@ func TestDeleteDeadTask(t *testing.T) {
 			id:       m1.ID,
 			score:    t1.Unix(),
 			want:     nil,
-			wantDead: []*TaskMessage{m2},
+			wantDead: []*base.TaskMessage{m2},
 		},
 		{
 			dead: []sortedSetEntry{
@@ -800,14 +801,14 @@ func TestDeleteDeadTask(t *testing.T) {
 			id:       m1.ID,
 			score:    t2.Unix(), // id and score mismatch
 			want:     ErrTaskNotFound,
-			wantDead: []*TaskMessage{m1, m2},
+			wantDead: []*base.TaskMessage{m1, m2},
 		},
 		{
 			dead:     []sortedSetEntry{},
 			id:       m1.ID,
 			score:    t1.Unix(),
 			want:     ErrTaskNotFound,
-			wantDead: []*TaskMessage{},
+			wantDead: []*base.TaskMessage{},
 		},
 	}
 
@@ -821,10 +822,10 @@ func TestDeleteDeadTask(t *testing.T) {
 			continue
 		}
 
-		gotDeadRaw := r.client.ZRange(deadQ, 0, -1).Val()
+		gotDeadRaw := r.client.ZRange(base.DeadQueue, 0, -1).Val()
 		gotDead := mustUnmarshalSlice(t, gotDeadRaw)
 		if diff := cmp.Diff(tc.wantDead, gotDead, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", deadQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DeadQueue, diff)
 		}
 	}
 }
@@ -841,7 +842,7 @@ func TestDeleteRetryTask(t *testing.T) {
 		id        xid.ID
 		score     int64
 		want      error
-		wantRetry []*TaskMessage
+		wantRetry []*base.TaskMessage
 	}{
 		{
 			retry: []sortedSetEntry{
@@ -851,7 +852,7 @@ func TestDeleteRetryTask(t *testing.T) {
 			id:        m1.ID,
 			score:     t1.Unix(),
 			want:      nil,
-			wantRetry: []*TaskMessage{m2},
+			wantRetry: []*base.TaskMessage{m2},
 		},
 		{
 			retry: []sortedSetEntry{
@@ -860,7 +861,7 @@ func TestDeleteRetryTask(t *testing.T) {
 			id:        m2.ID,
 			score:     t2.Unix(),
 			want:      ErrTaskNotFound,
-			wantRetry: []*TaskMessage{m1},
+			wantRetry: []*base.TaskMessage{m1},
 		},
 	}
 
@@ -874,10 +875,10 @@ func TestDeleteRetryTask(t *testing.T) {
 			continue
 		}
 
-		gotRetryRaw := r.client.ZRange(retryQ, 0, -1).Val()
+		gotRetryRaw := r.client.ZRange(base.RetryQueue, 0, -1).Val()
 		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", retryQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 	}
 }
@@ -894,7 +895,7 @@ func TestDeleteScheduledTask(t *testing.T) {
 		id            xid.ID
 		score         int64
 		want          error
-		wantScheduled []*TaskMessage
+		wantScheduled []*base.TaskMessage
 	}{
 		{
 			scheduled: []sortedSetEntry{
@@ -904,7 +905,7 @@ func TestDeleteScheduledTask(t *testing.T) {
 			id:            m1.ID,
 			score:         t1.Unix(),
 			want:          nil,
-			wantScheduled: []*TaskMessage{m2},
+			wantScheduled: []*base.TaskMessage{m2},
 		},
 		{
 			scheduled: []sortedSetEntry{
@@ -913,7 +914,7 @@ func TestDeleteScheduledTask(t *testing.T) {
 			id:            m2.ID,
 			score:         t2.Unix(),
 			want:          ErrTaskNotFound,
-			wantScheduled: []*TaskMessage{m1},
+			wantScheduled: []*base.TaskMessage{m1},
 		},
 	}
 
@@ -927,10 +928,10 @@ func TestDeleteScheduledTask(t *testing.T) {
 			continue
 		}
 
-		gotScheduledRaw := r.client.ZRange(scheduledQ, 0, -1).Val()
+		gotScheduledRaw := r.client.ZRange(base.ScheduledQueue, 0, -1).Val()
 		gotScheduled := mustUnmarshalSlice(t, gotScheduledRaw)
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", scheduledQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledQueue, diff)
 		}
 	}
 }
@@ -943,7 +944,7 @@ func TestDeleteAllDeadTasks(t *testing.T) {
 
 	tests := []struct {
 		dead     []sortedSetEntry
-		wantDead []*TaskMessage
+		wantDead []*base.TaskMessage
 	}{
 		{
 			dead: []sortedSetEntry{
@@ -951,7 +952,7 @@ func TestDeleteAllDeadTasks(t *testing.T) {
 				{m2, time.Now().Unix()},
 				{m3, time.Now().Unix()},
 			},
-			wantDead: []*TaskMessage{},
+			wantDead: []*base.TaskMessage{},
 		},
 	}
 
@@ -964,10 +965,10 @@ func TestDeleteAllDeadTasks(t *testing.T) {
 			t.Errorf("r.DeleteAllDeaadTasks = %v, want nil", err)
 		}
 
-		gotDeadRaw := r.client.ZRange(deadQ, 0, -1).Val()
+		gotDeadRaw := r.client.ZRange(base.DeadQueue, 0, -1).Val()
 		gotDead := mustUnmarshalSlice(t, gotDeadRaw)
 		if diff := cmp.Diff(tc.wantDead, gotDead, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", deadQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DeadQueue, diff)
 		}
 	}
 }
@@ -980,7 +981,7 @@ func TestDeleteAllRetryTasks(t *testing.T) {
 
 	tests := []struct {
 		retry     []sortedSetEntry
-		wantRetry []*TaskMessage
+		wantRetry []*base.TaskMessage
 	}{
 		{
 			retry: []sortedSetEntry{
@@ -988,7 +989,7 @@ func TestDeleteAllRetryTasks(t *testing.T) {
 				{m2, time.Now().Unix()},
 				{m3, time.Now().Unix()},
 			},
-			wantRetry: []*TaskMessage{},
+			wantRetry: []*base.TaskMessage{},
 		},
 	}
 
@@ -1001,10 +1002,10 @@ func TestDeleteAllRetryTasks(t *testing.T) {
 			t.Errorf("r.DeleteAllDeaadTasks = %v, want nil", err)
 		}
 
-		gotRetryRaw := r.client.ZRange(retryQ, 0, -1).Val()
+		gotRetryRaw := r.client.ZRange(base.RetryQueue, 0, -1).Val()
 		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", retryQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 	}
 }
@@ -1017,7 +1018,7 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 
 	tests := []struct {
 		scheduled     []sortedSetEntry
-		wantScheduled []*TaskMessage
+		wantScheduled []*base.TaskMessage
 	}{
 		{
 			scheduled: []sortedSetEntry{
@@ -1025,7 +1026,7 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 				{m2, time.Now().Add(time.Minute).Unix()},
 				{m3, time.Now().Add(time.Minute).Unix()},
 			},
-			wantScheduled: []*TaskMessage{},
+			wantScheduled: []*base.TaskMessage{},
 		},
 	}
 
@@ -1038,10 +1039,10 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 			t.Errorf("r.DeleteAllDeaadTasks = %v, want nil", err)
 		}
 
-		gotScheduledRaw := r.client.ZRange(scheduledQ, 0, -1).Val()
+		gotScheduledRaw := r.client.ZRange(base.ScheduledQueue, 0, -1).Val()
 		gotScheduled := mustUnmarshalSlice(t, gotScheduledRaw)
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", scheduledQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledQueue, diff)
 		}
 	}
 }

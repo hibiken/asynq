@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
@@ -19,7 +20,7 @@ func TestClient(t *testing.T) {
 		task          *Task
 		processAt     time.Time
 		opts          []Option
-		wantEnqueued  []*rdb.TaskMessage
+		wantEnqueued  []*base.TaskMessage
 		wantScheduled []sortedSetEntry
 	}{
 		{
@@ -27,8 +28,8 @@ func TestClient(t *testing.T) {
 			task:      task,
 			processAt: time.Now(),
 			opts:      []Option{},
-			wantEnqueued: []*rdb.TaskMessage{
-				&rdb.TaskMessage{
+			wantEnqueued: []*base.TaskMessage{
+				&base.TaskMessage{
 					Type:    task.Type,
 					Payload: task.Payload,
 					Retry:   defaultMaxRetry,
@@ -45,7 +46,7 @@ func TestClient(t *testing.T) {
 			wantEnqueued: nil, // db is flushed in setup so list does not exist hence nil
 			wantScheduled: []sortedSetEntry{
 				{
-					msg: &rdb.TaskMessage{
+					msg: &base.TaskMessage{
 						Type:    task.Type,
 						Payload: task.Payload,
 						Retry:   defaultMaxRetry,
@@ -62,8 +63,8 @@ func TestClient(t *testing.T) {
 			opts: []Option{
 				MaxRetry(3),
 			},
-			wantEnqueued: []*rdb.TaskMessage{
-				&rdb.TaskMessage{
+			wantEnqueued: []*base.TaskMessage{
+				&base.TaskMessage{
 					Type:    task.Type,
 					Payload: task.Payload,
 					Retry:   3,
@@ -79,8 +80,8 @@ func TestClient(t *testing.T) {
 			opts: []Option{
 				MaxRetry(-2),
 			},
-			wantEnqueued: []*rdb.TaskMessage{
-				&rdb.TaskMessage{
+			wantEnqueued: []*base.TaskMessage{
+				&base.TaskMessage{
 					Type:    task.Type,
 					Payload: task.Payload,
 					Retry:   0, // Retry count should be set to zero
@@ -97,8 +98,8 @@ func TestClient(t *testing.T) {
 				MaxRetry(2),
 				MaxRetry(10),
 			},
-			wantEnqueued: []*rdb.TaskMessage{
-				&rdb.TaskMessage{
+			wantEnqueued: []*base.TaskMessage{
+				&base.TaskMessage{
 					Type:    task.Type,
 					Payload: task.Payload,
 					Retry:   10, // Last option takes precedence
@@ -121,13 +122,13 @@ func TestClient(t *testing.T) {
 			continue
 		}
 
-		gotEnqueuedRaw := r.LRange(defaultQ, 0, -1).Val()
+		gotEnqueuedRaw := r.LRange(base.DefaultQueue, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, ignoreIDOpt); diff != "" {
-			t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, defaultQ, diff)
+			t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.DefaultQueue, diff)
 		}
 
-		gotScheduledRaw := r.ZRangeWithScores(scheduledQ, 0, -1).Val()
+		gotScheduledRaw := r.ZRangeWithScores(base.ScheduledQueue, 0, -1).Val()
 		var gotScheduled []sortedSetEntry
 		for _, z := range gotScheduledRaw {
 			gotScheduled = append(gotScheduled, sortedSetEntry{
@@ -138,7 +139,7 @@ func TestClient(t *testing.T) {
 
 		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, cmpOpt, ignoreIDOpt); diff != "" {
-			t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, scheduledQ, diff)
+			t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledQueue, diff)
 		}
 	}
 }
