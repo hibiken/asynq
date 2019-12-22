@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
@@ -160,21 +161,21 @@ func (p *processor) restore() {
 	}
 }
 
-func (p *processor) requeue(msg *rdb.TaskMessage) {
+func (p *processor) requeue(msg *base.TaskMessage) {
 	err := p.rdb.Requeue(msg)
 	if err != nil {
 		log.Printf("[ERROR] Could not move task from InProgress back to queue: %v\n", err)
 	}
 }
 
-func (p *processor) markAsDone(msg *rdb.TaskMessage) {
+func (p *processor) markAsDone(msg *base.TaskMessage) {
 	err := p.rdb.Done(msg)
 	if err != nil {
 		log.Printf("[ERROR] Could not remove task from InProgress queue: %v\n", err)
 	}
 }
 
-func (p *processor) retry(msg *rdb.TaskMessage, errMsg string) {
+func (p *processor) retry(msg *base.TaskMessage, errMsg string) {
 	retryAt := time.Now().Add(delaySeconds(msg.Retried))
 	err := p.rdb.Retry(msg, retryAt, errMsg)
 	if err != nil {
@@ -182,7 +183,7 @@ func (p *processor) retry(msg *rdb.TaskMessage, errMsg string) {
 	}
 }
 
-func (p *processor) kill(msg *rdb.TaskMessage, errMsg string) {
+func (p *processor) kill(msg *base.TaskMessage, errMsg string) {
 	log.Printf("[WARN] Retry exhausted for task(Type: %q, ID: %v)\n", msg.Type, msg.ID)
 	err := p.rdb.Kill(msg, errMsg)
 	if err != nil {

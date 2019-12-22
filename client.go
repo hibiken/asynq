@@ -3,6 +3,7 @@ package asynq
 import (
 	"time"
 
+	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/rs/xid"
 )
@@ -73,7 +74,7 @@ const (
 // Option the last one overrides the ones before.
 func (c *Client) Process(task *Task, processAt time.Time, opts ...Option) error {
 	opt := composeOptions(opts...)
-	msg := &rdb.TaskMessage{
+	msg := &base.TaskMessage{
 		ID:      xid.New(),
 		Type:    task.Type,
 		Payload: task.Payload,
@@ -83,7 +84,7 @@ func (c *Client) Process(task *Task, processAt time.Time, opts ...Option) error 
 	return c.enqueue(msg, processAt)
 }
 
-func (c *Client) enqueue(msg *rdb.TaskMessage, processAt time.Time) error {
+func (c *Client) enqueue(msg *base.TaskMessage, processAt time.Time) error {
 	if time.Now().After(processAt) {
 		return c.rdb.Enqueue(msg)
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
+	"github.com/hibiken/asynq/internal/base"
 	"github.com/rs/xid"
 )
 
@@ -37,8 +38,8 @@ func flushDB(t *testing.T, r *RDB) {
 	}
 }
 
-var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*TaskMessage) []*TaskMessage {
-	out := append([]*TaskMessage(nil), in...) // Copy input to avoid mutating it
+var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*base.TaskMessage) []*base.TaskMessage {
+	out := append([]*base.TaskMessage(nil), in...) // Copy input to avoid mutating it
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].ID.String() < out[j].ID.String()
 	})
@@ -53,8 +54,8 @@ var sortZSetEntryOpt = cmp.Transformer("SortZSetEntry", func(in []sortedSetEntry
 	return out
 })
 
-func newTaskMessage(taskType string, payload map[string]interface{}) *TaskMessage {
-	return &TaskMessage{
+func newTaskMessage(taskType string, payload map[string]interface{}) *base.TaskMessage {
+	return &base.TaskMessage{
 		ID:      xid.New(),
 		Type:    taskType,
 		Queue:   "default",
@@ -63,7 +64,7 @@ func newTaskMessage(taskType string, payload map[string]interface{}) *TaskMessag
 	}
 }
 
-func mustMarshal(t *testing.T, msg *TaskMessage) string {
+func mustMarshal(t *testing.T, msg *base.TaskMessage) string {
 	t.Helper()
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -72,9 +73,9 @@ func mustMarshal(t *testing.T, msg *TaskMessage) string {
 	return string(data)
 }
 
-func mustUnmarshal(t *testing.T, data string) *TaskMessage {
+func mustUnmarshal(t *testing.T, data string) *base.TaskMessage {
 	t.Helper()
-	var msg TaskMessage
+	var msg base.TaskMessage
 	err := json.Unmarshal([]byte(data), &msg)
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +83,7 @@ func mustUnmarshal(t *testing.T, data string) *TaskMessage {
 	return &msg
 }
 
-func mustMarshalSlice(t *testing.T, msgs []*TaskMessage) []string {
+func mustMarshalSlice(t *testing.T, msgs []*base.TaskMessage) []string {
 	t.Helper()
 	var data []string
 	for _, m := range msgs {
@@ -91,16 +92,16 @@ func mustMarshalSlice(t *testing.T, msgs []*TaskMessage) []string {
 	return data
 }
 
-func mustUnmarshalSlice(t *testing.T, data []string) []*TaskMessage {
+func mustUnmarshalSlice(t *testing.T, data []string) []*base.TaskMessage {
 	t.Helper()
-	var msgs []*TaskMessage
+	var msgs []*base.TaskMessage
 	for _, s := range data {
 		msgs = append(msgs, mustUnmarshal(t, s))
 	}
 	return msgs
 }
 
-func seedRedisList(t *testing.T, c *redis.Client, key string, msgs []*TaskMessage) {
+func seedRedisList(t *testing.T, c *redis.Client, key string, msgs []*base.TaskMessage) {
 	data := mustMarshalSlice(t, msgs)
 	for _, s := range data {
 		if err := c.LPush(key, s).Err(); err != nil {
@@ -120,36 +121,36 @@ func seedRedisZSet(t *testing.T, c *redis.Client, key string, items []sortedSetE
 
 // scheduledEntry represents an item in redis sorted set (aka ZSET).
 type sortedSetEntry struct {
-	msg   *TaskMessage
+	msg   *base.TaskMessage
 	score int64
 }
 
 // seedDefaultQueue initializes the default queue with the given messages.
-func seedDefaultQueue(t *testing.T, r *RDB, msgs []*TaskMessage) {
+func seedDefaultQueue(t *testing.T, r *RDB, msgs []*base.TaskMessage) {
 	t.Helper()
-	seedRedisList(t, r.client, defaultQ, msgs)
+	seedRedisList(t, r.client, base.DefaultQueue, msgs)
 }
 
 // seedInProgressQueue initializes the in-progress queue with the given messages.
-func seedInProgressQueue(t *testing.T, r *RDB, msgs []*TaskMessage) {
+func seedInProgressQueue(t *testing.T, r *RDB, msgs []*base.TaskMessage) {
 	t.Helper()
-	seedRedisList(t, r.client, inProgressQ, msgs)
+	seedRedisList(t, r.client, base.InProgressQueue, msgs)
 }
 
 // seedScheduledQueue initializes the scheduled queue with the given messages.
 func seedScheduledQueue(t *testing.T, r *RDB, entries []sortedSetEntry) {
 	t.Helper()
-	seedRedisZSet(t, r.client, scheduledQ, entries)
+	seedRedisZSet(t, r.client, base.ScheduledQueue, entries)
 }
 
 // seedRetryQueue initializes the retry queue with the given messages.
 func seedRetryQueue(t *testing.T, r *RDB, entries []sortedSetEntry) {
 	t.Helper()
-	seedRedisZSet(t, r.client, retryQ, entries)
+	seedRedisZSet(t, r.client, base.RetryQueue, entries)
 }
 
 // seedDeadQueue initializes the dead queue with the given messages.
 func seedDeadQueue(t *testing.T, r *RDB, entries []sortedSetEntry) {
 	t.Helper()
-	seedRedisZSet(t, r.client, deadQ, entries)
+	seedRedisZSet(t, r.client, base.DeadQueue, entries)
 }

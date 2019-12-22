@@ -8,17 +8,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
-	"github.com/rs/xid"
-)
-
-// Redis keys
-const (
-	queuePrefix = "asynq:queues:"         // LIST - asynq:queues:<qname>
-	defaultQ    = queuePrefix + "default" // LIST
-	scheduledQ  = "asynq:scheduled"       // ZSET
-	retryQ      = "asynq:retry"           // ZSET
-	deadQ       = "asynq:dead"            // ZSET
-	inProgressQ = "asynq:in_progress"     // LIST
+	"github.com/hibiken/asynq/internal/base"
 )
 
 var (
@@ -39,28 +29,6 @@ func NewRDB(client *redis.Client) *RDB {
 	return &RDB{client}
 }
 
-// TaskMessage is the internal representation of a task with additional metadata fields.
-// Serialized data of this type gets written in redis.
-type TaskMessage struct {
-	//-------- Task fields --------
-	// Type represents the kind of task.
-	Type string
-	// Payload holds data needed to process the task.
-	Payload map[string]interface{}
-
-	//-------- Metadata fields --------
-	// ID is a unique identifier for each task
-	ID xid.ID
-	// Queue is a name this message should be enqueued to
-	Queue string
-	// Retry is the max number of retry for this task.
-	Retry int
-	// Retried is the number of times we've retried this task so far
-	Retried int
-	// ErrorMsg holds the error message from the last failure
-	ErrorMsg string
-}
-
 // Close closes the connection with redis server.
 func (r *RDB) Close() error {
 	return r.client.Close()
@@ -68,12 +36,12 @@ func (r *RDB) Close() error {
 
 // Enqueue inserts the given task to the end of the queue.
 // It also adds the queue name to the "all-queues" list.
-func (r *RDB) Enqueue(msg *TaskMessage) error {
+func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
 	}
-	qname := queuePrefix + msg.Queue
+	qname := base.QueuePrefix + msg.Queue
 	pipe := r.client.Pipeline()
 	pipe.LPush(qname, string(bytes))
 	_, err = pipe.Exec()
@@ -86,15 +54,15 @@ func (r *RDB) Enqueue(msg *TaskMessage) error {
 // Dequeue blocks until there is a task available to be processed,
 // once a task is available, it adds the task to "in progress" list
 // and returns the task.
-func (r *RDB) Dequeue(timeout time.Duration) (*TaskMessage, error) {
-	data, err := r.client.BRPopLPush(defaultQ, inProgressQ, timeout).Result()
+func (r *RDB) Dequeue(timeout time.Duration) (*base.TaskMessage, error) {
+	data, err := r.client.BRPopLPush(base.DefaultQueue, base.InProgressQueue, timeout).Result()
 	if err == redis.Nil {
 		return nil, ErrDequeueTimeout
 	}
 	if err != nil {
-		return nil, fmt.Errorf("command `BRPOPLPUSH %q %q %v` failed: %v", defaultQ, inProgressQ, timeout, err)
+		return nil, fmt.Errorf("command `BRPOPLPUSH %q %q %v` failed: %v", base.DefaultQueue, base.InProgressQueue, timeout, err)
 	}
-	var msg TaskMessage
+	var msg base.TaskMessage
 	err = json.Unmarshal([]byte(data), &msg)
 	if err != nil {
 		return nil, fmt.Errorf("could not unmarshal %v to json: %v", data, err)
@@ -103,22 +71,22 @@ func (r *RDB) Dequeue(timeout time.Duration) (*TaskMessage, error) {
 }
 
 // Done removes the task from in-progress queue to mark the task as done.
-func (r *RDB) Done(msg *TaskMessage) error {
+func (r *RDB) Done(msg *base.TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
 	}
 	// NOTE: count ZERO means "remove all elements equal to val"
-	err = r.client.LRem(inProgressQ, 0, string(bytes)).Err()
+	err = r.client.LRem(base.InProgressQueue, 0, string(bytes)).Err()
 	if err != nil {
-		return fmt.Errorf("command `LREM %s 0 %s` failed: %v", inProgressQ, string(bytes), err)
+		return fmt.Errorf("command `LREM %s 0 %s` failed: %v", base.InProgressQueue, string(bytes), err)
 	}
 	return nil
 }
 
 // Requeue moves the task from in-progress queue to the default
 // queue.
-func (r *RDB) Requeue(msg *TaskMessage) error {
+func (r *RDB) Requeue(msg *base.TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
@@ -126,33 +94,33 @@ func (r *RDB) Requeue(msg *TaskMessage) error {
 	// Note: Use RPUSH to push to the head of the queue.
 	// KEYS[1] -> asynq:in_progress
 	// KEYS[2] -> asynq:queues:default
-	// ARGV[1] -> taskMessage value
+	// ARGV[1] -> base.TaskMessage value
 	script := redis.NewScript(`
 	redis.call("LREM", KEYS[1], 0, ARGV[1])
 	redis.call("RPUSH", KEYS[2], ARGV[1])
 	return redis.status_reply("OK")
 	`)
-	_, err = script.Run(r.client, []string{inProgressQ, defaultQ}, string(bytes)).Result()
+	_, err = script.Run(r.client, []string{base.InProgressQueue, base.DefaultQueue}, string(bytes)).Result()
 	return err
 }
 
 // Schedule adds the task to the backlog queue to be processed in the future.
-func (r *RDB) Schedule(msg *TaskMessage, processAt time.Time) error {
+func (r *RDB) Schedule(msg *base.TaskMessage, processAt time.Time) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
 	}
 	score := float64(processAt.Unix())
-	err = r.client.ZAdd(scheduledQ, &redis.Z{Member: string(bytes), Score: score}).Err()
+	err = r.client.ZAdd(base.ScheduledQueue, &redis.Z{Member: string(bytes), Score: score}).Err()
 	if err != nil {
-		return fmt.Errorf("command `ZADD %s %.1f %s` failed: %v", scheduledQ, score, string(bytes), err)
+		return fmt.Errorf("command `ZADD %s %.1f %s` failed: %v", base.ScheduledQueue, score, string(bytes), err)
 	}
 	return nil
 }
 
 // Retry moves the task from in-progress to retry queue, incrementing retry count
 // and assigning error message to the task message.
-func (r *RDB) Retry(msg *TaskMessage, processAt time.Time, errMsg string) error {
+func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) error {
 	bytesToRemove, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
@@ -166,15 +134,15 @@ func (r *RDB) Retry(msg *TaskMessage, processAt time.Time, errMsg string) error 
 	}
 	//  KEYS[1] -> asynq:in_progress
 	//  KEYS[2] -> asynq:retry
-	//  ARGV[1] -> TaskMessage value to remove from InProgress queue
-	//  ARGV[2] -> TaskMessage value to add to Retry queue
+	//  ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
+	//  ARGV[2] -> base.TaskMessage value to add to Retry queue
 	//  ARGV[3] -> retry_at UNIX timestamp
 	script := redis.NewScript(`
 	redis.call("LREM", KEYS[1], 0, ARGV[1])
 	redis.call("ZADD", KEYS[2], ARGV[3], ARGV[2])
 	return redis.status_reply("OK")
 	`)
-	_, err = script.Run(r.client, []string{inProgressQ, retryQ},
+	_, err = script.Run(r.client, []string{base.InProgressQueue, base.RetryQueue},
 		string(bytesToRemove), string(bytesToAdd), processAt.Unix()).Result()
 	return err
 }
@@ -182,7 +150,7 @@ func (r *RDB) Retry(msg *TaskMessage, processAt time.Time, errMsg string) error 
 // Kill sends the task to "dead" queue from in-progress queue, assigning
 // the error message to the task.
 // It also trims the set by timestamp and set size.
-func (r *RDB) Kill(msg *TaskMessage, errMsg string) error {
+func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 	const maxDeadTask = 10
 	const deadExpirationInDays = 90
 	bytesToRemove, err := json.Marshal(msg)
@@ -199,8 +167,8 @@ func (r *RDB) Kill(msg *TaskMessage, errMsg string) error {
 	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
 	// KEYS[1] -> asynq:in_progress
 	// KEYS[2] -> asynq:dead
-	// ARGV[1] -> TaskMessage value to remove from InProgress queue
-	// ARGV[2] -> TaskMessage value to add to Dead queue
+	// ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
+	// ARGV[2] -> base.TaskMessage value to add to Dead queue
 	// ARGV[3] -> died_at UNIX timestamp
 	// ARGV[4] -> cutoff timestamp (e.g., 90 days ago)
 	// ARGV[5] -> max number of tasks in dead queue (e.g., 100)
@@ -211,7 +179,7 @@ func (r *RDB) Kill(msg *TaskMessage, errMsg string) error {
 	redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[5])
 	return redis.status_reply("OK")
 	`)
-	_, err = script.Run(r.client, []string{inProgressQ, deadQ},
+	_, err = script.Run(r.client, []string{base.InProgressQueue, base.DeadQueue},
 		string(bytesToRemove), string(bytesToAdd), now.Unix(), limit, maxDeadTask).Result()
 	return err
 }
@@ -226,7 +194,7 @@ func (r *RDB) RestoreUnfinished() (int64, error) {
 	end
 	return len
 	`)
-	res, err := script.Run(r.client, []string{inProgressQ, defaultQ}).Result()
+	res, err := script.Run(r.client, []string{base.InProgressQueue, base.DefaultQueue}).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -240,7 +208,7 @@ func (r *RDB) RestoreUnfinished() (int64, error) {
 // CheckAndEnqueue checks for all scheduled tasks and enqueues any tasks that
 // have to be processed.
 func (r *RDB) CheckAndEnqueue() error {
-	delayed := []string{scheduledQ, retryQ}
+	delayed := []string{base.ScheduledQueue, base.RetryQueue}
 	for _, zset := range delayed {
 		if err := r.forward(zset); err != nil {
 			return err
@@ -261,6 +229,6 @@ func (r *RDB) forward(from string) error {
 	return msgs
 	`)
 	now := float64(time.Now().Unix())
-	_, err := script.Run(r.client, []string{from, defaultQ}, now).Result()
+	_, err := script.Run(r.client, []string{from, base.DefaultQueue}, now).Result()
 	return err
 }

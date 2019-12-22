@@ -10,7 +10,7 @@ import (
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq/internal/base"
 	"github.com/rs/xid"
 )
 
@@ -21,19 +21,9 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-// Redis keys
-const (
-	queuePrefix = "asynq:queues:"         // LIST - asynq:queues:<qname>
-	defaultQ    = queuePrefix + "default" // LIST
-	scheduledQ  = "asynq:scheduled"       // ZSET
-	retryQ      = "asynq:retry"           // ZSET
-	deadQ       = "asynq:dead"            // ZSET
-	inProgressQ = "asynq:in_progress"     // LIST
-)
-
 // scheduledEntry represents an item in redis sorted set (aka ZSET).
 type sortedSetEntry struct {
-	msg   *rdb.TaskMessage
+	msg   *base.TaskMessage
 	score int64
 }
 
@@ -58,8 +48,8 @@ var sortTaskOpt = cmp.Transformer("SortMsg", func(in []*Task) []*Task {
 	return out
 })
 
-var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*rdb.TaskMessage) []*rdb.TaskMessage {
-	out := append([]*rdb.TaskMessage(nil), in...) // Copy input to avoid mutating it
+var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*base.TaskMessage) []*base.TaskMessage {
+	out := append([]*base.TaskMessage(nil), in...) // Copy input to avoid mutating it
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].ID.String() < out[j].ID.String()
 	})
@@ -74,10 +64,10 @@ var sortZSetEntryOpt = cmp.Transformer("SortZSetEntry", func(in []sortedSetEntry
 	return out
 })
 
-var ignoreIDOpt = cmpopts.IgnoreFields(rdb.TaskMessage{}, "ID")
+var ignoreIDOpt = cmpopts.IgnoreFields(base.TaskMessage{}, "ID")
 
-func randomTask(taskType, qname string, payload map[string]interface{}) *rdb.TaskMessage {
-	return &rdb.TaskMessage{
+func randomTask(taskType, qname string, payload map[string]interface{}) *base.TaskMessage {
+	return &base.TaskMessage{
 		ID:      xid.New(),
 		Type:    taskType,
 		Queue:   qname,
@@ -86,7 +76,7 @@ func randomTask(taskType, qname string, payload map[string]interface{}) *rdb.Tas
 	}
 }
 
-func mustMarshal(t *testing.T, task *rdb.TaskMessage) string {
+func mustMarshal(t *testing.T, task *base.TaskMessage) string {
 	t.Helper()
 	data, err := json.Marshal(task)
 	if err != nil {
@@ -95,9 +85,9 @@ func mustMarshal(t *testing.T, task *rdb.TaskMessage) string {
 	return string(data)
 }
 
-func mustUnmarshal(t *testing.T, data string) *rdb.TaskMessage {
+func mustUnmarshal(t *testing.T, data string) *base.TaskMessage {
 	t.Helper()
-	var task rdb.TaskMessage
+	var task base.TaskMessage
 	err := json.Unmarshal([]byte(data), &task)
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +95,7 @@ func mustUnmarshal(t *testing.T, data string) *rdb.TaskMessage {
 	return &task
 }
 
-func mustMarshalSlice(t *testing.T, tasks []*rdb.TaskMessage) []string {
+func mustMarshalSlice(t *testing.T, tasks []*base.TaskMessage) []string {
 	t.Helper()
 	var data []string
 	for _, task := range tasks {
@@ -114,9 +104,9 @@ func mustMarshalSlice(t *testing.T, tasks []*rdb.TaskMessage) []string {
 	return data
 }
 
-func mustUnmarshalSlice(t *testing.T, data []string) []*rdb.TaskMessage {
+func mustUnmarshalSlice(t *testing.T, data []string) []*base.TaskMessage {
 	t.Helper()
-	var tasks []*rdb.TaskMessage
+	var tasks []*base.TaskMessage
 	for _, s := range data {
 		tasks = append(tasks, mustUnmarshal(t, s))
 	}

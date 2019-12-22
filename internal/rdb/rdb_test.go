@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/hibiken/asynq/internal/base"
 )
 
 func TestEnqueue(t *testing.T) {
 	r := setup(t)
 	tests := []struct {
-		msg *TaskMessage
+		msg *base.TaskMessage
 	}{
 		{msg: newTaskMessage("send_email", map[string]interface{}{"to": "exampleuser@gmail.com", "from": "noreply@example.com"})},
 		{msg: newTaskMessage("generate_csv", map[string]interface{}{})},
@@ -26,9 +27,9 @@ func TestEnqueue(t *testing.T) {
 			t.Errorf("(*RDB).Enqueue = %v, want nil", err)
 			continue
 		}
-		res := r.client.LRange(defaultQ, 0, -1).Val()
+		res := r.client.LRange(base.DefaultQueue, 0, -1).Val()
 		if len(res) != 1 {
-			t.Errorf("%q has length %d, want 1", defaultQ, len(res))
+			t.Errorf("%q has length %d, want 1", base.DefaultQueue, len(res))
 			continue
 		}
 		if diff := cmp.Diff(tc.msg, mustUnmarshal(t, res[0])); diff != "" {
@@ -41,13 +42,13 @@ func TestDequeue(t *testing.T) {
 	r := setup(t)
 	t1 := newTaskMessage("send_email", map[string]interface{}{"subject": "hello!"})
 	tests := []struct {
-		enqueued   []*TaskMessage
-		want       *TaskMessage
+		enqueued   []*base.TaskMessage
+		want       *base.TaskMessage
 		err        error
 		inProgress int64 // length of "in-progress" tasks after dequeue
 	}{
-		{enqueued: []*TaskMessage{t1}, want: t1, err: nil, inProgress: 1},
-		{enqueued: []*TaskMessage{}, want: nil, err: ErrDequeueTimeout, inProgress: 0},
+		{enqueued: []*base.TaskMessage{t1}, want: t1, err: nil, inProgress: 1},
+		{enqueued: []*base.TaskMessage{}, want: nil, err: ErrDequeueTimeout, inProgress: 0},
 	}
 
 	for _, tc := range tests {
@@ -60,8 +61,8 @@ func TestDequeue(t *testing.T) {
 				got, err, tc.want, tc.err)
 			continue
 		}
-		if l := r.client.LLen(inProgressQ).Val(); l != tc.inProgress {
-			t.Errorf("%q has length %d, want %d", inProgressQ, l, tc.inProgress)
+		if l := r.client.LLen(base.InProgressQueue).Val(); l != tc.inProgress {
+			t.Errorf("%q has length %d, want %d", base.InProgressQueue, l, tc.inProgress)
 		}
 	}
 }
@@ -72,24 +73,24 @@ func TestDone(t *testing.T) {
 	t2 := newTaskMessage("export_csv", nil)
 
 	tests := []struct {
-		inProgress     []*TaskMessage // initial state of the in-progress list
-		target         *TaskMessage   // task to remove
-		wantInProgress []*TaskMessage // final state of the in-progress list
+		inProgress     []*base.TaskMessage // initial state of the in-progress list
+		target         *base.TaskMessage   // task to remove
+		wantInProgress []*base.TaskMessage // final state of the in-progress list
 	}{
 		{
-			inProgress:     []*TaskMessage{t1, t2},
+			inProgress:     []*base.TaskMessage{t1, t2},
 			target:         t1,
-			wantInProgress: []*TaskMessage{t2},
+			wantInProgress: []*base.TaskMessage{t2},
 		},
 		{
-			inProgress:     []*TaskMessage{t2},
+			inProgress:     []*base.TaskMessage{t2},
 			target:         t1,
-			wantInProgress: []*TaskMessage{t2},
+			wantInProgress: []*base.TaskMessage{t2},
 		},
 		{
-			inProgress:     []*TaskMessage{t1},
+			inProgress:     []*base.TaskMessage{t1},
 			target:         t1,
-			wantInProgress: []*TaskMessage{},
+			wantInProgress: []*base.TaskMessage{},
 		},
 	}
 
@@ -103,10 +104,10 @@ func TestDone(t *testing.T) {
 			continue
 		}
 
-		data := r.client.LRange(inProgressQ, 0, -1).Val()
+		data := r.client.LRange(base.InProgressQueue, 0, -1).Val()
 		gotInProgress := mustUnmarshalSlice(t, data)
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after calling (*RDB).Done: (-want, +got):\n%s", inProgressQ, diff)
+			t.Errorf("mismatch found in %q after calling (*RDB).Done: (-want, +got):\n%s", base.InProgressQueue, diff)
 			continue
 		}
 	}
@@ -118,25 +119,25 @@ func TestRequeue(t *testing.T) {
 	t2 := newTaskMessage("export_csv", nil)
 
 	tests := []struct {
-		enqueued       []*TaskMessage // initial state of the default queue
-		inProgress     []*TaskMessage // initial state of the in-progress list
-		target         *TaskMessage   // task to requeue
-		wantEnqueued   []*TaskMessage // final state of the default queue
-		wantInProgress []*TaskMessage // final state of the in-progress list
+		enqueued       []*base.TaskMessage // initial state of the default queue
+		inProgress     []*base.TaskMessage // initial state of the in-progress list
+		target         *base.TaskMessage   // task to requeue
+		wantEnqueued   []*base.TaskMessage // final state of the default queue
+		wantInProgress []*base.TaskMessage // final state of the in-progress list
 	}{
 		{
-			enqueued:       []*TaskMessage{},
-			inProgress:     []*TaskMessage{t1, t2},
+			enqueued:       []*base.TaskMessage{},
+			inProgress:     []*base.TaskMessage{t1, t2},
 			target:         t1,
-			wantEnqueued:   []*TaskMessage{t1},
-			wantInProgress: []*TaskMessage{t2},
+			wantEnqueued:   []*base.TaskMessage{t1},
+			wantInProgress: []*base.TaskMessage{t2},
 		},
 		{
-			enqueued:       []*TaskMessage{t1},
-			inProgress:     []*TaskMessage{t2},
+			enqueued:       []*base.TaskMessage{t1},
+			inProgress:     []*base.TaskMessage{t2},
 			target:         t2,
-			wantEnqueued:   []*TaskMessage{t1, t2},
-			wantInProgress: []*TaskMessage{},
+			wantEnqueued:   []*base.TaskMessage{t1, t2},
+			wantInProgress: []*base.TaskMessage{},
 		},
 	}
 
@@ -151,16 +152,16 @@ func TestRequeue(t *testing.T) {
 			continue
 		}
 
-		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueuedRaw := r.client.LRange(base.DefaultQueue, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q: (-want, +got):\n%s", defaultQ, diff)
+			t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.DefaultQueue, diff)
 		}
 
-		gotInProgressRaw := r.client.LRange(inProgressQ, 0, -1).Val()
+		gotInProgressRaw := r.client.LRange(base.InProgressQueue, 0, -1).Val()
 		gotInProgress := mustUnmarshalSlice(t, gotInProgressRaw)
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q: (-want, +got):\n%s", inProgressQ, diff)
+			t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.InProgressQueue, diff)
 		}
 	}
 }
@@ -171,7 +172,7 @@ func TestKill(t *testing.T) {
 	t2 := newTaskMessage("reindex", nil)
 	t3 := newTaskMessage("generate_csv", nil)
 	errMsg := "SMTP server not responding"
-	t1AfterKill := &TaskMessage{
+	t1AfterKill := &base.TaskMessage{
 		ID:       t1.ID,
 		Type:     t1.Type,
 		Payload:  t1.Payload,
@@ -184,29 +185,29 @@ func TestKill(t *testing.T) {
 
 	// TODO(hibiken): add test cases for trimming
 	tests := []struct {
-		inProgress     []*TaskMessage
+		inProgress     []*base.TaskMessage
 		dead           []sortedSetEntry
-		target         *TaskMessage // task to kill
-		wantInProgress []*TaskMessage
+		target         *base.TaskMessage // task to kill
+		wantInProgress []*base.TaskMessage
 		wantDead       []sortedSetEntry
 	}{
 		{
-			inProgress: []*TaskMessage{t1, t2},
+			inProgress: []*base.TaskMessage{t1, t2},
 			dead: []sortedSetEntry{
 				{t3, now.Add(-time.Hour).Unix()},
 			},
 			target:         t1,
-			wantInProgress: []*TaskMessage{t2},
+			wantInProgress: []*base.TaskMessage{t2},
 			wantDead: []sortedSetEntry{
 				{t1AfterKill, now.Unix()},
 				{t3, now.Add(-time.Hour).Unix()},
 			},
 		},
 		{
-			inProgress:     []*TaskMessage{t1, t2, t3},
+			inProgress:     []*base.TaskMessage{t1, t2, t3},
 			dead:           []sortedSetEntry{},
 			target:         t1,
-			wantInProgress: []*TaskMessage{t2, t3},
+			wantInProgress: []*base.TaskMessage{t2, t3},
 			wantDead: []sortedSetEntry{
 				{t1AfterKill, now.Unix()},
 			},
@@ -224,14 +225,14 @@ func TestKill(t *testing.T) {
 			continue
 		}
 
-		gotInProgressRaw := r.client.LRange(inProgressQ, 0, -1).Val()
+		gotInProgressRaw := r.client.LRange(base.InProgressQueue, 0, -1).Val()
 		gotInProgress := mustUnmarshalSlice(t, gotInProgressRaw)
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", inProgressQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.InProgressQueue, diff)
 		}
 
 		var gotDead []sortedSetEntry
-		data := r.client.ZRangeWithScores(deadQ, 0, -1).Val()
+		data := r.client.ZRangeWithScores(base.DeadQueue, 0, -1).Val()
 		for _, z := range data {
 			gotDead = append(gotDead, sortedSetEntry{
 				msg:   mustUnmarshal(t, z.Member.(string)),
@@ -241,7 +242,7 @@ func TestKill(t *testing.T) {
 
 		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})
 		if diff := cmp.Diff(tc.wantDead, gotDead, cmpOpt, sortZSetEntryOpt); diff != "" {
-			t.Errorf("mismatch found in %q after calling (*RDB).Kill: (-want, +got):\n%s", deadQ, diff)
+			t.Errorf("mismatch found in %q after calling (*RDB).Kill: (-want, +got):\n%s", base.DeadQueue, diff)
 		}
 	}
 }
@@ -253,32 +254,32 @@ func TestRestoreUnfinished(t *testing.T) {
 	t3 := newTaskMessage("sync_stuff", nil)
 
 	tests := []struct {
-		inProgress     []*TaskMessage
-		enqueued       []*TaskMessage
+		inProgress     []*base.TaskMessage
+		enqueued       []*base.TaskMessage
 		want           int64
-		wantInProgress []*TaskMessage
-		wantEnqueued   []*TaskMessage
+		wantInProgress []*base.TaskMessage
+		wantEnqueued   []*base.TaskMessage
 	}{
 		{
-			inProgress:     []*TaskMessage{t1, t2, t3},
-			enqueued:       []*TaskMessage{},
+			inProgress:     []*base.TaskMessage{t1, t2, t3},
+			enqueued:       []*base.TaskMessage{},
 			want:           3,
-			wantInProgress: []*TaskMessage{},
-			wantEnqueued:   []*TaskMessage{t1, t2, t3},
+			wantInProgress: []*base.TaskMessage{},
+			wantEnqueued:   []*base.TaskMessage{t1, t2, t3},
 		},
 		{
-			inProgress:     []*TaskMessage{},
-			enqueued:       []*TaskMessage{t1, t2, t3},
+			inProgress:     []*base.TaskMessage{},
+			enqueued:       []*base.TaskMessage{t1, t2, t3},
 			want:           0,
-			wantInProgress: []*TaskMessage{},
-			wantEnqueued:   []*TaskMessage{t1, t2, t3},
+			wantInProgress: []*base.TaskMessage{},
+			wantEnqueued:   []*base.TaskMessage{t1, t2, t3},
 		},
 		{
-			inProgress:     []*TaskMessage{t2, t3},
-			enqueued:       []*TaskMessage{t1},
+			inProgress:     []*base.TaskMessage{t2, t3},
+			enqueued:       []*base.TaskMessage{t1},
 			want:           2,
-			wantInProgress: []*TaskMessage{},
-			wantEnqueued:   []*TaskMessage{t1, t2, t3},
+			wantInProgress: []*base.TaskMessage{},
+			wantEnqueued:   []*base.TaskMessage{t1, t2, t3},
 		},
 	}
 
@@ -294,15 +295,15 @@ func TestRestoreUnfinished(t *testing.T) {
 			continue
 		}
 
-		gotInProgressRaw := r.client.LRange(inProgressQ, 0, -1).Val()
+		gotInProgressRaw := r.client.LRange(base.InProgressQueue, 0, -1).Val()
 		gotInProgress := mustUnmarshalSlice(t, gotInProgressRaw)
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q (-want, +got)\n%s", inProgressQ, diff)
+			t.Errorf("mismatch found in %q (-want, +got)\n%s", base.InProgressQueue, diff)
 		}
-		gotEnqueuedRaw := r.client.LRange(defaultQ, 0, -1).Val()
+		gotEnqueuedRaw := r.client.LRange(base.DefaultQueue, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q (-want, +got)\n%s", defaultQ, diff)
+			t.Errorf("mismatch found in %q (-want, +got)\n%s", base.DefaultQueue, diff)
 		}
 	}
 }
@@ -318,9 +319,9 @@ func TestCheckAndEnqueue(t *testing.T) {
 	tests := []struct {
 		scheduled     []sortedSetEntry
 		retry         []sortedSetEntry
-		wantQueued    []*TaskMessage
-		wantScheduled []*TaskMessage
-		wantRetry     []*TaskMessage
+		wantQueued    []*base.TaskMessage
+		wantScheduled []*base.TaskMessage
+		wantRetry     []*base.TaskMessage
 	}{
 		{
 			scheduled: []sortedSetEntry{
@@ -328,9 +329,9 @@ func TestCheckAndEnqueue(t *testing.T) {
 				{t2, secondAgo.Unix()}},
 			retry: []sortedSetEntry{
 				{t3, secondAgo.Unix()}},
-			wantQueued:    []*TaskMessage{t1, t2, t3},
-			wantScheduled: []*TaskMessage{},
-			wantRetry:     []*TaskMessage{},
+			wantQueued:    []*base.TaskMessage{t1, t2, t3},
+			wantScheduled: []*base.TaskMessage{},
+			wantRetry:     []*base.TaskMessage{},
 		},
 		{
 			scheduled: []sortedSetEntry{
@@ -338,9 +339,9 @@ func TestCheckAndEnqueue(t *testing.T) {
 				{t2, secondAgo.Unix()}},
 			retry: []sortedSetEntry{
 				{t3, secondAgo.Unix()}},
-			wantQueued:    []*TaskMessage{t2, t3},
-			wantScheduled: []*TaskMessage{t1},
-			wantRetry:     []*TaskMessage{},
+			wantQueued:    []*base.TaskMessage{t2, t3},
+			wantScheduled: []*base.TaskMessage{t1},
+			wantRetry:     []*base.TaskMessage{},
 		},
 		{
 			scheduled: []sortedSetEntry{
@@ -348,9 +349,9 @@ func TestCheckAndEnqueue(t *testing.T) {
 				{t2, hourFromNow.Unix()}},
 			retry: []sortedSetEntry{
 				{t3, hourFromNow.Unix()}},
-			wantQueued:    []*TaskMessage{},
-			wantScheduled: []*TaskMessage{t1, t2},
-			wantRetry:     []*TaskMessage{t3},
+			wantQueued:    []*base.TaskMessage{},
+			wantScheduled: []*base.TaskMessage{t1, t2},
+			wantRetry:     []*base.TaskMessage{t3},
 		},
 	}
 
@@ -364,20 +365,20 @@ func TestCheckAndEnqueue(t *testing.T) {
 			t.Errorf("(*RDB).CheckScheduled() = %v, want nil", err)
 			continue
 		}
-		queued := r.client.LRange(defaultQ, 0, -1).Val()
+		queued := r.client.LRange(base.DefaultQueue, 0, -1).Val()
 		gotQueued := mustUnmarshalSlice(t, queued)
 		if diff := cmp.Diff(tc.wantQueued, gotQueued, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", defaultQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DefaultQueue, diff)
 		}
-		scheduled := r.client.ZRange(scheduledQ, 0, -1).Val()
+		scheduled := r.client.ZRange(base.ScheduledQueue, 0, -1).Val()
 		gotScheduled := mustUnmarshalSlice(t, scheduled)
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", scheduledQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledQueue, diff)
 		}
-		retry := r.client.ZRange(retryQ, 0, -1).Val()
+		retry := r.client.ZRange(base.RetryQueue, 0, -1).Val()
 		gotRetry := mustUnmarshalSlice(t, retry)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", retryQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 	}
 }
@@ -385,7 +386,7 @@ func TestCheckAndEnqueue(t *testing.T) {
 func TestSchedule(t *testing.T) {
 	r := setup(t)
 	tests := []struct {
-		msg       *TaskMessage
+		msg       *base.TaskMessage
 		processAt time.Time
 	}{
 		{
@@ -404,9 +405,9 @@ func TestSchedule(t *testing.T) {
 			continue
 		}
 
-		res := r.client.ZRangeWithScores(scheduledQ, 0, -1).Val()
+		res := r.client.ZRangeWithScores(base.ScheduledQueue, 0, -1).Val()
 		if len(res) != 1 {
-			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), scheduledQ)
+			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), base.ScheduledQueue)
 			continue
 		}
 		if res[0].Score != float64(tc.processAt.Unix()) {
@@ -423,7 +424,7 @@ func TestRetry(t *testing.T) {
 	t3 := newTaskMessage("reindex", nil)
 	t1.Retried = 10
 	errMsg := "SMTP server is not responding"
-	t1AfterRetry := &TaskMessage{
+	t1AfterRetry := &base.TaskMessage{
 		ID:       t1.ID,
 		Type:     t1.Type,
 		Payload:  t1.Payload,
@@ -435,23 +436,23 @@ func TestRetry(t *testing.T) {
 	now := time.Now()
 
 	tests := []struct {
-		inProgress     []*TaskMessage
+		inProgress     []*base.TaskMessage
 		retry          []sortedSetEntry
-		msg            *TaskMessage
+		msg            *base.TaskMessage
 		processAt      time.Time
 		errMsg         string
-		wantInProgress []*TaskMessage
+		wantInProgress []*base.TaskMessage
 		wantRetry      []sortedSetEntry
 	}{
 		{
-			inProgress: []*TaskMessage{t1, t2},
+			inProgress: []*base.TaskMessage{t1, t2},
 			retry: []sortedSetEntry{
 				{t3, now.Add(time.Minute).Unix()},
 			},
 			msg:            t1,
 			processAt:      now.Add(5 * time.Minute),
 			errMsg:         errMsg,
-			wantInProgress: []*TaskMessage{t2},
+			wantInProgress: []*base.TaskMessage{t2},
 			wantRetry: []sortedSetEntry{
 				{t1AfterRetry, now.Add(5 * time.Minute).Unix()},
 				{t3, now.Add(time.Minute).Unix()},
@@ -470,13 +471,13 @@ func TestRetry(t *testing.T) {
 			continue
 		}
 
-		gotInProgressRaw := r.client.LRange(inProgressQ, 0, -1).Val()
+		gotInProgressRaw := r.client.LRange(base.InProgressQueue, 0, -1).Val()
 		gotInProgress := mustUnmarshalSlice(t, gotInProgressRaw)
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", inProgressQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.InProgressQueue, diff)
 		}
 
-		gotRetryRaw := r.client.ZRangeWithScores(retryQ, 0, -1).Val()
+		gotRetryRaw := r.client.ZRangeWithScores(base.RetryQueue, 0, -1).Val()
 		var gotRetry []sortedSetEntry
 		for _, z := range gotRetryRaw {
 			gotRetry = append(gotRetry, sortedSetEntry{
@@ -486,7 +487,7 @@ func TestRetry(t *testing.T) {
 		}
 		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, cmpOpt, sortZSetEntryOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", retryQ, diff)
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 	}
 }
