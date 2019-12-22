@@ -120,7 +120,30 @@ func TestCurrentStats(t *testing.T) {
 			continue
 		}
 	}
+}
 
+func TestRedisInfo(t *testing.T) {
+	r := setup(t)
+
+	info, err := r.RedisInfo()
+	if err != nil {
+		t.Fatalf("RDB.RedisInfo() returned error: %v", err)
+	}
+
+	wantKeys := []string{
+		"redis_version",
+		"uptime_in_days",
+		"connected_clients",
+		"used_memory_human",
+		"used_memory_peak_human",
+		"used_memory_peak_perc",
+	}
+
+	for _, key := range wantKeys {
+		if _, ok := info[key]; !ok {
+			t.Errorf("RDB.RedisInfo() = %v is missing entry for %q", info, key)
+		}
+	}
 }
 
 func TestListEnqueued(t *testing.T) {

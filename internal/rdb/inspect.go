@@ -3,6 +3,7 @@ package rdb
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v7"
@@ -91,6 +92,23 @@ func (r *RDB) CurrentStats() (*Stats, error) {
 		Dead:       int(dlen.Val()),
 		Timestamp:  time.Now(),
 	}, nil
+}
+
+// RedisInfo returns a map of redis info.
+func (r *RDB) RedisInfo() (map[string]string, error) {
+	res, err := r.client.Info().Result()
+	if err != nil {
+		return nil, err
+	}
+	info := make(map[string]string)
+	lines := strings.Split(res, "\r\n")
+	for _, l := range lines {
+		kv := strings.Split(l, ":")
+		if len(kv) == 2 {
+			info[kv[0]] = kv[1]
+		}
+	}
+	return info, nil
 }
 
 // ListEnqueued returns all enqueued tasks that are ready to be processed.
