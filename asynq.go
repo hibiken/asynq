@@ -7,7 +7,6 @@ TODOs:
 - [P0] asynqmon kill <taskID>, asynqmon killall <qname>
 - [P0] Pagination for `asynqmon ls` command
 - [P0] Show elapsed time for InProgress tasks (asynqmon ls inprogress)
-- [P0] Redis Memory Usage, Connection info in stats
 - [P0] Processed, Failed count for today
 - [P0] Go docs + CONTRIBUTION.md + Github issue template + License comment
 - [P0] Redis Sentinel support
