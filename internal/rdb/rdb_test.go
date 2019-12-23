@@ -110,6 +110,17 @@ func TestDone(t *testing.T) {
 			t.Errorf("mismatch found in %q after calling (*RDB).Done: (-want, +got):\n%s", base.InProgressQueue, diff)
 			continue
 		}
+
+		processedKey := base.ProcessedKey(time.Now())
+		gotProcessed := r.client.Get(processedKey).Val()
+		if gotProcessed != "1" {
+			t.Errorf("GET %q = %q, want 1", processedKey, gotProcessed)
+		}
+
+		gotTTL := r.client.TTL(processedKey).Val()
+		if gotTTL > statsTTL {
+			t.Errorf("TTL %q = %v, want less than or equal to %v", processedKey, gotTTL, statsTTL)
+		}
 	}
 }
 
@@ -243,6 +254,26 @@ func TestKill(t *testing.T) {
 		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})
 		if diff := cmp.Diff(tc.wantDead, gotDead, cmpOpt, sortZSetEntryOpt); diff != "" {
 			t.Errorf("mismatch found in %q after calling (*RDB).Kill: (-want, +got):\n%s", base.DeadQueue, diff)
+		}
+
+		processedKey := base.ProcessedKey(time.Now())
+		gotProcessed := r.client.Get(processedKey).Val()
+		if gotProcessed != "1" {
+			t.Errorf("GET %q = %q, want 1", processedKey, gotProcessed)
+		}
+		gotTTL := r.client.TTL(processedKey).Val()
+		if gotTTL > statsTTL {
+			t.Errorf("TTL %q = %v, want less than or equal to %v", processedKey, gotTTL, statsTTL)
+		}
+
+		failureKey := base.FailureKey(time.Now())
+		gotFailure := r.client.Get(failureKey).Val()
+		if gotFailure != "1" {
+			t.Errorf("GET %q = %q, want 1", failureKey, gotFailure)
+		}
+		gotTTL = r.client.TTL(processedKey).Val()
+		if gotTTL > statsTTL {
+			t.Errorf("TTL %q = %v, want less than or equal to %v", failureKey, gotTTL, statsTTL)
 		}
 	}
 }
@@ -488,6 +519,26 @@ func TestRetry(t *testing.T) {
 		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, cmpOpt, sortZSetEntryOpt); diff != "" {
 			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
+		}
+
+		processedKey := base.ProcessedKey(time.Now())
+		gotProcessed := r.client.Get(processedKey).Val()
+		if gotProcessed != "1" {
+			t.Errorf("GET %q = %q, want 1", processedKey, gotProcessed)
+		}
+		gotTTL := r.client.TTL(processedKey).Val()
+		if gotTTL > statsTTL {
+			t.Errorf("TTL %q = %v, want less than or equal to %v", processedKey, gotTTL, statsTTL)
+		}
+
+		failureKey := base.FailureKey(time.Now())
+		gotFailure := r.client.Get(failureKey).Val()
+		if gotFailure != "1" {
+			t.Errorf("GET %q = %q, want 1", failureKey, gotFailure)
+		}
+		gotTTL = r.client.TTL(processedKey).Val()
+		if gotTTL > statsTTL {
+			t.Errorf("TTL %q = %v, want less than or equal to %v", failureKey, gotTTL, statsTTL)
 		}
 	}
 }
