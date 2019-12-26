@@ -1,17 +1,35 @@
 // Package base defines foundational types and constants used in asynq package.
 package base
 
-import "github.com/rs/xid"
+import (
+	"time"
+
+	"github.com/rs/xid"
+)
 
 // Redis keys
 const (
-	QueuePrefix     = "asynq:queues:"         // LIST - asynq:queues:<qname>
+	processedPrefix = "asynq:processed:"      // STRING - asynq:processed:<yyyy-mm-dd>
+	failurePrefix   = "asynq:failure:"        // STRING - asynq:failure:<yyyy-mm-dd>
+	QueuePrefix     = "asynq:queues:"         // LIST   - asynq:queues:<qname>
 	DefaultQueue    = QueuePrefix + "default" // LIST
 	ScheduledQueue  = "asynq:scheduled"       // ZSET
 	RetryQueue      = "asynq:retry"           // ZSET
 	DeadQueue       = "asynq:dead"            // ZSET
 	InProgressQueue = "asynq:in_progress"     // LIST
 )
+
+// ProcessedKey returns a redis key string for procesed count
+// for the given day.
+func ProcessedKey(t time.Time) string {
+	return processedPrefix + t.UTC().Format("2006-01-02")
+}
+
+// FailureKey returns a redis key string for failure count
+// for the given day.
+func FailureKey(t time.Time) string {
+	return failurePrefix + t.UTC().Format("2006-01-02")
+}
 
 // TaskMessage is the internal representation of a task with additional metadata fields.
 // Serialized data of this type gets written in redis.
