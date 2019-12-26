@@ -58,19 +58,33 @@ func stats(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	fmt.Println("QUEUES")
+	printQueues(stats)
+	fmt.Println()
+
+	fmt.Printf("STATS FOR %s UTC\n", stats.Timestamp.UTC().Format("2006-01-02"))
 	printStats(stats)
 	fmt.Println()
+
 	fmt.Println("REDIS INFO")
 	printInfo(info)
 	fmt.Println()
 }
 
-func printStats(s *rdb.Stats) {
+func printQueues(s *rdb.Stats) {
 	format := strings.Repeat("%v\t", 5) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
 	fmt.Fprintf(tw, format, "InProgress", "Enqueued", "Scheduled", "Retry", "Dead")
 	fmt.Fprintf(tw, format, "----------", "--------", "---------", "-----", "----")
 	fmt.Fprintf(tw, format, s.InProgress, s.Enqueued, s.Scheduled, s.Retry, s.Dead)
+	tw.Flush()
+}
+
+func printStats(s *rdb.Stats) {
+	format := strings.Repeat("%v\t", 3) + "\n"
+	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
+	fmt.Fprintf(tw, format, "Processed", "Failed", "Error Rate")
+	fmt.Fprintf(tw, format, "---------", "------", "----------")
+	fmt.Fprintf(tw, format, s.Processed, s.Failed, fmt.Sprintf("%.2f%%", float64(s.Failed)/float64(s.Processed)*100))
 	tw.Flush()
 }
 
