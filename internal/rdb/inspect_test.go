@@ -55,12 +55,16 @@ func TestCurrentStats(t *testing.T) {
 	m3 := newTaskMessage("gen_thumbnail", map[string]interface{}{"src": "some/path/to/img"})
 	m4 := newTaskMessage("sync", nil)
 
+	now := time.Now()
+
 	tests := []struct {
 		enqueued   []*base.TaskMessage
 		inProgress []*base.TaskMessage
 		scheduled  []sortedSetEntry
 		retry      []sortedSetEntry
 		dead       []sortedSetEntry
+		processed  int
+		failed     int
 		want       *Stats
 	}{
 		{
@@ -69,15 +73,19 @@ func TestCurrentStats(t *testing.T) {
 			scheduled: []sortedSetEntry{
 				{m3, time.Now().Add(time.Hour).Unix()},
 				{m4, time.Now().Unix()}},
-			retry: []sortedSetEntry{},
-			dead:  []sortedSetEntry{},
+			retry:     []sortedSetEntry{},
+			dead:      []sortedSetEntry{},
+			processed: 120,
+			failed:    2,
 			want: &Stats{
 				Enqueued:   1,
 				InProgress: 1,
 				Scheduled:  2,
 				Retry:      0,
 				Dead:       0,
-				Timestamp:  time.Now(),
+				Processed:  120,
+				Failed:     2,
+				Timestamp:  now,
 			},
 		},
 		{
@@ -90,13 +98,17 @@ func TestCurrentStats(t *testing.T) {
 				{m1, time.Now().Add(time.Minute).Unix()}},
 			dead: []sortedSetEntry{
 				{m2, time.Now().Add(-time.Hour).Unix()}},
+			processed: 90,
+			failed:    10,
 			want: &Stats{
 				Enqueued:   0,
 				InProgress: 0,
 				Scheduled:  2,
 				Retry:      1,
 				Dead:       1,
-				Timestamp:  time.Now(),
+				Processed:  90,
+				Failed:     10,
+				Timestamp:  now,
 			},
 		},
 	}
@@ -108,6 +120,10 @@ func TestCurrentStats(t *testing.T) {
 		seedScheduledQueue(t, r, tc.scheduled)
 		seedRetryQueue(t, r, tc.retry)
 		seedDeadQueue(t, r, tc.dead)
+		processedKey := base.ProcessedKey(now)
+		failedKey := base.FailureKey(now)
+		r.client.Set(processedKey, tc.processed, 0)
+		r.client.Set(failedKey, tc.failed, 0)
 
 		got, err := r.CurrentStats()
 		if err != nil {

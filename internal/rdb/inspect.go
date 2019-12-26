@@ -3,6 +3,7 @@ package rdb
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,8 @@ type Stats struct {
 	Scheduled  int
 	Retry      int
 	Dead       int
+	Processed  int
+	Failed     int
 	Timestamp  time.Time
 }
 
@@ -74,13 +77,24 @@ type DeadTask struct {
 
 // CurrentStats returns a current state of the queues.
 func (r *RDB) CurrentStats() (*Stats, error) {
+	now := time.Now()
 	pipe := r.client.Pipeline()
 	qlen := pipe.LLen(base.DefaultQueue)
 	plen := pipe.LLen(base.InProgressQueue)
 	slen := pipe.ZCard(base.ScheduledQueue)
 	rlen := pipe.ZCard(base.RetryQueue)
 	dlen := pipe.ZCard(base.DeadQueue)
+	pcount := pipe.Get(base.ProcessedKey(now))
+	fcount := pipe.Get(base.FailureKey(now))
 	_, err := pipe.Exec()
+	if err != nil {
+		return nil, err
+	}
+	p, err := strconv.Atoi(pcount.Val())
+	if err != nil {
+		return nil, err
+	}
+	f, err := strconv.Atoi(fcount.Val())
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +104,9 @@ func (r *RDB) CurrentStats() (*Stats, error) {
 		Scheduled:  int(slen.Val()),
 		Retry:      int(rlen.Val()),
 		Dead:       int(dlen.Val()),
-		Timestamp:  time.Now(),
+		Processed:  p,
+		Failed:     f,
+		Timestamp:  now,
 	}, nil
 }
 
