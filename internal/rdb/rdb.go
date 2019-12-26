@@ -183,7 +183,7 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) e
 // the error message to the task.
 // It also trims the set by timestamp and set size.
 func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
-	const maxDeadTask = 10
+	const maxDeadTask = 100
 	const deadExpirationInDays = 90
 	bytesToRemove, err := json.Marshal(msg)
 	if err != nil {
