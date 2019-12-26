@@ -137,13 +137,12 @@ func (p *processor) exec() {
 				if resErr != nil {
 					if msg.Retried >= msg.Retry {
 						p.kill(msg, resErr.Error())
-						return
+					} else {
+						p.retry(msg, resErr.Error())
 					}
-					p.retry(msg, resErr.Error())
 					return
 				}
 				p.markAsDone(msg)
-				return
 			}
 		}()
 	}
