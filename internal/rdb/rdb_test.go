@@ -246,13 +246,12 @@ func TestKill(t *testing.T) {
 		data := r.client.ZRangeWithScores(base.DeadQueue, 0, -1).Val()
 		for _, z := range data {
 			gotDead = append(gotDead, sortedSetEntry{
-				msg:   mustUnmarshal(t, z.Member.(string)),
-				score: int64(z.Score),
+				Msg:   mustUnmarshal(t, z.Member.(string)),
+				Score: int64(z.Score),
 			})
 		}
 
-		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})
-		if diff := cmp.Diff(tc.wantDead, gotDead, cmpOpt, sortZSetEntryOpt); diff != "" {
+		if diff := cmp.Diff(tc.wantDead, gotDead, sortZSetEntryOpt); diff != "" {
 			t.Errorf("mismatch found in %q after calling (*RDB).Kill: (-want, +got):\n%s", base.DeadQueue, diff)
 		}
 
@@ -512,8 +511,8 @@ func TestRetry(t *testing.T) {
 		var gotRetry []sortedSetEntry
 		for _, z := range gotRetryRaw {
 			gotRetry = append(gotRetry, sortedSetEntry{
-				msg:   mustUnmarshal(t, z.Member.(string)),
-				score: int64(z.Score),
+				Msg:   mustUnmarshal(t, z.Member.(string)),
+				Score: int64(z.Score),
 			})
 		}
 		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})

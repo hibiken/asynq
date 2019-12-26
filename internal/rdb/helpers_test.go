@@ -49,7 +49,7 @@ var sortMsgOpt = cmp.Transformer("SortMsg", func(in []*base.TaskMessage) []*base
 var sortZSetEntryOpt = cmp.Transformer("SortZSetEntry", func(in []sortedSetEntry) []sortedSetEntry {
 	out := append([]sortedSetEntry(nil), in...) // Copy input to avoid mutating it
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].msg.ID.String() < out[j].msg.ID.String()
+		return out[i].Msg.ID.String() < out[j].Msg.ID.String()
 	})
 	return out
 })
@@ -112,7 +112,7 @@ func seedRedisList(t *testing.T, c *redis.Client, key string, msgs []*base.TaskM
 
 func seedRedisZSet(t *testing.T, c *redis.Client, key string, items []sortedSetEntry) {
 	for _, item := range items {
-		z := &redis.Z{Member: mustMarshal(t, item.msg), Score: float64(item.score)}
+		z := &redis.Z{Member: mustMarshal(t, item.Msg), Score: float64(item.Score)}
 		if err := c.ZAdd(key, z).Err(); err != nil {
 			t.Fatal(err)
 		}
@@ -121,8 +121,8 @@ func seedRedisZSet(t *testing.T, c *redis.Client, key string, items []sortedSetE
 
 // scheduledEntry represents an item in redis sorted set (aka ZSET).
 type sortedSetEntry struct {
-	msg   *base.TaskMessage
-	score int64
+	Msg   *base.TaskMessage
+	Score int64
 }
 
 // seedDefaultQueue initializes the default queue with the given messages.

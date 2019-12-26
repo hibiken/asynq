@@ -179,12 +179,15 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) e
 	return err
 }
 
+const (
+	maxDeadTasks         = 10000
+	deadExpirationInDays = 90
+)
+
 // Kill sends the task to "dead" queue from in-progress queue, assigning
 // the error message to the task.
 // It also trims the set by timestamp and set size.
 func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
-	const maxDeadTask = 100
-	const deadExpirationInDays = 90
 	bytesToRemove, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
@@ -227,7 +230,7 @@ func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 	`)
 	_, err = script.Run(r.client,
 		[]string{base.InProgressQueue, base.DeadQueue, processedKey, failureKey},
-		string(bytesToRemove), string(bytesToAdd), now.Unix(), limit, maxDeadTask, expireAt.Unix()).Result()
+		string(bytesToRemove), string(bytesToAdd), now.Unix(), limit, maxDeadTasks, expireAt.Unix()).Result()
 	return err
 }
 
