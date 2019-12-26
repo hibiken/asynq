@@ -138,6 +138,30 @@ func TestCurrentStats(t *testing.T) {
 	}
 }
 
+func TestCurrentStatsWithoutData(t *testing.T) {
+	r := setup(t)
+
+	want := &Stats{
+		Enqueued:   0,
+		InProgress: 0,
+		Scheduled:  0,
+		Retry:      0,
+		Dead:       0,
+		Processed:  0,
+		Failed:     0,
+		Timestamp:  time.Now(),
+	}
+
+	got, err := r.CurrentStats()
+	if err != nil {
+		t.Fatalf("r.CurrentStats() = %v, %v, want %+v, nil", got, err, want)
+	}
+
+	if diff := cmp.Diff(want, got, timeCmpOpt); diff != "" {
+		t.Errorf("r.CurrentStats() = %v, %v, want %+v, nil; (-want, +got)\n%s", got, err, want, diff)
+	}
+}
+
 func TestRedisInfo(t *testing.T) {
 	r := setup(t)
 

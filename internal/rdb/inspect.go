@@ -3,13 +3,13 @@ package rdb
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/rs/xid"
+	"github.com/spf13/cast"
 )
 
 // Stats represents a state of queues at a certain time.
@@ -77,35 +77,57 @@ type DeadTask struct {
 
 // CurrentStats returns a current state of the queues.
 func (r *RDB) CurrentStats() (*Stats, error) {
+	// KEYS[1] -> asynq:queues:default
+	// KEYS[2] -> asynq:in_progress
+	// KEYS[3] -> asynq:scheduled
+	// KEYS[4] -> asynq:retry
+	// KEYS[5] -> asynq:dead
+	// KEYS[6] -> asynq:processed:<yyyy-mm-dd>
+	// KEYS[7] -> asynq:failure:<yyyy-mm-dd>
+	script := redis.NewScript(`
+	local qlen = redis.call("LLEN", KEYS[1])
+	local plen = redis.call("LLEN", KEYS[2])
+	local slen = redis.call("ZCARD", KEYS[3])
+	local rlen = redis.call("ZCARD", KEYS[4])
+	local dlen = redis.call("ZCARD", KEYS[5])
+	local pcount = 0
+	local p = redis.call("GET", KEYS[6])
+	if p then
+		pcount = tonumber(p) 
+	end
+	local fcount = 0
+	local f = redis.call("GET", KEYS[7])
+	if f then
+		fcount = tonumber(f)
+	end
+	return {qlen, plen, slen, rlen, dlen, pcount, fcount}
+	`)
+
 	now := time.Now()
-	pipe := r.client.Pipeline()
-	qlen := pipe.LLen(base.DefaultQueue)
-	plen := pipe.LLen(base.InProgressQueue)
-	slen := pipe.ZCard(base.ScheduledQueue)
-	rlen := pipe.ZCard(base.RetryQueue)
-	dlen := pipe.ZCard(base.DeadQueue)
-	pcount := pipe.Get(base.ProcessedKey(now))
-	fcount := pipe.Get(base.FailureKey(now))
-	_, err := pipe.Exec()
+	res, err := script.Run(r.client, []string{
+		base.DefaultQueue,
+		base.InProgressQueue,
+		base.ScheduledQueue,
+		base.RetryQueue,
+		base.DeadQueue,
+		base.ProcessedKey(now),
+		base.FailureKey(now),
+	}).Result()
 	if err != nil {
 		return nil, err
 	}
-	p, err := strconv.Atoi(pcount.Val())
-	if err != nil {
-		return nil, err
-	}
-	f, err := strconv.Atoi(fcount.Val())
+	nums, err := cast.ToIntSliceE(res)
 	if err != nil {
 		return nil, err
 	}
 	return &Stats{
-		Enqueued:   int(qlen.Val()),
-		InProgress: int(plen.Val()),
-		Scheduled:  int(slen.Val()),
-		Retry:      int(rlen.Val()),
-		Dead:       int(dlen.Val()),
-		Processed:  p,
-		Failed:     f,
+		Enqueued:   nums[0],
+		InProgress: nums[1],
+		Scheduled:  nums[2],
+		Retry:      nums[3],
+		Dead:       nums[4],
+		Processed:  nums[5],
+		Failed:     nums[6],
 		Timestamp:  now,
 	}, nil
 }

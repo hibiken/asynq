@@ -84,7 +84,13 @@ func printStats(s *rdb.Stats) {
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
 	fmt.Fprintf(tw, format, "Processed", "Failed", "Error Rate")
 	fmt.Fprintf(tw, format, "---------", "------", "----------")
-	fmt.Fprintf(tw, format, s.Processed, s.Failed, fmt.Sprintf("%.2f%%", float64(s.Failed)/float64(s.Processed)*100))
+	var errrate string
+	if s.Processed == 0 {
+		errrate = "N/A"
+	} else {
+		errrate = fmt.Sprintf("%.2f%%", float64(s.Failed)/float64(s.Processed)*100)
+	}
+	fmt.Fprintf(tw, format, s.Processed, s.Failed, errrate)
 	tw.Flush()
 }
 
