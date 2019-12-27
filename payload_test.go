@@ -9,7 +9,7 @@ import (
 )
 
 func TestPayloadGet(t *testing.T) {
-	names := []string{"luke", "anakin", "ray"}
+	names := []string{"luke", "anakin", "rey"}
 	primes := []int{2, 3, 5, 7, 11, 13, 17}
 	user := map[string]interface{}{"name": "Ken", "score": 3.14}
 	location := map[string]string{"address": "123 Main St.", "state": "NY", "zipcode": "10002"}
@@ -126,7 +126,7 @@ func TestPayloadGet(t *testing.T) {
 }
 
 func TestPayloadGetWithMarshaling(t *testing.T) {
-	names := []string{"luke", "anakin", "ray"}
+	names := []string{"luke", "anakin", "rey"}
 	primes := []int{2, 3, 5, 7, 11, 13, 17}
 	user := map[string]interface{}{"name": "Ken", "score": 3.14}
 	location := map[string]string{"address": "123 Main St.", "state": "NY", "zipcode": "10002"}
