@@ -414,6 +414,18 @@ func (r *RDB) KillScheduledTask(id xid.ID, score int64) error {
 	return nil
 }
 
+// KillAllRetryTasks moves all tasks from retry queue to dead queue and
+// returns the number of tasks that were moved.
+func (r *RDB) KillAllRetryTasks() (int64, error) {
+	return r.removeAndKillAll(base.RetryQueue)
+}
+
+// KillAllScheduledTasks moves all tasks from scheduled queue to dead queue and
+// returns the number of tasks that were moved.
+func (r *RDB) KillAllScheduledTasks() (int64, error) {
+	return r.removeAndKillAll(base.ScheduledQueue)
+}
+
 func (r *RDB) removeAndKill(zset, id string, score float64) (int64, error) {
 	// KEYS[1] -> ZSET to move task from (e.g., retry queue)
 	// KEYS[2] -> asynq:dead
@@ -441,6 +453,36 @@ func (r *RDB) removeAndKill(zset, id string, score float64) (int64, error) {
 	res, err := script.Run(r.client,
 		[]string{zset, base.DeadQueue},
 		score, id, now.Unix(), limit, maxDeadTasks).Result()
+	if err != nil {
+		return 0, err
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, fmt.Errorf("could not cast %v to int64", res)
+	}
+	return n, nil
+}
+
+func (r *RDB) removeAndKillAll(zset string) (int64, error) {
+	// KEYS[1] -> ZSET to move task from (e.g., retry queue)
+	// KEYS[2] -> asynq:dead
+	// ARGV[1] -> current timestamp
+	// ARGV[2] -> cutoff timestamp (e.g., 90 days ago)
+	// ARGV[3] -> max number of tasks in dead queue (e.g., 100)
+	script := redis.NewScript(`
+	local msgs = redis.call("ZRANGE", KEYS[1], 0, -1)
+	for _, msg in ipairs(msgs) do
+		redis.call("ZREM", KEYS[1], msg)
+		redis.call("ZADD", KEYS[2], ARGV[1], msg)
+		redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
+		redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
+	end
+	return table.getn(msgs)
+	`)
+	now := time.Now()
+	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
+	res, err := script.Run(r.client, []string{zset, base.DeadQueue},
+		now.Unix(), limit, maxDeadTasks).Result()
 	if err != nil {
 		return 0, err
 	}
