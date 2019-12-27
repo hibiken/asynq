@@ -4,7 +4,6 @@ import "github.com/go-redis/redis/v7"
 
 /*
 TODOs:
-- [P0] asynqmon kill <taskID>, asynqmon killall <qname>
 - [P0] Pagination for `asynqmon ls` command
 - [P0] Show elapsed time for InProgress tasks (asynqmon ls inprogress)
 - [P0] Go docs + CONTRIBUTION.md + Github issue template + License comment
