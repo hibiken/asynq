@@ -285,8 +285,7 @@ func TestRetry(t *testing.T) {
 				Score: int64(z.Score),
 			})
 		}
-		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})
-		if diff := cmp.Diff(tc.wantRetry, gotRetry, cmpOpt, sortZSetEntryOpt); diff != "" {
+		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortZSetEntryOpt); diff != "" {
 			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 
@@ -373,7 +372,7 @@ func TestKill(t *testing.T) {
 		gotInProgressRaw := r.client.LRange(base.InProgressQueue, 0, -1).Val()
 		gotInProgress := mustUnmarshalSlice(t, gotInProgressRaw)
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.InProgressQueue, diff)
+			t.Errorf("mismatch found in %q: (-want, +got)\n%s", base.InProgressQueue, diff)
 		}
 
 		var gotDead []sortedSetEntry
@@ -384,7 +383,6 @@ func TestKill(t *testing.T) {
 				Score: int64(z.Score),
 			})
 		}
-
 		if diff := cmp.Diff(tc.wantDead, gotDead, sortZSetEntryOpt); diff != "" {
 			t.Errorf("mismatch found in %q after calling (*RDB).Kill: (-want, +got):\n%s", base.DeadQueue, diff)
 		}
@@ -453,7 +451,6 @@ func TestRestoreUnfinished(t *testing.T) {
 		seedDefaultQueue(t, r, tc.enqueued)
 
 		got, err := r.RestoreUnfinished()
-
 		if got != tc.want || err != nil {
 			t.Errorf("(*RDB).RestoreUnfinished() = %v %v, want %v nil", got, err, tc.want)
 			continue
@@ -462,12 +459,12 @@ func TestRestoreUnfinished(t *testing.T) {
 		gotInProgressRaw := r.client.LRange(base.InProgressQueue, 0, -1).Val()
 		gotInProgress := mustUnmarshalSlice(t, gotInProgressRaw)
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q (-want, +got)\n%s", base.InProgressQueue, diff)
+			t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.InProgressQueue, diff)
 		}
 		gotEnqueuedRaw := r.client.LRange(base.DefaultQueue, 0, -1).Val()
 		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
 		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q (-want, +got)\n%s", base.DefaultQueue, diff)
+			t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.DefaultQueue, diff)
 		}
 	}
 }
