@@ -10,7 +10,7 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
-func TestPoller(t *testing.T) {
+func TestScheduler(t *testing.T) {
 	type scheduledTask struct {
 		msg       *base.TaskMessage
 		processAt time.Time
@@ -18,7 +18,7 @@ func TestPoller(t *testing.T) {
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
 	const pollInterval = time.Second
-	p := newPoller(rdbClient, pollInterval)
+	s := newScheduler(rdbClient, pollInterval)
 	t1 := randomTask("gen_thumbnail", "default", nil)
 	t2 := randomTask("send_email", "default", nil)
 	t3 := randomTask("reindex", "default", nil)
@@ -92,26 +92,26 @@ func TestPoller(t *testing.T) {
 			}
 		}
 
-		p.start()
+		s.start()
 		time.Sleep(tc.wait)
-		p.terminate()
+		s.terminate()
 
 		gotScheduledRaw := r.ZRange(base.ScheduledQueue, 0, -1).Val()
 		gotScheduled := mustUnmarshalSlice(t, gotScheduledRaw)
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", base.ScheduledQueue, diff)
+			t.Errorf("mismatch found in %q after running scheduler: (-want, +got)\n%s", base.ScheduledQueue, diff)
 		}
 
 		gotRetryRaw := r.ZRange(base.RetryQueue, 0, -1).Val()
 		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", base.RetryQueue, diff)
+			t.Errorf("mismatch found in %q after running scheduler: (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 
 		gotQueueRaw := r.LRange(base.DefaultQueue, 0, -1).Val()
 		gotQueue := mustUnmarshalSlice(t, gotQueueRaw)
 		if diff := cmp.Diff(tc.wantQueue, gotQueue, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running poller: (-want, +got)\n%s", base.DefaultQueue, diff)
+			t.Errorf("mismatch found in %q after running scheduler: (-want, +got)\n%s", base.DefaultQueue, diff)
 		}
 	}
 }
