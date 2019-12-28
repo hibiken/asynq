@@ -28,7 +28,7 @@ type Background struct {
 	running bool
 
 	rdb       *rdb.RDB
-	poller    *poller
+	scheduler *scheduler
 	processor *processor
 }
 
@@ -36,11 +36,11 @@ type Background struct {
 // given a redis configuration .
 func NewBackground(numWorkers int, cfg *RedisConfig) *Background {
 	r := rdb.NewRDB(newRedisClient(cfg))
-	poller := newPoller(r, 5*time.Second)
+	scheduler := newScheduler(r, 5*time.Second)
 	processor := newProcessor(r, numWorkers, nil)
 	return &Background{
 		rdb:       r,
-		poller:    poller,
+		scheduler: scheduler,
 		processor: processor,
 	}
 }
@@ -101,7 +101,7 @@ func (bg *Background) start(handler Handler) {
 	bg.running = true
 	bg.processor.handler = handler
 
-	bg.poller.start()
+	bg.scheduler.start()
 	bg.processor.start()
 }
 
@@ -113,7 +113,7 @@ func (bg *Background) stop() {
 		return
 	}
 
-	bg.poller.terminate()
+	bg.scheduler.terminate()
 	bg.processor.terminate()
 
 	bg.rdb.Close()
