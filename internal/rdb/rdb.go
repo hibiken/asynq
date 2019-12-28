@@ -130,14 +130,14 @@ func (r *RDB) Schedule(msg *base.TaskMessage, processAt time.Time) error {
 func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) error {
 	bytesToRemove, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
+		return err
 	}
 	modified := *msg
 	modified.Retried++
 	modified.ErrorMsg = errMsg
 	bytesToAdd, err := json.Marshal(&modified)
 	if err != nil {
-		return fmt.Errorf("could not marshal %+v to json: %v", modified, err)
+		return err
 	}
 	// KEYS[1] -> asynq:in_progress
 	// KEYS[2] -> asynq:retry
@@ -164,10 +164,9 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) e
 	processedKey := base.ProcessedKey(now)
 	failureKey := base.FailureKey(now)
 	expireAt := now.Add(statsTTL)
-	_, err = script.Run(r.client,
+	return script.Run(r.client,
 		[]string{base.InProgressQueue, base.RetryQueue, processedKey, failureKey},
-		string(bytesToRemove), string(bytesToAdd), processAt.Unix(), expireAt.Unix()).Result()
-	return err
+		string(bytesToRemove), string(bytesToAdd), processAt.Unix(), expireAt.Unix()).Err()
 }
 
 const (
@@ -181,13 +180,13 @@ const (
 func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 	bytesToRemove, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
+		return err
 	}
 	modified := *msg
 	modified.ErrorMsg = errMsg
 	bytesToAdd, err := json.Marshal(&modified)
 	if err != nil {
-		return fmt.Errorf("could not marshal %+v to json: %v", modified, err)
+		return err
 	}
 	now := time.Now()
 	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
@@ -219,10 +218,9 @@ func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 	end
 	return redis.status_reply("OK")
 	`)
-	_, err = script.Run(r.client,
+	return script.Run(r.client,
 		[]string{base.InProgressQueue, base.DeadQueue, processedKey, failureKey},
-		string(bytesToRemove), string(bytesToAdd), now.Unix(), limit, maxDeadTasks, expireAt.Unix()).Result()
-	return err
+		string(bytesToRemove), string(bytesToAdd), now.Unix(), limit, maxDeadTasks, expireAt.Unix()).Err()
 }
 
 // RestoreUnfinished  moves all tasks from in-progress list to the queue
@@ -270,6 +268,6 @@ func (r *RDB) forward(from string) error {
 	return msgs
 	`)
 	now := float64(time.Now().Unix())
-	_, err := script.Run(r.client, []string{from, base.DefaultQueue}, now).Result()
-	return err
+	return script.Run(r.client,
+		[]string{from, base.DefaultQueue}, now).Err()
 }
