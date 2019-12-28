@@ -16,7 +16,7 @@ type Task struct {
 	// Type indicates the kind of the task to be performed.
 	Type string
 
-	// Payload holds data needed for the task execution.
+	// Payload holds data needed to process the task.
 	Payload Payload
 }
 

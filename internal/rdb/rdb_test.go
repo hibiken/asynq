@@ -42,13 +42,23 @@ func TestDequeue(t *testing.T) {
 	r := setup(t)
 	t1 := newTaskMessage("send_email", map[string]interface{}{"subject": "hello!"})
 	tests := []struct {
-		enqueued   []*base.TaskMessage
-		want       *base.TaskMessage
-		err        error
-		inProgress int64 // length of "in-progress" tasks after dequeue
+		enqueued       []*base.TaskMessage
+		want           *base.TaskMessage
+		err            error
+		wantInProgress []*base.TaskMessage
 	}{
-		{enqueued: []*base.TaskMessage{t1}, want: t1, err: nil, inProgress: 1},
-		{enqueued: []*base.TaskMessage{}, want: nil, err: ErrDequeueTimeout, inProgress: 0},
+		{
+			enqueued:       []*base.TaskMessage{t1},
+			want:           t1,
+			err:            nil,
+			wantInProgress: []*base.TaskMessage{t1},
+		},
+		{
+			enqueued:       []*base.TaskMessage{},
+			want:           nil,
+			err:            ErrDequeueTimeout,
+			wantInProgress: []*base.TaskMessage{},
+		},
 	}
 
 	for _, tc := range tests {
@@ -61,8 +71,11 @@ func TestDequeue(t *testing.T) {
 				got, err, tc.want, tc.err)
 			continue
 		}
-		if l := r.client.LLen(base.InProgressQueue).Val(); l != tc.inProgress {
-			t.Errorf("%q has length %d, want %d", base.InProgressQueue, l, tc.inProgress)
+
+		gotInProgressRaw := r.client.LRange(base.InProgressQueue, 0, -1).Val()
+		gotInProgress := mustUnmarshalSlice(t, gotInProgressRaw)
+		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.InProgressQueue, diff)
 		}
 	}
 }
@@ -79,11 +92,6 @@ func TestDone(t *testing.T) {
 	}{
 		{
 			inProgress:     []*base.TaskMessage{t1, t2},
-			target:         t1,
-			wantInProgress: []*base.TaskMessage{t2},
-		},
-		{
-			inProgress:     []*base.TaskMessage{t2},
 			target:         t1,
 			wantInProgress: []*base.TaskMessage{t2},
 		},
@@ -107,7 +115,7 @@ func TestDone(t *testing.T) {
 		data := r.client.LRange(base.InProgressQueue, 0, -1).Val()
 		gotInProgress := mustUnmarshalSlice(t, data)
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after calling (*RDB).Done: (-want, +got):\n%s", base.InProgressQueue, diff)
+			t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.InProgressQueue, diff)
 			continue
 		}
 
@@ -177,6 +185,132 @@ func TestRequeue(t *testing.T) {
 	}
 }
 
+func TestSchedule(t *testing.T) {
+	r := setup(t)
+	t1 := newTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
+	tests := []struct {
+		msg       *base.TaskMessage
+		processAt time.Time
+	}{
+		{t1, time.Now().Add(15 * time.Minute)},
+	}
+
+	for _, tc := range tests {
+		flushDB(t, r) // clean up db before each test case
+
+		desc := fmt.Sprintf("(*RDB).Schedule(%v, %v)", tc.msg, tc.processAt)
+		err := r.Schedule(tc.msg, tc.processAt)
+		if err != nil {
+			t.Errorf("%s = %v, want nil", desc, err)
+			continue
+		}
+
+		res := r.client.ZRangeWithScores(base.ScheduledQueue, 0, -1).Val()
+		if len(res) != 1 {
+			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), base.ScheduledQueue)
+			continue
+		}
+		if res[0].Score != float64(tc.processAt.Unix()) {
+			t.Errorf("%s inserted an item with score %f, want %f", desc, res[0].Score, float64(tc.processAt.Unix()))
+			continue
+		}
+	}
+}
+
+func TestRetry(t *testing.T) {
+	r := setup(t)
+	t1 := newTaskMessage("send_email", map[string]interface{}{"subject": "Hola!"})
+	t2 := newTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/image.jpg"})
+	t3 := newTaskMessage("reindex", nil)
+	t1.Retried = 10
+	errMsg := "SMTP server is not responding"
+	t1AfterRetry := &base.TaskMessage{
+		ID:       t1.ID,
+		Type:     t1.Type,
+		Payload:  t1.Payload,
+		Queue:    t1.Queue,
+		Retry:    t1.Retry,
+		Retried:  t1.Retried + 1,
+		ErrorMsg: errMsg,
+	}
+	now := time.Now()
+
+	tests := []struct {
+		inProgress     []*base.TaskMessage
+		retry          []sortedSetEntry
+		msg            *base.TaskMessage
+		processAt      time.Time
+		errMsg         string
+		wantInProgress []*base.TaskMessage
+		wantRetry      []sortedSetEntry
+	}{
+		{
+			inProgress: []*base.TaskMessage{t1, t2},
+			retry: []sortedSetEntry{
+				{t3, now.Add(time.Minute).Unix()},
+			},
+			msg:            t1,
+			processAt:      now.Add(5 * time.Minute),
+			errMsg:         errMsg,
+			wantInProgress: []*base.TaskMessage{t2},
+			wantRetry: []sortedSetEntry{
+				{t1AfterRetry, now.Add(5 * time.Minute).Unix()},
+				{t3, now.Add(time.Minute).Unix()},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		flushDB(t, r)
+		seedInProgressQueue(t, r, tc.inProgress)
+		seedRetryQueue(t, r, tc.retry)
+
+		err := r.Retry(tc.msg, tc.processAt, tc.errMsg)
+		if err != nil {
+			t.Errorf("(*RDB).Retry = %v, want nil", err)
+			continue
+		}
+
+		gotInProgressRaw := r.client.LRange(base.InProgressQueue, 0, -1).Val()
+		gotInProgress := mustUnmarshalSlice(t, gotInProgressRaw)
+		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.InProgressQueue, diff)
+		}
+
+		gotRetryRaw := r.client.ZRangeWithScores(base.RetryQueue, 0, -1).Val()
+		var gotRetry []sortedSetEntry
+		for _, z := range gotRetryRaw {
+			gotRetry = append(gotRetry, sortedSetEntry{
+				Msg:   mustUnmarshal(t, z.Member.(string)),
+				Score: int64(z.Score),
+			})
+		}
+		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})
+		if diff := cmp.Diff(tc.wantRetry, gotRetry, cmpOpt, sortZSetEntryOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
+		}
+
+		processedKey := base.ProcessedKey(time.Now())
+		gotProcessed := r.client.Get(processedKey).Val()
+		if gotProcessed != "1" {
+			t.Errorf("GET %q = %q, want 1", processedKey, gotProcessed)
+		}
+		gotTTL := r.client.TTL(processedKey).Val()
+		if gotTTL > statsTTL {
+			t.Errorf("TTL %q = %v, want less than or equal to %v", processedKey, gotTTL, statsTTL)
+		}
+
+		failureKey := base.FailureKey(time.Now())
+		gotFailure := r.client.Get(failureKey).Val()
+		if gotFailure != "1" {
+			t.Errorf("GET %q = %q, want 1", failureKey, gotFailure)
+		}
+		gotTTL = r.client.TTL(processedKey).Val()
+		if gotTTL > statsTTL {
+			t.Errorf("TTL %q = %v, want less than or equal to %v", failureKey, gotTTL, statsTTL)
+		}
+	}
+}
 func TestKill(t *testing.T) {
 	r := setup(t)
 	t1 := newTaskMessage("send_email", nil)
@@ -409,135 +543,6 @@ func TestCheckAndEnqueue(t *testing.T) {
 		gotRetry := mustUnmarshalSlice(t, retry)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
-		}
-	}
-}
-
-func TestSchedule(t *testing.T) {
-	r := setup(t)
-	tests := []struct {
-		msg       *base.TaskMessage
-		processAt time.Time
-	}{
-		{
-			newTaskMessage("send_email", map[string]interface{}{"subject": "hello"}),
-			time.Now().Add(15 * time.Minute),
-		},
-	}
-
-	for _, tc := range tests {
-		flushDB(t, r) // clean up db before each test case
-
-		desc := fmt.Sprintf("(*RDB).Schedule(%v, %v)", tc.msg, tc.processAt)
-		err := r.Schedule(tc.msg, tc.processAt)
-		if err != nil {
-			t.Errorf("%s = %v, want nil", desc, err)
-			continue
-		}
-
-		res := r.client.ZRangeWithScores(base.ScheduledQueue, 0, -1).Val()
-		if len(res) != 1 {
-			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(res), base.ScheduledQueue)
-			continue
-		}
-		if res[0].Score != float64(tc.processAt.Unix()) {
-			t.Errorf("%s inserted an item with score %f, want %f", desc, res[0].Score, float64(tc.processAt.Unix()))
-			continue
-		}
-	}
-}
-
-func TestRetry(t *testing.T) {
-	r := setup(t)
-	t1 := newTaskMessage("send_email", map[string]interface{}{"subject": "Hola!"})
-	t2 := newTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/image.jpg"})
-	t3 := newTaskMessage("reindex", nil)
-	t1.Retried = 10
-	errMsg := "SMTP server is not responding"
-	t1AfterRetry := &base.TaskMessage{
-		ID:       t1.ID,
-		Type:     t1.Type,
-		Payload:  t1.Payload,
-		Queue:    t1.Queue,
-		Retry:    t1.Retry,
-		Retried:  t1.Retried + 1,
-		ErrorMsg: errMsg,
-	}
-	now := time.Now()
-
-	tests := []struct {
-		inProgress     []*base.TaskMessage
-		retry          []sortedSetEntry
-		msg            *base.TaskMessage
-		processAt      time.Time
-		errMsg         string
-		wantInProgress []*base.TaskMessage
-		wantRetry      []sortedSetEntry
-	}{
-		{
-			inProgress: []*base.TaskMessage{t1, t2},
-			retry: []sortedSetEntry{
-				{t3, now.Add(time.Minute).Unix()},
-			},
-			msg:            t1,
-			processAt:      now.Add(5 * time.Minute),
-			errMsg:         errMsg,
-			wantInProgress: []*base.TaskMessage{t2},
-			wantRetry: []sortedSetEntry{
-				{t1AfterRetry, now.Add(5 * time.Minute).Unix()},
-				{t3, now.Add(time.Minute).Unix()},
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		flushDB(t, r)
-		seedInProgressQueue(t, r, tc.inProgress)
-		seedRetryQueue(t, r, tc.retry)
-
-		err := r.Retry(tc.msg, tc.processAt, tc.errMsg)
-		if err != nil {
-			t.Errorf("(*RDB).Retry = %v, want nil", err)
-			continue
-		}
-
-		gotInProgressRaw := r.client.LRange(base.InProgressQueue, 0, -1).Val()
-		gotInProgress := mustUnmarshalSlice(t, gotInProgressRaw)
-		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, sortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.InProgressQueue, diff)
-		}
-
-		gotRetryRaw := r.client.ZRangeWithScores(base.RetryQueue, 0, -1).Val()
-		var gotRetry []sortedSetEntry
-		for _, z := range gotRetryRaw {
-			gotRetry = append(gotRetry, sortedSetEntry{
-				Msg:   mustUnmarshal(t, z.Member.(string)),
-				Score: int64(z.Score),
-			})
-		}
-		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})
-		if diff := cmp.Diff(tc.wantRetry, gotRetry, cmpOpt, sortZSetEntryOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
-		}
-
-		processedKey := base.ProcessedKey(time.Now())
-		gotProcessed := r.client.Get(processedKey).Val()
-		if gotProcessed != "1" {
-			t.Errorf("GET %q = %q, want 1", processedKey, gotProcessed)
-		}
-		gotTTL := r.client.TTL(processedKey).Val()
-		if gotTTL > statsTTL {
-			t.Errorf("TTL %q = %v, want less than or equal to %v", processedKey, gotTTL, statsTTL)
-		}
-
-		failureKey := base.FailureKey(time.Now())
-		gotFailure := r.client.Get(failureKey).Val()
-		if gotFailure != "1" {
-			t.Errorf("GET %q = %q, want 1", failureKey, gotFailure)
-		}
-		gotTTL = r.client.TTL(processedKey).Val()
-		if gotTTL > statsTTL {
-			t.Errorf("TTL %q = %v, want less than or equal to %v", failureKey, gotTTL, statsTTL)
 		}
 	}
 }

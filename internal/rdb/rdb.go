@@ -36,38 +36,32 @@ func (r *RDB) Close() error {
 	return r.client.Close()
 }
 
-// Enqueue inserts the given task to the end of the queue.
-// It also adds the queue name to the "all-queues" list.
+// Enqueue inserts the given task to the tail of the queue.
 func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
+		return err
 	}
 	qname := base.QueuePrefix + msg.Queue
-	pipe := r.client.Pipeline()
-	pipe.LPush(qname, string(bytes))
-	_, err = pipe.Exec()
-	if err != nil {
-		return fmt.Errorf("could not enqueue the task %+v to %q: %v", msg, qname, err)
-	}
-	return nil
+	return r.client.LPush(qname, string(bytes)).Err()
 }
 
 // Dequeue blocks until there is a task available to be processed,
-// once a task is available, it adds the task to "in progress" list
-// and returns the task.
+// once a task is available, it adds the task to "in progress" queue
+// and returns the task. If there are no tasks for the entire timeout
+// duration, it returns ErrDequeueTimeout.
 func (r *RDB) Dequeue(timeout time.Duration) (*base.TaskMessage, error) {
 	data, err := r.client.BRPopLPush(base.DefaultQueue, base.InProgressQueue, timeout).Result()
 	if err == redis.Nil {
 		return nil, ErrDequeueTimeout
 	}
 	if err != nil {
-		return nil, fmt.Errorf("command `BRPOPLPUSH %q %q %v` failed: %v", base.DefaultQueue, base.InProgressQueue, timeout, err)
+		return nil, err
 	}
 	var msg base.TaskMessage
 	err = json.Unmarshal([]byte(data), &msg)
 	if err != nil {
-		return nil, fmt.Errorf("could not unmarshal %v to json: %v", data, err)
+		return nil, err
 	}
 	return &msg, nil
 }
@@ -76,7 +70,7 @@ func (r *RDB) Dequeue(timeout time.Duration) (*base.TaskMessage, error) {
 func (r *RDB) Done(msg *base.TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
+		return err
 	}
 	// Note: LREM count ZERO means "remove all elements equal to val"
 	// KEYS[1] -> asynq:in_progress
@@ -94,10 +88,9 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 	now := time.Now()
 	processedKey := base.ProcessedKey(now)
 	expireAt := now.Add(statsTTL)
-	_, err = script.Run(r.client,
+	return script.Run(r.client,
 		[]string{base.InProgressQueue, processedKey},
-		string(bytes), expireAt.Unix()).Result()
-	return err
+		string(bytes), expireAt.Unix()).Err()
 }
 
 // Requeue moves the task from in-progress queue to the default
@@ -105,7 +98,7 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 func (r *RDB) Requeue(msg *base.TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
+		return err
 	}
 	// Note: Use RPUSH to push to the head of the queue.
 	// KEYS[1] -> asynq:in_progress
@@ -116,22 +109,20 @@ func (r *RDB) Requeue(msg *base.TaskMessage) error {
 	redis.call("RPUSH", KEYS[2], ARGV[1])
 	return redis.status_reply("OK")
 	`)
-	_, err = script.Run(r.client, []string{base.InProgressQueue, base.DefaultQueue}, string(bytes)).Result()
-	return err
+	return script.Run(r.client,
+		[]string{base.InProgressQueue, base.DefaultQueue},
+		string(bytes)).Err()
 }
 
 // Schedule adds the task to the backlog queue to be processed in the future.
 func (r *RDB) Schedule(msg *base.TaskMessage, processAt time.Time) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("could not marshal %+v to json: %v", msg, err)
+		return err
 	}
 	score := float64(processAt.Unix())
-	err = r.client.ZAdd(base.ScheduledQueue, &redis.Z{Member: string(bytes), Score: score}).Err()
-	if err != nil {
-		return fmt.Errorf("command `ZADD %s %.1f %s` failed: %v", base.ScheduledQueue, score, string(bytes), err)
-	}
-	return nil
+	return r.client.ZAdd(base.ScheduledQueue,
+		&redis.Z{Member: string(bytes), Score: score}).Err()
 }
 
 // Retry moves the task from in-progress to retry queue, incrementing retry count
