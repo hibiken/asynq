@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-redis/redis/v7"
 	"go.uber.org/goleak"
 )
 
@@ -17,10 +18,11 @@ func TestBackground(t *testing.T) {
 		DB:   15,
 	})
 
-	client := NewClient(&RedisConfig{
+	r := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 		DB:   15,
 	})
+	client := NewClient(r)
 
 	// no-op handler
 	h := func(task *Task) error {

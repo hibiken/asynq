@@ -3,6 +3,7 @@ package asynq
 import (
 	"time"
 
+	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/rs/xid"
@@ -19,9 +20,9 @@ type Client struct {
 }
 
 // NewClient and returns a new Client given a redis configuration.
-func NewClient(cfg *RedisConfig) *Client {
-	r := rdb.NewRDB(newRedisClient(cfg))
-	return &Client{r}
+func NewClient(r *redis.Client) *Client {
+	rdb := rdb.NewRDB(r)
+	return &Client{rdb}
 }
 
 // Option configures the behavior of task processing.
