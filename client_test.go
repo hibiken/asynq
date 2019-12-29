@@ -7,12 +7,11 @@ import (
 	"github.com/google/go-cmp/cmp"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/rdb"
 )
 
 func TestClient(t *testing.T) {
 	r := setup(t)
-	client := &Client{rdb.NewRDB(r)}
+	client := NewClient(r)
 
 	task := &Task{Type: "send_email", Payload: map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}}
 

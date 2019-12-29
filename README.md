@@ -50,9 +50,10 @@ import "github.com/hibiken/asynq"
 
 ```go
 func main() {
-    client := asynq.NewClient(&asynq.RedisOpt{
+    r := redis.NewClient(&redis.Options{
         Addr: "localhost:6379",
-    })
+    }
+    client := asynq.NewClient(r)
 
     t1 := asynq.Task{
         Type: "send_welcome_email",
