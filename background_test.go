@@ -13,16 +13,12 @@ func TestBackground(t *testing.T) {
 	ignoreOpt := goleak.IgnoreTopFunction("github.com/go-redis/redis/v7/internal/pool.(*ConnPool).reaper")
 	defer goleak.VerifyNoLeaks(t, ignoreOpt)
 
-	bg := NewBackground(10, &RedisConfig{
-		Addr: "localhost:6379",
-		DB:   15,
-	})
-
 	r := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 		DB:   15,
 	})
 	client := NewClient(r)
+	bg := NewBackground(r, 10)
 
 	// no-op handler
 	h := func(task *Task) error {

@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
@@ -34,12 +35,12 @@ type Background struct {
 
 // NewBackground returns a new Background with the specified number of workers
 // given a redis configuration .
-func NewBackground(numWorkers int, cfg *RedisConfig) *Background {
-	r := rdb.NewRDB(newRedisClient(cfg))
-	scheduler := newScheduler(r, 5*time.Second)
-	processor := newProcessor(r, numWorkers, nil)
+func NewBackground(r *redis.Client, numWorkers int) *Background {
+	rdb := rdb.NewRDB(r)
+	scheduler := newScheduler(rdb, 5*time.Second)
+	processor := newProcessor(rdb, numWorkers, nil)
 	return &Background{
-		rdb:       r,
+		rdb:       rdb,
 		scheduler: scheduler,
 		processor: processor,
 	}

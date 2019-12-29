@@ -29,8 +29,11 @@ Asynq provides:
 
 ## Requirements
 
-- Redis: 2.6+
-- Go: 1.12+
+| Dependency                                                     | Version |
+| -------------------------------------------------------------- | ------- |
+| [Redis](https://redis.io/)                                     | v2.6+   |
+| [Go](https://golang.org/)                                      | v1.12+  |
+| [github.com/go-redis/redis](https://github.com/go-redis/redis) | v.7.0+  |
 
 ## Installation
 
@@ -84,9 +87,10 @@ func main() {
 
 ```go
 func main() {
-    bg := asynq.NewBackground(10, &asynq.RedisOpt{
+    r := redis.NewClient(&redis.Options{
         Addr: "localhost:6379",
-    })
+    }
+    bg := asynq.NewBackground(r, 10)
 
     // Blocks until signal TERM or INT is received.
     // For graceful shutdown, send signal TSTP to stop processing more tasks
@@ -129,9 +133,10 @@ func handler(t *asynq.Task) error {
 }
 
 func main() {
-    bg := asynq.NewBackground(10, &asynq.RedisOpt{
+    r := redis.NewClient(&redis.Options{
         Addr: "localhost:6379",
-    })
+    }
+    bg := asynq.NewBackground(r, 10)
 
     // Use asynq.HandlerFunc adapter for a handler function
     bg.Run(asynq.HandlerFunc(handler))
