@@ -4,29 +4,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
+	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
 func TestScheduler(t *testing.T) {
-	type scheduledTask struct {
-		msg       *base.TaskMessage
-		processAt time.Time
-	}
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
 	const pollInterval = time.Second
 	s := newScheduler(rdbClient, pollInterval)
-	t1 := randomTask("gen_thumbnail", "default", nil)
-	t2 := randomTask("send_email", "default", nil)
-	t3 := randomTask("reindex", "default", nil)
-	t4 := randomTask("sync", "default", nil)
+	t1 := h.NewTaskMessage("gen_thumbnail", nil)
+	t2 := h.NewTaskMessage("send_email", nil)
+	t3 := h.NewTaskMessage("reindex", nil)
+	t4 := h.NewTaskMessage("sync", nil)
+	now := time.Now()
 
 	tests := []struct {
-		initScheduled []scheduledTask     // scheduled queue initial state
-		initRetry     []scheduledTask     // retry queue initial state
+		initScheduled []h.ZSetEntry       // scheduled queue initial state
+		initRetry     []h.ZSetEntry       // retry queue initial state
 		initQueue     []*base.TaskMessage // default queue initial state
 		wait          time.Duration       // wait duration before checking for final state
 		wantScheduled []*base.TaskMessage // schedule queue final state
@@ -34,12 +31,12 @@ func TestScheduler(t *testing.T) {
 		wantQueue     []*base.TaskMessage // default queue final state
 	}{
 		{
-			initScheduled: []scheduledTask{
-				{t1, time.Now().Add(time.Hour)},
-				{t2, time.Now().Add(-2 * time.Second)},
+			initScheduled: []h.ZSetEntry{
+				{Msg: t1, Score: now.Add(time.Hour).Unix()},
+				{Msg: t2, Score: now.Add(-2 * time.Second).Unix()},
 			},
-			initRetry: []scheduledTask{
-				{t3, time.Now().Add(-500 * time.Millisecond)},
+			initRetry: []h.ZSetEntry{
+				{Msg: t3, Score: time.Now().Add(-500 * time.Millisecond).Unix()},
 			},
 			initQueue:     []*base.TaskMessage{t4},
 			wait:          pollInterval * 2,
@@ -48,12 +45,12 @@ func TestScheduler(t *testing.T) {
 			wantQueue:     []*base.TaskMessage{t2, t3, t4},
 		},
 		{
-			initScheduled: []scheduledTask{
-				{t1, time.Now()},
-				{t2, time.Now().Add(-2 * time.Second)},
-				{t3, time.Now().Add(-500 * time.Millisecond)},
+			initScheduled: []h.ZSetEntry{
+				{Msg: t1, Score: now.Unix()},
+				{Msg: t2, Score: now.Add(-2 * time.Second).Unix()},
+				{Msg: t3, Score: now.Add(-500 * time.Millisecond).Unix()},
 			},
-			initRetry:     []scheduledTask{},
+			initRetry:     []h.ZSetEntry{},
 			initQueue:     []*base.TaskMessage{t4},
 			wait:          pollInterval * 2,
 			wantScheduled: []*base.TaskMessage{},
@@ -63,54 +60,27 @@ func TestScheduler(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
-		// initialize scheduled queue
-		for _, st := range tc.initScheduled {
-			err := rdbClient.Schedule(st.msg, st.processAt)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-		// initialize retry queue
-		for _, st := range tc.initRetry {
-			err := r.ZAdd(base.RetryQueue, &redis.Z{
-				Member: mustMarshal(t, st.msg),
-				Score:  float64(st.processAt.Unix()),
-			}).Err()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-		// initialize default queue
-		for _, msg := range tc.initQueue {
-			err := rdbClient.Enqueue(msg)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+		h.FlushDB(t, r)                              // clean up db before each test case.
+		h.SeedScheduledQueue(t, r, tc.initScheduled) // initialize scheduled queue
+		h.SeedRetryQueue(t, r, tc.initRetry)         // initialize retry queue
+		h.SeedDefaultQueue(t, r, tc.initQueue)       // initialize default queue
 
 		s.start()
 		time.Sleep(tc.wait)
 		s.terminate()
 
-		gotScheduledRaw := r.ZRange(base.ScheduledQueue, 0, -1).Val()
-		gotScheduled := mustUnmarshalSlice(t, gotScheduledRaw)
-		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, sortMsgOpt); diff != "" {
+		gotScheduled := h.GetScheduledMessages(t, r)
+		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q after running scheduler: (-want, +got)\n%s", base.ScheduledQueue, diff)
 		}
 
-		gotRetryRaw := r.ZRange(base.RetryQueue, 0, -1).Val()
-		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
-		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
+		gotRetry := h.GetRetryMessages(t, r)
+		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q after running scheduler: (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 
-		gotQueueRaw := r.LRange(base.DefaultQueue, 0, -1).Val()
-		gotQueue := mustUnmarshalSlice(t, gotQueueRaw)
-		if diff := cmp.Diff(tc.wantQueue, gotQueue, sortMsgOpt); diff != "" {
+		gotEnqueued := h.GetEnqueuedMessages(t, r)
+		if diff := cmp.Diff(tc.wantQueue, gotEnqueued, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q after running scheduler: (-want, +got)\n%s", base.DefaultQueue, diff)
 		}
 	}

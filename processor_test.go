@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 )
@@ -15,10 +16,10 @@ func TestProcessorSuccess(t *testing.T) {
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
 
-	m1 := randomTask("send_email", "default", nil)
-	m2 := randomTask("gen_thumbnail", "default", nil)
-	m3 := randomTask("reindex", "default", nil)
-	m4 := randomTask("sync", "default", nil)
+	m1 := h.NewTaskMessage("send_email", nil)
+	m2 := h.NewTaskMessage("gen_thumbnail", nil)
+	m3 := h.NewTaskMessage("reindex", nil)
+	m4 := h.NewTaskMessage("sync", nil)
 
 	t1 := &Task{Type: m1.Type, Payload: m1.Payload}
 	t2 := &Task{Type: m2.Type, Payload: m2.Payload}
@@ -26,19 +27,19 @@ func TestProcessorSuccess(t *testing.T) {
 	t4 := &Task{Type: m4.Type, Payload: m4.Payload}
 
 	tests := []struct {
-		initQueue     []*base.TaskMessage // initial default queue state
+		enqueued      []*base.TaskMessage // initial default queue state
 		incoming      []*base.TaskMessage // tasks to be enqueued during run
 		wait          time.Duration       // wait duration between starting and stopping processor for this test case
 		wantProcessed []*Task             // tasks to be processed at the end
 	}{
 		{
-			initQueue:     []*base.TaskMessage{m1},
+			enqueued:      []*base.TaskMessage{m1},
 			incoming:      []*base.TaskMessage{m2, m3, m4},
 			wait:          time.Second,
 			wantProcessed: []*Task{t1, t2, t3, t4},
 		},
 		{
-			initQueue:     []*base.TaskMessage{},
+			enqueued:      []*base.TaskMessage{},
 			incoming:      []*base.TaskMessage{m1},
 			wait:          time.Second,
 			wantProcessed: []*Task{t1},
@@ -46,32 +47,22 @@ func TestProcessorSuccess(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
+		h.FlushDB(t, r)                       // clean up db before each test case.
+		h.SeedDefaultQueue(t, r, tc.enqueued) // initialize default queue.
+
 		// instantiate a new processor
 		var mu sync.Mutex
 		var processed []*Task
-		var h HandlerFunc
-		h = func(task *Task) error {
+		handler := func(task *Task) error {
 			mu.Lock()
 			defer mu.Unlock()
 			processed = append(processed, task)
 			return nil
 		}
-		p := newProcessor(rdbClient, 10, h)
+		p := newProcessor(rdbClient, 10, HandlerFunc(handler))
 		p.dequeueTimeout = time.Second // short time out for test purpose
-		// initialize default queue.
-		for _, msg := range tc.initQueue {
-			err := rdbClient.Enqueue(msg)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
 
 		p.start()
-
 		for _, msg := range tc.incoming {
 			err := rdbClient.Enqueue(msg)
 			if err != nil {
@@ -96,11 +87,11 @@ func TestProcessorRetry(t *testing.T) {
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
 
-	m1 := randomTask("send_email", "default", nil)
+	m1 := h.NewTaskMessage("send_email", nil)
 	m1.Retried = m1.Retry // m1 has reached its max retry count
-	m2 := randomTask("gen_thumbnail", "default", nil)
-	m3 := randomTask("reindex", "default", nil)
-	m4 := randomTask("sync", "default", nil)
+	m2 := h.NewTaskMessage("gen_thumbnail", nil)
+	m3 := h.NewTaskMessage("reindex", nil)
+	m4 := h.NewTaskMessage("sync", nil)
 
 	errMsg := "something went wrong"
 	// r* is m* after retry
@@ -117,14 +108,14 @@ func TestProcessorRetry(t *testing.T) {
 	r4.Retried = m4.Retried + 1
 
 	tests := []struct {
-		initQueue []*base.TaskMessage // initial default queue state
+		enqueued  []*base.TaskMessage // initial default queue state
 		incoming  []*base.TaskMessage // tasks to be enqueued during run
 		wait      time.Duration       // wait duration between starting and stopping processor for this test case
 		wantRetry []*base.TaskMessage // tasks in retry queue at the end
 		wantDead  []*base.TaskMessage // tasks in dead queue at the end
 	}{
 		{
-			initQueue: []*base.TaskMessage{m1, m2},
+			enqueued:  []*base.TaskMessage{m1, m2},
 			incoming:  []*base.TaskMessage{m3, m4},
 			wait:      time.Second,
 			wantRetry: []*base.TaskMessage{&r2, &r3, &r4},
@@ -133,24 +124,15 @@ func TestProcessorRetry(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
+		h.FlushDB(t, r)                       // clean up db before each test case.
+		h.SeedDefaultQueue(t, r, tc.enqueued) // initialize default queue.
+
 		// instantiate a new processor
-		var h HandlerFunc
-		h = func(task *Task) error {
+		handler := func(task *Task) error {
 			return fmt.Errorf(errMsg)
 		}
-		p := newProcessor(rdbClient, 10, h)
+		p := newProcessor(rdbClient, 10, HandlerFunc(handler))
 		p.dequeueTimeout = time.Second // short time out for test purpose
-		// initialize default queue.
-		for _, msg := range tc.initQueue {
-			err := rdbClient.Enqueue(msg)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
 
 		p.start()
 		for _, msg := range tc.incoming {
@@ -163,15 +145,13 @@ func TestProcessorRetry(t *testing.T) {
 		time.Sleep(tc.wait)
 		p.terminate()
 
-		gotRetryRaw := r.ZRange(base.RetryQueue, 0, -1).Val()
-		gotRetry := mustUnmarshalSlice(t, gotRetryRaw)
-		if diff := cmp.Diff(tc.wantRetry, gotRetry, sortMsgOpt); diff != "" {
+		gotRetry := h.GetRetryMessages(t, r)
+		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 
-		gotDeadRaw := r.ZRange(base.DeadQueue, 0, -1).Val()
-		gotDead := mustUnmarshalSlice(t, gotDeadRaw)
-		if diff := cmp.Diff(tc.wantDead, gotDead, sortMsgOpt); diff != "" {
+		gotDead := h.GetDeadMessages(t, r)
+		if diff := cmp.Diff(tc.wantDead, gotDead, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.DeadQueue, diff)
 		}
 

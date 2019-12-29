@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 )
@@ -21,7 +22,7 @@ func TestClient(t *testing.T) {
 		processAt     time.Time
 		opts          []Option
 		wantEnqueued  []*base.TaskMessage
-		wantScheduled []sortedSetEntry
+		wantScheduled []h.ZSetEntry
 	}{
 		{
 			desc:      "Process task immediately",
@@ -44,15 +45,15 @@ func TestClient(t *testing.T) {
 			processAt:    time.Now().Add(2 * time.Hour),
 			opts:         []Option{},
 			wantEnqueued: nil, // db is flushed in setup so list does not exist hence nil
-			wantScheduled: []sortedSetEntry{
+			wantScheduled: []h.ZSetEntry{
 				{
-					msg: &base.TaskMessage{
+					Msg: &base.TaskMessage{
 						Type:    task.Type,
 						Payload: task.Payload,
 						Retry:   defaultMaxRetry,
 						Queue:   "default",
 					},
-					score: time.Now().Add(2 * time.Hour).Unix(),
+					Score: time.Now().Add(2 * time.Hour).Unix(),
 				},
 			},
 		},
@@ -111,10 +112,7 @@ func TestClient(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// clean up db before each test case.
-		if err := r.FlushDB().Err(); err != nil {
-			t.Fatal(err)
-		}
+		h.FlushDB(t, r) // clean up db before each test case.
 
 		err := client.Process(tc.task, tc.processAt, tc.opts...)
 		if err != nil {
@@ -122,23 +120,13 @@ func TestClient(t *testing.T) {
 			continue
 		}
 
-		gotEnqueuedRaw := r.LRange(base.DefaultQueue, 0, -1).Val()
-		gotEnqueued := mustUnmarshalSlice(t, gotEnqueuedRaw)
-		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, ignoreIDOpt); diff != "" {
+		gotEnqueued := h.GetEnqueuedMessages(t, r)
+		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, h.IgnoreIDOpt); diff != "" {
 			t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.DefaultQueue, diff)
 		}
 
-		gotScheduledRaw := r.ZRangeWithScores(base.ScheduledQueue, 0, -1).Val()
-		var gotScheduled []sortedSetEntry
-		for _, z := range gotScheduledRaw {
-			gotScheduled = append(gotScheduled, sortedSetEntry{
-				msg:   mustUnmarshal(t, z.Member.(string)),
-				score: int64(z.Score),
-			})
-		}
-
-		cmpOpt := cmp.AllowUnexported(sortedSetEntry{})
-		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, cmpOpt, ignoreIDOpt); diff != "" {
+		gotScheduled := h.GetScheduledEntries(t, r)
+		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, h.IgnoreIDOpt); diff != "" {
 			t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledQueue, diff)
 		}
 	}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/rs/xid"
 )
@@ -35,6 +36,9 @@ var SortZSetEntryOpt = cmp.Transformer("SortZSetEntries", func(in []ZSetEntry) [
 	})
 	return out
 })
+
+// IgnoreIDOpt is an cmp.Option to ignore ID field in task messages when comparing.
+var IgnoreIDOpt = cmpopts.IgnoreFields(base.TaskMessage{}, "ID")
 
 // NewTaskMessage returns a new instance of TaskMessage given a task type and payload.
 func NewTaskMessage(taskType string, payload map[string]interface{}) *base.TaskMessage {
