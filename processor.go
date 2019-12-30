@@ -3,8 +3,6 @@ package asynq
 import (
 	"fmt"
 	"log"
-	"math"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -16,6 +14,8 @@ type processor struct {
 	rdb *rdb.RDB
 
 	handler Handler
+
+	retryDelayFunc retryDelayFunc
 
 	// timeout for blocking dequeue operation.
 	// dequeue needs to timeout to avoid blocking forever
@@ -38,15 +38,18 @@ type processor struct {
 	quit chan struct{}
 }
 
-func newProcessor(r *rdb.RDB, numWorkers int, handler Handler) *processor {
+type retryDelayFunc func(n int, err error, task *Task) time.Duration
+
+func newProcessor(r *rdb.RDB, n int, fn retryDelayFunc) *processor {
 	return &processor{
 		rdb:            r,
-		handler:        handler,
+		retryDelayFunc: fn,
 		dequeueTimeout: 2 * time.Second,
-		sema:           make(chan struct{}, numWorkers),
+		sema:           make(chan struct{}, n),
 		done:           make(chan struct{}),
 		abort:          make(chan struct{}),
 		quit:           make(chan struct{}),
+		handler:        HandlerFunc(func(t *Task) error { return fmt.Errorf("handler not set") }),
 	}
 }
 
@@ -136,9 +139,9 @@ func (p *processor) exec() {
 				// 3) Kill  -> Removes the message from InProgress & Adds the message to Dead
 				if resErr != nil {
 					if msg.Retried >= msg.Retry {
-						p.kill(msg, resErr.Error())
+						p.kill(msg, resErr)
 					} else {
-						p.retry(msg, resErr.Error())
+						p.retry(msg, resErr)
 					}
 					return
 				}
@@ -174,17 +177,18 @@ func (p *processor) markAsDone(msg *base.TaskMessage) {
 	}
 }
 
-func (p *processor) retry(msg *base.TaskMessage, errMsg string) {
-	retryAt := time.Now().Add(delaySeconds(msg.Retried))
-	err := p.rdb.Retry(msg, retryAt, errMsg)
+func (p *processor) retry(msg *base.TaskMessage, e error) {
+	d := p.retryDelayFunc(msg.Retried, e, &Task{Type: msg.Type, Payload: msg.Payload})
+	retryAt := time.Now().Add(d)
+	err := p.rdb.Retry(msg, retryAt, e.Error())
 	if err != nil {
 		log.Printf("[ERROR] Could not send task %+v to Retry queue: %v\n", msg, err)
 	}
 }
 
-func (p *processor) kill(msg *base.TaskMessage, errMsg string) {
+func (p *processor) kill(msg *base.TaskMessage, e error) {
 	log.Printf("[WARN] Retry exhausted for task(Type: %q, ID: %v)\n", msg.Type, msg.ID)
-	err := p.rdb.Kill(msg, errMsg)
+	err := p.rdb.Kill(msg, e.Error())
 	if err != nil {
 		log.Printf("[ERROR] Could not send task %+v to Dead queue: %v\n", msg, err)
 	}
@@ -200,12 +204,4 @@ func perform(h Handler, task *Task) (err error) {
 		}
 	}()
 	return h.ProcessTask(task)
-}
-
-// delaySeconds returns a number seconds to delay before retrying.
-// Formula taken from https://github.com/mperham/sidekiq.
-func delaySeconds(count int) time.Duration {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	s := int(math.Pow(float64(count), 4)) + 15 + (r.Intn(30) * (count + 1))
-	return time.Duration(s) * time.Second
 }
