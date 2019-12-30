@@ -3,6 +3,8 @@ package asynq
 import (
 	"fmt"
 	"log"
+	"math"
+	"math/rand"
 	"os"
 	"os/signal"
 	"sync"
@@ -43,7 +45,21 @@ type Config struct {
 	// TODO(hibiken): Add ShutdownTimeout
 	// ShutdownTimeout time.Duration
 
-	// TODO(hibiken): Add RetryDelayFunc
+	// Function to calculate retry delay for a failed task.
+	//
+	// By default, it uses exponential backoff algorithm to calculate the delay.
+	//
+	// n is the number of times the task has been retried.
+	// e is the error returned by the task handler.
+	// t is the task in question. t is read-only, the function should not mutate t.
+	RetryDelayFunc func(n int, e error, t *Task) time.Duration
+}
+
+// Formula taken from https://github.com/mperham/sidekiq.
+func defaultDelayFunc(n int, e error, t *Task) time.Duration {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	s := int(math.Pow(float64(n), 4)) + 15 + (r.Intn(30) * (n + 1))
+	return time.Duration(s) * time.Second
 }
 
 // NewBackground returns a new Background instance given a redis client
@@ -53,9 +69,13 @@ func NewBackground(r *redis.Client, cfg *Config) *Background {
 	if n < 1 {
 		n = 1
 	}
+	delayFunc := cfg.RetryDelayFunc
+	if delayFunc == nil {
+		delayFunc = defaultDelayFunc
+	}
 	rdb := rdb.NewRDB(r)
 	scheduler := newScheduler(rdb, 5*time.Second)
-	processor := newProcessor(rdb, n, nil)
+	processor := newProcessor(rdb, n, delayFunc)
 	return &Background{
 		rdb:       rdb,
 		scheduler: scheduler,
@@ -70,6 +90,9 @@ func NewBackground(r *redis.Client, cfg *Config) *Background {
 //
 // If ProcessTask return a non-nil error or panics, the task
 // will be retried after delay.
+//
+// Note: The argument task is ready only, ProcessTask should
+// not mutate the task.
 type Handler interface {
 	ProcessTask(*Task) error
 }

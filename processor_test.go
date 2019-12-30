@@ -59,7 +59,8 @@ func TestProcessorSuccess(t *testing.T) {
 			processed = append(processed, task)
 			return nil
 		}
-		p := newProcessor(rdbClient, 10, HandlerFunc(handler))
+		p := newProcessor(rdbClient, 10, defaultDelayFunc)
+		p.handler = HandlerFunc(handler)
 		p.dequeueTimeout = time.Second // short time out for test purpose
 
 		p.start()
@@ -107,19 +108,27 @@ func TestProcessorRetry(t *testing.T) {
 	r4.ErrorMsg = errMsg
 	r4.Retried = m4.Retried + 1
 
+	now := time.Now()
+
 	tests := []struct {
 		enqueued  []*base.TaskMessage // initial default queue state
 		incoming  []*base.TaskMessage // tasks to be enqueued during run
+		delay     time.Duration       // retry delay duration
 		wait      time.Duration       // wait duration between starting and stopping processor for this test case
-		wantRetry []*base.TaskMessage // tasks in retry queue at the end
+		wantRetry []h.ZSetEntry       // tasks in retry queue at the end
 		wantDead  []*base.TaskMessage // tasks in dead queue at the end
 	}{
 		{
-			enqueued:  []*base.TaskMessage{m1, m2},
-			incoming:  []*base.TaskMessage{m3, m4},
-			wait:      time.Second,
-			wantRetry: []*base.TaskMessage{&r2, &r3, &r4},
-			wantDead:  []*base.TaskMessage{&r1},
+			enqueued: []*base.TaskMessage{m1, m2},
+			incoming: []*base.TaskMessage{m3, m4},
+			delay:    time.Minute,
+			wait:     time.Second,
+			wantRetry: []h.ZSetEntry{
+				{Msg: &r2, Score: now.Add(time.Minute).Unix()},
+				{Msg: &r3, Score: now.Add(time.Minute).Unix()},
+				{Msg: &r4, Score: now.Add(time.Minute).Unix()},
+			},
+			wantDead: []*base.TaskMessage{&r1},
 		},
 	}
 
@@ -128,10 +137,14 @@ func TestProcessorRetry(t *testing.T) {
 		h.SeedDefaultQueue(t, r, tc.enqueued) // initialize default queue.
 
 		// instantiate a new processor
+		delayFunc := func(n int, e error, t *Task) time.Duration {
+			return tc.delay
+		}
 		handler := func(task *Task) error {
 			return fmt.Errorf(errMsg)
 		}
-		p := newProcessor(rdbClient, 10, HandlerFunc(handler))
+		p := newProcessor(rdbClient, 10, delayFunc)
+		p.handler = HandlerFunc(handler)
 		p.dequeueTimeout = time.Second // short time out for test purpose
 
 		p.start()
@@ -145,8 +158,8 @@ func TestProcessorRetry(t *testing.T) {
 		time.Sleep(tc.wait)
 		p.terminate()
 
-		gotRetry := h.GetRetryMessages(t, r)
-		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortMsgOpt); diff != "" {
+		gotRetry := h.GetRetryEntries(t, r)
+		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortZSetEntryOpt); diff != "" {
 			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 
