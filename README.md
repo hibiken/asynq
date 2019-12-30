@@ -90,7 +90,9 @@ func main() {
     r := redis.NewClient(&redis.Options{
         Addr: "localhost:6379",
     }
-    bg := asynq.NewBackground(r, 10)
+    bg := asynq.NewBackground(r, &asynq.Config{
+        Concurrency: 20,
+    })
 
     // Blocks until signal TERM or INT is received.
     // For graceful shutdown, send signal TSTP to stop processing more tasks
@@ -136,7 +138,9 @@ func main() {
     r := redis.NewClient(&redis.Options{
         Addr: "localhost:6379",
     }
-    bg := asynq.NewBackground(r, 10)
+    bg := asynq.NewBackground(r, &asynq.Config{
+        Concurrency: 20,
+    })
 
     // Use asynq.HandlerFunc adapter for a handler function
     bg.Run(asynq.HandlerFunc(handler))

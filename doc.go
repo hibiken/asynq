@@ -3,9 +3,7 @@ Package asynq provides a framework for background task processing.
 
 The Client is used to register a task to be processed at the specified time.
 
-	client := asynq.NewClient(&asynq.RedisConfig{
-	    Addr: "localhost:6379",
-	})
+	client := asynq.NewClient(redis)
 
 	t := &asynq.Task{
 	    Type:    "send_email",
@@ -16,8 +14,8 @@ The Client is used to register a task to be processed at the specified time.
 
 The Background is used to run the background processing with a given
 handler with the specified number of workers.
-    bg := asynq.NewBackground(20, &asynq.RedisConfig{
-        Addr: "localhost:6379",
+    bg := asynq.NewBackground(redis, &asynq.Config{
+        Concurrency: 20,
     })
 
     bg.Run(handler)

@@ -33,12 +33,29 @@ type Background struct {
 	processor *processor
 }
 
-// NewBackground returns a new Background with the specified number of workers
-// given a redis configuration .
-func NewBackground(r *redis.Client, numWorkers int) *Background {
+// Config specifies the background-task processing behavior.
+type Config struct {
+	// Max number of concurrent workers to process tasks.
+	//
+	// If set to zero or negative value, NewBackground will overwrite the value to one.
+	Concurrency int
+
+	// TODO(hibiken): Add ShutdownTimeout
+	// ShutdownTimeout time.Duration
+
+	// TODO(hibiken): Add RetryDelayFunc
+}
+
+// NewBackground returns a new Background instance given a redis client
+// and background processing configuration.
+func NewBackground(r *redis.Client, cfg *Config) *Background {
+	n := cfg.Concurrency
+	if n < 1 {
+		n = 1
+	}
 	rdb := rdb.NewRDB(r)
 	scheduler := newScheduler(rdb, 5*time.Second)
-	processor := newProcessor(rdb, numWorkers, nil)
+	processor := newProcessor(rdb, n, nil)
 	return &Background{
 		rdb:       rdb,
 		scheduler: scheduler,

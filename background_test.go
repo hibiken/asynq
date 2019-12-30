@@ -18,7 +18,9 @@ func TestBackground(t *testing.T) {
 		DB:   15,
 	})
 	client := NewClient(r)
-	bg := NewBackground(r, 10)
+	bg := NewBackground(r, &Config{
+		Concurrency: 10,
+	})
 
 	// no-op handler
 	h := func(task *Task) error {
