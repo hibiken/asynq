@@ -70,7 +70,7 @@ func (p *processor) stop() {
 func (p *processor) terminate() {
 	p.stop()
 
-	// TODO(hibiken): Allow user to customize this timeout value.
+	// IDEA: Allow user to customize this timeout value.
 	const timeout = 8 * time.Second
 	time.AfterFunc(timeout, func() { close(p.quit) })
 	log.Println("[INFO] Waiting for all workers to finish...")

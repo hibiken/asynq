@@ -37,13 +37,10 @@ type Background struct {
 
 // Config specifies the background-task processing behavior.
 type Config struct {
-	// Max number of concurrent workers to process tasks.
+	// Maximum number of concurrent workers to process tasks.
 	//
 	// If set to zero or negative value, NewBackground will overwrite the value to one.
 	Concurrency int
-
-	// TODO(hibiken): Add ShutdownTimeout
-	// ShutdownTimeout time.Duration
 
 	// Function to calculate retry delay for a failed task.
 	//
