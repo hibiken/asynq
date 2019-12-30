@@ -25,7 +25,7 @@ func NewClient(r *redis.Client) *Client {
 	return &Client{rdb}
 }
 
-// Option configures the behavior of task processing.
+// Option specifies the processing behavior for the associated task.
 type Option interface{}
 
 // max number of times a task will be retried.
