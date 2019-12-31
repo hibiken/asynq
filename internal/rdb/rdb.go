@@ -74,8 +74,8 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 	}
 	// Note: LREM count ZERO means "remove all elements equal to val"
 	// Note: Script will try removing the message by exact match first,
-	// if the task is muated and exact match is not found, it'll fallback
-	// to linear scan of the list and find a match with ID.
+	// if the task is mutated and exact match is not found, it'll fallback
+	// to finding a match with ID.
 	// KEYS[1] -> asynq:in_progress
 	// KEYS[2] -> asynq:processed:<yyyy-mm-dd>
 	// ARGV[1] -> base.TaskMessage value
@@ -154,8 +154,8 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) e
 		return err
 	}
 	// Note: Script will try removing the message by exact match first,
-	// if the task is muated and exact match is not found, it'll fallback
-	// to linear scan of the list and find a match with ID.
+	// if the task is mutated and exact match is not found, it'll fallback
+	// to finding a match with ID.
 	// KEYS[1] -> asynq:in_progress
 	// KEYS[2] -> asynq:retry
 	// KEYS[3] -> asynq:processed:<yyyy-mm-dd>
@@ -222,8 +222,8 @@ func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 	failureKey := base.FailureKey(now)
 	expireAt := now.Add(statsTTL)
 	// Note: Script will try removing the message by exact match first,
-	// if the task is muated and exact match is not found, it'll fallback
-	// to linear scan of the list and find a match with ID.
+	// if the task is mutated and exact match is not found, it'll fallback
+	// to finding a match with ID.
 	// KEYS[1] -> asynq:in_progress
 	// KEYS[2] -> asynq:dead
 	// KEYS[3] -> asynq:processed:<yyyy-mm-dd>
