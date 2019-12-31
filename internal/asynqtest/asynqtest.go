@@ -53,169 +53,169 @@ func NewTaskMessage(taskType string, payload map[string]interface{}) *base.TaskM
 
 // MustMarshal marshals given task message and returns a json string.
 // Calling test will fail if marshaling errors out.
-func MustMarshal(t *testing.T, msg *base.TaskMessage) string {
-	t.Helper()
+func MustMarshal(tb testing.TB, msg *base.TaskMessage) string {
+	tb.Helper()
 	data, err := json.Marshal(msg)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	return string(data)
 }
 
 // MustUnmarshal unmarshals given string into task message struct.
 // Calling test will fail if unmarshaling errors out.
-func MustUnmarshal(t *testing.T, data string) *base.TaskMessage {
-	t.Helper()
+func MustUnmarshal(tb testing.TB, data string) *base.TaskMessage {
+	tb.Helper()
 	var msg base.TaskMessage
 	err := json.Unmarshal([]byte(data), &msg)
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	return &msg
 }
 
 // MustMarshalSlice marshals a slice of task messages and return a slice of
 // json strings. Calling test will fail if marshaling errors out.
-func MustMarshalSlice(t *testing.T, msgs []*base.TaskMessage) []string {
-	t.Helper()
+func MustMarshalSlice(tb testing.TB, msgs []*base.TaskMessage) []string {
+	tb.Helper()
 	var data []string
 	for _, m := range msgs {
-		data = append(data, MustMarshal(t, m))
+		data = append(data, MustMarshal(tb, m))
 	}
 	return data
 }
 
 // MustUnmarshalSlice unmarshals a slice of strings into a slice of task message structs.
 // Calling test will fail if marshaling errors out.
-func MustUnmarshalSlice(t *testing.T, data []string) []*base.TaskMessage {
-	t.Helper()
+func MustUnmarshalSlice(tb testing.TB, data []string) []*base.TaskMessage {
+	tb.Helper()
 	var msgs []*base.TaskMessage
 	for _, s := range data {
-		msgs = append(msgs, MustUnmarshal(t, s))
+		msgs = append(msgs, MustUnmarshal(tb, s))
 	}
 	return msgs
 }
 
 // FlushDB deletes all the keys of the currently selected DB.
-func FlushDB(t *testing.T, r *redis.Client) {
-	t.Helper()
+func FlushDB(tb testing.TB, r *redis.Client) {
+	tb.Helper()
 	if err := r.FlushDB().Err(); err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 }
 
 // SeedDefaultQueue initializes the default queue with the given messages.
-func SeedDefaultQueue(t *testing.T, r *redis.Client, msgs []*base.TaskMessage) {
-	t.Helper()
-	seedRedisList(t, r, base.DefaultQueue, msgs)
+func SeedDefaultQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage) {
+	tb.Helper()
+	seedRedisList(tb, r, base.DefaultQueue, msgs)
 }
 
 // SeedInProgressQueue initializes the in-progress queue with the given messages.
-func SeedInProgressQueue(t *testing.T, r *redis.Client, msgs []*base.TaskMessage) {
-	t.Helper()
-	seedRedisList(t, r, base.InProgressQueue, msgs)
+func SeedInProgressQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage) {
+	tb.Helper()
+	seedRedisList(tb, r, base.InProgressQueue, msgs)
 }
 
 // SeedScheduledQueue initializes the scheduled queue with the given messages.
-func SeedScheduledQueue(t *testing.T, r *redis.Client, entries []ZSetEntry) {
-	t.Helper()
-	seedRedisZSet(t, r, base.ScheduledQueue, entries)
+func SeedScheduledQueue(tb testing.TB, r *redis.Client, entries []ZSetEntry) {
+	tb.Helper()
+	seedRedisZSet(tb, r, base.ScheduledQueue, entries)
 }
 
 // SeedRetryQueue initializes the retry queue with the given messages.
-func SeedRetryQueue(t *testing.T, r *redis.Client, entries []ZSetEntry) {
-	t.Helper()
-	seedRedisZSet(t, r, base.RetryQueue, entries)
+func SeedRetryQueue(tb testing.TB, r *redis.Client, entries []ZSetEntry) {
+	tb.Helper()
+	seedRedisZSet(tb, r, base.RetryQueue, entries)
 }
 
 // SeedDeadQueue initializes the dead queue with the given messages.
-func SeedDeadQueue(t *testing.T, r *redis.Client, entries []ZSetEntry) {
-	t.Helper()
-	seedRedisZSet(t, r, base.DeadQueue, entries)
+func SeedDeadQueue(tb testing.TB, r *redis.Client, entries []ZSetEntry) {
+	tb.Helper()
+	seedRedisZSet(tb, r, base.DeadQueue, entries)
 }
 
-func seedRedisList(t *testing.T, c *redis.Client, key string, msgs []*base.TaskMessage) {
-	data := MustMarshalSlice(t, msgs)
+func seedRedisList(tb testing.TB, c *redis.Client, key string, msgs []*base.TaskMessage) {
+	data := MustMarshalSlice(tb, msgs)
 	for _, s := range data {
 		if err := c.LPush(key, s).Err(); err != nil {
-			t.Fatal(err)
+			tb.Fatal(err)
 		}
 	}
 }
 
-func seedRedisZSet(t *testing.T, c *redis.Client, key string, items []ZSetEntry) {
+func seedRedisZSet(tb testing.TB, c *redis.Client, key string, items []ZSetEntry) {
 	for _, item := range items {
-		z := &redis.Z{Member: MustMarshal(t, item.Msg), Score: float64(item.Score)}
+		z := &redis.Z{Member: MustMarshal(tb, item.Msg), Score: float64(item.Score)}
 		if err := c.ZAdd(key, z).Err(); err != nil {
-			t.Fatal(err)
+			tb.Fatal(err)
 		}
 	}
 }
 
 // GetEnqueuedMessages returns all task messages in the default queue.
-func GetEnqueuedMessages(t *testing.T, r *redis.Client) []*base.TaskMessage {
-	t.Helper()
-	return getListMessages(t, r, base.DefaultQueue)
+func GetEnqueuedMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
+	tb.Helper()
+	return getListMessages(tb, r, base.DefaultQueue)
 }
 
 // GetInProgressMessages returns all task messages in the in-progress queue.
-func GetInProgressMessages(t *testing.T, r *redis.Client) []*base.TaskMessage {
-	t.Helper()
-	return getListMessages(t, r, base.InProgressQueue)
+func GetInProgressMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
+	tb.Helper()
+	return getListMessages(tb, r, base.InProgressQueue)
 }
 
 // GetScheduledMessages returns all task messages in the scheduled queue.
-func GetScheduledMessages(t *testing.T, r *redis.Client) []*base.TaskMessage {
-	t.Helper()
-	return getZSetMessages(t, r, base.ScheduledQueue)
+func GetScheduledMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
+	tb.Helper()
+	return getZSetMessages(tb, r, base.ScheduledQueue)
 }
 
 // GetRetryMessages returns all task messages in the retry queue.
-func GetRetryMessages(t *testing.T, r *redis.Client) []*base.TaskMessage {
-	t.Helper()
-	return getZSetMessages(t, r, base.RetryQueue)
+func GetRetryMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
+	tb.Helper()
+	return getZSetMessages(tb, r, base.RetryQueue)
 }
 
 // GetDeadMessages returns all task messages in the dead queue.
-func GetDeadMessages(t *testing.T, r *redis.Client) []*base.TaskMessage {
-	t.Helper()
-	return getZSetMessages(t, r, base.DeadQueue)
+func GetDeadMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
+	tb.Helper()
+	return getZSetMessages(tb, r, base.DeadQueue)
 }
 
 // GetScheduledEntries returns all task messages and its score in the scheduled queue.
-func GetScheduledEntries(t *testing.T, r *redis.Client) []ZSetEntry {
-	t.Helper()
-	return getZSetEntries(t, r, base.ScheduledQueue)
+func GetScheduledEntries(tb testing.TB, r *redis.Client) []ZSetEntry {
+	tb.Helper()
+	return getZSetEntries(tb, r, base.ScheduledQueue)
 }
 
 // GetRetryEntries returns all task messages and its score in the retry queue.
-func GetRetryEntries(t *testing.T, r *redis.Client) []ZSetEntry {
-	t.Helper()
-	return getZSetEntries(t, r, base.RetryQueue)
+func GetRetryEntries(tb testing.TB, r *redis.Client) []ZSetEntry {
+	tb.Helper()
+	return getZSetEntries(tb, r, base.RetryQueue)
 }
 
 // GetDeadEntries returns all task messages and its score in the dead queue.
-func GetDeadEntries(t *testing.T, r *redis.Client) []ZSetEntry {
-	t.Helper()
-	return getZSetEntries(t, r, base.DeadQueue)
+func GetDeadEntries(tb testing.TB, r *redis.Client) []ZSetEntry {
+	tb.Helper()
+	return getZSetEntries(tb, r, base.DeadQueue)
 }
 
-func getListMessages(t *testing.T, r *redis.Client, list string) []*base.TaskMessage {
+func getListMessages(tb testing.TB, r *redis.Client, list string) []*base.TaskMessage {
 	data := r.LRange(list, 0, -1).Val()
-	return MustUnmarshalSlice(t, data)
+	return MustUnmarshalSlice(tb, data)
 }
 
-func getZSetMessages(t *testing.T, r *redis.Client, zset string) []*base.TaskMessage {
+func getZSetMessages(tb testing.TB, r *redis.Client, zset string) []*base.TaskMessage {
 	data := r.ZRange(zset, 0, -1).Val()
-	return MustUnmarshalSlice(t, data)
+	return MustUnmarshalSlice(tb, data)
 }
 
-func getZSetEntries(t *testing.T, r *redis.Client, zset string) []ZSetEntry {
+func getZSetEntries(tb testing.TB, r *redis.Client, zset string) []ZSetEntry {
 	data := r.ZRangeWithScores(zset, 0, -1).Val()
 	var entries []ZSetEntry
 	for _, z := range data {
 		entries = append(entries, ZSetEntry{
-			Msg:   MustUnmarshal(t, z.Member.(string)),
+			Msg:   MustUnmarshal(tb, z.Member.(string)),
 			Score: int64(z.Score),
 		})
 	}
