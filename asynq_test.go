@@ -12,14 +12,14 @@ import (
 // This file defines test helper functions used by
 // other test files.
 
-func setup(t *testing.T) *redis.Client {
-	t.Helper()
+func setup(tb testing.TB) *redis.Client {
+	tb.Helper()
 	r := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 		DB:   14,
 	})
 	// Start each test with a clean slate.
-	h.FlushDB(t, r)
+	h.FlushDB(tb, r)
 	return r
 }
 
