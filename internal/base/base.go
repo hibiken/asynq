@@ -11,13 +11,32 @@ import (
 const (
 	processedPrefix = "asynq:processed:"      // STRING - asynq:processed:<yyyy-mm-dd>
 	failurePrefix   = "asynq:failure:"        // STRING - asynq:failure:<yyyy-mm-dd>
-	QueuePrefix     = "asynq:queues:"         // LIST   - asynq:queues:<qname>
-	DefaultQueue    = QueuePrefix + "default" // LIST
+	queuePrefix     = "asynq:queues:"         // LIST   - asynq:queues:<qname>
+	DefaultQueue    = queuePrefix + "default" // LIST
 	ScheduledQueue  = "asynq:scheduled"       // ZSET
 	RetryQueue      = "asynq:retry"           // ZSET
 	DeadQueue       = "asynq:dead"            // ZSET
 	InProgressQueue = "asynq:in_progress"     // LIST
 )
+
+// Priority indicates importance of a task in comparison with others.
+type Priority int
+
+// Levels of priority in descending order.
+const (
+	PriorityHigh Priority = iota
+	PriorityDefault
+	PriorityLow
+)
+
+func (p Priority) String() string {
+	return [...]string{"high", "default", "low"}[p]
+}
+
+// QueueKey returns a redis key string for the given priority.
+func QueueKey(p Priority) string {
+	return queuePrefix + p.String()
+}
 
 // ProcessedKey returns a redis key string for procesed count
 // for the given day.

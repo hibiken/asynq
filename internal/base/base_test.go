@@ -5,6 +5,24 @@ import (
 	"time"
 )
 
+func TestQueueKey(t *testing.T) {
+	tests := []struct {
+		p    Priority
+		want string
+	}{
+		{PriorityHigh, "asynq:queues:high"},
+		{PriorityDefault, "asynq:queues:default"},
+		{PriorityLow, "asynq:queues:low"},
+	}
+
+	for _, tc := range tests {
+		got := QueueKey(tc.p)
+		if got != tc.want {
+			t.Errorf("QueueKey(%v) = %q, want %q", tc.p, got, tc.want)
+		}
+	}
+}
+
 func TestProcessedKey(t *testing.T) {
 	tests := []struct {
 		input time.Time
