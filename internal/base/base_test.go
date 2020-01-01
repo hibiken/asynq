@@ -10,9 +10,9 @@ func TestQueueKey(t *testing.T) {
 		p    Priority
 		want string
 	}{
-		{PriorityHigh, "asynq:queues:high"},
-		{PriorityDefault, "asynq:queues:default"},
-		{PriorityLow, "asynq:queues:low"},
+		{PriorityHigh, HighPriorityQueue},
+		{PriorityDefault, DefaultQueue},
+		{PriorityLow, LowPriorityQueue},
 	}
 
 	for _, tc := range tests {

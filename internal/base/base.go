@@ -9,14 +9,16 @@ import (
 
 // Redis keys
 const (
-	processedPrefix = "asynq:processed:"      // STRING - asynq:processed:<yyyy-mm-dd>
-	failurePrefix   = "asynq:failure:"        // STRING - asynq:failure:<yyyy-mm-dd>
-	queuePrefix     = "asynq:queues:"         // LIST   - asynq:queues:<qname>
-	DefaultQueue    = queuePrefix + "default" // LIST
-	ScheduledQueue  = "asynq:scheduled"       // ZSET
-	RetryQueue      = "asynq:retry"           // ZSET
-	DeadQueue       = "asynq:dead"            // ZSET
-	InProgressQueue = "asynq:in_progress"     // LIST
+	processedPrefix   = "asynq:processed:"      // STRING - asynq:processed:<yyyy-mm-dd>
+	failurePrefix     = "asynq:failure:"        // STRING - asynq:failure:<yyyy-mm-dd>
+	queuePrefix       = "asynq:queues:"         // LIST   - asynq:queues:<qname>
+	DefaultQueue      = queuePrefix + "default" // LIST
+	HighPriorityQueue = queuePrefix + "high"    // LIST
+	LowPriorityQueue  = queuePrefix + "low"     // LIST
+	ScheduledQueue    = "asynq:scheduled"       // ZSET
+	RetryQueue        = "asynq:retry"           // ZSET
+	DeadQueue         = "asynq:dead"            // ZSET
+	InProgressQueue   = "asynq:in_progress"     // LIST
 )
 
 // Priority indicates importance of a task in comparison with others.
