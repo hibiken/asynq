@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	// ErrDequeueTimeout indicates that the blocking dequeue operation timed out.
-	ErrDequeueTimeout = errors.New("blocking dequeue operation timed out")
+	// ErrNoProcessableTask indicates that the dequeue operation returns no task because all queues are empty.
+	ErrNoProcessableTask = errors.New("all queues are empty; no task to process")
 
 	// ErrTaskNotFound indicates that a task that matches the given identifier was not found.
 	ErrTaskNotFound = errors.New("could not find a task")
@@ -50,20 +50,35 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 // once a task is available, it adds the task to "in progress" queue
 // and returns the task. If there are no tasks for the entire timeout
 // duration, it returns ErrDequeueTimeout.
-func (r *RDB) Dequeue(timeout time.Duration) (*base.TaskMessage, error) {
-	data, err := r.client.BRPopLPush(base.DefaultQueue, base.InProgressQueue, timeout).Result()
+func (r *RDB) Dequeue(queues ...string) (*base.TaskMessage, error) {
+	data, err := r.dequeue(queues...)
 	if err == redis.Nil {
-		return nil, ErrDequeueTimeout
+		// all queues are empty // TODO(hibiken): Rename this sentinel error
+		return nil, ErrNoProcessableTask
 	}
 	if err != nil {
 		return nil, err
 	}
+
 	var msg base.TaskMessage
 	err = json.Unmarshal([]byte(data), &msg)
 	if err != nil {
 		return nil, err
 	}
 	return &msg, nil
+}
+
+func (r *RDB) dequeue(queues ...string) (data string, err error) {
+	for _, qname := range queues {
+		data, err = r.client.RPopLPush(qname, base.InProgressQueue).Result()
+		if err == nil {
+			return data, nil
+		}
+		if err != redis.Nil {
+			return "", err
+		}
+	}
+	return data, err
 }
 
 // Done removes the task from in-progress queue to mark the task as done.

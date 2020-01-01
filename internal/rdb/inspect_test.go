@@ -328,7 +328,7 @@ func TestListRetry(t *testing.T) {
 	m1 := &base.TaskMessage{
 		ID:       xid.New(),
 		Type:     "send_email",
-		Queue:    "default",
+		Priority: base.PriorityDefault,
 		Payload:  map[string]interface{}{"subject": "hello"},
 		ErrorMsg: "email server not responding",
 		Retry:    25,
@@ -337,7 +337,7 @@ func TestListRetry(t *testing.T) {
 	m2 := &base.TaskMessage{
 		ID:       xid.New(),
 		Type:     "reindex",
-		Queue:    "default",
+		Priority: base.PriorityDefault,
 		Payload:  nil,
 		ErrorMsg: "search engine not responding",
 		Retry:    25,
@@ -412,14 +412,14 @@ func TestListDead(t *testing.T) {
 	m1 := &base.TaskMessage{
 		ID:       xid.New(),
 		Type:     "send_email",
-		Queue:    "default",
+		Priority: base.PriorityDefault,
 		Payload:  map[string]interface{}{"subject": "hello"},
 		ErrorMsg: "email server not responding",
 	}
 	m2 := &base.TaskMessage{
 		ID:       xid.New(),
 		Type:     "reindex",
-		Queue:    "default",
+		Priority: base.PriorityDefault,
 		Payload:  nil,
 		ErrorMsg: "search engine not responding",
 	}

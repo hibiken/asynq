@@ -110,6 +110,18 @@ func SeedDefaultQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage) 
 	seedRedisList(tb, r, base.DefaultQueue, msgs)
 }
 
+// SeedHighPriorityQueue initializes the high-priority queue with the given messages.
+func SeedHighPriorityQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage) {
+	tb.Helper()
+	seedRedisList(tb, r, base.HighPriorityQueue, msgs)
+}
+
+// SeedLowPriorityQueue initializes the low-priority queue with the given messages.
+func SeedLowPriorityQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage) {
+	tb.Helper()
+	seedRedisList(tb, r, base.LowPriorityQueue, msgs)
+}
+
 // SeedInProgressQueue initializes the in-progress queue with the given messages.
 func SeedInProgressQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage) {
 	tb.Helper()
@@ -156,6 +168,18 @@ func seedRedisZSet(tb testing.TB, c *redis.Client, key string, items []ZSetEntry
 func GetEnqueuedMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
 	tb.Helper()
 	return getListMessages(tb, r, base.DefaultQueue)
+}
+
+// GetHighPriorityMessages returns all task messages in the high-priority queue.
+func GetHighPriorityMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
+	tb.Helper()
+	return getListMessages(tb, r, base.HighPriorityQueue)
+}
+
+// GetLowPriorityMessages returns all task messages in the low-priority queue.
+func GetLowPriorityMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
+	tb.Helper()
+	return getListMessages(tb, r, base.LowPriorityQueue)
 }
 
 // GetInProgressMessages returns all task messages in the in-progress queue.

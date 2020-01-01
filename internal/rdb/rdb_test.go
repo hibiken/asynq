@@ -55,35 +55,141 @@ func TestEnqueue(t *testing.T) {
 func TestDequeue(t *testing.T) {
 	r := setup(t)
 	t1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello!"})
+	t2 := h.NewTaskMessage("reindex", map[string]interface{}{})
+	t3 := h.NewTaskMessage("gen_thumbnail", map[string]interface{}{})
+	t4 := h.NewTaskMessage("send_notification", nil)
 	tests := []struct {
-		enqueued       []*base.TaskMessage
-		want           *base.TaskMessage
-		err            error
-		wantInProgress []*base.TaskMessage
+		desc            string
+		enqueuedHigh    []*base.TaskMessage
+		enqueuedDefault []*base.TaskMessage
+		enqueuedLow     []*base.TaskMessage
+		args            []string
+		want            *base.TaskMessage
+		err             error
+		wantHigh        []*base.TaskMessage
+		wantDefault     []*base.TaskMessage
+		wantLow         []*base.TaskMessage
+		wantInProgress  []*base.TaskMessage
 	}{
 		{
-			enqueued:       []*base.TaskMessage{t1},
-			want:           t1,
-			err:            nil,
-			wantInProgress: []*base.TaskMessage{t1},
+			desc:            "default only",
+			enqueuedHigh:    []*base.TaskMessage{},
+			enqueuedDefault: []*base.TaskMessage{t1, t2, t3, t4},
+			enqueuedLow:     []*base.TaskMessage{},
+			args:            []string{base.HighPriorityQueue, base.DefaultQueue, base.LowPriorityQueue},
+			want:            t1,
+			err:             nil,
+			wantHigh:        []*base.TaskMessage{},
+			wantDefault:     []*base.TaskMessage{t2, t3, t4},
+			wantLow:         []*base.TaskMessage{},
+			wantInProgress:  []*base.TaskMessage{t1},
 		},
 		{
-			enqueued:       []*base.TaskMessage{},
-			want:           nil,
-			err:            ErrDequeueTimeout,
-			wantInProgress: []*base.TaskMessage{},
+			desc:            "all queues empty",
+			enqueuedHigh:    []*base.TaskMessage{},
+			enqueuedDefault: []*base.TaskMessage{},
+			enqueuedLow:     []*base.TaskMessage{},
+			args:            []string{base.HighPriorityQueue, base.DefaultQueue, base.LowPriorityQueue},
+			want:            nil,
+			err:             ErrNoProcessableTask,
+			wantHigh:        []*base.TaskMessage{},
+			wantDefault:     []*base.TaskMessage{},
+			wantLow:         []*base.TaskMessage{},
+			wantInProgress:  []*base.TaskMessage{},
+		},
+		{
+			desc:            "all queues full",
+			enqueuedHigh:    []*base.TaskMessage{t2},
+			enqueuedDefault: []*base.TaskMessage{t1, t3},
+			enqueuedLow:     []*base.TaskMessage{t4},
+			args:            []string{base.HighPriorityQueue, base.DefaultQueue, base.LowPriorityQueue},
+			want:            t2,
+			err:             nil,
+			wantHigh:        []*base.TaskMessage{},
+			wantDefault:     []*base.TaskMessage{t1, t3},
+			wantLow:         []*base.TaskMessage{t4},
+			wantInProgress:  []*base.TaskMessage{t2},
+		},
+		{
+			desc:            "low queue only",
+			enqueuedHigh:    []*base.TaskMessage{},
+			enqueuedDefault: []*base.TaskMessage{},
+			enqueuedLow:     []*base.TaskMessage{t3, t4},
+			args:            []string{base.HighPriorityQueue, base.DefaultQueue, base.LowPriorityQueue},
+			want:            t3,
+			err:             nil,
+			wantHigh:        []*base.TaskMessage{},
+			wantDefault:     []*base.TaskMessage{},
+			wantLow:         []*base.TaskMessage{t4},
+			wantInProgress:  []*base.TaskMessage{t3},
+		},
+		{
+			desc:            "all queues full with reverse priority args",
+			enqueuedHigh:    []*base.TaskMessage{t2},
+			enqueuedDefault: []*base.TaskMessage{t1},
+			enqueuedLow:     []*base.TaskMessage{t3, t4},
+			args:            []string{base.LowPriorityQueue, base.DefaultQueue, base.HighPriorityQueue},
+			want:            t3,
+			err:             nil,
+			wantHigh:        []*base.TaskMessage{t2},
+			wantDefault:     []*base.TaskMessage{t1},
+			wantLow:         []*base.TaskMessage{t4},
+			wantInProgress:  []*base.TaskMessage{t3},
+		},
+		{
+			desc:            "all queues full with defaualt queue first in args",
+			enqueuedHigh:    []*base.TaskMessage{t2},
+			enqueuedDefault: []*base.TaskMessage{t1},
+			enqueuedLow:     []*base.TaskMessage{t3, t4},
+			args:            []string{base.DefaultQueue, base.LowPriorityQueue, base.HighPriorityQueue},
+			want:            t1,
+			err:             nil,
+			wantHigh:        []*base.TaskMessage{t2},
+			wantDefault:     []*base.TaskMessage{},
+			wantLow:         []*base.TaskMessage{t3, t4},
+			wantInProgress:  []*base.TaskMessage{t1},
+		},
+		{
+			desc:            "first queue in args empty",
+			enqueuedHigh:    []*base.TaskMessage{},
+			enqueuedDefault: []*base.TaskMessage{t1, t2, t3},
+			enqueuedLow:     []*base.TaskMessage{t4},
+			args:            []string{base.HighPriorityQueue, base.DefaultQueue, base.LowPriorityQueue},
+			want:            t1,
+			err:             nil,
+			wantHigh:        []*base.TaskMessage{},
+			wantDefault:     []*base.TaskMessage{t2, t3},
+			wantLow:         []*base.TaskMessage{t4},
+			wantInProgress:  []*base.TaskMessage{t1},
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedDefaultQueue(t, r.client, tc.enqueued)
+		h.SeedHighPriorityQueue(t, r.client, tc.enqueuedHigh)
+		h.SeedDefaultQueue(t, r.client, tc.enqueuedDefault)
+		h.SeedLowPriorityQueue(t, r.client, tc.enqueuedLow)
 
-		got, err := r.Dequeue(time.Second)
+		got, err := r.Dequeue(tc.args...)
 		if !cmp.Equal(got, tc.want) || err != tc.err {
-			t.Errorf("(*RDB).Dequeue(time.Second) = %v, %v; want %v, %v",
+			t.Errorf("(*RDB).Dequeue() = %v, %v; want %v, %v",
 				got, err, tc.want, tc.err)
 			continue
+		}
+
+		gotHigh := h.GetHighPriorityMessages(t, r.client)
+		if diff := cmp.Diff(tc.wantHigh, gotHigh, h.SortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.HighPriorityQueue, diff)
+		}
+
+		gotDefault := h.GetEnqueuedMessages(t, r.client)
+		if diff := cmp.Diff(tc.wantDefault, gotDefault, h.SortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.DefaultQueue, diff)
+		}
+
+		gotLow := h.GetLowPriorityMessages(t, r.client)
+		if diff := cmp.Diff(tc.wantLow, gotLow, h.SortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.LowPriorityQueue, diff)
 		}
 
 		gotInProgress := h.GetInProgressMessages(t, r.client)
@@ -296,7 +402,7 @@ func TestRetry(t *testing.T) {
 		ID:       t1.ID,
 		Type:     t1.Type,
 		Payload:  t1.Payload,
-		Queue:    t1.Queue,
+		Priority: t1.Priority,
 		Retry:    t1.Retry,
 		Retried:  t1.Retried + 1,
 		ErrorMsg: errMsg,
@@ -391,7 +497,7 @@ func TestRetryWithMutatedTask(t *testing.T) {
 		ID:       t1.ID,
 		Type:     t1.Type,
 		Payload:  t1.Payload,
-		Queue:    t1.Queue,
+		Priority: t1.Priority,
 		Retry:    t1.Retry,
 		Retried:  t1.Retried + 1,
 		ErrorMsg: errMsg,
@@ -488,7 +594,7 @@ func TestKill(t *testing.T) {
 		ID:       t1.ID,
 		Type:     t1.Type,
 		Payload:  t1.Payload,
-		Queue:    t1.Queue,
+		Priority: t1.Priority,
 		Retry:    t1.Retry,
 		Retried:  t1.Retried,
 		ErrorMsg: errMsg,
@@ -591,7 +697,7 @@ func TestKillWithMutatedTask(t *testing.T) {
 		ID:       t1.ID,
 		Type:     t1.Type,
 		Payload:  t1.Payload,
-		Queue:    t1.Queue,
+		Priority: t1.Priority,
 		Retry:    t1.Retry,
 		Retried:  t1.Retried,
 		ErrorMsg: errMsg,

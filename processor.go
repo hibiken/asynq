@@ -102,9 +102,10 @@ func (p *processor) start() {
 // exec pulls a task out of the queue and starts a worker goroutine to
 // process the task.
 func (p *processor) exec() {
-	msg, err := p.rdb.Dequeue(p.dequeueTimeout)
-	if err == rdb.ErrDequeueTimeout {
-		// timed out, this is a normal behavior.
+	// TODO(hibiken): sort the queues based on weight, but prevent starvation
+	msg, err := p.rdb.Dequeue(base.HighPriorityQueue, base.DefaultQueue, base.LowPriorityQueue)
+	if err == rdb.ErrNoProcessableTask {
+		// queues are empty, this is a normal behavior.
 		return
 	}
 	if err != nil {
