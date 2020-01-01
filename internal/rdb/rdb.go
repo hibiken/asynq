@@ -42,7 +42,7 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 	if err != nil {
 		return err
 	}
-	qname := base.QueuePrefix + msg.Queue
+	qname := base.QueueKey(msg.Priority)
 	return r.client.LPush(qname, string(bytes)).Err()
 }
 

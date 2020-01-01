@@ -62,8 +62,8 @@ type TaskMessage struct {
 	// ID is a unique identifier for each task.
 	ID xid.ID
 
-	// Queue is a name this message should be enqueued to.
-	Queue string
+	// Priority is the priority of this task.
+	Priority Priority
 
 	// Retry is the max number of retry for this task.
 	Retry int

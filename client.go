@@ -76,11 +76,11 @@ const (
 func (c *Client) Process(task *Task, processAt time.Time, opts ...Option) error {
 	opt := composeOptions(opts...)
 	msg := &base.TaskMessage{
-		ID:      xid.New(),
-		Type:    task.Type,
-		Payload: task.Payload,
-		Queue:   "default",
-		Retry:   opt.retry,
+		ID:       xid.New(),
+		Type:     task.Type,
+		Payload:  task.Payload,
+		Priority: base.PriorityDefault,
+		Retry:    opt.retry,
 	}
 	return c.enqueue(msg, processAt)
 }

@@ -30,10 +30,10 @@ func TestClient(t *testing.T) {
 			opts:      []Option{},
 			wantEnqueued: []*base.TaskMessage{
 				&base.TaskMessage{
-					Type:    task.Type,
-					Payload: task.Payload,
-					Retry:   defaultMaxRetry,
-					Queue:   "default",
+					Type:     task.Type,
+					Payload:  task.Payload,
+					Retry:    defaultMaxRetry,
+					Priority: base.PriorityDefault,
 				},
 			},
 			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
@@ -47,10 +47,10 @@ func TestClient(t *testing.T) {
 			wantScheduled: []h.ZSetEntry{
 				{
 					Msg: &base.TaskMessage{
-						Type:    task.Type,
-						Payload: task.Payload,
-						Retry:   defaultMaxRetry,
-						Queue:   "default",
+						Type:     task.Type,
+						Payload:  task.Payload,
+						Retry:    defaultMaxRetry,
+						Priority: base.PriorityDefault,
 					},
 					Score: time.Now().Add(2 * time.Hour).Unix(),
 				},
@@ -65,10 +65,10 @@ func TestClient(t *testing.T) {
 			},
 			wantEnqueued: []*base.TaskMessage{
 				&base.TaskMessage{
-					Type:    task.Type,
-					Payload: task.Payload,
-					Retry:   3,
-					Queue:   "default",
+					Type:     task.Type,
+					Payload:  task.Payload,
+					Retry:    3,
+					Priority: base.PriorityDefault,
 				},
 			},
 			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
@@ -82,10 +82,10 @@ func TestClient(t *testing.T) {
 			},
 			wantEnqueued: []*base.TaskMessage{
 				&base.TaskMessage{
-					Type:    task.Type,
-					Payload: task.Payload,
-					Retry:   0, // Retry count should be set to zero
-					Queue:   "default",
+					Type:     task.Type,
+					Payload:  task.Payload,
+					Retry:    0, // Retry count should be set to zero
+					Priority: base.PriorityDefault,
 				},
 			},
 			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
@@ -100,10 +100,10 @@ func TestClient(t *testing.T) {
 			},
 			wantEnqueued: []*base.TaskMessage{
 				&base.TaskMessage{
-					Type:    task.Type,
-					Payload: task.Payload,
-					Retry:   10, // Last option takes precedence
-					Queue:   "default",
+					Type:     task.Type,
+					Payload:  task.Payload,
+					Retry:    10, // Last option takes precedence
+					Priority: base.PriorityDefault,
 				},
 			},
 			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil

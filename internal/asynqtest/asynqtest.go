@@ -43,11 +43,11 @@ var IgnoreIDOpt = cmpopts.IgnoreFields(base.TaskMessage{}, "ID")
 // NewTaskMessage returns a new instance of TaskMessage given a task type and payload.
 func NewTaskMessage(taskType string, payload map[string]interface{}) *base.TaskMessage {
 	return &base.TaskMessage{
-		ID:      xid.New(),
-		Type:    taskType,
-		Queue:   "default",
-		Retry:   25,
-		Payload: payload,
+		ID:       xid.New(),
+		Type:     taskType,
+		Priority: base.PriorityDefault,
+		Retry:    25,
+		Payload:  payload,
 	}
 }
 
