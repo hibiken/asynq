@@ -2,6 +2,7 @@ package asynq
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -61,7 +62,6 @@ func TestProcessorSuccess(t *testing.T) {
 		}
 		p := newProcessor(rdbClient, 10, defaultDelayFunc)
 		p.handler = HandlerFunc(handler)
-		p.dequeueTimeout = time.Second // short time out for test purpose
 
 		p.start()
 		for _, msg := range tc.incoming {
@@ -145,7 +145,6 @@ func TestProcessorRetry(t *testing.T) {
 		}
 		p := newProcessor(rdbClient, 10, delayFunc)
 		p.handler = HandlerFunc(handler)
-		p.dequeueTimeout = time.Second // short time out for test purpose
 
 		p.start()
 		for _, msg := range tc.incoming {
@@ -217,5 +216,26 @@ func TestPerform(t *testing.T) {
 			t.Errorf("%s: perform() = nil, want non-nil error", tc.desc)
 			continue
 		}
+	}
+}
+
+func TestWeightedQueues(t *testing.T) {
+	want := []string{base.HighPriorityQueue, base.DefaultQueue, base.LowPriorityQueue}
+
+	got := weightedQueues()
+
+	sortOpt := cmp.Transformer("SortString", func(in []string) []string {
+		out := append([]string(nil), in...) // Copy input to avoid mutating it
+		sort.Strings(out)
+		return out
+	})
+	if diff := cmp.Diff(want, got, sortOpt); diff != "" {
+		t.Errorf("weightedQueues = %v, want %v; (-want,+got):\n%s", got, want, diff)
+	}
+}
+
+func BenchmarkWeightedQueues(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		weightedQueues()
 	}
 }
