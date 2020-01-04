@@ -117,7 +117,7 @@ func TestClient(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r) // clean up db before each test case.
 
-		err := client.Process(tc.task, tc.processAt, tc.opts...)
+		err := client.Schedule(tc.task, tc.processAt, tc.opts...)
 		if err != nil {
 			t.Error(err)
 			continue

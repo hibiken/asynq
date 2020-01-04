@@ -70,14 +70,14 @@ const (
 	defaultMaxRetry = 25
 )
 
-// Process registers a task to be processed at the specified time.
+// Schedule registers a task to be processed at the specified time.
 //
-// Process returns nil if the task is registered successfully,
+// Schedule returns nil if the task is registered successfully,
 // otherwise returns non-nil error.
 //
 // opts specifies the behavior of task processing. If there are conflicting
 // Option the last one overrides the ones before.
-func (c *Client) Process(task *Task, processAt time.Time, opts ...Option) error {
+func (c *Client) Schedule(task *Task, processAt time.Time, opts ...Option) error {
 	opt := composeOptions(opts...)
 	msg := &base.TaskMessage{
 		ID:      xid.New(),

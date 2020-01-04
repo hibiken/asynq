@@ -14,7 +14,7 @@ The Client is used to register a task to be processed at the specified time.
 	    Payload: map[string]interface{}{"user_id": 42},
 	}
 
-	err := client.Process(&t, time.Now().Add(time.Minute))
+	err := client.Schedule(&t, time.Now().Add(time.Minute))
 
 The Background is used to run the background task processing with a given
 handler.
