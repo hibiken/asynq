@@ -166,6 +166,55 @@ func TestCurrentStatsWithoutData(t *testing.T) {
 	}
 }
 
+func TestHistoricalStats(t *testing.T) {
+	r := setup(t)
+	now := time.Now().UTC()
+
+	tests := []struct {
+		n int // number of days
+	}{
+		{90},
+		{7},
+		{0},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+
+		// populate last n days data
+		for i := 0; i < tc.n; i++ {
+			ts := now.Add(-time.Duration(i) * 24 * time.Hour)
+			processedKey := base.ProcessedKey(ts)
+			failedKey := base.FailureKey(ts)
+			r.client.Set(processedKey, (i+1)*1000, 0)
+			r.client.Set(failedKey, (i+1)*10, 0)
+		}
+
+		got, err := r.HistoricalStats(tc.n)
+		if err != nil {
+			t.Errorf("RDB.HistoricalStats(%v) returned error: %v", tc.n, err)
+			continue
+		}
+
+		if len(got) != tc.n {
+			t.Errorf("RDB.HistorycalStats(%v) returned %d daily stats, want %d", tc.n, len(got), tc.n)
+			continue
+		}
+
+		for i := 0; i < tc.n; i++ {
+			want := &DailyStats{
+				Processed: (i + 1) * 1000,
+				Failed:    (i + 1) * 10,
+				Time:      now.Add(-time.Duration(i) * 24 * time.Hour),
+			}
+			if diff := cmp.Diff(want, got[i], timeCmpOpt); diff != "" {
+				t.Errorf("RDB.HistoricalStats %d days ago data; got %+v, want %+v; (-want,+got):\n%s", i, got[i], want, diff)
+			}
+		}
+	}
+
+}
+
 func TestRedisInfo(t *testing.T) {
 	r := setup(t)
 

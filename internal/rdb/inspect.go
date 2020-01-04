@@ -28,6 +28,13 @@ type Stats struct {
 	Timestamp  time.Time
 }
 
+// DailyStats holds aggregate data for a given day.
+type DailyStats struct {
+	Processed int
+	Failed    int
+	Time      time.Time
+}
+
 // EnqueuedTask is a task in a queue and is ready to be processed.
 type EnqueuedTask struct {
 	ID      xid.ID
@@ -129,6 +136,51 @@ func (r *RDB) CurrentStats() (*Stats, error) {
 		Failed:     nums[6],
 		Timestamp:  now,
 	}, nil
+}
+
+// HistoricalStats returns a list of stats from the last n days.
+func (r *RDB) HistoricalStats(n int) ([]*DailyStats, error) {
+	if n < 1 {
+		return []*DailyStats{}, nil
+	}
+	const day = 24 * time.Hour
+	now := time.Now().UTC()
+	var days []time.Time
+	var keys []string
+	for i := 0; i < n; i++ {
+		ts := now.Add(-time.Duration(i) * day)
+		days = append(days, ts)
+		keys = append(keys, base.ProcessedKey(ts))
+		keys = append(keys, base.FailureKey(ts))
+	}
+	script := redis.NewScript(`
+	local res = {}
+	for _, key in ipairs(KEYS) do
+	  local n = redis.call("GET", key)
+	  if not n then
+		n = 0
+	  end
+	  table.insert(res, tonumber(n))
+	end
+	return res
+	`)
+	res, err := script.Run(r.client, keys, len(keys)).Result()
+	if err != nil {
+		return nil, err
+	}
+	data, err := cast.ToIntSliceE(res)
+	if err != nil {
+		return nil, err
+	}
+	var stats []*DailyStats
+	for i := 0; i < len(data); i += 2 {
+		stats = append(stats, &DailyStats{
+			Processed: data[i],
+			Failed:    data[i+1],
+			Time:      days[i/2],
+		})
+	}
+	return stats, nil
 }
 
 // RedisInfo returns a map of redis info.
