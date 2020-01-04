@@ -58,28 +58,23 @@ func main() {
     }
     client := asynq.NewClient(r)
 
-    t1 := asynq.Task{
-        Type: "send_welcome_email",
-        Payload: map[string]interface{}{
-          "recipient_id": 1234,
-        },
-    }
+    // create a task with typename and payload.
+    t1 := asynq.NewTask(
+        "send_welcome_email",
+        map[string]interface{}{"user_id": 42})
 
-    t2 := asynq.Task{
-        Type: "send_reminder_email",
-        Payload: map[string]interface{}{
-          "recipient_id": 1234,
-        },
-    }
+    t2 := asynq.NewTask(
+        "send_reminder_email",
+        map[string]interface{}{"user_id": 42})
 
     // process the task immediately.
-    err := client.Schedule(&t1, time.Now())
+    err := client.Schedule(t1, time.Now())
 
     // process the task 24 hours later.
-    err = client.Schedule(&t2, time.Now().Add(24 * time.Hour))
+    err = client.Schedule(t2, time.Now().Add(24 * time.Hour))
 
     // specify the max number of retry (default: 25)
-    err = client.Schedule(&t1, time.Now(), asynq.MaxRetry(1))
+    err = client.Schedule(t1, time.Now(), asynq.MaxRetry(1))
 }
 ```
 
@@ -120,7 +115,7 @@ The simplest way to implement a handler is to define a function with the same si
 func handler(t *asynq.Task) error {
     switch t.Type {
     case "send_welcome_email":
-        id, err := t.Payload.GetInt("recipient_id")
+        id, err := t.Payload.GetInt("user_id")
         if err != nil {
             return err
         }

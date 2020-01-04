@@ -28,8 +28,8 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 		})
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
-			t := Task{Type: fmt.Sprintf("task%d", i), Payload: Payload{"data": i}}
-			client.Schedule(&t, time.Now())
+			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
+			client.Schedule(t, time.Now())
 		}
 
 		var wg sync.WaitGroup
@@ -65,12 +65,12 @@ func BenchmarkEndToEnd(b *testing.B) {
 		})
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
-			t := Task{Type: fmt.Sprintf("task%d", i), Payload: Payload{"data": i}}
-			client.Schedule(&t, time.Now())
+			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
+			client.Schedule(t, time.Now())
 		}
 		for i := 0; i < count; i++ {
-			t := Task{Type: fmt.Sprintf("scheduled%d", i), Payload: Payload{"data": i}}
-			client.Schedule(&t, time.Now().Add(time.Second))
+			t := NewTask(fmt.Sprintf("scheduled%d", i), map[string]interface{}{"data": i})
+			client.Schedule(t, time.Now().Add(time.Second))
 		}
 
 		var wg sync.WaitGroup

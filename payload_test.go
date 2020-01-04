@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	h "github.com/hibiken/asynq/internal/asynqtest"
+	"github.com/hibiken/asynq/internal/base"
 )
 
 func TestPayloadGet(t *testing.T) {
@@ -34,7 +36,7 @@ func TestPayloadGet(t *testing.T) {
 	now := time.Now()
 	duration := 15 * time.Minute
 
-	payload := Payload{
+	data := map[string]interface{}{
 		"greeting":  "Hello",
 		"user_id":   9876,
 		"pi":        3.1415,
@@ -49,6 +51,7 @@ func TestPayloadGet(t *testing.T) {
 		"timestamp": now,
 		"duration":  duration,
 	}
+	payload := Payload{data}
 
 	gotStr, err := payload.GetString("greeting")
 	if gotStr != "Hello" || err != nil {
@@ -151,7 +154,7 @@ func TestPayloadGetWithMarshaling(t *testing.T) {
 	now := time.Now()
 	duration := 15 * time.Minute
 
-	in := Payload{
+	in := Payload{map[string]interface{}{
 		"subject":      "Hello",
 		"recipient_id": 9876,
 		"pi":           3.14,
@@ -165,18 +168,19 @@ func TestPayloadGetWithMarshaling(t *testing.T) {
 		"features":     features,
 		"timestamp":    now,
 		"duration":     duration,
-	}
-
-	// encode and then decode
-	data, err := json.Marshal(in)
+	}}
+	// encode and then decode task messsage
+	inMsg := h.NewTaskMessage("testing", in.data)
+	data, err := json.Marshal(inMsg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var out Payload
-	err = json.Unmarshal(data, &out)
+	var outMsg base.TaskMessage
+	err = json.Unmarshal(data, &outMsg)
 	if err != nil {
 		t.Fatal(err)
 	}
+	out := Payload{outMsg.Payload}
 
 	gotStr, err := out.GetString("subject")
 	if gotStr != "Hello" || err != nil {
@@ -258,9 +262,9 @@ func TestPayloadGetWithMarshaling(t *testing.T) {
 }
 
 func TestPayloadHas(t *testing.T) {
-	payload := Payload{
+	payload := Payload{map[string]interface{}{
 		"user_id": 123,
-	}
+	}}
 
 	if !payload.Has("user_id") {
 		t.Errorf("Payload.Has(%q) = false, want true", "user_id")

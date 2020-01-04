@@ -82,7 +82,7 @@ func (c *Client) Schedule(task *Task, processAt time.Time, opts ...Option) error
 	msg := &base.TaskMessage{
 		ID:      xid.New(),
 		Type:    task.Type,
-		Payload: task.Payload,
+		Payload: task.Payload.data,
 		Queue:   "default",
 		Retry:   opt.retry,
 	}

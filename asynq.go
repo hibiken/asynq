@@ -11,9 +11,20 @@ TODOs:
 
 // Task represents a task to be performed.
 type Task struct {
-	// Type indicates the kind of the task to be performed.
+	// Type indicates the type of task to be performed.
 	Type string
 
 	// Payload holds data needed to process the task.
 	Payload Payload
+}
+
+// NewTask returns a new instance of a task given a task type and payload.
+//
+// Since payload data gets serialized to JSON, the payload values must be
+// composed of JSON supported data types.
+func NewTask(typename string, payload map[string]interface{}) *Task {
+	return &Task{
+		Type:    typename,
+		Payload: Payload{payload},
+	}
 }

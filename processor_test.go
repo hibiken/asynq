@@ -25,10 +25,10 @@ func TestProcessorSuccess(t *testing.T) {
 	m3 := h.NewTaskMessage("reindex", nil)
 	m4 := h.NewTaskMessage("sync", nil)
 
-	t1 := &Task{Type: m1.Type, Payload: m1.Payload}
-	t2 := &Task{Type: m2.Type, Payload: m2.Payload}
-	t3 := &Task{Type: m3.Type, Payload: m3.Payload}
-	t4 := &Task{Type: m4.Type, Payload: m4.Payload}
+	t1 := NewTask(m1.Type, m1.Payload)
+	t2 := NewTask(m2.Type, m2.Payload)
+	t3 := NewTask(m3.Type, m3.Payload)
+	t4 := NewTask(m4.Type, m4.Payload)
 
 	tests := []struct {
 		enqueued      []*base.TaskMessage // initial default queue state
@@ -78,7 +78,7 @@ func TestProcessorSuccess(t *testing.T) {
 		time.Sleep(tc.wait)
 		p.terminate()
 
-		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt); diff != "" {
+		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Payload{})); diff != "" {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 
@@ -190,7 +190,7 @@ func TestPerform(t *testing.T) {
 			handler: func(t *Task) error {
 				return nil
 			},
-			task:    &Task{Type: "gen_thumbnail", Payload: map[string]interface{}{"src": "some/img/path"}},
+			task:    NewTask("gen_thumbnail", map[string]interface{}{"src": "some/img/path"}),
 			wantErr: false,
 		},
 		{
@@ -198,7 +198,7 @@ func TestPerform(t *testing.T) {
 			handler: func(t *Task) error {
 				return fmt.Errorf("something went wrong")
 			},
-			task:    &Task{Type: "gen_thumbnail", Payload: map[string]interface{}{"src": "some/img/path"}},
+			task:    NewTask("gen_thumbnail", map[string]interface{}{"src": "some/img/path"}),
 			wantErr: true,
 		},
 		{
@@ -206,7 +206,7 @@ func TestPerform(t *testing.T) {
 			handler: func(t *Task) error {
 				panic("something went terribly wrong")
 			},
-			task:    &Task{Type: "gen_thumbnail", Payload: map[string]interface{}{"src": "some/img/path"}},
+			task:    NewTask("gen_thumbnail", map[string]interface{}{"src": "some/img/path"}),
 			wantErr: true,
 		},
 	}
