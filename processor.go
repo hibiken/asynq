@@ -126,7 +126,7 @@ func (p *processor) exec() {
 			defer func() { <-p.sema /* release token */ }()
 
 			resCh := make(chan error, 1)
-			task := &Task{Type: msg.Type, Payload: msg.Payload}
+			task := NewTask(msg.Type, msg.Payload)
 			go func() {
 				resCh <- perform(p.handler, task)
 			}()
@@ -182,7 +182,7 @@ func (p *processor) markAsDone(msg *base.TaskMessage) {
 }
 
 func (p *processor) retry(msg *base.TaskMessage, e error) {
-	d := p.retryDelayFunc(msg.Retried, e, &Task{Type: msg.Type, Payload: msg.Payload})
+	d := p.retryDelayFunc(msg.Retried, e, NewTask(msg.Type, msg.Payload))
 	retryAt := time.Now().Add(d)
 	err := p.rdb.Retry(msg, retryAt, e.Error())
 	if err != nil {

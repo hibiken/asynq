@@ -52,7 +52,7 @@ type Config struct {
 	//
 	// n is the number of times the task has been retried.
 	// e is the error returned by the task handler.
-	// t is the task in question. t is read-only, the function should not mutate t.
+	// t is the task in question.
 	RetryDelayFunc func(n int, e error, t *Task) time.Duration
 }
 
@@ -91,9 +91,6 @@ func NewBackground(r *redis.Client, cfg *Config) *Background {
 //
 // If ProcessTask return a non-nil error or panics, the task
 // will be retried after delay.
-//
-// Note: The argument task is ready only, ProcessTask should
-// not mutate the task.
 type Handler interface {
 	ProcessTask(*Task) error
 }

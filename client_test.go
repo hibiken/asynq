@@ -17,7 +17,7 @@ func TestClient(t *testing.T) {
 	r := setup(t)
 	client := NewClient(r)
 
-	task := &Task{Type: "send_email", Payload: map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}}
+	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
 
 	tests := []struct {
 		desc          string
@@ -35,7 +35,7 @@ func TestClient(t *testing.T) {
 			wantEnqueued: []*base.TaskMessage{
 				&base.TaskMessage{
 					Type:    task.Type,
-					Payload: task.Payload,
+					Payload: task.Payload.data,
 					Retry:   defaultMaxRetry,
 					Queue:   "default",
 				},
@@ -52,7 +52,7 @@ func TestClient(t *testing.T) {
 				{
 					Msg: &base.TaskMessage{
 						Type:    task.Type,
-						Payload: task.Payload,
+						Payload: task.Payload.data,
 						Retry:   defaultMaxRetry,
 						Queue:   "default",
 					},
@@ -70,7 +70,7 @@ func TestClient(t *testing.T) {
 			wantEnqueued: []*base.TaskMessage{
 				&base.TaskMessage{
 					Type:    task.Type,
-					Payload: task.Payload,
+					Payload: task.Payload.data,
 					Retry:   3,
 					Queue:   "default",
 				},
@@ -87,7 +87,7 @@ func TestClient(t *testing.T) {
 			wantEnqueued: []*base.TaskMessage{
 				&base.TaskMessage{
 					Type:    task.Type,
-					Payload: task.Payload,
+					Payload: task.Payload.data,
 					Retry:   0, // Retry count should be set to zero
 					Queue:   "default",
 				},
@@ -105,7 +105,7 @@ func TestClient(t *testing.T) {
 			wantEnqueued: []*base.TaskMessage{
 				&base.TaskMessage{
 					Type:    task.Type,
-					Payload: task.Payload,
+					Payload: task.Payload.data,
 					Retry:   10, // Last option takes precedence
 					Queue:   "default",
 				},
