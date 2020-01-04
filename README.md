@@ -73,13 +73,13 @@ func main() {
     }
 
     // process the task immediately.
-    err := client.Process(&t1, time.Now())
+    err := client.Schedule(&t1, time.Now())
 
     // process the task 24 hours later.
-    err = client.Process(&t2, time.Now().Add(24 * time.Hour))
+    err = client.Schedule(&t2, time.Now().Add(24 * time.Hour))
 
     // specify the max number of retry (default: 25)
-    err = client.Process(&t1, time.Now(), asynq.MaxRetry(1))
+    err = client.Schedule(&t1, time.Now(), asynq.MaxRetry(1))
 }
 ```
 

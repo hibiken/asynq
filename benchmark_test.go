@@ -29,7 +29,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
 			t := Task{Type: fmt.Sprintf("task%d", i), Payload: Payload{"data": i}}
-			client.Process(&t, time.Now())
+			client.Schedule(&t, time.Now())
 		}
 
 		var wg sync.WaitGroup
@@ -66,11 +66,11 @@ func BenchmarkEndToEnd(b *testing.B) {
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
 			t := Task{Type: fmt.Sprintf("task%d", i), Payload: Payload{"data": i}}
-			client.Process(&t, time.Now())
+			client.Schedule(&t, time.Now())
 		}
 		for i := 0; i < count; i++ {
 			t := Task{Type: fmt.Sprintf("scheduled%d", i), Payload: Payload{"data": i}}
-			client.Process(&t, time.Now().Add(time.Second))
+			client.Schedule(&t, time.Now().Add(time.Second))
 		}
 
 		var wg sync.WaitGroup

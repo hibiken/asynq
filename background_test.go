@@ -33,12 +33,12 @@ func TestBackground(t *testing.T) {
 
 	bg.start(HandlerFunc(h))
 
-	client.Process(&Task{
+	client.Schedule(&Task{
 		Type:    "send_email",
 		Payload: map[string]interface{}{"recipient_id": 123},
 	}, time.Now())
 
-	client.Process(&Task{
+	client.Schedule(&Task{
 		Type:    "send_email",
 		Payload: map[string]interface{}{"recipient_id": 456},
 	}, time.Now().Add(time.Hour))
