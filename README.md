@@ -1,4 +1,6 @@
-# Asynq&nbsp;[![Build Status](https://travis-ci.com/hibiken/asynq.svg?token=paqzfpSkF4p23s5Ux39b&branch=master)](https://travis-ci.com/hibiken/asynq)
+# Asynq
+
+[![Build Status](https://travis-ci.com/hibiken/asynq.svg?token=paqzfpSkF4p23s5Ux39b&branch=master)](https://travis-ci.com/hibiken/asynq)&nbsp;[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 Simple, efficent asynchronous task processing library in Go.
 
@@ -8,6 +10,7 @@ Simple, efficent asynchronous task processing library in Go.
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Getting Started](#getting-started)
+- [Acknowledgements](#acknowledgements)
 - [License](#license)
 
 ## Overview
@@ -43,10 +46,13 @@ go get github.com/hibiken/asynq
 
 ## Getting Started
 
-1. Import `asynq` in your file.
+1. Import `asynq` and `redis` in your file.
 
 ```go
-import "github.com/hibiken/asynq"
+import (
+    "github.com/go-redis/redis/v7"
+    "github.com/hibiken/asynq"
+)
 ```
 
 2. Create a `Client` instance to create tasks.
@@ -141,6 +147,11 @@ func main() {
     bg.Run(asynq.HandlerFunc(handler))
 }
 ```
+
+## Acknowledgements
+
+- [Sidekiq](https://github.com/mperham/sidekiq) : Many of the design ideas are taken from sidekiq and its Web UI
+- [Cobra](https://github.com/spf13/cobra) : Asynqmon CLI is built with cobra
 
 ## License
 
