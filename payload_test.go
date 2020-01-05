@@ -21,7 +21,7 @@ func TestPayloadGet(t *testing.T) {
 	location := map[string]string{"address": "123 Main St.", "state": "NY", "zipcode": "10002"}
 	favs := map[string][]string{
 		"movies":   []string{"forrest gump", "star wars"},
-		"tv_shows": []string{"game of throwns", "HIMYM", "breaking bad"},
+		"tv_shows": []string{"game of thrones", "HIMYM", "breaking bad"},
 	}
 	counter := map[string]int{
 		"a": 1,
@@ -258,6 +258,89 @@ func TestPayloadGetWithMarshaling(t *testing.T) {
 	if gotDuration != duration {
 		t.Errorf("Payload.GetDuration(%q) = %v, %v, want %v, nil",
 			"duration", gotDuration, err, duration)
+	}
+}
+
+func TestPayloadKeyNotFound(t *testing.T) {
+	payload := Payload{nil}
+
+	key := "something"
+	gotStr, err := payload.GetString(key)
+	if err == nil || gotStr != "" {
+		t.Errorf("Payload.GetString(%q) = %v, %v; want '', error",
+			key, gotStr, err)
+	}
+
+	gotInt, err := payload.GetInt(key)
+	if err == nil || gotInt != 0 {
+		t.Errorf("Payload.GetInt(%q) = %v, %v; want 0, error",
+			key, gotInt, err)
+	}
+
+	gotFloat, err := payload.GetFloat64(key)
+	if err == nil || gotFloat != 0 {
+		t.Errorf("Payload.GetFloat64(%q = %v, %v; want 0, error",
+			key, gotFloat, err)
+	}
+
+	gotBool, err := payload.GetBool(key)
+	if err == nil || gotBool != false {
+		t.Errorf("Payload.GetBool(%q) = %v, %v; want false, error",
+			key, gotBool, err)
+	}
+
+	gotStrSlice, err := payload.GetStringSlice(key)
+	if err == nil || gotStrSlice != nil {
+		t.Errorf("Payload.GetStringSlice(%q) = %v, %v; want nil, error",
+			key, gotStrSlice, err)
+	}
+
+	gotIntSlice, err := payload.GetIntSlice(key)
+	if err == nil || gotIntSlice != nil {
+		t.Errorf("Payload.GetIntSlice(%q) = %v, %v; want nil, error",
+			key, gotIntSlice, err)
+	}
+
+	gotStrMap, err := payload.GetStringMap(key)
+	if err == nil || gotStrMap != nil {
+		t.Errorf("Payload.GetStringMap(%q) = %v, %v; want nil, error",
+			key, gotStrMap, err)
+	}
+
+	gotStrMapStr, err := payload.GetStringMapString(key)
+	if err == nil || gotStrMapStr != nil {
+		t.Errorf("Payload.GetStringMapString(%q) = %v, %v; want nil, error",
+			key, gotStrMapStr, err)
+	}
+
+	gotStrMapStrSlice, err := payload.GetStringMapStringSlice(key)
+	if err == nil || gotStrMapStrSlice != nil {
+		t.Errorf("Payload.GetStringMapStringSlice(%q) = %v, %v; want nil, error",
+			key, gotStrMapStrSlice, err)
+	}
+
+	gotStrMapInt, err := payload.GetStringMapInt(key)
+	if err == nil || gotStrMapInt != nil {
+		t.Errorf("Payload.GetStringMapInt(%q) = %v, %v, want nil, error",
+			key, gotStrMapInt, err)
+	}
+
+	gotStrMapBool, err := payload.GetStringMapBool(key)
+	if err == nil || gotStrMapBool != nil {
+		t.Errorf("Payload.GetStringMapBool(%q) = %v, %v, want nil, error",
+			key, gotStrMapBool, err)
+	}
+
+	gotTime, err := payload.GetTime(key)
+	if err == nil || !gotTime.IsZero() {
+		t.Errorf("Payload.GetTime(%q) = %v, %v, want %v, error",
+			key, gotTime, err, time.Time{})
+	}
+
+	gotDuration, err := payload.GetDuration(key)
+	if err == nil || gotDuration != 0 {
+		t.Errorf("Payload.GetDuration(%q) = %v, %v, want 0, error",
+			key, gotDuration, err)
 	}
 }
 
