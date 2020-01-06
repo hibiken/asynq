@@ -40,7 +40,7 @@ type (
 )
 
 // MaxRetry returns an option to specify the max number of times
-// a task will be retried.
+// the task will be retried.
 //
 // Negative retry count is treated as zero retry.
 func MaxRetry(n int) Option {
@@ -50,11 +50,11 @@ func MaxRetry(n int) Option {
 	return retryOption(n)
 }
 
-// Queue returns an option to specify which queue to enqueue this task into.
+// Queue returns an option to specify which queue to enqueue the task into.
 //
 // Queue name is case-insensitive and the lowercased version is used.
-func Queue(qname string) Option {
-	return queueOption(strings.ToLower(qname))
+func Queue(name string) Option {
+	return queueOption(strings.ToLower(name))
 }
 
 type option struct {
