@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
+	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
@@ -54,6 +55,23 @@ type Config struct {
 	// e is the error returned by the task handler.
 	// t is the task in question.
 	RetryDelayFunc func(n int, e error, t *Task) time.Duration
+
+	// List of queues to process with given priority level. Keys are the names of the
+	// queues and values are associated priority level.
+	//
+	// If set to nil or not specified, the background will process only the "default" queue.
+	//
+	// Priority is treated as follows to prevent starving low priority queues.
+	// Example:
+	// Queues: map[string]uint{
+	//     "critical": 6,
+	//     "default":  3,
+	//     "low":      1,
+	// }
+	// With the above config and if all queues are not empty, then the tasks
+	// in "critical", "default", "low" should be processed 60%, 30%, 10% of
+	// the time respectively.
+	Queues map[string]uint
 }
 
 // Formula taken from https://github.com/mperham/sidekiq.
@@ -61,6 +79,10 @@ func defaultDelayFunc(n int, e error, t *Task) time.Duration {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	s := int(math.Pow(float64(n), 4)) + 15 + (r.Intn(30) * (n + 1))
 	return time.Duration(s) * time.Second
+}
+
+var defaultQueueConfig = map[string]uint{
+	base.DefaultQueueName: 1,
 }
 
 // NewBackground returns a new Background instance given a redis client
@@ -74,9 +96,13 @@ func NewBackground(r *redis.Client, cfg *Config) *Background {
 	if delayFunc == nil {
 		delayFunc = defaultDelayFunc
 	}
+	queues := cfg.Queues
+	if queues == nil {
+		queues = defaultQueueConfig
+	}
 	rdb := rdb.NewRDB(r)
 	scheduler := newScheduler(rdb, 5*time.Second)
-	processor := newProcessor(rdb, n, delayFunc)
+	processor := newProcessor(rdb, n, queues, delayFunc)
 	return &Background{
 		rdb:       rdb,
 		scheduler: scheduler,

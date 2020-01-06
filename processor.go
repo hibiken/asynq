@@ -19,6 +19,8 @@ type processor struct {
 
 	handler Handler
 
+	queueConfig map[string]uint
+
 	retryDelayFunc retryDelayFunc
 
 	// timeout for blocking dequeue operation.
@@ -44,9 +46,10 @@ type processor struct {
 
 type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
-func newProcessor(r *rdb.RDB, n int, fn retryDelayFunc) *processor {
+func newProcessor(r *rdb.RDB, n int, qcfg map[string]uint, fn retryDelayFunc) *processor {
 	return &processor{
 		rdb:            r,
+		queueConfig:    qcfg,
 		retryDelayFunc: fn,
 		dequeueTimeout: 2 * time.Second,
 		sema:           make(chan struct{}, n),
