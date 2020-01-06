@@ -156,10 +156,16 @@ func seedRedisZSet(tb testing.TB, c *redis.Client, key string, items []ZSetEntry
 	}
 }
 
-// GetEnqueuedMessages returns all task messages in the default queue.
-func GetEnqueuedMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
+// GetEnqueuedMessages returns all task messages in the specified queue.
+//
+// If queue name option is not passed, it defaults to the default queue.
+func GetEnqueuedMessages(tb testing.TB, r *redis.Client, queueOpt ...string) []*base.TaskMessage {
 	tb.Helper()
-	return getListMessages(tb, r, base.DefaultQueue)
+	queue := base.DefaultQueue
+	if len(queueOpt) > 0 {
+		queue = base.QueueKey(queueOpt[0])
+	}
+	return getListMessages(tb, r, queue)
 }
 
 // GetInProgressMessages returns all task messages in the in-progress queue.

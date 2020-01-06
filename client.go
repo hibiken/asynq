@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v7"
@@ -32,8 +33,11 @@ func NewClient(r *redis.Client) *Client {
 // Option specifies the processing behavior for the associated task.
 type Option interface{}
 
-// max number of times a task will be retried.
-type retryOption int
+// Internal option representations.
+type (
+	retryOption int
+	queueOption string
+)
 
 // MaxRetry returns an option to specify the max number of times
 // a task will be retried.
@@ -46,18 +50,29 @@ func MaxRetry(n int) Option {
 	return retryOption(n)
 }
 
+// Queue returns an option to specify which queue to enqueue this task into.
+//
+// Queue name is case-insensitive and the lowercased version is used.
+func Queue(qname string) Option {
+	return queueOption(strings.ToLower(qname))
+}
+
 type option struct {
 	retry int
+	queue string
 }
 
 func composeOptions(opts ...Option) option {
 	res := option{
 		retry: defaultMaxRetry,
+		queue: base.DefaultQueueName,
 	}
 	for _, opt := range opts {
 		switch opt := opt.(type) {
 		case retryOption:
 			res.retry = int(opt)
+		case queueOption:
+			res.queue = string(opt)
 		default:
 			// ignore unexpected option
 		}
@@ -83,7 +98,7 @@ func (c *Client) Schedule(task *Task, processAt time.Time, opts ...Option) error
 		ID:      xid.New(),
 		Type:    task.Type,
 		Payload: task.Payload.data,
-		Queue:   "default",
+		Queue:   opt.queue,
 		Retry:   opt.retry,
 	}
 	return c.enqueue(msg, processAt)
