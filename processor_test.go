@@ -63,7 +63,7 @@ func TestProcessorSuccess(t *testing.T) {
 			processed = append(processed, task)
 			return nil
 		}
-		p := newProcessor(rdbClient, 10, defaultDelayFunc)
+		p := newProcessor(rdbClient, 10, defaultQueueConfig, defaultDelayFunc)
 		p.handler = HandlerFunc(handler)
 		p.dequeueTimeout = time.Second // short time out for test purpose
 
@@ -147,7 +147,7 @@ func TestProcessorRetry(t *testing.T) {
 		handler := func(task *Task) error {
 			return fmt.Errorf(errMsg)
 		}
-		p := newProcessor(rdbClient, 10, delayFunc)
+		p := newProcessor(rdbClient, 10, defaultQueueConfig, delayFunc)
 		p.handler = HandlerFunc(handler)
 		p.dequeueTimeout = time.Second // short time out for test purpose
 
