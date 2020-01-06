@@ -11,17 +11,25 @@ import (
 	"github.com/rs/xid"
 )
 
+// DefaultQueueName is the queue name used if none are specified by user.
+const DefaultQueueName = "default"
+
 // Redis keys
 const (
-	processedPrefix = "asynq:processed:"      // STRING - asynq:processed:<yyyy-mm-dd>
-	failurePrefix   = "asynq:failure:"        // STRING - asynq:failure:<yyyy-mm-dd>
-	QueuePrefix     = "asynq:queues:"         // LIST   - asynq:queues:<qname>
-	DefaultQueue    = QueuePrefix + "default" // LIST
-	ScheduledQueue  = "asynq:scheduled"       // ZSET
-	RetryQueue      = "asynq:retry"           // ZSET
-	DeadQueue       = "asynq:dead"            // ZSET
-	InProgressQueue = "asynq:in_progress"     // LIST
+	processedPrefix = "asynq:processed:"             // STRING - asynq:processed:<yyyy-mm-dd>
+	failurePrefix   = "asynq:failure:"               // STRING - asynq:failure:<yyyy-mm-dd>
+	queuePrefix     = "asynq:queues:"                // LIST   - asynq:queues:<qname>
+	DefaultQueue    = queuePrefix + DefaultQueueName // LIST
+	ScheduledQueue  = "asynq:scheduled"              // ZSET
+	RetryQueue      = "asynq:retry"                  // ZSET
+	DeadQueue       = "asynq:dead"                   // ZSET
+	InProgressQueue = "asynq:in_progress"            // LIST
 )
+
+// QueueKey returns a redis key string for the given queue name.
+func QueueKey(qname string) string {
+	return queuePrefix + qname
+}
 
 // ProcessedKey returns a redis key string for procesed count
 // for the given day.

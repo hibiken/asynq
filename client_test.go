@@ -24,7 +24,7 @@ func TestClient(t *testing.T) {
 		task          *Task
 		processAt     time.Time
 		opts          []Option
-		wantEnqueued  []*base.TaskMessage
+		wantEnqueued  map[string][]*base.TaskMessage
 		wantScheduled []h.ZSetEntry
 	}{
 		{
@@ -32,12 +32,14 @@ func TestClient(t *testing.T) {
 			task:      task,
 			processAt: time.Now(),
 			opts:      []Option{},
-			wantEnqueued: []*base.TaskMessage{
-				&base.TaskMessage{
-					Type:    task.Type,
-					Payload: task.Payload.data,
-					Retry:   defaultMaxRetry,
-					Queue:   "default",
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default": []*base.TaskMessage{
+					&base.TaskMessage{
+						Type:    task.Type,
+						Payload: task.Payload.data,
+						Retry:   defaultMaxRetry,
+						Queue:   "default",
+					},
 				},
 			},
 			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
@@ -67,12 +69,14 @@ func TestClient(t *testing.T) {
 			opts: []Option{
 				MaxRetry(3),
 			},
-			wantEnqueued: []*base.TaskMessage{
-				&base.TaskMessage{
-					Type:    task.Type,
-					Payload: task.Payload.data,
-					Retry:   3,
-					Queue:   "default",
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default": []*base.TaskMessage{
+					&base.TaskMessage{
+						Type:    task.Type,
+						Payload: task.Payload.data,
+						Retry:   3,
+						Queue:   "default",
+					},
 				},
 			},
 			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
@@ -84,12 +88,14 @@ func TestClient(t *testing.T) {
 			opts: []Option{
 				MaxRetry(-2),
 			},
-			wantEnqueued: []*base.TaskMessage{
-				&base.TaskMessage{
-					Type:    task.Type,
-					Payload: task.Payload.data,
-					Retry:   0, // Retry count should be set to zero
-					Queue:   "default",
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default": []*base.TaskMessage{
+					&base.TaskMessage{
+						Type:    task.Type,
+						Payload: task.Payload.data,
+						Retry:   0, // Retry count should be set to zero
+						Queue:   "default",
+					},
 				},
 			},
 			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
@@ -102,12 +108,52 @@ func TestClient(t *testing.T) {
 				MaxRetry(2),
 				MaxRetry(10),
 			},
-			wantEnqueued: []*base.TaskMessage{
-				&base.TaskMessage{
-					Type:    task.Type,
-					Payload: task.Payload.data,
-					Retry:   10, // Last option takes precedence
-					Queue:   "default",
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default": []*base.TaskMessage{
+					&base.TaskMessage{
+						Type:    task.Type,
+						Payload: task.Payload.data,
+						Retry:   10, // Last option takes precedence
+						Queue:   "default",
+					},
+				},
+			},
+			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
+		},
+		{
+			desc:      "With queue option",
+			task:      task,
+			processAt: time.Now(),
+			opts: []Option{
+				Queue("custom"),
+			},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"custom": []*base.TaskMessage{
+					&base.TaskMessage{
+						Type:    task.Type,
+						Payload: task.Payload.data,
+						Retry:   defaultMaxRetry,
+						Queue:   "custom",
+					},
+				},
+			},
+			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
+		},
+		{
+			desc:      "Queue option should be case-insensitive",
+			task:      task,
+			processAt: time.Now(),
+			opts: []Option{
+				Queue("HIGH"),
+			},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"high": []*base.TaskMessage{
+					&base.TaskMessage{
+						Type:    task.Type,
+						Payload: task.Payload.data,
+						Retry:   defaultMaxRetry,
+						Queue:   "high",
+					},
 				},
 			},
 			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
@@ -123,9 +169,11 @@ func TestClient(t *testing.T) {
 			continue
 		}
 
-		gotEnqueued := h.GetEnqueuedMessages(t, r)
-		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, h.IgnoreIDOpt); diff != "" {
-			t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.DefaultQueue, diff)
+		for qname, want := range tc.wantEnqueued {
+			gotEnqueued := h.GetEnqueuedMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotEnqueued, h.IgnoreIDOpt); diff != "" {
+				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.QueueKey(qname), diff)
+			}
 		}
 
 		gotScheduled := h.GetScheduledEntries(t, r)
