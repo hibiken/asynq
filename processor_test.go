@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -51,7 +52,7 @@ func TestProcessorSuccess(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r)                       // clean up db before each test case.
+		h.FlushDB(t, r)                        // clean up db before each test case.
 		h.SeedEnqueuedQueue(t, r, tc.enqueued) // initialize default queue.
 
 		// instantiate a new processor
@@ -137,7 +138,7 @@ func TestProcessorRetry(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r)                       // clean up db before each test case.
+		h.FlushDB(t, r)                        // clean up db before each test case.
 		h.SeedEnqueuedQueue(t, r, tc.enqueued) // initialize default queue.
 
 		// instantiate a new processor
@@ -174,6 +175,43 @@ func TestProcessorRetry(t *testing.T) {
 
 		if l := r.LLen(base.InProgressQueue).Val(); l != 0 {
 			t.Errorf("%q has %d tasks, want 0", base.InProgressQueue, l)
+		}
+	}
+}
+
+func TestProcessorQueues(t *testing.T) {
+	sortOpt := cmp.Transformer("SortStrings", func(in []string) []string {
+		out := append([]string(nil), in...) // Copy input to avoid mutating it
+		sort.Strings(out)
+		return out
+	})
+
+	tests := []struct {
+		queueCfg map[string]uint
+		want     []string
+	}{
+		{
+			queueCfg: map[string]uint{
+				"high":    6,
+				"default": 3,
+				"low":     1,
+			},
+			want: []string{"high", "default", "low"},
+		},
+		{
+			queueCfg: map[string]uint{
+				"default": 1,
+			},
+			want: []string{"default"},
+		},
+	}
+
+	for _, tc := range tests {
+		p := newProcessor(nil, 10, tc.queueCfg, defaultDelayFunc)
+		got := p.queues()
+		if diff := cmp.Diff(tc.want, got, sortOpt); diff != "" {
+			t.Errorf("with queue config: %v\n(*processor).queues() = %v, want %v\n(-want,+got):\n%s",
+				tc.queueCfg, got, tc.want, diff)
 		}
 	}
 }
