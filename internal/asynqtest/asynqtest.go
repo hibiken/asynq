@@ -108,10 +108,16 @@ func FlushDB(tb testing.TB, r *redis.Client) {
 	}
 }
 
-// SeedDefaultQueue initializes the default queue with the given messages.
-func SeedDefaultQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage) {
+// SeedEnqueuedQueue initializes the specified queue with the given messages.
+//
+// If queue name option is not passed, it defaults to the default queue.
+func SeedEnqueuedQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage, queueOpt ...string) {
 	tb.Helper()
-	seedRedisList(tb, r, base.DefaultQueue, msgs)
+	queue := base.DefaultQueue
+	if len(queueOpt) > 0 {
+		queue = base.QueueKey(queueOpt[0])
+	}
+	seedRedisList(tb, r, queue, msgs)
 }
 
 // SeedInProgressQueue initializes the in-progress queue with the given messages.

@@ -13,11 +13,12 @@ import (
 
 	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/spf13/cast"
 )
 
 var (
-	// ErrDequeueTimeout indicates that the blocking dequeue operation timed out.
-	ErrDequeueTimeout = errors.New("blocking dequeue operation timed out")
+	// ErrNoProcessableTask indicates that there are no tasks ready to be processed.
+	ErrNoProcessableTask = errors.New("no tasks are ready for processing")
 
 	// ErrTaskNotFound indicates that a task that matches the given identifier was not found.
 	ErrTaskNotFound = errors.New("could not find a task")
@@ -50,14 +51,17 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 	return r.client.LPush(key, string(bytes)).Err()
 }
 
-// Dequeue blocks until there is a task available to be processed,
-// once a task is available, it adds the task to "in progress" queue
-// and returns the task. If there are no tasks for the entire timeout
-// duration, it returns ErrDequeueTimeout.
-func (r *RDB) Dequeue(timeout time.Duration) (*base.TaskMessage, error) {
-	data, err := r.client.BRPopLPush(base.DefaultQueue, base.InProgressQueue, timeout).Result()
+// Dequeue queries given queues in order and pops a task message if there
+// is one and returns it. If all queues are empty,  ErrNoProcessableTask
+// error is returned.
+func (r *RDB) Dequeue(qnames ...string) (*base.TaskMessage, error) {
+	var keys []string
+	for _, q := range qnames {
+		keys = append(keys, base.QueueKey(q))
+	}
+	data, err := r.dequeue(keys...)
 	if err == redis.Nil {
-		return nil, ErrDequeueTimeout
+		return nil, ErrNoProcessableTask
 	}
 	if err != nil {
 		return nil, err
@@ -68,6 +72,28 @@ func (r *RDB) Dequeue(timeout time.Duration) (*base.TaskMessage, error) {
 		return nil, err
 	}
 	return &msg, nil
+}
+
+func (r *RDB) dequeue(queues ...string) (data string, err error) {
+	var args []interface{}
+	for _, qkey := range queues {
+		args = append(args, qkey)
+	}
+	script := redis.NewScript(`
+	local res
+	for _, qkey in ipairs(ARGV) do
+		res = redis.call("RPOPLPUSH", qkey, KEYS[1])
+		if res then
+			return res
+		end
+	end
+	return res
+	`)
+	res, err := script.Run(r.client, []string{base.InProgressQueue}, args...).Result()
+	if err != nil {
+		return "", err
+	}
+	return cast.ToStringE(res)
 }
 
 // Done removes the task from in-progress queue to mark the task as done.
