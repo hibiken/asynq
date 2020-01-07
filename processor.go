@@ -109,9 +109,17 @@ func (p *processor) start() {
 // exec pulls a task out of the queue and starts a worker goroutine to
 // process the task.
 func (p *processor) exec() {
-	msg, err := p.rdb.Dequeue(p.dequeueTimeout)
-	if err == rdb.ErrDequeueTimeout {
-		// timed out, this is a normal behavior.
+	// TODO(hibiken): Randomize the order to avoid starving low priority queues
+	var qnames []string
+	for q := range p.queueConfig {
+		qnames = append(qnames, q)
+	}
+
+	msg, err := p.rdb.Dequeue(qnames...)
+	if err == rdb.ErrNoProcessableTask {
+		// queues are empty, this is a normal behavior.
+		// sleep to avoid slamming redis and let scheduler move tasks into queues.
+		time.Sleep(time.Second)
 		return
 	}
 	if err != nil {

@@ -52,7 +52,7 @@ func TestProcessorSuccess(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r)                       // clean up db before each test case.
-		h.SeedDefaultQueue(t, r, tc.enqueued) // initialize default queue.
+		h.SeedEnqueuedQueue(t, r, tc.enqueued) // initialize default queue.
 
 		// instantiate a new processor
 		var mu sync.Mutex
@@ -138,7 +138,7 @@ func TestProcessorRetry(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r)                       // clean up db before each test case.
-		h.SeedDefaultQueue(t, r, tc.enqueued) // initialize default queue.
+		h.SeedEnqueuedQueue(t, r, tc.enqueued) // initialize default queue.
 
 		// instantiate a new processor
 		delayFunc := func(n int, e error, t *Task) time.Duration {

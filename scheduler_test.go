@@ -67,7 +67,7 @@ func TestScheduler(t *testing.T) {
 		h.FlushDB(t, r)                              // clean up db before each test case.
 		h.SeedScheduledQueue(t, r, tc.initScheduled) // initialize scheduled queue
 		h.SeedRetryQueue(t, r, tc.initRetry)         // initialize retry queue
-		h.SeedDefaultQueue(t, r, tc.initQueue)       // initialize default queue
+		h.SeedEnqueuedQueue(t, r, tc.initQueue)      // initialize default queue
 
 		s.start()
 		time.Sleep(tc.wait)

@@ -119,7 +119,7 @@ func TestCurrentStats(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedDefaultQueue(t, r.client, tc.enqueued)
+		h.SeedEnqueuedQueue(t, r.client, tc.enqueued)
 		h.SeedInProgressQueue(t, r.client, tc.inProgress)
 		h.SeedScheduledQueue(t, r.client, tc.scheduled)
 		h.SeedRetryQueue(t, r.client, tc.retry)
@@ -262,7 +262,7 @@ func TestListEnqueued(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedDefaultQueue(t, r.client, tc.enqueued)
+		h.SeedEnqueuedQueue(t, r.client, tc.enqueued)
 
 		got, err := r.ListEnqueued()
 		if err != nil {

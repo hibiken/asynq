@@ -59,35 +59,109 @@ func TestEnqueue(t *testing.T) {
 func TestDequeue(t *testing.T) {
 	r := setup(t)
 	t1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello!"})
+	t2 := h.NewTaskMessage("export_csv", nil)
+	t3 := h.NewTaskMessage("reindex", nil)
+
 	tests := []struct {
-		enqueued       []*base.TaskMessage
+		enqueued       map[string][]*base.TaskMessage
+		args           []string // list of queues to query
 		want           *base.TaskMessage
 		err            error
+		wantEnqueued   map[string][]*base.TaskMessage
 		wantInProgress []*base.TaskMessage
 	}{
 		{
-			enqueued:       []*base.TaskMessage{t1},
-			want:           t1,
-			err:            nil,
+			enqueued: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			args: []string{"default"},
+			want: t1,
+			err:  nil,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 			wantInProgress: []*base.TaskMessage{t1},
 		},
 		{
-			enqueued:       []*base.TaskMessage{},
-			want:           nil,
-			err:            ErrDequeueTimeout,
+			enqueued: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			args: []string{"default"},
+			want: nil,
+			err:  ErrNoProcessableTask,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantInProgress: []*base.TaskMessage{},
+		},
+		{
+			enqueued: map[string][]*base.TaskMessage{
+				"default":  {t1},
+				"critical": {t2},
+				"low":      {t3},
+			},
+			args: []string{"critical", "default", "low"},
+			want: t2,
+			err:  nil,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default":  {t1},
+				"critical": {},
+				"low":      {t3},
+			},
+			wantInProgress: []*base.TaskMessage{t2},
+		},
+		{
+			enqueued: map[string][]*base.TaskMessage{
+				"default":  {t1},
+				"critical": {},
+				"low":      {t2, t3},
+			},
+			args: []string{"critical", "default", "low"},
+			want: t1,
+			err:  nil,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+				"low":      {t2, t3},
+			},
+			wantInProgress: []*base.TaskMessage{t1},
+		},
+		{
+			enqueued: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
+			args: []string{"critical", "default", "low"},
+			want: nil,
+			err:  ErrNoProcessableTask,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
 			wantInProgress: []*base.TaskMessage{},
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedDefaultQueue(t, r.client, tc.enqueued)
+		for queue, msgs := range tc.enqueued {
+			h.SeedEnqueuedQueue(t, r.client, msgs, queue)
+		}
 
-		got, err := r.Dequeue(time.Second)
+		got, err := r.Dequeue(tc.args...)
 		if !cmp.Equal(got, tc.want) || err != tc.err {
-			t.Errorf("(*RDB).Dequeue(time.Second) = %v, %v; want %v, %v",
-				got, err, tc.want, tc.err)
+			t.Errorf("(*RDB).Dequeue(%v) = %v, %v; want %v, %v",
+				tc.args, got, err, tc.want, tc.err)
 			continue
+		}
+
+		for queue, want := range tc.wantEnqueued {
+			gotEnqueued := h.GetEnqueuedMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.QueueKey(queue), diff)
+			}
 		}
 
 		gotInProgress := h.GetInProgressMessages(t, r.client)
@@ -178,7 +252,7 @@ func TestRequeue(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedDefaultQueue(t, r.client, tc.enqueued)
+		h.SeedEnqueuedQueue(t, r.client, tc.enqueued)
 		h.SeedInProgressQueue(t, r.client, tc.inProgress)
 
 		err := r.Requeue(tc.target)
@@ -468,7 +542,7 @@ func TestRestoreUnfinished(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedInProgressQueue(t, r.client, tc.inProgress)
-		h.SeedDefaultQueue(t, r.client, tc.enqueued)
+		h.SeedEnqueuedQueue(t, r.client, tc.enqueued)
 
 		got, err := r.RestoreUnfinished()
 		if got != tc.want || err != nil {
