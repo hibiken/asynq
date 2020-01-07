@@ -18,8 +18,8 @@ const DefaultQueueName = "default"
 const (
 	processedPrefix = "asynq:processed:"             // STRING - asynq:processed:<yyyy-mm-dd>
 	failurePrefix   = "asynq:failure:"               // STRING - asynq:failure:<yyyy-mm-dd>
-	queuePrefix     = "asynq:queues:"                // LIST   - asynq:queues:<qname>
-	DefaultQueue    = queuePrefix + DefaultQueueName // LIST
+	QueuePrefix     = "asynq:queues:"                // LIST   - asynq:queues:<qname>
+	DefaultQueue    = QueuePrefix + DefaultQueueName // LIST
 	ScheduledQueue  = "asynq:scheduled"              // ZSET
 	RetryQueue      = "asynq:retry"                  // ZSET
 	DeadQueue       = "asynq:dead"                   // ZSET
@@ -28,7 +28,7 @@ const (
 
 // QueueKey returns a redis key string for the given queue name.
 func QueueKey(qname string) string {
-	return queuePrefix + qname
+	return QueuePrefix + qname
 }
 
 // ProcessedKey returns a redis key string for procesed count
