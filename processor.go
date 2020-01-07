@@ -7,6 +7,7 @@ package asynq
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -109,12 +110,7 @@ func (p *processor) start() {
 // exec pulls a task out of the queue and starts a worker goroutine to
 // process the task.
 func (p *processor) exec() {
-	// TODO(hibiken): Randomize the order to avoid starving low priority queues
-	var qnames []string
-	for q := range p.queueConfig {
-		qnames = append(qnames, q)
-	}
-
+	qnames := p.queues()
 	msg, err := p.rdb.Dequeue(qnames...)
 	if err == rdb.ErrNoProcessableTask {
 		// queues are empty, this is a normal behavior.
@@ -209,6 +205,21 @@ func (p *processor) kill(msg *base.TaskMessage, e error) {
 	}
 }
 
+// queues returns a list of queues to query. Order of the list
+// is based roughly on the priority of each queue, but randomizes
+// it to avoid starving low priority queues.
+func (p *processor) queues() []string {
+	var names []string
+	for qname, priority := range p.queueConfig {
+		for i := 0; i < int(priority); i++ {
+			names = append(names, qname)
+		}
+	}
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r.Shuffle(len(names), func(i, j int) { names[i], names[j] = names[j], names[i] })
+	return uniq(names, len(p.queueConfig))
+}
+
 // perform calls the handler with the given task.
 // If the call returns without panic, it simply returns the value,
 // otherwise, it recovers from panic and returns an error.
@@ -219,4 +230,21 @@ func perform(h Handler, task *Task) (err error) {
 		}
 	}()
 	return h.ProcessTask(task)
+}
+
+// uniq dedupes elements and returns a slice of unique names of length l.
+// Order of the output slice is based on the input list.
+func uniq(names []string, l int) []string {
+	var res []string
+	seen := make(map[string]struct{})
+	for _, s := range names {
+		if _, ok := seen[s]; !ok {
+			seen[s] = struct{}{}
+			res = append(res, s)
+		}
+		if len(res) == l {
+			break
+		}
+	}
+	return res
 }
