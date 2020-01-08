@@ -61,14 +61,15 @@ type Config struct {
 	//
 	// If set to nil or not specified, the background will process only the "default" queue.
 	//
-	// Priority is treated as follows to prevent starving low priority queues.
+	// Priority is treated as follows to avoid starving low priority queues.
+	//
 	// Example:
 	// Queues: map[string]uint{
 	//     "critical": 6,
 	//     "default":  3,
 	//     "low":      1,
 	// }
-	// With the above config and if all queues are not empty, then the tasks
+	// With the above config and given that all queues are not empty, the tasks
 	// in "critical", "default", "low" should be processed 60%, 30%, 10% of
 	// the time respectively.
 	Queues map[string]uint
