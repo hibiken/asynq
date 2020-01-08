@@ -504,6 +504,8 @@ func TestEnqueueDeadTask(t *testing.T) {
 	r := setup(t)
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
+	t3 := h.NewTaskMessage("send_notification", nil)
+	t3.Queue = "critical"
 	s1 := time.Now().Add(-5 * time.Minute).Unix()
 	s2 := time.Now().Add(-time.Hour).Unix()
 
@@ -513,29 +515,48 @@ func TestEnqueueDeadTask(t *testing.T) {
 		id           xid.ID
 		want         error // expected return value from calling EnqueueDeadTask
 		wantDead     []*base.TaskMessage
-		wantEnqueued []*base.TaskMessage
+		wantEnqueued map[string][]*base.TaskMessage
 	}{
 		{
 			dead: []h.ZSetEntry{
 				{Msg: t1, Score: s1},
 				{Msg: t2, Score: s2},
 			},
-			score:        s2,
-			id:           t2.ID,
-			want:         nil,
-			wantDead:     []*base.TaskMessage{t1},
-			wantEnqueued: []*base.TaskMessage{t2},
+			score:    s2,
+			id:       t2.ID,
+			want:     nil,
+			wantDead: []*base.TaskMessage{t1},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {t2},
+			},
 		},
 		{
 			dead: []h.ZSetEntry{
 				{Msg: t1, Score: s1},
 				{Msg: t2, Score: s2},
 			},
-			score:        123,
-			id:           t2.ID,
-			want:         ErrTaskNotFound,
-			wantDead:     []*base.TaskMessage{t1, t2},
-			wantEnqueued: []*base.TaskMessage{},
+			score:    123,
+			id:       t2.ID,
+			want:     ErrTaskNotFound,
+			wantDead: []*base.TaskMessage{t1, t2},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {},
+			},
+		},
+		{
+			dead: []h.ZSetEntry{
+				{Msg: t1, Score: s1},
+				{Msg: t2, Score: s2},
+				{Msg: t3, Score: s1},
+			},
+			score:    s1,
+			id:       t3.ID,
+			want:     nil,
+			wantDead: []*base.TaskMessage{t1, t2},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {},
+				"critical":            {t3},
+			},
 		},
 	}
 
@@ -549,9 +570,11 @@ func TestEnqueueDeadTask(t *testing.T) {
 			continue
 		}
 
-		gotEnqueued := h.GetEnqueuedMessages(t, r.client)
-		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, h.SortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DefaultQueue, diff)
+		for qname, want := range tc.wantEnqueued {
+			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.QueueKey(qname), diff)
+			}
 		}
 
 		gotDead := h.GetDeadMessages(t, r.client)
@@ -566,6 +589,8 @@ func TestEnqueueRetryTask(t *testing.T) {
 
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
+	t3 := h.NewTaskMessage("send_notification", nil)
+	t3.Queue = "low"
 	s1 := time.Now().Add(-5 * time.Minute).Unix()
 	s2 := time.Now().Add(-time.Hour).Unix()
 	tests := []struct {
@@ -574,29 +599,48 @@ func TestEnqueueRetryTask(t *testing.T) {
 		id           xid.ID
 		want         error // expected return value from calling EnqueueRetryTask
 		wantRetry    []*base.TaskMessage
-		wantEnqueued []*base.TaskMessage
+		wantEnqueued map[string][]*base.TaskMessage
 	}{
 		{
 			retry: []h.ZSetEntry{
 				{Msg: t1, Score: s1},
 				{Msg: t2, Score: s2},
 			},
-			score:        s2,
-			id:           t2.ID,
-			want:         nil,
-			wantRetry:    []*base.TaskMessage{t1},
-			wantEnqueued: []*base.TaskMessage{t2},
+			score:     s2,
+			id:        t2.ID,
+			want:      nil,
+			wantRetry: []*base.TaskMessage{t1},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {t2},
+			},
 		},
 		{
 			retry: []h.ZSetEntry{
 				{Msg: t1, Score: s1},
 				{Msg: t2, Score: s2},
 			},
-			score:        123,
-			id:           t2.ID,
-			want:         ErrTaskNotFound,
-			wantRetry:    []*base.TaskMessage{t1, t2},
-			wantEnqueued: []*base.TaskMessage{},
+			score:     123,
+			id:        t2.ID,
+			want:      ErrTaskNotFound,
+			wantRetry: []*base.TaskMessage{t1, t2},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {},
+			},
+		},
+		{
+			retry: []h.ZSetEntry{
+				{Msg: t1, Score: s1},
+				{Msg: t2, Score: s2},
+				{Msg: t3, Score: s2},
+			},
+			score:     s2,
+			id:        t3.ID,
+			want:      nil,
+			wantRetry: []*base.TaskMessage{t1, t2},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {},
+				"low":                 {t3},
+			},
 		},
 	}
 
@@ -610,9 +654,11 @@ func TestEnqueueRetryTask(t *testing.T) {
 			continue
 		}
 
-		gotEnqueued := h.GetEnqueuedMessages(t, r.client)
-		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, h.SortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DefaultQueue, diff)
+		for qname, want := range tc.wantEnqueued {
+			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.QueueKey(qname), diff)
+			}
 		}
 
 		gotRetry := h.GetRetryMessages(t, r.client)
@@ -626,6 +672,8 @@ func TestEnqueueScheduledTask(t *testing.T) {
 	r := setup(t)
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
+	t3 := h.NewTaskMessage("send_notification", nil)
+	t3.Queue = "notifications"
 	s1 := time.Now().Add(-5 * time.Minute).Unix()
 	s2 := time.Now().Add(-time.Hour).Unix()
 
@@ -635,7 +683,7 @@ func TestEnqueueScheduledTask(t *testing.T) {
 		id            xid.ID
 		want          error // expected return value from calling EnqueueScheduledTask
 		wantScheduled []*base.TaskMessage
-		wantEnqueued  []*base.TaskMessage
+		wantEnqueued  map[string][]*base.TaskMessage
 	}{
 		{
 			scheduled: []h.ZSetEntry{
@@ -646,7 +694,9 @@ func TestEnqueueScheduledTask(t *testing.T) {
 			id:            t2.ID,
 			want:          nil,
 			wantScheduled: []*base.TaskMessage{t1},
-			wantEnqueued:  []*base.TaskMessage{t2},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {t2},
+			},
 		},
 		{
 			scheduled: []h.ZSetEntry{
@@ -657,7 +707,24 @@ func TestEnqueueScheduledTask(t *testing.T) {
 			id:            t2.ID,
 			want:          ErrTaskNotFound,
 			wantScheduled: []*base.TaskMessage{t1, t2},
-			wantEnqueued:  []*base.TaskMessage{},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {},
+			},
+		},
+		{
+			scheduled: []h.ZSetEntry{
+				{Msg: t1, Score: s1},
+				{Msg: t2, Score: s2},
+				{Msg: t3, Score: s1},
+			},
+			score:         s1,
+			id:            t3.ID,
+			want:          nil,
+			wantScheduled: []*base.TaskMessage{t1, t2},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {},
+				"notifications":       {t3},
+			},
 		},
 	}
 
@@ -671,9 +738,11 @@ func TestEnqueueScheduledTask(t *testing.T) {
 			continue
 		}
 
-		gotEnqueued := h.GetEnqueuedMessages(t, r.client)
-		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, h.SortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DefaultQueue, diff)
+		for qname, want := range tc.wantEnqueued {
+			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.QueueKey(qname), diff)
+			}
 		}
 
 		gotScheduled := h.GetScheduledMessages(t, r.client)
@@ -688,12 +757,16 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
 	t3 := h.NewTaskMessage("reindex", nil)
+	t4 := h.NewTaskMessage("important_notification", nil)
+	t4.Queue = "critical"
+	t5 := h.NewTaskMessage("minor_notification", nil)
+	t5.Queue = "low"
 
 	tests := []struct {
 		desc         string
 		scheduled    []h.ZSetEntry
 		want         int64
-		wantEnqueued []*base.TaskMessage
+		wantEnqueued map[string][]*base.TaskMessage
 	}{
 		{
 			desc: "with tasks in scheduled queue",
@@ -702,14 +775,34 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 				{Msg: t2, Score: time.Now().Add(time.Hour).Unix()},
 				{Msg: t3, Score: time.Now().Add(time.Hour).Unix()},
 			},
-			want:         3,
-			wantEnqueued: []*base.TaskMessage{t1, t2, t3},
+			want: 3,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {t1, t2, t3},
+			},
 		},
 		{
-			desc:         "with empty scheduled queue",
-			scheduled:    []h.ZSetEntry{},
-			want:         0,
-			wantEnqueued: []*base.TaskMessage{},
+			desc:      "with empty scheduled queue",
+			scheduled: []h.ZSetEntry{},
+			want:      0,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {},
+			},
+		},
+		{
+			desc: "with custom queues",
+			scheduled: []h.ZSetEntry{
+				{Msg: t1, Score: time.Now().Add(time.Hour).Unix()},
+				{Msg: t2, Score: time.Now().Add(time.Hour).Unix()},
+				{Msg: t3, Score: time.Now().Add(time.Hour).Unix()},
+				{Msg: t4, Score: time.Now().Add(time.Hour).Unix()},
+				{Msg: t5, Score: time.Now().Add(time.Hour).Unix()},
+			},
+			want: 5,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {t1, t2, t3},
+				"critical":            {t4},
+				"low":                 {t5},
+			},
 		},
 	}
 
@@ -729,9 +822,11 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 				tc.desc, got, err, tc.want)
 		}
 
-		gotEnqueued := h.GetEnqueuedMessages(t, r.client)
-		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, h.SortMsgOpt); diff != "" {
-			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.DefaultQueue, diff)
+		for qname, want := range tc.wantEnqueued {
+			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.QueueKey(qname), diff)
+			}
 		}
 	}
 }
@@ -741,28 +836,52 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
 	t3 := h.NewTaskMessage("reindex", nil)
+	t4 := h.NewTaskMessage("important_notification", nil)
+	t4.Queue = "critical"
+	t5 := h.NewTaskMessage("minor_notification", nil)
+	t5.Queue = "low"
 
 	tests := []struct {
-		description  string
+		desc         string
 		retry        []h.ZSetEntry
 		want         int64
-		wantEnqueued []*base.TaskMessage
+		wantEnqueued map[string][]*base.TaskMessage
 	}{
 		{
-			description: "with tasks in retry queue",
+			desc: "with tasks in retry queue",
 			retry: []h.ZSetEntry{
 				{Msg: t1, Score: time.Now().Add(time.Hour).Unix()},
 				{Msg: t2, Score: time.Now().Add(time.Hour).Unix()},
 				{Msg: t3, Score: time.Now().Add(time.Hour).Unix()},
 			},
-			want:         3,
-			wantEnqueued: []*base.TaskMessage{t1, t2, t3},
+			want: 3,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {t1, t2, t3},
+			},
 		},
 		{
-			description:  "with empty retry queue",
-			retry:        []h.ZSetEntry{},
-			want:         0,
-			wantEnqueued: []*base.TaskMessage{},
+			desc:  "with empty retry queue",
+			retry: []h.ZSetEntry{},
+			want:  0,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {},
+			},
+		},
+		{
+			desc: "with custom queues",
+			retry: []h.ZSetEntry{
+				{Msg: t1, Score: time.Now().Add(time.Hour).Unix()},
+				{Msg: t2, Score: time.Now().Add(time.Hour).Unix()},
+				{Msg: t3, Score: time.Now().Add(time.Hour).Unix()},
+				{Msg: t4, Score: time.Now().Add(time.Hour).Unix()},
+				{Msg: t5, Score: time.Now().Add(time.Hour).Unix()},
+			},
+			want: 5,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {t1, t2, t3},
+				"critical":            {t4},
+				"low":                 {t5},
+			},
 		},
 	}
 
@@ -773,18 +892,20 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 		got, err := r.EnqueueAllRetryTasks()
 		if err != nil {
 			t.Errorf("%s; r.EnqueueAllRetryTasks = %v, %v; want %v, nil",
-				tc.description, got, err, tc.want)
+				tc.desc, got, err, tc.want)
 			continue
 		}
 
 		if got != tc.want {
 			t.Errorf("%s; r.EnqueueAllRetryTasks = %v, %v; want %v, nil",
-				tc.description, got, err, tc.want)
+				tc.desc, got, err, tc.want)
 		}
 
-		gotEnqueued := h.GetEnqueuedMessages(t, r.client)
-		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, h.SortMsgOpt); diff != "" {
-			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.description, base.DefaultQueue, diff)
+		for qname, want := range tc.wantEnqueued {
+			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.QueueKey(qname), diff)
+			}
 		}
 	}
 }
@@ -794,12 +915,16 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
 	t3 := h.NewTaskMessage("reindex", nil)
+	t4 := h.NewTaskMessage("important_notification", nil)
+	t4.Queue = "critical"
+	t5 := h.NewTaskMessage("minor_notification", nil)
+	t5.Queue = "low"
 
 	tests := []struct {
 		desc         string
 		dead         []h.ZSetEntry
 		want         int64
-		wantEnqueued []*base.TaskMessage
+		wantEnqueued map[string][]*base.TaskMessage
 	}{
 		{
 			desc: "with tasks in dead queue",
@@ -808,14 +933,34 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 				{Msg: t2, Score: time.Now().Add(-time.Minute).Unix()},
 				{Msg: t3, Score: time.Now().Add(-time.Minute).Unix()},
 			},
-			want:         3,
-			wantEnqueued: []*base.TaskMessage{t1, t2, t3},
+			want: 3,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {t1, t2, t3},
+			},
 		},
 		{
-			desc:         "with empty dead queue",
-			dead:         []h.ZSetEntry{},
-			want:         0,
-			wantEnqueued: []*base.TaskMessage{},
+			desc: "with empty dead queue",
+			dead: []h.ZSetEntry{},
+			want: 0,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {},
+			},
+		},
+		{
+			desc: "with custom queues",
+			dead: []h.ZSetEntry{
+				{Msg: t1, Score: time.Now().Add(-time.Minute).Unix()},
+				{Msg: t2, Score: time.Now().Add(-time.Minute).Unix()},
+				{Msg: t3, Score: time.Now().Add(-time.Minute).Unix()},
+				{Msg: t4, Score: time.Now().Add(-time.Minute).Unix()},
+				{Msg: t5, Score: time.Now().Add(-time.Minute).Unix()},
+			},
+			want: 5,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {t1, t2, t3},
+				"critical":            {t4},
+				"low":                 {t5},
+			},
 		},
 	}
 
@@ -835,9 +980,11 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 				tc.desc, got, err, tc.want)
 		}
 
-		gotEnqueued := h.GetEnqueuedMessages(t, r.client)
-		if diff := cmp.Diff(tc.wantEnqueued, gotEnqueued, h.SortMsgOpt); diff != "" {
-			t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.DefaultQueue, diff)
+		for qname, want := range tc.wantEnqueued {
+			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.QueueKey(qname), diff)
+			}
 		}
 	}
 }
