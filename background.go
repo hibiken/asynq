@@ -97,12 +97,12 @@ func NewBackground(r *redis.Client, cfg *Config) *Background {
 		delayFunc = defaultDelayFunc
 	}
 	queues := cfg.Queues
-	if queues == nil {
+	if queues == nil || len(queues) == 0 {
 		queues = defaultQueueConfig
 	}
 	rdb := rdb.NewRDB(r)
 	scheduler := newScheduler(rdb, 5*time.Second)
-	processor := newProcessor(rdb, n, queues, delayFunc)
+	processor := newProcessor(rdb, n, normalizeQueueCfg(queues), delayFunc)
 	return &Background{
 		rdb:       rdb,
 		scheduler: scheduler,
@@ -184,4 +184,36 @@ func (bg *Background) stop() {
 	bg.rdb.Close()
 	bg.processor.handler = nil
 	bg.running = false
+}
+
+// normalizeQueueCfg divides priority numbers by their
+// greatest common divisor.
+func normalizeQueueCfg(queueCfg map[string]uint) map[string]uint {
+	var xs []uint
+	for _, x := range queueCfg {
+		xs = append(xs, x)
+	}
+	d := gcd(xs...)
+	res := make(map[string]uint)
+	for q, x := range queueCfg {
+		res[q] = x / d
+	}
+	return res
+}
+
+func gcd(xs ...uint) uint {
+	fn := func(x, y uint) uint {
+		for y > 0 {
+			x, y = y, x%y
+		}
+		return x
+	}
+	res := xs[0]
+	for i := 0; i < len(xs); i++ {
+		res = fn(xs[i], res)
+		if res == 1 {
+			return 1
+		}
+	}
+	return res
 }
