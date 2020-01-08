@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - NewTask constructor
+- `Queues` option in `Config` to specify mutiple queues with priority level
+- `Client` can schedule a task with `asynq.Queue(name)` to specify which queue to use
 
 ### Changed
 
