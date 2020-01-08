@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/go-redis/redis/v7 v7.0.0-beta.4
-	github.com/google/go-cmp v0.3.1
+	github.com/google/go-cmp v0.4.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pelletier/go-toml v1.6.0 // indirect
 	github.com/rs/xid v1.2.1
