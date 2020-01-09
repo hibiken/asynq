@@ -25,6 +25,7 @@ type Stats struct {
 	Dead       int
 	Processed  int
 	Failed     int
+	Queues     map[string]int // map of queue name to number of tasks in the queue (e.g., "default": 100, "critical": 20)
 	Timestamp  time.Time
 }
 
@@ -83,7 +84,7 @@ type DeadTask struct {
 
 // CurrentStats returns a current state of the queues.
 func (r *RDB) CurrentStats() (*Stats, error) {
-	// KEYS[1] -> asynq:queues:default
+	// KEYS[1] -> asynq:queues
 	// KEYS[2] -> asynq:in_progress
 	// KEYS[3] -> asynq:scheduled
 	// KEYS[4] -> asynq:retry
@@ -91,27 +92,40 @@ func (r *RDB) CurrentStats() (*Stats, error) {
 	// KEYS[6] -> asynq:processed:<yyyy-mm-dd>
 	// KEYS[7] -> asynq:failure:<yyyy-mm-dd>
 	script := redis.NewScript(`
-	local qlen = redis.call("LLEN", KEYS[1])
-	local plen = redis.call("LLEN", KEYS[2])
-	local slen = redis.call("ZCARD", KEYS[3])
-	local rlen = redis.call("ZCARD", KEYS[4])
-	local dlen = redis.call("ZCARD", KEYS[5])
+	local res = {}
+	local queues = redis.call("SMEMBERS", KEYS[1])
+	for _, qkey in ipairs(queues) do
+	  table.insert(res, qkey)
+	  table.insert(res, redis.call("LLEN", qkey))
+	end
+	table.insert(res, KEYS[2])
+	table.insert(res, redis.call("LLEN", KEYS[2]))
+	table.insert(res, KEYS[3])
+	table.insert(res, redis.call("ZCARD", KEYS[3]))
+	table.insert(res, KEYS[4])
+	table.insert(res, redis.call("ZCARD", KEYS[4]))
+	table.insert(res, KEYS[5])
+	table.insert(res, redis.call("ZCARD", KEYS[5]))
 	local pcount = 0
 	local p = redis.call("GET", KEYS[6])
 	if p then
 		pcount = tonumber(p) 
 	end
+	table.insert(res, "processed")
+	table.insert(res, pcount)
 	local fcount = 0
 	local f = redis.call("GET", KEYS[7])
 	if f then
 		fcount = tonumber(f)
 	end
-	return {qlen, plen, slen, rlen, dlen, pcount, fcount}
+	table.insert(res, "failed")
+	table.insert(res, fcount)
+	return res
 	`)
 
 	now := time.Now()
 	res, err := script.Run(r.client, []string{
-		base.DefaultQueue,
+		base.AllQueues,
 		base.InProgressQueue,
 		base.ScheduledQueue,
 		base.RetryQueue,
@@ -122,20 +136,37 @@ func (r *RDB) CurrentStats() (*Stats, error) {
 	if err != nil {
 		return nil, err
 	}
-	nums, err := cast.ToIntSliceE(res)
+	data, err := cast.ToSliceE(res)
 	if err != nil {
 		return nil, err
 	}
-	return &Stats{
-		Enqueued:   nums[0],
-		InProgress: nums[1],
-		Scheduled:  nums[2],
-		Retry:      nums[3],
-		Dead:       nums[4],
-		Processed:  nums[5],
-		Failed:     nums[6],
-		Timestamp:  now,
-	}, nil
+	stats := &Stats{
+		Queues:    make(map[string]int),
+		Timestamp: now,
+	}
+	for i := 0; i < len(data); i += 2 {
+		key := cast.ToString(data[i])
+		val := cast.ToInt(data[i+1])
+
+		switch {
+		case strings.HasPrefix(key, base.QueuePrefix):
+			stats.Enqueued += val
+			stats.Queues[strings.TrimPrefix(key, base.QueuePrefix)] = val
+		case key == base.InProgressQueue:
+			stats.InProgress = val
+		case key == base.ScheduledQueue:
+			stats.Scheduled = val
+		case key == base.RetryQueue:
+			stats.Retry = val
+		case key == base.DeadQueue:
+			stats.Dead = val
+		case key == "processed":
+			stats.Processed = val
+		case key == "failed":
+			stats.Failed = val
+		}
+	}
+	return stats, nil
 }
 
 // HistoricalStats returns a list of stats from the last n days.
