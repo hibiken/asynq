@@ -24,11 +24,6 @@ type processor struct {
 
 	retryDelayFunc retryDelayFunc
 
-	// timeout for blocking dequeue operation.
-	// dequeue needs to timeout to avoid blocking forever
-	// in case of a program shutdown or additon of a new queue.
-	dequeueTimeout time.Duration
-
 	// sema is a counting semaphore to ensure the number of active workers
 	// does not exceed the limit.
 	sema chan struct{}
@@ -52,7 +47,6 @@ func newProcessor(r *rdb.RDB, n int, qcfg map[string]uint, fn retryDelayFunc) *p
 		rdb:            r,
 		queueConfig:    qcfg,
 		retryDelayFunc: fn,
-		dequeueTimeout: 2 * time.Second,
 		sema:           make(chan struct{}, n),
 		done:           make(chan struct{}),
 		abort:          make(chan struct{}),

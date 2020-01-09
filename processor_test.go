@@ -66,7 +66,6 @@ func TestProcessorSuccess(t *testing.T) {
 		}
 		p := newProcessor(rdbClient, 10, defaultQueueConfig, defaultDelayFunc)
 		p.handler = HandlerFunc(handler)
-		p.dequeueTimeout = time.Second // short time out for test purpose
 
 		p.start()
 		for _, msg := range tc.incoming {
@@ -150,7 +149,6 @@ func TestProcessorRetry(t *testing.T) {
 		}
 		p := newProcessor(rdbClient, 10, defaultQueueConfig, delayFunc)
 		p.handler = HandlerFunc(handler)
-		p.dequeueTimeout = time.Second // short time out for test purpose
 
 		p.start()
 		for _, msg := range tc.incoming {
