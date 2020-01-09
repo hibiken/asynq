@@ -29,12 +29,18 @@ func setup(t *testing.T) *RDB {
 
 func TestEnqueue(t *testing.T) {
 	r := setup(t)
+	t1 := h.NewTaskMessage("send_email", map[string]interface{}{"to": "exampleuser@gmail.com", "from": "noreply@example.com"})
+	t2 := h.NewTaskMessage("generate_csv", map[string]interface{}{})
+	t2.Queue = "csv"
+	t3 := h.NewTaskMessage("sync", nil)
+	t3.Queue = "low"
+
 	tests := []struct {
 		msg *base.TaskMessage
 	}{
-		{h.NewTaskMessage("send_email", map[string]interface{}{"to": "exampleuser@gmail.com", "from": "noreply@example.com"})},
-		{h.NewTaskMessage("generate_csv", map[string]interface{}{})},
-		{h.NewTaskMessage("sync", nil)},
+		{t1},
+		{t2},
+		{t3},
 	}
 
 	for _, tc := range tests {
@@ -42,16 +48,20 @@ func TestEnqueue(t *testing.T) {
 
 		err := r.Enqueue(tc.msg)
 		if err != nil {
-			t.Errorf("(*RDB).Enqueue = %v, want nil", err)
-			continue
+			t.Errorf("(*RDB).Enqueue(msg) = %v, want nil", err)
 		}
-		gotEnqueued := h.GetEnqueuedMessages(t, r.client)
+
+		qkey := base.QueueKey(tc.msg.Queue)
+		gotEnqueued := h.GetEnqueuedMessages(t, r.client, tc.msg.Queue)
 		if len(gotEnqueued) != 1 {
-			t.Errorf("%q has length %d, want 1", base.DefaultQueue, len(gotEnqueued))
+			t.Errorf("%q has length %d, want 1", qkey, len(gotEnqueued))
 			continue
 		}
 		if diff := cmp.Diff(tc.msg, gotEnqueued[0]); diff != "" {
 			t.Errorf("persisted data differed from the original input (-want, +got)\n%s", diff)
+		}
+		if !r.client.SIsMember(base.AllQueues, qkey).Val() {
+			t.Errorf("%q is not a member of SET %q", qkey, base.AllQueues)
 		}
 	}
 }

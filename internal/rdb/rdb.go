@@ -48,7 +48,12 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 		return err
 	}
 	key := base.QueueKey(msg.Queue)
-	return r.client.LPush(key, string(bytes)).Err()
+	script := redis.NewScript(`
+	redis.call("LPUSH", KEYS[1], ARGV[1])
+	redis.call("SADD", KEYS[2], KEYS[1])
+	return 1
+	`)
+	return script.Run(r.client, []string{key, base.AllQueues}, string(bytes)).Err()
 }
 
 // Dequeue queries given queues in order and pops a task message if there
