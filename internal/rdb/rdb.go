@@ -52,7 +52,7 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 }
 
 // Dequeue queries given queues in order and pops a task message if there
-// is one and returns it. If all queues are empty,  ErrNoProcessableTask
+// is one and returns it. If all queues are empty, ErrNoProcessableTask
 // error is returned.
 func (r *RDB) Dequeue(qnames ...string) (*base.TaskMessage, error) {
 	var keys []string
