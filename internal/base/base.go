@@ -19,6 +19,7 @@ const (
 	processedPrefix = "asynq:processed:"             // STRING - asynq:processed:<yyyy-mm-dd>
 	failurePrefix   = "asynq:failure:"               // STRING - asynq:failure:<yyyy-mm-dd>
 	QueuePrefix     = "asynq:queues:"                // LIST   - asynq:queues:<qname>
+	AllQueues       = "asynq:queues"                 // SET
 	DefaultQueue    = QueuePrefix + DefaultQueueName // LIST
 	ScheduledQueue  = "asynq:scheduled"              // ZSET
 	RetryQueue      = "asynq:retry"                  // ZSET
