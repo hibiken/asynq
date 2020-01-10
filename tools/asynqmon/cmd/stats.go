@@ -7,6 +7,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -61,8 +63,12 @@ func stats(cmd *cobra.Command, args []string) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	fmt.Println("STATES")
+	printStates(stats)
+	fmt.Println()
+
 	fmt.Println("QUEUES")
-	printQueues(stats)
+	printQueues(stats.Queues)
 	fmt.Println()
 
 	fmt.Printf("STATS FOR %s UTC\n", stats.Timestamp.UTC().Format("2006-01-02"))
@@ -74,12 +80,30 @@ func stats(cmd *cobra.Command, args []string) {
 	fmt.Println()
 }
 
-func printQueues(s *rdb.Stats) {
+func printStates(s *rdb.Stats) {
 	format := strings.Repeat("%v\t", 5) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
 	fmt.Fprintf(tw, format, "InProgress", "Enqueued", "Scheduled", "Retry", "Dead")
 	fmt.Fprintf(tw, format, "----------", "--------", "---------", "-----", "----")
 	fmt.Fprintf(tw, format, s.InProgress, s.Enqueued, s.Scheduled, s.Retry, s.Dead)
+	tw.Flush()
+}
+
+func printQueues(queues map[string]int) {
+	var qnames, seps, counts []string
+	for q := range queues {
+		qnames = append(qnames, strings.Title(q))
+	}
+	sort.Strings(qnames) // sort for stable order
+	for _, q := range qnames {
+		seps = append(seps, strings.Repeat("-", len(q)))
+		counts = append(counts, strconv.Itoa(queues[strings.ToLower(q)]))
+	}
+	format := strings.Repeat("%v\t", len(qnames)) + "\n"
+	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
+	fmt.Fprintf(tw, format, toInterfaceSlice(qnames)...)
+	fmt.Fprintf(tw, format, toInterfaceSlice(seps)...)
+	fmt.Fprintf(tw, format, toInterfaceSlice(counts)...)
 	tw.Flush()
 }
 
@@ -111,4 +135,12 @@ func printInfo(info map[string]string) {
 		fmt.Sprintf("%sB", info["used_memory_peak_human"]),
 	)
 	tw.Flush()
+}
+
+func toInterfaceSlice(strs []string) []interface{} {
+	var res []interface{}
+	for _, s := range strs {
+		res = append(res, s)
+	}
+	return res
 }
