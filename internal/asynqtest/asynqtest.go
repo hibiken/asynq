@@ -49,7 +49,19 @@ func NewTaskMessage(taskType string, payload map[string]interface{}) *base.TaskM
 	return &base.TaskMessage{
 		ID:      xid.New(),
 		Type:    taskType,
-		Queue:   "default",
+		Queue:   base.DefaultQueueName,
+		Retry:   25,
+		Payload: payload,
+	}
+}
+
+// NewTaskMessageWithQueue returns a new instance of TaskMessage given a
+// task type, payload and queue name.
+func NewTaskMessageWithQueue(taskType string, payload map[string]interface{}, qname string) *base.TaskMessage {
+	return &base.TaskMessage{
+		ID:      xid.New(),
+		Type:    taskType,
+		Queue:   qname,
 		Retry:   25,
 		Payload: payload,
 	}
@@ -117,6 +129,7 @@ func SeedEnqueuedQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage,
 	if len(queueOpt) > 0 {
 		queue = base.QueueKey(queueOpt[0])
 	}
+	r.SAdd(base.AllQueues, queue)
 	seedRedisList(tb, r, queue, msgs)
 }
 
