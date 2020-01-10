@@ -115,10 +115,10 @@ func listEnqueued(r *rdb.RDB) {
 		fmt.Println("No enqueued tasks")
 		return
 	}
-	cols := []string{"ID", "Type", "Payload"}
+	cols := []string{"ID", "Type", "Payload", "Queue"}
 	printRows := func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
-			fmt.Fprintf(w, tmpl, t.ID, t.Type, t.Payload)
+			fmt.Fprintf(w, tmpl, t.ID, t.Type, t.Payload, t.Queue)
 		}
 	}
 	printTable(cols, printRows)
@@ -153,11 +153,11 @@ func listScheduled(r *rdb.RDB) {
 		fmt.Println("No scheduled tasks")
 		return
 	}
-	cols := []string{"ID", "Type", "Payload", "Process In"}
+	cols := []string{"ID", "Type", "Payload", "Process In", "Queue"}
 	printRows := func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
 			processIn := fmt.Sprintf("%.0f seconds", t.ProcessAt.Sub(time.Now()).Seconds())
-			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "s"), t.Type, t.Payload, processIn)
+			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "s"), t.Type, t.Payload, processIn, t.Queue)
 		}
 	}
 	printTable(cols, printRows)
@@ -173,11 +173,11 @@ func listRetry(r *rdb.RDB) {
 		fmt.Println("No retry tasks")
 		return
 	}
-	cols := []string{"ID", "Type", "Payload", "Retry In", "Last Error", "Retried", "Max Retry"}
+	cols := []string{"ID", "Type", "Payload", "Retry In", "Last Error", "Retried", "Max Retry", "Queue"}
 	printRows := func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
 			retryIn := fmt.Sprintf("%.0f seconds", t.ProcessAt.Sub(time.Now()).Seconds())
-			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "r"), t.Type, t.Payload, retryIn, t.ErrorMsg, t.Retried, t.Retry)
+			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "r"), t.Type, t.Payload, retryIn, t.ErrorMsg, t.Retried, t.Retry, t.Queue)
 		}
 	}
 	printTable(cols, printRows)
@@ -193,10 +193,10 @@ func listDead(r *rdb.RDB) {
 		fmt.Println("No dead tasks")
 		return
 	}
-	cols := []string{"ID", "Type", "Payload", "Last Failed", "Last Error"}
+	cols := []string{"ID", "Type", "Payload", "Last Failed", "Last Error", "Queue"}
 	printRows := func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
-			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "d"), t.Type, t.Payload, t.LastFailedAt, t.ErrorMsg)
+			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "d"), t.Type, t.Payload, t.LastFailedAt, t.ErrorMsg, t.Queue)
 		}
 	}
 	printTable(cols, printRows)

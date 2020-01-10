@@ -41,6 +41,7 @@ type EnqueuedTask struct {
 	ID      xid.ID
 	Type    string
 	Payload map[string]interface{}
+	Queue   string
 }
 
 // InProgressTask is a task that's currently being processed.
@@ -57,6 +58,7 @@ type ScheduledTask struct {
 	Payload   map[string]interface{}
 	ProcessAt time.Time
 	Score     int64
+	Queue     string
 }
 
 // RetryTask is a task that's in retry queue because worker failed to process the task.
@@ -70,6 +72,7 @@ type RetryTask struct {
 	Retried   int
 	Retry     int
 	Score     int64
+	Queue     string
 }
 
 // DeadTask is a task in that has exhausted all retries.
@@ -80,6 +83,7 @@ type DeadTask struct {
 	LastFailedAt time.Time
 	ErrorMsg     string
 	Score        int64
+	Queue        string
 }
 
 // CurrentStats returns a current state of the queues.
@@ -263,6 +267,7 @@ func (r *RDB) ListEnqueued() ([]*EnqueuedTask, error) {
 			ID:      msg.ID,
 			Type:    msg.Type,
 			Payload: msg.Payload,
+			Queue:   msg.Queue,
 		})
 	}
 	return tasks, nil
@@ -313,6 +318,7 @@ func (r *RDB) ListScheduled() ([]*ScheduledTask, error) {
 			ID:        msg.ID,
 			Type:      msg.Type,
 			Payload:   msg.Payload,
+			Queue:     msg.Queue,
 			ProcessAt: processAt,
 			Score:     int64(z.Score),
 		})
@@ -346,6 +352,7 @@ func (r *RDB) ListRetry() ([]*RetryTask, error) {
 			ErrorMsg:  msg.ErrorMsg,
 			Retry:     msg.Retry,
 			Retried:   msg.Retried,
+			Queue:     msg.Queue,
 			ProcessAt: processAt,
 			Score:     int64(z.Score),
 		})
@@ -376,6 +383,7 @@ func (r *RDB) ListDead() ([]*DeadTask, error) {
 			Type:         msg.Type,
 			Payload:      msg.Payload,
 			ErrorMsg:     msg.ErrorMsg,
+			Queue:        msg.Queue,
 			LastFailedAt: lastFailedAt,
 			Score:        int64(z.Score),
 		})
