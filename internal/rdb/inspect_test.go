@@ -135,6 +135,7 @@ func TestCurrentStatsWithoutData(t *testing.T) {
 		Processed:  0,
 		Failed:     0,
 		Timestamp:  time.Now(),
+		Queues:     map[string]int{},
 	}
 
 	got, err := r.CurrentStats()
@@ -227,10 +228,10 @@ func TestListEnqueued(t *testing.T) {
 	m2 := h.NewTaskMessage("reindex", nil)
 	m3 := h.NewTaskMessageWithQueue("important_notification", nil, "critical")
 	m4 := h.NewTaskMessageWithQueue("minor_notification", nil, "low")
-	t1 := &EnqueuedTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload}
-	t2 := &EnqueuedTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload}
-	t3 := &EnqueuedTask{ID: m3.ID, Type: m3.Type, Payload: m3.Payload}
-	t4 := &EnqueuedTask{ID: m4.ID, Type: m4.Type, Payload: m4.Payload}
+	t1 := &EnqueuedTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, Queue: m1.Queue}
+	t2 := &EnqueuedTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, Queue: m2.Queue}
+	t3 := &EnqueuedTask{ID: m3.ID, Type: m3.Type, Payload: m3.Payload, Queue: m3.Queue}
+	t4 := &EnqueuedTask{ID: m4.ID, Type: m4.Type, Payload: m4.Payload, Queue: m4.Queue}
 	tests := []struct {
 		enqueued map[string][]*base.TaskMessage
 		want     []*EnqueuedTask
@@ -332,8 +333,8 @@ func TestListScheduled(t *testing.T) {
 	m2 := h.NewTaskMessage("reindex", nil)
 	p1 := time.Now().Add(30 * time.Minute)
 	p2 := time.Now().Add(24 * time.Hour)
-	t1 := &ScheduledTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, ProcessAt: p1, Score: p1.Unix()}
-	t2 := &ScheduledTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, ProcessAt: p2, Score: p2.Unix()}
+	t1 := &ScheduledTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, ProcessAt: p1, Score: p1.Unix(), Queue: m1.Queue}
+	t2 := &ScheduledTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, ProcessAt: p2, Score: p2.Unix(), Queue: m2.Queue}
 
 	tests := []struct {
 		scheduled []h.ZSetEntry
@@ -406,6 +407,7 @@ func TestListRetry(t *testing.T) {
 		Retried:   m1.Retried,
 		Retry:     m1.Retry,
 		Score:     p1.Unix(),
+		Queue:     m1.Queue,
 	}
 	t2 := &RetryTask{
 		ID:        m2.ID,
@@ -416,6 +418,7 @@ func TestListRetry(t *testing.T) {
 		Retried:   m2.Retried,
 		Retry:     m2.Retry,
 		Score:     p2.Unix(),
+		Queue:     m1.Queue,
 	}
 
 	tests := []struct {
@@ -484,6 +487,7 @@ func TestListDead(t *testing.T) {
 		LastFailedAt: f1,
 		ErrorMsg:     m1.ErrorMsg,
 		Score:        f1.Unix(),
+		Queue:        m1.Queue,
 	}
 	t2 := &DeadTask{
 		ID:           m2.ID,
@@ -492,6 +496,7 @@ func TestListDead(t *testing.T) {
 		LastFailedAt: f2,
 		ErrorMsg:     m2.ErrorMsg,
 		Score:        f2.Unix(),
+		Queue:        m2.Queue,
 	}
 
 	tests := []struct {
