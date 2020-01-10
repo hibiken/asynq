@@ -233,7 +233,22 @@ func (r *RDB) RedisInfo() (map[string]string, error) {
 
 // ListEnqueued returns all enqueued tasks that are ready to be processed.
 func (r *RDB) ListEnqueued() ([]*EnqueuedTask, error) {
-	data, err := r.client.LRange(base.DefaultQueue, 0, -1).Result()
+	script := redis.NewScript(`
+	local res = {}
+	local queues = redis.call("SMEMBERS", KEYS[1])
+	for _, qkey in ipairs(queues) do
+		local msgs = redis.call("LRANGE", qkey, 0, -1)
+		for _, msg in ipairs(msgs) do
+			table.insert(res, msg)
+		end
+	end
+	return res
+	`)
+	res, err := script.Run(r.client, []string{base.AllQueues}).Result()
+	if err != nil {
+		return nil, err
+	}
+	data, err := cast.ToStringSliceE(res)
 	if err != nil {
 		return nil, err
 	}
@@ -242,8 +257,7 @@ func (r *RDB) ListEnqueued() ([]*EnqueuedTask, error) {
 		var msg base.TaskMessage
 		err := json.Unmarshal([]byte(s), &msg)
 		if err != nil {
-			// continue // bad data, ignore and continue
-			return nil, err
+			continue // bad data, ignore and continue
 		}
 		tasks = append(tasks, &EnqueuedTask{
 			ID:      msg.ID,

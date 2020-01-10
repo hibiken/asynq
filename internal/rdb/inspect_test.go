@@ -225,25 +225,43 @@ func TestListEnqueued(t *testing.T) {
 
 	m1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
 	m2 := h.NewTaskMessage("reindex", nil)
+	m3 := h.NewTaskMessageWithQueue("important_notification", nil, "critical")
+	m4 := h.NewTaskMessageWithQueue("minor_notification", nil, "low")
 	t1 := &EnqueuedTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload}
 	t2 := &EnqueuedTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload}
+	t3 := &EnqueuedTask{ID: m3.ID, Type: m3.Type, Payload: m3.Payload}
+	t4 := &EnqueuedTask{ID: m4.ID, Type: m4.Type, Payload: m4.Payload}
 	tests := []struct {
-		enqueued []*base.TaskMessage
+		enqueued map[string][]*base.TaskMessage
 		want     []*EnqueuedTask
 	}{
 		{
-			enqueued: []*base.TaskMessage{m1, m2},
-			want:     []*EnqueuedTask{t1, t2},
+			enqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {m1, m2},
+			},
+			want: []*EnqueuedTask{t1, t2},
 		},
 		{
-			enqueued: []*base.TaskMessage{},
-			want:     []*EnqueuedTask{},
+			enqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {},
+			},
+			want: []*EnqueuedTask{},
+		},
+		{
+			enqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {m1, m2},
+				"critical":            {m3},
+				"low":                 {m4},
+			},
+			want: []*EnqueuedTask{t1, t2, t3, t4},
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedEnqueuedQueue(t, r.client, tc.enqueued)
+		for qname, msgs := range tc.enqueued {
+			h.SeedEnqueuedQueue(t, r.client, msgs, qname)
+		}
 
 		got, err := r.ListEnqueued()
 		if err != nil {
