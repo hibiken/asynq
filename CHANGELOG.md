@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- [CLI] `asynqmon stats` now shows the total of all enqueued tasks under "Enqueued"
+- [CLI] `asynqmon stats` now shows each queue's task count
 - Task type is now immutable (i.e., Payload is read-only)
 
 ## [0.1.0] - 2020-01-04
