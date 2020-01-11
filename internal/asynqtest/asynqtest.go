@@ -20,7 +20,7 @@ import (
 // ZSetEntry is an entry in redis sorted set.
 type ZSetEntry struct {
 	Msg   *base.TaskMessage
-	Score int64
+	Score float64
 }
 
 // SortMsgOpt is a cmp.Option to sort base.TaskMessage for comparing slice of task messages.
@@ -245,7 +245,7 @@ func getZSetEntries(tb testing.TB, r *redis.Client, zset string) []ZSetEntry {
 	for _, z := range data {
 		entries = append(entries, ZSetEntry{
 			Msg:   MustUnmarshal(tb, z.Member.(string)),
-			Score: int64(z.Score),
+			Score: z.Score,
 		})
 	}
 	return entries

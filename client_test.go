@@ -58,7 +58,7 @@ func TestClient(t *testing.T) {
 						Retry:   defaultMaxRetry,
 						Queue:   "default",
 					},
-					Score: time.Now().Add(2 * time.Hour).Unix(),
+					Score: float64(time.Now().Add(2 * time.Hour).Unix()),
 				},
 			},
 		},
