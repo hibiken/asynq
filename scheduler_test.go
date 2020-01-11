@@ -36,11 +36,11 @@ func TestScheduler(t *testing.T) {
 	}{
 		{
 			initScheduled: []h.ZSetEntry{
-				{Msg: t1, Score: now.Add(time.Hour).Unix()},
-				{Msg: t2, Score: now.Add(-2 * time.Second).Unix()},
+				{Msg: t1, Score: float64(now.Add(time.Hour).Unix())},
+				{Msg: t2, Score: float64(now.Add(-2 * time.Second).Unix())},
 			},
 			initRetry: []h.ZSetEntry{
-				{Msg: t3, Score: time.Now().Add(-500 * time.Millisecond).Unix()},
+				{Msg: t3, Score: float64(time.Now().Add(-500 * time.Millisecond).Unix())},
 			},
 			initQueue:     []*base.TaskMessage{t4},
 			wait:          pollInterval * 2,
@@ -50,9 +50,9 @@ func TestScheduler(t *testing.T) {
 		},
 		{
 			initScheduled: []h.ZSetEntry{
-				{Msg: t1, Score: now.Unix()},
-				{Msg: t2, Score: now.Add(-2 * time.Second).Unix()},
-				{Msg: t3, Score: now.Add(-500 * time.Millisecond).Unix()},
+				{Msg: t1, Score: float64(now.Unix())},
+				{Msg: t2, Score: float64(now.Add(-2 * time.Second).Unix())},
+				{Msg: t3, Score: float64(now.Add(-500 * time.Millisecond).Unix())},
 			},
 			initRetry:     []h.ZSetEntry{},
 			initQueue:     []*base.TaskMessage{t4},

@@ -308,8 +308,8 @@ func TestSchedule(t *testing.T) {
 			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(gotScheduled), base.ScheduledQueue)
 			continue
 		}
-		if gotScheduled[0].Score != tc.processAt.Unix() {
-			t.Errorf("%s inserted an item with score %d, want %d", desc, gotScheduled[0].Score, tc.processAt.Unix())
+		if int64(gotScheduled[0].Score) != tc.processAt.Unix() {
+			t.Errorf("%s inserted an item with score %d, want %d", desc, int64(gotScheduled[0].Score), tc.processAt.Unix())
 			continue
 		}
 	}
@@ -347,7 +347,7 @@ func TestRetry(t *testing.T) {
 			retry: []h.ZSetEntry{
 				{
 					Msg:   t3,
-					Score: now.Add(time.Minute).Unix(),
+					Score: float64(now.Add(time.Minute).Unix()),
 				},
 			},
 			msg:            t1,
@@ -357,11 +357,11 @@ func TestRetry(t *testing.T) {
 			wantRetry: []h.ZSetEntry{
 				{
 					Msg:   t1AfterRetry,
-					Score: now.Add(5 * time.Minute).Unix(),
+					Score: float64(now.Add(5 * time.Minute).Unix()),
 				},
 				{
 					Msg:   t3,
-					Score: now.Add(time.Minute).Unix(),
+					Score: float64(now.Add(time.Minute).Unix()),
 				},
 			},
 		},
@@ -440,7 +440,7 @@ func TestKill(t *testing.T) {
 			dead: []h.ZSetEntry{
 				{
 					Msg:   t3,
-					Score: now.Add(-time.Hour).Unix(),
+					Score: float64(now.Add(-time.Hour).Unix()),
 				},
 			},
 			target:         t1,
@@ -448,11 +448,11 @@ func TestKill(t *testing.T) {
 			wantDead: []h.ZSetEntry{
 				{
 					Msg:   t1AfterKill,
-					Score: now.Unix(),
+					Score: float64(now.Unix()),
 				},
 				{
 					Msg:   t3,
-					Score: now.Add(-time.Hour).Unix(),
+					Score: float64(now.Add(-time.Hour).Unix()),
 				},
 			},
 		},
@@ -464,7 +464,7 @@ func TestKill(t *testing.T) {
 			wantDead: []h.ZSetEntry{
 				{
 					Msg:   t1AfterKill,
-					Score: now.Unix(),
+					Score: float64(now.Unix()),
 				},
 			},
 		},
@@ -593,11 +593,11 @@ func TestCheckAndEnqueue(t *testing.T) {
 	}{
 		{
 			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: secondAgo.Unix()},
-				{Msg: t2, Score: secondAgo.Unix()},
+				{Msg: t1, Score: float64(secondAgo.Unix())},
+				{Msg: t2, Score: float64(secondAgo.Unix())},
 			},
 			retry: []h.ZSetEntry{
-				{Msg: t3, Score: secondAgo.Unix()}},
+				{Msg: t3, Score: float64(secondAgo.Unix())}},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {t1, t2, t3},
 			},
@@ -606,10 +606,10 @@ func TestCheckAndEnqueue(t *testing.T) {
 		},
 		{
 			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: hourFromNow.Unix()},
-				{Msg: t2, Score: secondAgo.Unix()}},
+				{Msg: t1, Score: float64(hourFromNow.Unix())},
+				{Msg: t2, Score: float64(secondAgo.Unix())}},
 			retry: []h.ZSetEntry{
-				{Msg: t3, Score: secondAgo.Unix()}},
+				{Msg: t3, Score: float64(secondAgo.Unix())}},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {t2, t3},
 			},
@@ -618,10 +618,10 @@ func TestCheckAndEnqueue(t *testing.T) {
 		},
 		{
 			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: hourFromNow.Unix()},
-				{Msg: t2, Score: hourFromNow.Unix()}},
+				{Msg: t1, Score: float64(hourFromNow.Unix())},
+				{Msg: t2, Score: float64(hourFromNow.Unix())}},
 			retry: []h.ZSetEntry{
-				{Msg: t3, Score: hourFromNow.Unix()}},
+				{Msg: t3, Score: float64(hourFromNow.Unix())}},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {},
 			},
@@ -630,11 +630,11 @@ func TestCheckAndEnqueue(t *testing.T) {
 		},
 		{
 			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: secondAgo.Unix()},
-				{Msg: t4, Score: secondAgo.Unix()},
+				{Msg: t1, Score: float64(secondAgo.Unix())},
+				{Msg: t4, Score: float64(secondAgo.Unix())},
 			},
 			retry: []h.ZSetEntry{
-				{Msg: t5, Score: secondAgo.Unix()}},
+				{Msg: t5, Score: float64(secondAgo.Unix())}},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {t1},
 				"critical": {t4},

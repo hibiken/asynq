@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
@@ -128,9 +129,9 @@ func TestProcessorRetry(t *testing.T) {
 			delay:    time.Minute,
 			wait:     time.Second,
 			wantRetry: []h.ZSetEntry{
-				{Msg: &r2, Score: now.Add(time.Minute).Unix()},
-				{Msg: &r3, Score: now.Add(time.Minute).Unix()},
-				{Msg: &r4, Score: now.Add(time.Minute).Unix()},
+				{Msg: &r2, Score: float64(now.Add(time.Minute).Unix())},
+				{Msg: &r3, Score: float64(now.Add(time.Minute).Unix())},
+				{Msg: &r4, Score: float64(now.Add(time.Minute).Unix())},
 			},
 			wantDead: []*base.TaskMessage{&r1},
 		},
@@ -161,8 +162,9 @@ func TestProcessorRetry(t *testing.T) {
 		time.Sleep(tc.wait)
 		p.terminate()
 
+		cmpOpt := cmpopts.EquateApprox(0, float64(time.Second)) // allow up to second difference in zset score
 		gotRetry := h.GetRetryEntries(t, r)
-		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortZSetEntryOpt); diff != "" {
+		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortZSetEntryOpt, cmpOpt); diff != "" {
 			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.RetryQueue, diff)
 		}
 
