@@ -6,6 +6,7 @@
 package base
 
 import (
+	"strings"
 	"time"
 
 	"github.com/rs/xid"
@@ -29,7 +30,7 @@ const (
 
 // QueueKey returns a redis key string for the given queue name.
 func QueueKey(qname string) string {
-	return QueuePrefix + qname
+	return QueuePrefix + strings.ToLower(qname)
 }
 
 // ProcessedKey returns a redis key string for procesed count

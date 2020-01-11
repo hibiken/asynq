@@ -23,18 +23,23 @@ var lsValidArgs = []string{"enqueued", "inprogress", "scheduled", "retry", "dead
 
 // lsCmd represents the ls command
 var lsCmd = &cobra.Command{
-	Use:   "ls [queue name]",
-	Short: "Lists queue contents",
-	Long: `Ls (asynqmon ls) will list all tasks from the specified queue in a table format.
+	Use:   "ls [task state]",
+	Short: "Lists tasks in the specified state",
+	Long: `Ls (asynqmon ls) will list all tasks in the specified state in a table format.
 
-The command takes one argument which specifies the queue to inspect. The value
-of the argument should be one of "enqueued", "inprogress", "scheduled",
+The command takes one argument which specifies the state of tasks.
+The argument value should be one of "enqueued", "inprogress", "scheduled",
 "retry", or "dead".
 
-Example: asynqmon ls dead`,
-	ValidArgs: lsValidArgs,
-	Args:      cobra.ExactValidArgs(1),
-	Run:       ls,
+Example:
+asynqmon ls dead -> Lists all tasks in dead state
+
+Enqueued tasks can optionally be filtered by providing queue names after ":"
+Example:
+asynqmon ls enqueued:critical -> List tasks from critical queue only
+`,
+	Args: cobra.ExactValidArgs(1),
+	Run:  ls,
 }
 
 func init() {
@@ -57,9 +62,10 @@ func ls(cmd *cobra.Command, args []string) {
 		DB:   db,
 	})
 	r := rdb.NewRDB(c)
-	switch args[0] {
+	parts := strings.Split(args[0], ":")
+	switch parts[0] {
 	case "enqueued":
-		listEnqueued(r)
+		listEnqueued(r, parts[1:]...)
 	case "inprogress":
 		listInProgress(r)
 	case "scheduled":
@@ -69,7 +75,7 @@ func ls(cmd *cobra.Command, args []string) {
 	case "dead":
 		listDead(r)
 	default:
-		fmt.Printf("error: `asynqmon ls [queue name]` only accepts %v as the argument.\n", lsValidArgs)
+		fmt.Printf("error: `asynqmon ls [task state]` only accepts %v as the argument.\n", lsValidArgs)
 		os.Exit(1)
 	}
 }
@@ -105,14 +111,24 @@ func parseQueryID(queryID string) (id xid.ID, score int64, qtype string, err err
 	return id, score, qtype, nil
 }
 
-func listEnqueued(r *rdb.RDB) {
-	tasks, err := r.ListEnqueued()
+func listEnqueued(r *rdb.RDB, qnames ...string) {
+	tasks, err := r.ListEnqueued(qnames...)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	if len(tasks) == 0 {
-		fmt.Println("No enqueued tasks")
+		msg := "No enqueued tasks"
+		if len(qnames) > 0 {
+			msg += " in"
+			for i, q := range qnames {
+				msg += fmt.Sprintf(" %q queue", q)
+				if i != len(qnames)-1 {
+					msg += ","
+				}
+			}
+		}
+		fmt.Println(msg)
 		return
 	}
 	cols := []string{"ID", "Type", "Payload", "Queue"}

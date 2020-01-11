@@ -235,8 +235,18 @@ func (r *RDB) RedisInfo() (map[string]string, error) {
 	return info, nil
 }
 
-// ListEnqueued returns all enqueued tasks that are ready to be processed.
-func (r *RDB) ListEnqueued() ([]*EnqueuedTask, error) {
+// ListEnqueued returns enqueued tasks that are ready to be processed.
+//
+// Queue names can be optionally passed to query only the specified queues.
+// If none are passed, it will query all queues.
+func (r *RDB) ListEnqueued(qnames ...string) ([]*EnqueuedTask, error) {
+	if len(qnames) == 0 {
+		return r.listAllEnqueued()
+	}
+	return r.listEnqueued(qnames...)
+}
+
+func (r *RDB) listAllEnqueued() ([]*EnqueuedTask, error) {
 	script := redis.NewScript(`
 	local res = {}
 	local queues = redis.call("SMEMBERS", KEYS[1])
@@ -256,6 +266,36 @@ func (r *RDB) ListEnqueued() ([]*EnqueuedTask, error) {
 	if err != nil {
 		return nil, err
 	}
+	return toEnqueuedTasks(data)
+}
+
+func (r *RDB) listEnqueued(qnames ...string) ([]*EnqueuedTask, error) {
+	script := redis.NewScript(`
+	local res = {}
+	for _, qkey in ipairs(KEYS) do
+		local msgs = redis.call("LRANGE", qkey, 0, -1)
+		for _, msg in ipairs(msgs) do
+			table.insert(res, msg)
+		end
+	end
+	return res
+	`)
+	var keys []string
+	for _, q := range qnames {
+		keys = append(keys, base.QueueKey(q))
+	}
+	res, err := script.Run(r.client, keys).Result()
+	if err != nil {
+		return nil, err
+	}
+	data, err := cast.ToStringSliceE(res)
+	if err != nil {
+		return nil, err
+	}
+	return toEnqueuedTasks(data)
+}
+
+func toEnqueuedTasks(data []string) ([]*EnqueuedTask, error) {
 	var tasks []*EnqueuedTask
 	for _, s := range data {
 		var msg base.TaskMessage

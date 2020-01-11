@@ -234,19 +234,22 @@ func TestListEnqueued(t *testing.T) {
 	t4 := &EnqueuedTask{ID: m4.ID, Type: m4.Type, Payload: m4.Payload, Queue: m4.Queue}
 	tests := []struct {
 		enqueued map[string][]*base.TaskMessage
+		qnames   []string
 		want     []*EnqueuedTask
 	}{
 		{
 			enqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {m1, m2},
 			},
-			want: []*EnqueuedTask{t1, t2},
+			qnames: []string{},
+			want:   []*EnqueuedTask{t1, t2},
 		},
 		{
 			enqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {},
 			},
-			want: []*EnqueuedTask{},
+			qnames: []string{},
+			want:   []*EnqueuedTask{},
 		},
 		{
 			enqueued: map[string][]*base.TaskMessage{
@@ -254,7 +257,26 @@ func TestListEnqueued(t *testing.T) {
 				"critical":            {m3},
 				"low":                 {m4},
 			},
-			want: []*EnqueuedTask{t1, t2, t3, t4},
+			qnames: []string{},
+			want:   []*EnqueuedTask{t1, t2, t3, t4},
+		},
+		{
+			enqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {m1, m2},
+				"critical":            {m3},
+				"low":                 {m4},
+			},
+			qnames: []string{"critical"},
+			want:   []*EnqueuedTask{t3},
+		},
+		{
+			enqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {m1, m2},
+				"critical":            {m3},
+				"low":                 {m4},
+			},
+			qnames: []string{"critical", "low"},
+			want:   []*EnqueuedTask{t3, t4},
 		},
 	}
 
@@ -264,7 +286,7 @@ func TestListEnqueued(t *testing.T) {
 			h.SeedEnqueuedQueue(t, r.client, msgs, qname)
 		}
 
-		got, err := r.ListEnqueued()
+		got, err := r.ListEnqueued(tc.qnames...)
 		if err != nil {
 			t.Errorf("r.ListEnqueued() = %v, %v, want %v, nil", got, err, tc.want)
 			continue
