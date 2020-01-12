@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"sort"
 	"sync"
 	"time"
 
@@ -21,6 +22,9 @@ type processor struct {
 	handler Handler
 
 	queueConfig map[string]uint
+
+	// orderedQueues is set only in strict-priority mode.
+	orderedQueues []string
 
 	retryDelayFunc retryDelayFunc
 
@@ -42,10 +46,22 @@ type processor struct {
 
 type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
-func newProcessor(r *rdb.RDB, n int, qcfg map[string]uint, fn retryDelayFunc) *processor {
+// newProcessor constructs a new processor.
+//
+// r is an instance of RDB used by the processor.
+// n specifies the max number of concurrenct worker goroutines.
+// qfcg is a mapping of queue names to associated priority level.
+// strict specifies whether queue priority should be treated strictly.
+// fn is a function to compute retry delay.
+func newProcessor(r *rdb.RDB, n int, qcfg map[string]uint, strict bool, fn retryDelayFunc) *processor {
+	orderedQueues := []string(nil)
+	if strict {
+		orderedQueues = sortByPriority(qcfg)
+	}
 	return &processor{
 		rdb:            r,
 		queueConfig:    qcfg,
+		orderedQueues:  orderedQueues,
 		retryDelayFunc: fn,
 		sema:           make(chan struct{}, n),
 		done:           make(chan struct{}),
@@ -199,10 +215,15 @@ func (p *processor) kill(msg *base.TaskMessage, e error) {
 	}
 }
 
-// queues returns a list of queues to query. Order of the list
-// is based roughly on the priority of each queue, but randomizes
-// it to avoid starving low priority queues.
+// queues returns a list of queues to query.
+// Order of the queue names is based on the priority of each queue.
+// Queue names is sorted by their priority level if strict-priority is true.
+// If strict-priority is false, then the order of queue names are roughly based on
+// the priority level but randomized in order to avoid starving low priority queues.
 func (p *processor) queues() []string {
+	if p.orderedQueues != nil {
+		return p.orderedQueues
+	}
 	var names []string
 	for qname, priority := range p.queueConfig {
 		for i := 0; i < int(priority); i++ {
@@ -242,3 +263,29 @@ func uniq(names []string, l int) []string {
 	}
 	return res
 }
+
+// sortByPriority returns the list of queue names sorted by
+// their priority level in descending order.
+func sortByPriority(qcfg map[string]uint) []string {
+	var queues []*queue
+	for qname, n := range qcfg {
+		queues = append(queues, &queue{qname, n})
+	}
+	sort.Sort(sort.Reverse(byPriority(queues)))
+	var res []string
+	for _, q := range queues {
+		res = append(res, q.name)
+	}
+	return res
+}
+
+type queue struct {
+	name     string
+	priority uint
+}
+
+type byPriority []*queue
+
+func (x byPriority) Len() int           { return len(x) }
+func (x byPriority) Less(i, j int) bool { return x[i].priority < x[j].priority }
+func (x byPriority) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }

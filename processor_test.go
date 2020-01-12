@@ -65,7 +65,7 @@ func TestProcessorSuccess(t *testing.T) {
 			processed = append(processed, task)
 			return nil
 		}
-		p := newProcessor(rdbClient, 10, defaultQueueConfig, defaultDelayFunc)
+		p := newProcessor(rdbClient, 10, defaultQueueConfig, false, defaultDelayFunc)
 		p.handler = HandlerFunc(handler)
 
 		p.start()
@@ -148,7 +148,7 @@ func TestProcessorRetry(t *testing.T) {
 		handler := func(task *Task) error {
 			return fmt.Errorf(errMsg)
 		}
-		p := newProcessor(rdbClient, 10, defaultQueueConfig, delayFunc)
+		p := newProcessor(rdbClient, 10, defaultQueueConfig, false, delayFunc)
 		p.handler = HandlerFunc(handler)
 
 		p.start()
@@ -207,11 +207,85 @@ func TestProcessorQueues(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		p := newProcessor(nil, 10, tc.queueCfg, defaultDelayFunc)
+		p := newProcessor(nil, 10, tc.queueCfg, false, defaultDelayFunc)
 		got := p.queues()
 		if diff := cmp.Diff(tc.want, got, sortOpt); diff != "" {
 			t.Errorf("with queue config: %v\n(*processor).queues() = %v, want %v\n(-want,+got):\n%s",
 				tc.queueCfg, got, tc.want, diff)
+		}
+	}
+}
+
+func TestProcessorWithStrictPriority(t *testing.T) {
+	r := setup(t)
+	rdbClient := rdb.NewRDB(r)
+
+	m1 := h.NewTaskMessage("send_email", nil)
+	m2 := h.NewTaskMessage("send_email", nil)
+	m3 := h.NewTaskMessage("send_email", nil)
+	m4 := h.NewTaskMessage("gen_thumbnail", nil)
+	m5 := h.NewTaskMessage("gen_thumbnail", nil)
+	m6 := h.NewTaskMessage("sync", nil)
+	m7 := h.NewTaskMessage("sync", nil)
+
+	t1 := NewTask(m1.Type, m1.Payload)
+	t2 := NewTask(m2.Type, m2.Payload)
+	t3 := NewTask(m3.Type, m3.Payload)
+	t4 := NewTask(m4.Type, m4.Payload)
+	t5 := NewTask(m5.Type, m5.Payload)
+	t6 := NewTask(m6.Type, m6.Payload)
+	t7 := NewTask(m7.Type, m7.Payload)
+
+	tests := []struct {
+		enqueued      map[string][]*base.TaskMessage // initial queues state
+		wait          time.Duration                  // wait duration between starting and stopping processor for this test case
+		wantProcessed []*Task                        // tasks to be processed at the end
+	}{
+		{
+			enqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {m4, m5},
+				"critical":            {m1, m2, m3},
+				"low":                 {m6, m7},
+			},
+			wait:          time.Second,
+			wantProcessed: []*Task{t1, t2, t3, t4, t5, t6, t7},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r) // clean up db before each test case.
+		for qname, msgs := range tc.enqueued {
+			h.SeedEnqueuedQueue(t, r, msgs, qname)
+		}
+
+		// instantiate a new processor
+		var mu sync.Mutex
+		var processed []*Task
+		handler := func(task *Task) error {
+			mu.Lock()
+			defer mu.Unlock()
+			processed = append(processed, task)
+			return nil
+		}
+		queueCfg := map[string]uint{
+			"critical":            3,
+			base.DefaultQueueName: 2,
+			"low":                 1,
+		}
+		// Note: Set concurrency to 1 to make sure tasks are processed one at a time.
+		p := newProcessor(rdbClient, 1 /*concurrency */, queueCfg, true /* strict */, defaultDelayFunc)
+		p.handler = HandlerFunc(handler)
+
+		p.start()
+		time.Sleep(tc.wait)
+		p.terminate()
+
+		if diff := cmp.Diff(tc.wantProcessed, processed, cmp.AllowUnexported(Payload{})); diff != "" {
+			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
+		}
+
+		if l := r.LLen(base.InProgressQueue).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", base.InProgressQueue, l)
 		}
 	}
 }
