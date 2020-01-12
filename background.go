@@ -73,6 +73,13 @@ type Config struct {
 	// in "critical", "default", "low" should be processed 60%, 30%, 10% of
 	// the time respectively.
 	Queues map[string]uint
+
+	// StrictPriority indicates whether the queue priority should be treated strictly.
+	//
+	// If set to true, tasks in the queue with the highest priority is processed first.
+	// The tasks in lower priority queues are processed only when those queues with
+	// higher priorities are empty.
+	StrictPriority bool
 }
 
 // Formula taken from https://github.com/mperham/sidekiq.
@@ -103,7 +110,7 @@ func NewBackground(r *redis.Client, cfg *Config) *Background {
 	}
 	rdb := rdb.NewRDB(r)
 	scheduler := newScheduler(rdb, 5*time.Second)
-	processor := newProcessor(rdb, n, normalizeQueueCfg(queues), delayFunc)
+	processor := newProcessor(rdb, n, normalizeQueueCfg(queues), cfg.StrictPriority, delayFunc)
 	return &Background{
 		rdb:       rdb,
 		scheduler: scheduler,
