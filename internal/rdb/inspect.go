@@ -706,3 +706,15 @@ func (r *RDB) DeleteAllRetryTasks() error {
 func (r *RDB) DeleteAllScheduledTasks() error {
 	return r.client.Del(base.ScheduledQueue).Err()
 }
+
+// RemoveQueue removes the specified queue deleting any tasks in the queue.
+func (r *RDB) RemoveQueue(qname string) error {
+	script := redis.NewScript(`
+	local n = redis.call("SREM", KEYS[1], KEYS[2])
+	if n == 1 then
+		redis.call("DEL", KEYS[2])
+	end
+	return redis.status_reply("OK")
+	`)
+	return script.Run(r.client, []string{base.AllQueues, base.QueueKey(qname)}).Err()
+}
