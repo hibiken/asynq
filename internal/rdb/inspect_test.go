@@ -1641,3 +1641,70 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoveQueue(t *testing.T) {
+	r := setup(t)
+	m1 := h.NewTaskMessage("send_email", nil)
+	m2 := h.NewTaskMessage("reindex", nil)
+	m3 := h.NewTaskMessage("gen_thumbnail", nil)
+
+	tests := []struct {
+		enqueued     map[string][]*base.TaskMessage
+		qname        string // queue to remove
+		wantEnqueued map[string][]*base.TaskMessage
+	}{
+		{
+			enqueued: map[string][]*base.TaskMessage{
+				"default":  {m1},
+				"critical": {m2, m3},
+				"low":      {},
+			},
+			qname: "low",
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default":  {m1},
+				"critical": {m2, m3},
+			},
+		},
+		{
+			enqueued: map[string][]*base.TaskMessage{
+				"default":  {m1},
+				"critical": {m2, m3},
+				"low":      {},
+			},
+			qname: "critical",
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default": {m1},
+				"low":     {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		for qname, msgs := range tc.enqueued {
+			h.SeedEnqueuedQueue(t, r.client, msgs, qname)
+		}
+
+		err := r.RemoveQueue(tc.qname)
+		if err != nil {
+			t.Errorf("(*RDB).RemoveQueue(%q) = %v, want nil", tc.qname, err)
+			continue
+		}
+
+		qkey := base.QueueKey(tc.qname)
+		if r.client.SIsMember(base.AllQueues, qkey).Val() {
+			t.Errorf("%q is a member of %q", qkey, base.AllQueues)
+		}
+
+		if r.client.LLen(qkey).Val() != 0 {
+			t.Errorf("queue %q is not empty", qkey)
+		}
+
+		for qname, want := range tc.wantEnqueued {
+			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got):\n%s", base.QueueKey(qname), diff)
+			}
+		}
+	}
+}

@@ -264,7 +264,7 @@ func uniq(names []string, l int) []string {
 	return res
 }
 
-// sortByPriority returns the list of queue names sorted by
+// sortByPriority returns a list of queue names sorted by
 // their priority level in descending order.
 func sortByPriority(qcfg map[string]uint) []string {
 	var queues []*queue
