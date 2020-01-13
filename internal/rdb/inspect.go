@@ -707,14 +707,67 @@ func (r *RDB) DeleteAllScheduledTasks() error {
 	return r.client.Del(base.ScheduledQueue).Err()
 }
 
-// RemoveQueue removes the specified queue deleting any tasks in the queue.
-func (r *RDB) RemoveQueue(qname string) error {
-	script := redis.NewScript(`
-	local n = redis.call("SREM", KEYS[1], KEYS[2])
-	if n == 1 then
+// ErrQueueNotFound indicates specified queue does not exist.
+type ErrQueueNotFound struct {
+	qname string
+}
+
+func (e *ErrQueueNotFound) Error() string {
+	return fmt.Sprintf("queue %q does not exist", e.qname)
+}
+
+// ErrQueueNotEmpty indicates specified queue is not empty.
+type ErrQueueNotEmpty struct {
+	qname string
+}
+
+func (e *ErrQueueNotEmpty) Error() string {
+	return fmt.Sprintf("queue %q is not empty", e.qname)
+}
+
+// RemoveQueue removes the specified queue.
+//
+// If force is set to true, it will remove the queue regardless
+// of whether the queue is empty.
+// If force is set to false, it will only remove the queue if
+// it is empty.
+func (r *RDB) RemoveQueue(qname string, force bool) error {
+	var script *redis.Script
+	if force {
+		script = redis.NewScript(`
+		local n = redis.call("SREM", KEYS[1], KEYS[2])
+		if n == 0 then
+			return redis.error_reply("LIST NOT FOUND")
+		end
 		redis.call("DEL", KEYS[2])
-	end
-	return redis.status_reply("OK")
-	`)
-	return script.Run(r.client, []string{base.AllQueues, base.QueueKey(qname)}).Err()
+		return redis.status_reply("OK")
+		`)
+	} else {
+		script = redis.NewScript(`
+		local l = redis.call("LLEN", KEYS[2])
+		if l > 0 then
+			return redis.error_reply("LIST NOT EMPTY")
+		end
+		local n = redis.call("SREM", KEYS[1], KEYS[2])
+		if n == 0 then
+			return redis.error_reply("LIST NOT FOUND")
+		end
+		redis.call("DEL", KEYS[2])
+		return redis.status_reply("OK")
+		`)
+	}
+	err := script.Run(r.client,
+		[]string{base.AllQueues, base.QueueKey(qname)},
+		force).Err()
+	if err != nil {
+		switch err.Error() {
+		case "LIST NOT FOUND":
+			return &ErrQueueNotFound{qname}
+		case "LIST NOT EMPTY":
+			return &ErrQueueNotEmpty{qname}
+		default:
+			return err
+		}
+	}
+	return nil
 }
