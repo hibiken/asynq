@@ -1651,6 +1651,7 @@ func TestRemoveQueue(t *testing.T) {
 	tests := []struct {
 		enqueued     map[string][]*base.TaskMessage
 		qname        string // queue to remove
+		force        bool
 		wantEnqueued map[string][]*base.TaskMessage
 	}{
 		{
@@ -1660,6 +1661,7 @@ func TestRemoveQueue(t *testing.T) {
 				"low":      {},
 			},
 			qname: "low",
+			force: false,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {m1},
 				"critical": {m2, m3},
@@ -1672,6 +1674,7 @@ func TestRemoveQueue(t *testing.T) {
 				"low":      {},
 			},
 			qname: "critical",
+			force: true, // allow removing non-empty queue
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {m1},
 				"low":     {},
@@ -1685,7 +1688,7 @@ func TestRemoveQueue(t *testing.T) {
 			h.SeedEnqueuedQueue(t, r.client, msgs, qname)
 		}
 
-		err := r.RemoveQueue(tc.qname)
+		err := r.RemoveQueue(tc.qname, tc.force)
 		if err != nil {
 			t.Errorf("(*RDB).RemoveQueue(%q) = %v, want nil", tc.qname, err)
 			continue
@@ -1704,6 +1707,62 @@ func TestRemoveQueue(t *testing.T) {
 			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
 			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got):\n%s", base.QueueKey(qname), diff)
+			}
+		}
+	}
+}
+
+func TestRemoveQueueError(t *testing.T) {
+	r := setup(t)
+	m1 := h.NewTaskMessage("send_email", nil)
+	m2 := h.NewTaskMessage("reindex", nil)
+	m3 := h.NewTaskMessage("gen_thumbnail", nil)
+
+	tests := []struct {
+		desc     string
+		enqueued map[string][]*base.TaskMessage
+		qname    string // queue to remove
+		force    bool
+	}{
+		{
+			desc: "removing non-existent queue",
+			enqueued: map[string][]*base.TaskMessage{
+				"default":  {m1},
+				"critical": {m2, m3},
+				"low":      {},
+			},
+			qname: "nonexistent",
+			force: false,
+		},
+		{
+			desc: "removing non-empty queue",
+			enqueued: map[string][]*base.TaskMessage{
+				"default":  {m1},
+				"critical": {m2, m3},
+				"low":      {},
+			},
+			qname: "critical",
+			force: false,
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		for qname, msgs := range tc.enqueued {
+			h.SeedEnqueuedQueue(t, r.client, msgs, qname)
+		}
+
+		got := r.RemoveQueue(tc.qname, tc.force)
+		if got == nil {
+			t.Errorf("%s;(*RDB).RemoveQueue(%q) = nil, want error", tc.desc, tc.qname)
+			continue
+		}
+
+		// Make sure that nothing changed
+		for qname, want := range tc.enqueued {
+			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+				t.Errorf("%s;mismatch found in %q; (-want,+got):\n%s", tc.desc, base.QueueKey(qname), diff)
 			}
 		}
 	}
