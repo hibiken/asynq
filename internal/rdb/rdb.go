@@ -60,11 +60,17 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 // is one and returns it. If all queues are empty, ErrNoProcessableTask
 // error is returned.
 func (r *RDB) Dequeue(qnames ...string) (*base.TaskMessage, error) {
-	var keys []string
-	for _, q := range qnames {
-		keys = append(keys, base.QueueKey(q))
+	var data string
+	var err error
+	if len(qnames) == 1 {
+		data, err = r.dequeueSingle(base.QueueKey(qnames[0]))
+	} else {
+		var keys []string
+		for _, q := range qnames {
+			keys = append(keys, base.QueueKey(q))
+		}
+		data, err = r.dequeue(keys...)
 	}
-	data, err := r.dequeue(keys...)
 	if err == redis.Nil {
 		return nil, ErrNoProcessableTask
 	}
@@ -77,6 +83,11 @@ func (r *RDB) Dequeue(qnames ...string) (*base.TaskMessage, error) {
 		return nil, err
 	}
 	return &msg, nil
+}
+
+func (r *RDB) dequeueSingle(queue string) (data string, err error) {
+	// timeout needed to avoid blocking forever
+	return r.client.BRPopLPush(queue, base.InProgressQueue, time.Second).Result()
 }
 
 func (r *RDB) dequeue(queues ...string) (data string, err error) {

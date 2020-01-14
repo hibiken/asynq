@@ -124,8 +124,12 @@ func (p *processor) exec() {
 	msg, err := p.rdb.Dequeue(qnames...)
 	if err == rdb.ErrNoProcessableTask {
 		// queues are empty, this is a normal behavior.
-		// sleep to avoid slamming redis and let scheduler move tasks into queues.
-		time.Sleep(time.Second)
+		if len(p.queueConfig) > 1 {
+			// sleep to avoid slamming redis and let scheduler move tasks into queues.
+			// Note: With multiple queues, we are not using blocking pop operation and
+			// polling queues instead. This adds significant load to redis.
+			time.Sleep(time.Second)
+		}
 		return
 	}
 	if err != nil {
@@ -221,6 +225,13 @@ func (p *processor) kill(msg *base.TaskMessage, e error) {
 // If strict-priority is false, then the order of queue names are roughly based on
 // the priority level but randomized in order to avoid starving low priority queues.
 func (p *processor) queues() []string {
+	// skip the overhead of generating a list of queue names
+	// if we are processing one queue.
+	if len(p.queueConfig) == 1 {
+		for qname := range p.queueConfig {
+			return []string{qname}
+		}
+	}
 	if p.orderedQueues != nil {
 		return p.orderedQueues
 	}
