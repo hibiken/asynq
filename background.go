@@ -108,9 +108,11 @@ func NewBackground(r *redis.Client, cfg *Config) *Background {
 	if queues == nil || len(queues) == 0 {
 		queues = defaultQueueConfig
 	}
+	qcfg := normalizeQueueCfg(queues)
+
 	rdb := rdb.NewRDB(r)
-	scheduler := newScheduler(rdb, 5*time.Second)
-	processor := newProcessor(rdb, n, normalizeQueueCfg(queues), cfg.StrictPriority, delayFunc)
+	scheduler := newScheduler(rdb, 5*time.Second, qcfg)
+	processor := newProcessor(rdb, n, qcfg, cfg.StrictPriority, delayFunc)
 	return &Background{
 		rdb:       rdb,
 		scheduler: scheduler,
