@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Queues` option in `Config` to specify mutiple queues with priority level
 - `Client` can schedule a task with `asynq.Queue(name)` to specify which queue to use
 - `StrictPriority` option in `Config` to specify whether the priority should be followed strictly
+- [CLI] `asynqmon rmq` command to remove queue
 
 ### Changed
 
