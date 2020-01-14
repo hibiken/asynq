@@ -19,13 +19,21 @@ type scheduler struct {
 
 	// poll interval on average
 	avgInterval time.Duration
+
+	// list of queues to move the tasks into.
+	qnames []string
 }
 
-func newScheduler(r *rdb.RDB, avgInterval time.Duration) *scheduler {
+func newScheduler(r *rdb.RDB, avgInterval time.Duration, qcfg map[string]uint) *scheduler {
+	var qnames []string
+	for q := range qcfg {
+		qnames = append(qnames, q)
+	}
 	return &scheduler{
 		rdb:         r,
 		done:        make(chan struct{}),
 		avgInterval: avgInterval,
+		qnames:      qnames,
 	}
 }
 
@@ -51,7 +59,7 @@ func (s *scheduler) start() {
 }
 
 func (s *scheduler) exec() {
-	if err := s.rdb.CheckAndEnqueue(); err != nil {
+	if err := s.rdb.CheckAndEnqueue(s.qnames...); err != nil {
 		log.Printf("[ERROR] could not forward scheduled tasks: %v\n", err)
 	}
 }

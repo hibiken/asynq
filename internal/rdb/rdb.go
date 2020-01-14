@@ -292,10 +292,18 @@ func (r *RDB) RestoreUnfinished() (int64, error) {
 
 // CheckAndEnqueue checks for all scheduled tasks and enqueues any tasks that
 // have to be processed.
-func (r *RDB) CheckAndEnqueue() error {
+//
+// qnames specifies to which queues to send tasks.
+func (r *RDB) CheckAndEnqueue(qnames ...string) error {
 	delayed := []string{base.ScheduledQueue, base.RetryQueue}
 	for _, zset := range delayed {
-		if err := r.forward(zset); err != nil {
+		var err error
+		if len(qnames) == 1 {
+			err = r.forwardSingle(zset, base.QueueKey(qnames[0]))
+		} else {
+			err = r.forward(zset)
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -303,8 +311,8 @@ func (r *RDB) CheckAndEnqueue() error {
 }
 
 // forward moves all tasks with a score less than the current unix time
-// from the given zset to the default queue.
-func (r *RDB) forward(from string) error {
+// from the src zset.
+func (r *RDB) forward(src string) error {
 	script := redis.NewScript(`
 	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
 	for _, msg in ipairs(msgs) do
@@ -317,5 +325,21 @@ func (r *RDB) forward(from string) error {
 	`)
 	now := float64(time.Now().Unix())
 	return script.Run(r.client,
-		[]string{from, base.DefaultQueue}, now, base.QueuePrefix).Err()
+		[]string{src}, now, base.QueuePrefix).Err()
+}
+
+// forwardSingle moves all tasks with a score less than the current unix time
+// from the src zset to dst list.
+func (r *RDB) forwardSingle(src, dst string) error {
+	script := redis.NewScript(`
+	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+	for _, msg in ipairs(msgs) do
+		redis.call("ZREM", KEYS[1], msg)
+		redis.call("LPUSH", KEYS[2], msg)
+	end
+	return msgs
+	`)
+	now := float64(time.Now().Unix())
+	return script.Run(r.client,
+		[]string{src, dst}, now).Err()
 }
