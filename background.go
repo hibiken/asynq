@@ -15,7 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 )
@@ -95,7 +94,7 @@ var defaultQueueConfig = map[string]uint{
 
 // NewBackground returns a new Background instance given a redis client
 // and background processing configuration.
-func NewBackground(r *redis.Client, cfg *Config) *Background {
+func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	n := cfg.Concurrency
 	if n < 1 {
 		n = 1
@@ -110,7 +109,7 @@ func NewBackground(r *redis.Client, cfg *Config) *Background {
 	}
 	qcfg := normalizeQueueCfg(queues)
 
-	rdb := rdb.NewRDB(r)
+	rdb := rdb.NewRDB(createRedisClient(r))
 	scheduler := newScheduler(rdb, 5*time.Second, qcfg)
 	processor := newProcessor(rdb, n, qcfg, cfg.StrictPriority, delayFunc)
 	return &Background{

@@ -5,15 +5,27 @@
 /*
 Package asynq provides a framework for background task processing.
 
+Asynq uses Redis as a message broker. To connect to redis server,
+specify the options using one of RedisConnOpt types.
+
+    redis = &asynq.RedisClientOpt{
+        Addr:     "localhost:6379",
+        Password: "secretpassword",
+        DB:       3,
+    }
+
 The Client is used to register a task to be processed at the specified time.
 
-	client := asynq.NewClient(redis)
+Task is created with two parameters: its type and payload.
 
-	t := asynq.NewTask(
-	    "send_email",
-	    map[string]interface{}{"user_id": 42})
+    client := asynq.NewClient(redis)
 
-	err := client.Schedule(t, time.Now().Add(time.Minute))
+    t := asynq.NewTask(
+        "send_email",
+        map[string]interface{}{"user_id": 42})
+
+    // Schedule the task t to be processed a minute from now.
+    err := client.Schedule(t, time.Now().Add(time.Minute))
 
 The Background is used to run the background task processing with a given
 handler.
@@ -26,7 +38,7 @@ handler.
 Handler is an interface with one method ProcessTask which
 takes a task and returns an error. Handler should return nil if
 the processing is successful, otherwise return a non-nil error.
-If handler returns a non-nil error, the task will be retried in the future.
+If handler panics or returns a non-nil error, the task will be retried in the future.
 
 Example of a type that implements the Handler interface.
     type TaskHandler struct {
@@ -42,7 +54,7 @@ Example of a type that implements the Handler interface.
             // generate thumbnail image
         //...
         default:
-            return fmt.Errorf("unepected task type %q", task.Type)
+            return fmt.Errorf("unexpected task type %q", task.Type)
         }
         return nil
     }

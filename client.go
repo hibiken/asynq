@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/rs/xid"
@@ -25,8 +24,8 @@ type Client struct {
 }
 
 // NewClient and returns a new Client given a redis configuration.
-func NewClient(r *redis.Client) *Client {
-	rdb := rdb.NewRDB(r)
+func NewClient(r RedisConnOpt) *Client {
+	rdb := rdb.NewRDB(createRedisClient(r))
 	return &Client{rdb}
 }
 
