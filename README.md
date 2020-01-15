@@ -1,8 +1,10 @@
 # Asynq
 
-[![Build Status](https://travis-ci.com/hibiken/asynq.svg?token=paqzfpSkF4p23s5Ux39b&branch=master)](https://travis-ci.com/hibiken/asynq)&nbsp;[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://travis-ci.com/hibiken/asynq.svg?token=paqzfpSkF4p23s5Ux39b&branch=master)](https://travis-ci.com/hibiken/asynq)&nbsp;[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-Simple, efficent asynchronous task processing library in Go.
+Simple and efficent asynchronous task processing library in Go.
+
+**Important Note**: Current major version is zero (v0.x.x) to accomodate rapid development and fast iteration while getting early feedback from users. The public API could change without a major version update before the release of verson 1.0.0.
 
 ## Table of Contents
 
@@ -10,6 +12,7 @@ Simple, efficent asynchronous task processing library in Go.
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Getting Started](#getting-started)
+- [Monitoring CLI](#monitoring-cli)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
 
@@ -27,44 +30,49 @@ Asynq provides:
 - Ability to configure max retry count per task
 - Ability to configure max number of worker goroutines to process tasks
 - Unix signal handling to safely shutdown background processing
-- Enhanced reliability TODO(hibiken): link to wiki page describing this.
 - CLI to query and mutate queues state for mointoring and administrative purposes
 
 ## Requirements
 
-| Dependency                                                     | Version |
-| -------------------------------------------------------------- | ------- |
-| [Redis](https://redis.io/)                                     | v2.6+   |
-| [Go](https://golang.org/)                                      | v1.12+  |
-| [github.com/go-redis/redis](https://github.com/go-redis/redis) | v.7.0+  |
+| Dependency                 | Version |
+| -------------------------- | ------- |
+| [Redis](https://redis.io/) | v2.8+   |
+| [Go](https://golang.org/)  | v1.12+  |
 
 ## Installation
 
 ```
-go get github.com/hibiken/asynq
+go get -u github.com/hibiken/asynq
 ```
 
 ## Getting Started
 
-1. Import `asynq` and `redis` in your file.
+1. Import `asynq` in your file.
 
 ```go
-import (
-    "github.com/go-redis/redis/v7"
-    "github.com/hibiken/asynq"
-)
+import "github.com/hibiken/asynq"
 ```
 
-2. Create a `Client` instance to create tasks.
+2. Use one of `RedisConnOpt` types to specify how to connect to Redis.
+
+```go
+var redis = &asynq.RedisClientOpt{
+    Addr: "localhost:6379",
+    // Omit if no password is required
+    Password: "mypassword",
+    // Use a dedicated db number for asynq.
+    // By default, Redis offers 16 databases (0..15)
+    DB: 0,
+}
+```
+
+3. Create a `Client` instance to create and schedule tasks.
 
 ```go
 func main() {
-    r := redis.NewClient(&redis.Options{
-        Addr: "localhost:6379",
-    }
-    client := asynq.NewClient(r)
+    client := asynq.NewClient(redis)
 
-    // create a task with typename and payload.
+    // Create a task with typename and payload.
     t1 := asynq.NewTask(
         "send_welcome_email",
         map[string]interface{}{"user_id": 42})
@@ -73,34 +81,33 @@ func main() {
         "send_reminder_email",
         map[string]interface{}{"user_id": 42})
 
-    // process the task immediately.
+    // Process the task immediately.
     err := client.Schedule(t1, time.Now())
 
-    // process the task 24 hours later.
+    // Process the task 24 hours later.
     err = client.Schedule(t2, time.Now().Add(24 * time.Hour))
 
-    // specify the max number of retry (default: 25)
+    // Specify the max number of retry (default: 25)
     err = client.Schedule(t1, time.Now(), asynq.MaxRetry(1))
 }
 ```
 
-3. Create a `Background` instance to process tasks.
+4. Create a `Background` instance to process tasks.
 
 ```go
 func main() {
-    r := redis.NewClient(&redis.Options{
-        Addr: "localhost:6379",
-    }
-    bg := asynq.NewBackground(r, &asynq.Config{
-        Concurrency: 20,
+    bg := asynq.NewBackground(redis, &asynq.Config{
+        Concurrency: 10,
     })
 
     // Blocks until signal TERM or INT is received.
     // For graceful shutdown, send signal TSTP to stop processing more tasks
-    // before sending TERM or INT signal.
+    // before sending TERM or INT signal to terminate the process.
     bg.Run(handler)
 }
 ```
+
+Note that `Client` and `Background` are intended to be used in separate executable binaries.
 
 The argument to `(*asynq.Background).Run` is an interface `asynq.Handler` which has one method `ProcessTask`.
 
@@ -136,17 +143,18 @@ func handler(t *asynq.Task) error {
 }
 
 func main() {
-    r := redis.NewClient(&redis.Options{
-        Addr: "localhost:6379",
-    }
-    bg := asynq.NewBackground(r, &asynq.Config{
-        Concurrency: 20,
+    bg := asynq.NewBackground(redis, &asynq.Config{
+        Concurrency: 10,
     })
 
     // Use asynq.HandlerFunc adapter for a handler function
     bg.Run(asynq.HandlerFunc(handler))
 }
 ```
+
+## Monitoring CLI
+
+TODO(hibiken): Describe basic usage of `asynqmon` CLI
 
 ## Acknowledgements
 
