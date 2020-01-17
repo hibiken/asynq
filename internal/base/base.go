@@ -33,7 +33,7 @@ func QueueKey(qname string) string {
 	return QueuePrefix + strings.ToLower(qname)
 }
 
-// ProcessedKey returns a redis key string for procesed count
+// ProcessedKey returns a redis key string for processed count
 // for the given day.
 func ProcessedKey(t time.Time) string {
 	return processedPrefix + t.UTC().Format("2006-01-02")
