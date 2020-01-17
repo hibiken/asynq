@@ -21,10 +21,10 @@ import (
 
 // Background is responsible for managing the background-task processing.
 //
-// Background manages background queues to process tasks and retry if
-// necessary. If the processing of a task is unsuccessful, background will
-// schedule it for a retry with an exponential backoff until either the task
-// gets processed successfully or it exhausts its max retry count.
+// Background manages task queues to process tasks.
+// If the processing of a task is unsuccessful, background will
+// schedule it for a retry until either the task gets processed successfully
+// or it exhausts its max retry count.
 //
 // Once a task exhausts its retries, it will be moved to the "dead" queue and
 // will be kept in the queue for some time until a certain condition is met
@@ -41,7 +41,7 @@ type Background struct {
 
 // Config specifies the background-task processing behavior.
 type Config struct {
-	// Maximum number of concurrent workers to process tasks.
+	// Maximum number of concurrent processing of tasks.
 	//
 	// If set to zero or negative value, NewBackground will overwrite the value to one.
 	Concurrency int
@@ -92,7 +92,7 @@ var defaultQueueConfig = map[string]uint{
 	base.DefaultQueueName: 1,
 }
 
-// NewBackground returns a new Background instance given a redis client
+// NewBackground returns a new Background given a redis connection option
 // and background processing configuration.
 func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	n := cfg.Concurrency
