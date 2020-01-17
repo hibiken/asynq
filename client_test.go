@@ -15,7 +15,10 @@ import (
 
 func TestClient(t *testing.T) {
 	r := setup(t)
-	client := NewClient(r)
+	client := NewClient(&RedisClientOpt{
+		Addr: "localhost:6379",
+		DB:   14,
+	})
 
 	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
 
