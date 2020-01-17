@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
 	"go.uber.org/goleak"
 )
@@ -18,10 +17,10 @@ func TestBackground(t *testing.T) {
 	ignoreOpt := goleak.IgnoreTopFunction("github.com/go-redis/redis/v7/internal/pool.(*ConnPool).reaper")
 	defer goleak.VerifyNoLeaks(t, ignoreOpt)
 
-	r := redis.NewClient(&redis.Options{
+	r := &RedisClientOpt{
 		Addr: "localhost:6379",
 		DB:   15,
-	})
+	}
 	client := NewClient(r)
 	bg := NewBackground(r, &Config{
 		Concurrency: 10,
