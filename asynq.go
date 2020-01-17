@@ -16,14 +16,14 @@ type Task struct {
 	// Type indicates the type of task to be performed.
 	Type string
 
-	// Payload holds data needed to process the task.
+	// Payload holds data needed to perform the task.
 	Payload Payload
 }
 
-// NewTask returns a new instance of a task given a task type and payload.
+// NewTask returns a new Task. The typename and payload argument set Type
+// and Payload field respectively.
 //
-// Since payload data gets serialized to JSON, the payload values must be
-// composed of JSON supported data types.
+// The payload must be serializable to JSON.
 func NewTask(typename string, payload map[string]interface{}) *Task {
 	return &Task{
 		Type:    typename,
@@ -34,17 +34,20 @@ func NewTask(typename string, payload map[string]interface{}) *Task {
 // RedisConnOpt is a discriminated union of redis-client-option types.
 //
 // RedisConnOpt represents a sum of following types:
+//
 // RedisClientOpt | *RedisClientOpt | RedisFailoverClientOpt | *RedisFailoverClientOpt
+//
+// Passing unexpected type to a RedisConnOpt variable can cause panic.
 type RedisConnOpt interface{}
 
-// RedisClientOpt is used to specify redis client options to connect
-// to a redis server running as a stand alone instance.
+// RedisClientOpt is used to create a redis client that connects
+// to a redis server directly.
 type RedisClientOpt struct {
 	// Network type to use, either tcp or unix.
 	// Default is tcp.
 	Network string
 
-	// Redis server address in the format 'host:port'.
+	// Redis server address in "host:port" format.
 	Addr string
 
 	// Redis server password.
@@ -63,12 +66,14 @@ type RedisClientOpt struct {
 	TLSConfig *tls.Config
 }
 
-// RedisFailoverClientOpt is used to specify redis failover client.
+// RedisFailoverClientOpt is used to creates a redis client that talks
+// to redis sentinels for service discovery and has automatic failover
+// capability.
 type RedisFailoverClientOpt struct {
 	// Redis master name that monitored by sentinels.
 	MasterName string
 
-	// Addresses of sentinels in the form "host:port".
+	// Addresses of sentinels in "host:port" format.
 	// Use at least three sentinels to avoid problems described in
 	// https://redis.io/topics/sentinel.
 	SentinelAddrs []string

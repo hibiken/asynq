@@ -23,13 +23,13 @@ type Client struct {
 	rdb *rdb.RDB
 }
 
-// NewClient and returns a new Client given a redis configuration.
+// NewClient and returns a new Client given a redis connection option.
 func NewClient(r RedisConnOpt) *Client {
 	rdb := rdb.NewRDB(createRedisClient(r))
 	return &Client{rdb}
 }
 
-// Option specifies the processing behavior for the associated task.
+// Option specifies the task processing behavior.
 type Option interface{}
 
 // Internal option representations.
@@ -49,7 +49,7 @@ func MaxRetry(n int) Option {
 	return retryOption(n)
 }
 
-// Queue returns an option to specify which queue to enqueue the task into.
+// Queue returns an option to specify the queue to enqueue the task into.
 //
 // Queue name is case-insensitive and the lowercased version is used.
 func Queue(name string) Option {
@@ -87,10 +87,10 @@ const (
 // Schedule registers a task to be processed at the specified time.
 //
 // Schedule returns nil if the task is registered successfully,
-// otherwise returns non-nil error.
+// otherwise returns a non-nil error.
 //
 // opts specifies the behavior of task processing. If there are conflicting
-// Option the last one overrides the ones before.
+// Option values the last one overrides others.
 func (c *Client) Schedule(task *Task, processAt time.Time, opts ...Option) error {
 	opt := composeOptions(opts...)
 	msg := &base.TaskMessage{

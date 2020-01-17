@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cast"
 )
 
-// Payload is an arbitrary data needed for task execution.
+// Payload holds arbitrary data needed for task execution.
 type Payload struct {
 	data map[string]interface{}
 }

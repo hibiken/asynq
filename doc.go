@@ -50,8 +50,6 @@ Example of a type that implements the Handler interface.
         case "send_email":
             id, err := task.Payload.GetInt("user_id")
             // send email
-        case "generate_thumbnail":
-            // generate thumbnail image
         //...
         default:
             return fmt.Errorf("unexpected task type %q", task.Type)
