@@ -30,6 +30,7 @@ func newSyncer(requestsCh <-chan *syncRequest, interval time.Duration) *syncer {
 	return &syncer{
 		requestsCh: requestsCh,
 		done:       make(chan struct{}),
+		interval:   interval,
 	}
 }
 

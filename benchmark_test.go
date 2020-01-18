@@ -18,9 +18,13 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 	const count = 100000
 	for n := 0; n < b.N; n++ {
 		b.StopTimer() // begin setup
-		r := setup(b)
-		client := NewClient(r)
-		bg := NewBackground(r, &Config{
+		setup(b)
+		redis := &RedisClientOpt{
+			Addr: redisAddr,
+			DB:   redisDB,
+		}
+		client := NewClient(redis)
+		bg := NewBackground(redis, &Config{
 			Concurrency: 10,
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
 				return time.Second
@@ -55,9 +59,13 @@ func BenchmarkEndToEnd(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		b.StopTimer() // begin setup
 		rand.Seed(time.Now().UnixNano())
-		r := setup(b)
-		client := NewClient(r)
-		bg := NewBackground(r, &Config{
+		setup(b)
+		redis := &RedisClientOpt{
+			Addr: redisAddr,
+			DB:   redisDB,
+		}
+		client := NewClient(redis)
+		bg := NewBackground(redis, &Config{
 			Concurrency: 10,
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
 				return time.Second
