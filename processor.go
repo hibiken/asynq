@@ -28,6 +28,9 @@ type processor struct {
 
 	retryDelayFunc retryDelayFunc
 
+	// channel via which to send sync requests to syncer.
+	syncRequestCh chan<- *syncRequest
+
 	// sema is a counting semaphore to ensure the number of active workers
 	// does not exceed the limit.
 	sema chan struct{}
@@ -53,7 +56,7 @@ type retryDelayFunc func(n int, err error, task *Task) time.Duration
 // qfcg is a mapping of queue names to associated priority level.
 // strict specifies whether queue priority should be treated strictly.
 // fn is a function to compute retry delay.
-func newProcessor(r *rdb.RDB, n int, qcfg map[string]uint, strict bool, fn retryDelayFunc) *processor {
+func newProcessor(r *rdb.RDB, n int, qcfg map[string]uint, strict bool, fn retryDelayFunc, syncRequestCh chan<- *syncRequest) *processor {
 	orderedQueues := []string(nil)
 	if strict {
 		orderedQueues = sortByPriority(qcfg)
@@ -63,6 +66,7 @@ func newProcessor(r *rdb.RDB, n int, qcfg map[string]uint, strict bool, fn retry
 		queueConfig:    qcfg,
 		orderedQueues:  orderedQueues,
 		retryDelayFunc: fn,
+		syncRequestCh:  syncRequestCh,
 		sema:           make(chan struct{}, n),
 		done:           make(chan struct{}),
 		abort:          make(chan struct{}),
@@ -198,7 +202,14 @@ func (p *processor) requeue(msg *base.TaskMessage) {
 func (p *processor) markAsDone(msg *base.TaskMessage) {
 	err := p.rdb.Done(msg)
 	if err != nil {
-		log.Printf("[ERROR] Could not remove task from InProgress queue: %v\n", err)
+		errMsg := fmt.Sprintf("could not remove task %+v from %q", msg, base.InProgressQueue)
+		log.Printf("[WARN] %s; will retry\n", errMsg)
+		p.syncRequestCh <- &syncRequest{
+			fn: func() error {
+				return p.rdb.Done(msg)
+			},
+			errMsg: errMsg,
+		}
 	}
 }
 
@@ -207,7 +218,14 @@ func (p *processor) retry(msg *base.TaskMessage, e error) {
 	retryAt := time.Now().Add(d)
 	err := p.rdb.Retry(msg, retryAt, e.Error())
 	if err != nil {
-		log.Printf("[ERROR] Could not send task %+v to Retry queue: %v\n", msg, err)
+		errMsg := fmt.Sprintf("could not move task %+v from %q to %q", msg, base.InProgressQueue, base.RetryQueue)
+		log.Printf("[WARN] %s; will retry\n", errMsg)
+		p.syncRequestCh <- &syncRequest{
+			fn: func() error {
+				return p.rdb.Retry(msg, retryAt, e.Error())
+			},
+			errMsg: errMsg,
+		}
 	}
 }
 
@@ -215,7 +233,14 @@ func (p *processor) kill(msg *base.TaskMessage, e error) {
 	log.Printf("[WARN] Retry exhausted for task(Type: %q, ID: %v)\n", msg.Type, msg.ID)
 	err := p.rdb.Kill(msg, e.Error())
 	if err != nil {
-		log.Printf("[ERROR] Could not send task %+v to Dead queue: %v\n", msg, err)
+		errMsg := fmt.Sprintf("could not move task %+v from %q to %q", msg, base.InProgressQueue, base.DeadQueue)
+		log.Printf("[WARN] %s; will retry\n", errMsg)
+		p.syncRequestCh <- &syncRequest{
+			fn: func() error {
+				return p.rdb.Kill(msg, e.Error())
+			},
+			errMsg: errMsg,
+		}
 	}
 }
 

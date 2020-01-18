@@ -37,6 +37,7 @@ type Background struct {
 	rdb       *rdb.RDB
 	scheduler *scheduler
 	processor *processor
+	syncer    *syncer
 }
 
 // Config specifies the background-task processing behavior.
@@ -109,13 +110,18 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	}
 	qcfg := normalizeQueueCfg(queues)
 
+	syncRequestCh := make(chan *syncRequest)
+
+	syncer := newSyncer(syncRequestCh, 5*time.Second)
+
 	rdb := rdb.NewRDB(createRedisClient(r))
 	scheduler := newScheduler(rdb, 5*time.Second, qcfg)
-	processor := newProcessor(rdb, n, qcfg, cfg.StrictPriority, delayFunc)
+	processor := newProcessor(rdb, n, qcfg, cfg.StrictPriority, delayFunc, syncRequestCh)
 	return &Background{
 		rdb:       rdb,
 		scheduler: scheduler,
 		processor: processor,
+		syncer:    syncer,
 	}
 }
 
@@ -175,6 +181,7 @@ func (bg *Background) start(handler Handler) {
 	bg.running = true
 	bg.processor.handler = handler
 
+	bg.syncer.start()
 	bg.scheduler.start()
 	bg.processor.start()
 }
@@ -189,6 +196,7 @@ func (bg *Background) stop() {
 
 	bg.scheduler.terminate()
 	bg.processor.terminate()
+	bg.syncer.terminate()
 
 	bg.rdb.Close()
 	bg.processor.handler = nil
