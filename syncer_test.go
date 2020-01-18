@@ -39,7 +39,7 @@ func TestSyncer(t *testing.T) {
 		}
 	}
 
-	time.Sleep(interval) // ensure that syncer runs at least once
+	time.Sleep(2 * interval) // ensure that syncer runs at least once
 
 	gotInProgress := h.GetInProgressMessages(t, r)
 	if l := len(gotInProgress); l != 0 {
@@ -78,7 +78,7 @@ func TestSyncerRetry(t *testing.T) {
 		}
 	}
 
-	time.Sleep(interval) // ensure that syncer runs at least once
+	time.Sleep(2 * interval) // ensure that syncer runs at least once
 
 	// Sanity check to ensure that message was not successfully deleted
 	// from in-progress list.
@@ -90,7 +90,7 @@ func TestSyncerRetry(t *testing.T) {
 	// simualate failover.
 	rdbClient = rdb.NewRDB(goodClient)
 
-	time.Sleep(interval) // ensure that syncer runs at least once
+	time.Sleep(2 * interval) // ensure that syncer runs at least once
 
 	gotInProgress = h.GetInProgressMessages(t, goodClient)
 	if l := len(gotInProgress); l != 0 {

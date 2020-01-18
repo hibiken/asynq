@@ -111,9 +111,7 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	qcfg := normalizeQueueCfg(queues)
 
 	syncRequestCh := make(chan *syncRequest)
-
 	syncer := newSyncer(syncRequestCh, 5*time.Second)
-
 	rdb := rdb.NewRDB(createRedisClient(r))
 	scheduler := newScheduler(rdb, 5*time.Second, qcfg)
 	processor := newProcessor(rdb, n, qcfg, cfg.StrictPriority, delayFunc, syncRequestCh)
@@ -196,6 +194,8 @@ func (bg *Background) stop() {
 
 	bg.scheduler.terminate()
 	bg.processor.terminate()
+	// Note: processor and all worker goroutines need to be exited
+	// before shutting down syncer to avoid goroutine leak.
 	bg.syncer.terminate()
 
 	bg.rdb.Close()
