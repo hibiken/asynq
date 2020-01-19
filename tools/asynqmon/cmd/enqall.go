@@ -11,6 +11,7 @@ import (
 	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var enqallValidArgs = []string{"scheduled", "retry", "dead"}
@@ -48,8 +49,9 @@ func init() {
 
 func enqall(cmd *cobra.Command, args []string) {
 	c := redis.NewClient(&redis.Options{
-		Addr: uri,
-		DB:   db,
+		Addr:     viper.GetString("uri"),
+		DB:       viper.GetInt("db"),
+		Password: viper.GetString("password"),
 	})
 	r := rdb.NewRDB(c)
 	var n int64
