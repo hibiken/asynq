@@ -21,7 +21,7 @@ var enqCmd = &cobra.Command{
 	Long: `Enq (asynqmon enq) will enqueue a task given an identifier.
 
 The command takes one argument which specifies the task to enqueue.
-The task should be in either scheduled, retry or dead queue.
+The task should be in either scheduled, retry or dead state.
 Identifier for a task should be obtained by running "asynqmon ls" command.
 
 The task enqueued by this command will be processed as soon as the task 
