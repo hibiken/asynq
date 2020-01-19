@@ -31,7 +31,7 @@ var rmqForce bool
 
 func init() {
 	rootCmd.AddCommand(rmqCmd)
-	rmqCmd.Flags().BoolVarP(&rmqForce, "force", "f", false, "Remove the queue regardless of its size")
+	rmqCmd.Flags().BoolVarP(&rmqForce, "force", "f", false, "remove the queue regardless of its size")
 }
 
 func rmq(cmd *cobra.Command, args []string) {

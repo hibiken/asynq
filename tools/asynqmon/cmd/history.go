@@ -7,7 +7,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -17,44 +16,28 @@ import (
 	"github.com/spf13/viper"
 )
 
+var days int
+
 // historyCmd represents the history command
 var historyCmd = &cobra.Command{
-	Use:   "history [num of days]",
+	Use:   "history",
 	Short: "Shows historical aggregate data",
-	Long: `History (asynqmon history) will show the number of processed tasks
-as well as the error rate for the last n days.
+	Long: `History (asynqmon history) will show the number of processed and failed tasks
+from the last x days.
 
-Example: asynqmon history 7 -> Shows stats from the last 7 days`,
-	Args: cobra.ExactArgs(1),
+By default, it will show the data from the last 10 days.
+
+Example: asynqmon history -x=30 -> Shows stats from the last 30 days`,
+	Args: cobra.NoArgs,
 	Run:  history,
 }
 
 func init() {
 	rootCmd.AddCommand(historyCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// historyCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// historyCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	historyCmd.Flags().IntVarP(&days, "days", "x", 10, "show data from last x days")
 }
 
 func history(cmd *cobra.Command, args []string) {
-	n, err := strconv.Atoi(args[0])
-	if err != nil {
-		fmt.Printf(`Error: Invalid argument. Argument has to be an integer.
-
-Usage: asynqmon history [num of days]
-`)
-		os.Exit(1)
-	}
-	if err != nil {
-
-	}
 	c := redis.NewClient(&redis.Options{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),
@@ -62,7 +45,7 @@ Usage: asynqmon history [num of days]
 	})
 	r := rdb.NewRDB(c)
 
-	stats, err := r.HistoricalStats(n)
+	stats, err := r.HistoricalStats(days)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
