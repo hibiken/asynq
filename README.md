@@ -18,19 +18,23 @@ Simple and efficent asynchronous task processing library in Go.
 
 ## Overview
 
+![Gif](/docs/assets/asynqmon_stats.gif)
+
 Asynq provides a simple interface to asynchronous task processing.
 
-Asynq also ships with a CLI to monitor the queues and take manual actions if needed.
+It also ships with a tool to monitor the queues and take manual actions if needed.
 
 Asynq provides:
 
 - Clear separation of task producer and consumer
 - Ability to schedule task processing in the future
 - Automatic retry of failed tasks with exponential backoff
+- Automatic failover using Redis sentinels
 - Ability to configure max retry count per task
 - Ability to configure max number of worker goroutines to process tasks
-- Unix signal handling to safely shutdown background processing
-- CLI to query and mutate queues state for mointoring and administrative purposes
+- Support for priority queues
+- Unix signal handling to gracefully shutdown background processing
+- CLI tool to query and mutate queues state for mointoring and administrative purposes
 
 ## Requirements
 
@@ -53,7 +57,8 @@ go get -u github.com/hibiken/asynq
 import "github.com/hibiken/asynq"
 ```
 
-2. Use one of `RedisConnOpt` types to specify how to connect to Redis.
+2. Asynq uses redis as a message broker.
+   Use one of `RedisConnOpt` types to specify how to connect to Redis.
 
 ```go
 var redis = &asynq.RedisClientOpt{
@@ -154,7 +159,13 @@ func main() {
 
 ## Monitoring CLI
 
-TODO(hibiken): Describe basic usage of `asynqmon` CLI
+Asynq ships with a CLI tool to inspect the state of queues and tasks.
+
+To install the CLI, run the following command:
+
+    go get github.com/hibiken/asynq/tools/asynqmon
+
+For details on how to use the tool, see the [README](/tools/asynqmon/README.md) for the asynqmon CLI.
 
 ## Acknowledgements
 
