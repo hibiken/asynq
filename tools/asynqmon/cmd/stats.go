@@ -21,14 +21,19 @@ import (
 // statsCmd represents the stats command
 var statsCmd = &cobra.Command{
 	Use:   "stats",
-	Short: "Shows current state of the queues",
-	Long: `Stats (aysnqmon stats) will show the number of tasks in each queue at that instant.
-It also displays basic information about the running redis instance.
+	Short: "Shows current state of the tasks and queues",
+	Long: `Stats (aysnqmon stats) will show the overview of tasks and queues at that instant.
 
-To monitor the queues continuously, it's recommended that you run this
+Specifically, the command shows the following:
+* Number of tasks in each state
+* Number of tasks in each queue
+* Aggregate data for the current day
+* Basic information about the running redis instance
+
+To monitor the tasks continuously, it's recommended that you run this
 command in conjunction with the watch command.
 
-Example: watch -n 5 asynqmon stats`,
+Example: watch -n 3 asynqmon stats -> Shows current state of tasks every three seconds`,
 	Args: cobra.NoArgs,
 	Run:  stats,
 }

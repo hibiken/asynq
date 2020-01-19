@@ -24,7 +24,7 @@ var lsValidArgs = []string{"enqueued", "inprogress", "scheduled", "retry", "dead
 
 // lsCmd represents the ls command
 var lsCmd = &cobra.Command{
-	Use:   "ls [task state]",
+	Use:   "ls [state]",
 	Short: "Lists tasks in the specified state",
 	Long: `Ls (asynqmon ls) will list all tasks in the specified state in a table format.
 
@@ -77,7 +77,7 @@ func ls(cmd *cobra.Command, args []string) {
 	case "dead":
 		listDead(r)
 	default:
-		fmt.Printf("error: `asynqmon ls [task state]` only accepts %v as the argument.\n", lsValidArgs)
+		fmt.Printf("error: `asynqmon ls [state]` only accepts %v as the argument.\n", lsValidArgs)
 		os.Exit(1)
 	}
 }

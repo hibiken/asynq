@@ -18,13 +18,13 @@ var delallValidArgs = []string{"scheduled", "retry", "dead"}
 
 // delallCmd represents the delall command
 var delallCmd = &cobra.Command{
-	Use:   "delall [queue name]",
-	Short: "Deletes all tasks from the specified queue",
-	Long: `Delall (asynqmon delall) will delete all tasks from the specified queue.
+	Use:   "delall [state]",
+	Short: "Deletes all tasks from the specified state",
+	Long: `Delall (asynqmon delall) will delete all tasks in the specified state.
 
 The argument should be one of "scheduled", "retry", or "dead".
 
-Example: asynqmon delall dead -> Deletes all tasks from the dead queue`,
+Example: asynqmon delall dead -> Deletes all dead tasks`,
 	ValidArgs: delallValidArgs,
 	Args:      cobra.ExactValidArgs(1),
 	Run:       delall,
@@ -60,12 +60,12 @@ func delall(cmd *cobra.Command, args []string) {
 	case "dead":
 		err = r.DeleteAllDeadTasks()
 	default:
-		fmt.Printf("error: `asynqmon delall [queue name]` only accepts %v as the argument.\n", delallValidArgs)
+		fmt.Printf("error: `asynqmon delall [state]` only accepts %v as the argument.\n", delallValidArgs)
 		os.Exit(1)
 	}
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Printf("Deleted all tasks from %q queue\n", args[0])
+	fmt.Printf("Deleted all tasks in %q state\n", args[0])
 }

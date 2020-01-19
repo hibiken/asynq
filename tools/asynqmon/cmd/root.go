@@ -25,9 +25,9 @@ var password string
 var rootCmd = &cobra.Command{
 	Use:   "asynqmon",
 	Short: "A monitoring tool for asynq queues",
-	Long: `Asynqmon is a CLI tool to inspect and monitor queues managed by asynq package.
+	Long: `Asynqmon is a CLI tool to inspect tasks and queues managed by asynq package.
 
-Asynqmon has a few commands to query and mutate the current state of the queues.
+Use commands to query and mutate the current state of tasks and queues.
 
 Monitoring commands such as "stats" and "ls" can be used in conjunction with the
 "watch" command to continuously run the command at a certain interval.
