@@ -6,8 +6,9 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"os"
+
+	"github.com/spf13/cobra"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
@@ -18,6 +19,7 @@ var cfgFile string
 // Flags
 var uri string
 var db int
+var password string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -31,9 +33,6 @@ Monitoring commands such as "stats" and "ls" can be used in conjunction with the
 "watch" command to continuously run the command at a certain interval.
 	
 Example: watch -n 5 asynqmon stats`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	//	Run: func(cmd *cobra.Command, args []string) { },
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -48,13 +47,16 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.asynqmon.yaml)")
-	rootCmd.PersistentFlags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "Redis server URI")
-	rootCmd.PersistentFlags().IntVarP(&db, "db", "n", 0, "Redis database number (default is 0)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file to set flag defaut values (default is $HOME/.asynqmon.yaml)")
+	rootCmd.PersistentFlags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "redis server URI")
+	rootCmd.PersistentFlags().IntVarP(&db, "db", "n", 0, "redis database number (default is 0)")
+	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "password to use when connecting to redis server")
+	viper.BindPFlag("uri", rootCmd.PersistentFlags().Lookup("uri"))
+	viper.BindPFlag("db", rootCmd.PersistentFlags().Lookup("db"))
+	viper.BindPFlag("password", rootCmd.PersistentFlags().Lookup("password"))
 }
 
 // initConfig reads in config file and ENV variables if set.
-// TODO(hibiken): Remove this if not necessary.
 func initConfig() {
 	if cfgFile != "" {
 		// Use config file from the flag.

@@ -11,6 +11,7 @@ import (
 	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // rmqCmd represents the rmq command
@@ -35,8 +36,9 @@ func init() {
 
 func rmq(cmd *cobra.Command, args []string) {
 	c := redis.NewClient(&redis.Options{
-		Addr: uri,
-		DB:   db,
+		Addr:     viper.GetString("uri"),
+		DB:       viper.GetInt("db"),
+		Password: viper.GetString("password"),
 	})
 	r := rdb.NewRDB(c)
 	err := r.RemoveQueue(args[0], rmqForce)
