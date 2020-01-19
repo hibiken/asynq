@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2020-01-19
+
 ### Added
 
 - NewTask constructor
@@ -19,8 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `Client` and `Background` constructors take `RedisConnOpt` as their first argument.
-- [CLI] `asynqmon stats` now shows the total of all enqueued tasks under "Enqueued"
-- [CLI] `asynqmon stats` now shows each queue's task count
+- `asynqmon stats` now shows the total of all enqueued tasks under "Enqueued"
+- `asynqmon stats` now shows each queue's task count
+- `asynqmon history` now doesn't take any arguments and shows data from the last 10 days by default (use `--days` flag to change the number of days)
 - Task type is now immutable (i.e., Payload is read-only)
 
 ## [0.1.0] - 2020-01-04
