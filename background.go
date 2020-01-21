@@ -6,7 +6,6 @@ package asynq
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 	"os"
@@ -150,8 +149,14 @@ func (fn HandlerFunc) ProcessTask(task *Task) error {
 // a signal, it gracefully shuts down all pending workers and other
 // goroutines to process the tasks.
 func (bg *Background) Run(handler Handler) {
+	logger.SetPrefix(fmt.Sprintf("asynq: pid=%d ", os.Getpid()))
+	logger.info("Starting processing")
+
 	bg.start(handler)
 	defer bg.stop()
+
+	logger.info("Send signal TSTP to stop processing new tasks")
+	logger.info("Send signal TERM or INT to terminate the process")
 
 	// Wait for a signal to terminate.
 	sigs := make(chan os.Signal, 1)
@@ -165,7 +170,7 @@ func (bg *Background) Run(handler Handler) {
 		break
 	}
 	fmt.Println()
-	log.Println("[INFO] Starting graceful shutdown...")
+	logger.info("Starting graceful shutdown")
 }
 
 // starts the background-task processing.
@@ -201,6 +206,8 @@ func (bg *Background) stop() {
 	bg.rdb.Close()
 	bg.processor.handler = nil
 	bg.running = false
+
+	logger.info("Bye!")
 }
 
 // normalizeQueueCfg divides priority numbers by their

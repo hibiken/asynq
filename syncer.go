@@ -5,7 +5,6 @@
 package asynq
 
 import (
-	"log"
 	"time"
 )
 
@@ -35,7 +34,7 @@ func newSyncer(requestsCh <-chan *syncRequest, interval time.Duration) *syncer {
 }
 
 func (s *syncer) terminate() {
-	log.Println("[INFO] Syncer shutting down...")
+	logger.info("Syncer shutting down...")
 	// Signal the syncer goroutine to stop.
 	s.done <- struct{}{}
 }
@@ -49,10 +48,10 @@ func (s *syncer) start() {
 				// Try sync one last time before shutting down.
 				for _, req := range requests {
 					if err := req.fn(); err != nil {
-						log.Printf("[ERROR] %s\n", req.errMsg)
+						logger.error(req.errMsg)
 					}
 				}
-				log.Println("[INFO] Syncer done.")
+				logger.info("Syncer done")
 				return
 			case req := <-s.requestsCh:
 				requests = append(requests, req)
