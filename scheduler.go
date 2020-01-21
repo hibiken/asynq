@@ -5,7 +5,6 @@
 package asynq
 
 import (
-	"log"
 	"time"
 
 	"github.com/hibiken/asynq/internal/rdb"
@@ -38,7 +37,7 @@ func newScheduler(r *rdb.RDB, avgInterval time.Duration, qcfg map[string]uint) *
 }
 
 func (s *scheduler) terminate() {
-	log.Println("[INFO] Scheduler shutting down...")
+	logger.info("Scheduler shutting down...")
 	// Signal the scheduler goroutine to stop polling.
 	s.done <- struct{}{}
 }
@@ -49,7 +48,7 @@ func (s *scheduler) start() {
 		for {
 			select {
 			case <-s.done:
-				log.Println("[INFO] Scheduler done.")
+				logger.info("Scheduler done")
 				return
 			case <-time.After(s.avgInterval):
 				s.exec()
@@ -60,6 +59,6 @@ func (s *scheduler) start() {
 
 func (s *scheduler) exec() {
 	if err := s.rdb.CheckAndEnqueue(s.qnames...); err != nil {
-		log.Printf("[ERROR] could not forward scheduled tasks: %v\n", err)
+		logger.error("Could not enqueue scheduled tasks: %v", err)
 	}
 }

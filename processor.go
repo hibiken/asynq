@@ -6,7 +6,6 @@ package asynq
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"sort"
 	"sync"
@@ -79,7 +78,7 @@ func newProcessor(r *rdb.RDB, n int, qcfg map[string]uint, strict bool, fn retry
 // It's safe to call this method multiple times.
 func (p *processor) stop() {
 	p.once.Do(func() {
-		log.Println("[INFO] Processor shutting down...")
+		logger.info("Processor shutting down...")
 		// Unblock if processor is waiting for sema token.
 		close(p.abort)
 		// Signal the processor goroutine to stop processing tasks
@@ -95,12 +94,12 @@ func (p *processor) terminate() {
 	// IDEA: Allow user to customize this timeout value.
 	const timeout = 8 * time.Second
 	time.AfterFunc(timeout, func() { close(p.quit) })
-	log.Println("[INFO] Waiting for all workers to finish...")
+	logger.info("Waiting for all workers to finish...")
 	// block until all workers have released the token
 	for i := 0; i < cap(p.sema); i++ {
 		p.sema <- struct{}{}
 	}
-	log.Println("[INFO] All workers have finished.")
+	logger.info("All workers have finished")
 	p.restore() // move any unfinished tasks back to the queue.
 }
 
@@ -112,7 +111,7 @@ func (p *processor) start() {
 		for {
 			select {
 			case <-p.done:
-				log.Println("[INFO] Processor done.")
+				logger.info("Processor done")
 				return
 			default:
 				p.exec()
@@ -137,7 +136,7 @@ func (p *processor) exec() {
 		return
 	}
 	if err != nil {
-		log.Printf("[ERROR] unexpected error while pulling a task out of queue: %v\n", err)
+		logger.error("Dequeue error: %v", err)
 		return
 	}
 
@@ -159,7 +158,7 @@ func (p *processor) exec() {
 			select {
 			case <-p.quit:
 				// time is up, quit this worker goroutine.
-				log.Printf("[WARN] Terminating in-progress task %+v\n", msg)
+				logger.warn("Quitting worker to process task id=%s", msg.ID)
 				return
 			case resErr := <-resCh:
 				// Note: One of three things should happen.
@@ -185,25 +184,25 @@ func (p *processor) exec() {
 func (p *processor) restore() {
 	n, err := p.rdb.RestoreUnfinished()
 	if err != nil {
-		log.Printf("[ERROR] Could not restore unfinished tasks: %v\n", err)
+		logger.error("Could not restore unfinished tasks: %v", err)
 	}
 	if n > 0 {
-		log.Printf("[INFO] Restored %d unfinished tasks back to queue.\n", n)
+		logger.info("Restored %d unfinished tasks back to queue", n)
 	}
 }
 
 func (p *processor) requeue(msg *base.TaskMessage) {
 	err := p.rdb.Requeue(msg)
 	if err != nil {
-		log.Printf("[ERROR] Could not move task from InProgress back to queue: %v\n", err)
+		logger.error("Could not push task id=%s back to queue: %v", msg.ID, err)
 	}
 }
 
 func (p *processor) markAsDone(msg *base.TaskMessage) {
 	err := p.rdb.Done(msg)
 	if err != nil {
-		errMsg := fmt.Sprintf("could not remove task %+v from %q", msg, base.InProgressQueue)
-		log.Printf("[WARN] %s; will retry\n", errMsg)
+		errMsg := fmt.Sprintf("Could not remove task id=%s from %q", msg.ID, base.InProgressQueue)
+		logger.warn("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.rdb.Done(msg)
@@ -218,8 +217,8 @@ func (p *processor) retry(msg *base.TaskMessage, e error) {
 	retryAt := time.Now().Add(d)
 	err := p.rdb.Retry(msg, retryAt, e.Error())
 	if err != nil {
-		errMsg := fmt.Sprintf("could not move task %+v from %q to %q", msg, base.InProgressQueue, base.RetryQueue)
-		log.Printf("[WARN] %s; will retry\n", errMsg)
+		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.InProgressQueue, base.RetryQueue)
+		logger.warn("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.rdb.Retry(msg, retryAt, e.Error())
@@ -230,11 +229,11 @@ func (p *processor) retry(msg *base.TaskMessage, e error) {
 }
 
 func (p *processor) kill(msg *base.TaskMessage, e error) {
-	log.Printf("[WARN] Retry exhausted for task(Type: %q, ID: %v)\n", msg.Type, msg.ID)
+	logger.warn("Retry exhausted for task id=%s", msg.ID)
 	err := p.rdb.Kill(msg, e.Error())
 	if err != nil {
-		errMsg := fmt.Sprintf("could not move task %+v from %q to %q", msg, base.InProgressQueue, base.DeadQueue)
-		log.Printf("[WARN] %s; will retry\n", errMsg)
+		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.InProgressQueue, base.DeadQueue)
+		logger.warn("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.rdb.Kill(msg, e.Error())
