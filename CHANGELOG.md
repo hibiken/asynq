@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2020-01-22
+
+### Fixed
+
+- More structured log messages
+- Prevent spamming logs with a bunch of errors when Redis connection is lost
+- Fixed and updated README doc
+
 ## [0.2.0] - 2020-01-19
 
 ### Added
