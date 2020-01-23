@@ -179,7 +179,7 @@ func main() {
 }
 ```
 
-We could kep adding cases to this handler function, but in a realistic application, it's convenient to define the logic for each case in a separate function.
+We could keep adding cases to this handler function, but in a realistic application, it's convenient to define the logic for each case in a separate function.
 
 To refactor our code, let's create a simple dispatcher which maps task type to its handler.
 
