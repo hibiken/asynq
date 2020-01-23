@@ -1,6 +1,6 @@
 # Asynqmon
 
-Asynqmon is a CLI tool to monitor the queues managed by `asynq` package.
+Asynqmon is a command line tool to monitor the tasks managed by `asynq` package.
 
 ## Table of Contents
 
@@ -46,23 +46,81 @@ This will run `asynqmon stats` command every 3 seconds.
 
 ### History
 
-TODO: Add discription
+History command shows the number of processed and failed tasks from the last x days.
+
+By default, it shows the stats from the last 10 days. Use `--days` to specify the number of days.
+
+Example:
+
+    asynqmon history --days=30
+
+![Gif](/docs/assets/asynqmon_history.gif)
 
 ### List
 
-TODO: Add discription
+List command shows all tasks in the specified state in a table format
+
+Example:
+
+    asynqmon ls retry
+    asynqmon ls scheduled
+    asynqmon ls dead
+    asynqmon ls enqueued
+    asynqmon ls inprogress
 
 ### Enqueue
 
-TODO: Add discription
+There are two commands to enqueue tasks.
+
+Command `enq` takes a task ID and moves the task to **Enqueued** state. You can obtain the task ID by running `ls` command.
+
+Example:
+
+    asynqmon enq d:1575732274:bnogo8gt6toe23vhef0g
+
+Command `enqall` moves all tasks to **Enqueued** state from the specified state.
+
+Example:
+
+    asynqmon enqall retry
+
+Running the above command will move all **Retry** tasks to **Enqueued** state.
 
 ### Delete
 
-TODO: Add discription
+There are two commands for task deletion.
+
+Command `del` takes a task ID and deletes the task. You can obtain the task ID by running `ls` command.
+
+Example:
+
+    asynqmon del r:1575732274:bnogo8gt6toe23vhef0g
+
+Command `delall` deletes all tasks which are in the specified state.
+
+Example:
+
+    asynqmon delall retry
+
+Running the above command will delete all **Retry** tasks.
 
 ### Kill
 
-TODO: Add discription
+There are two commands to kill (i.e. move to dead state) tasks.
+
+Command `kill` takes a task ID and kills the task. You can obtain the task ID by running `ls` command.
+
+Example:
+
+    asynqmon kill r:1575732274:bnogo8gt6toe23vhef0g
+
+Command `killall` kills all tasks which are in the specified state.
+
+Example:
+
+    asynqmon killall retry
+
+Running the above command will move all **Retry** tasks to **Dead** state.
 
 ## Config File
 

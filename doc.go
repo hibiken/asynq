@@ -3,7 +3,7 @@
 // that can be found in the LICENSE file.
 
 /*
-Package asynq provides a framework for background task processing.
+Package asynq provides a framework for asynchronous task processing.
 
 Asynq uses Redis as a message broker. To connect to redis server,
 specify the options using one of RedisConnOpt types.

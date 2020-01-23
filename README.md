@@ -8,7 +8,7 @@
 
 Simple and efficent asynchronous task processing library in Go.
 
-**Important Note**: Current major version is zero (v0.x.x) to accomodate rapid development and fast iteration while getting early feedback from users. The public API could change without a major version update before the release of verson 1.0.0.
+**Important Note**: Current major version is zero (v0.x.x) to accomodate rapid development and fast iteration while getting early feedback from users. The public API could change without a major version update before v1.0.0 release.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ Simple and efficent asynchronous task processing library in Go.
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Getting Started](#getting-started)
-- [Monitoring CLI](#monitoring-cli)
+- [Command Line Tool](#command-line-tool)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
 
@@ -24,21 +24,19 @@ Simple and efficent asynchronous task processing library in Go.
 
 ![Gif](/docs/assets/asynqmon_stats.gif)
 
-Asynq provides a simple interface to asynchronous task processing.
-
-It also ships with a tool to monitor the queues and take manual actions if needed.
+Package asynq provides a framework for asynchronous task processing.
 
 Asynq provides:
 
 - Clear separation of task producer and consumer
+- Ability to process multiple tasks concurrently
 - Ability to schedule task processing in the future
 - Automatic retry of failed tasks with exponential backoff
-- [Automatic failover](https://github.com/hibiken/asynq/wiki/Automatic-Failover) using Redis sentinels
-- [Ability to configure](https://github.com/hibiken/asynq/wiki/Task-Retry) max retry count per task
-- Ability to configure max number of worker goroutines to process tasks
+- [Ability to configure](https://github.com/hibiken/asynq/wiki/Task-Retry) task retry count and retry delay
 - Support for [priority queues](https://github.com/hibiken/asynq/wiki/Priority-Queues)
 - [Unix signal handling](https://github.com/hibiken/asynq/wiki/Signals) to gracefully shutdown background processing
-- [CLI tool](/tools/asynqmon/README.md) to query and mutate queues state for mointoring and administrative purposes
+- [Automatic failover](https://github.com/hibiken/asynq/wiki/Automatic-Failover) using Redis sentinels
+- [Command line tool](/tools/asynqmon/README.md) to query tasks for monitoring and troubleshooting purposes
 
 ## Requirements
 
@@ -49,7 +47,7 @@ Asynq provides:
 
 ## Installation
 
-To install both `asynq` library and `asynqmon` CLI tool, run the following command:
+To install both `asynq` library and `asynqmon` command line tool, run the following command:
 
 ```
 go get -u github.com/hibiken/asynq
@@ -88,7 +86,25 @@ var redis = &asynq.RedisClientOpt{
 }
 ```
 
-3. In `producer.go`, create a `Client` instance to create and schedule tasks.
+3. In `producer.go`, we are going to create a `Client` instance to create and schedule tasks.
+
+   In `asynq`, a unit of work to be performed is encapsluated in a message called `Task`.
+   Which has two fields: `Type` and `Payload`.
+
+```go
+// Task represents a task to be performed.
+type Task struct {
+    // Type indicates the type of task to be performed.
+    Type string
+
+    // Payload holds data needed to perform the task.
+    Payload Payload
+}
+```
+
+To create a task, use `NewTask` function and pass type and payload for the task.
+
+You can schedule a task by calling `Schedule` on a client passing the task and the time to be performed.
 
 ```go
 // producer.go
@@ -119,6 +135,12 @@ func main() {
 ```
 
 4. In `consumer.go`, create a `Background` instance to process tasks.
+
+`NewBackground` function takes `RedisConnOpt` and `Config`.
+
+You can take a look at documentation on `Config` to see the available options.
+
+We are only going to specify the concurrency in this example.
 
 ```go
 // consumer.go
@@ -240,18 +262,10 @@ func sendReminderEmail(t *asynq.Task) error {
 Now that we have both task producer and consumer, we can run both programs.
 
 ```sh
-go run consumer.go
-```
-
-**Note**: This will not exit until you send a signal to terminate the program. See [Signal Wiki page](https://github.com/hibiken/asynq/wiki/Signals) for best practice on how to safely terminate background processing.
-
-With our consumer running, also run
-
-```sh
 go run producer.go
 ```
 
-This will create a task and the first task will get processed immediately by the consumer. The second task will be processed 24 hours later.
+This will create two tasks: One that should processed immediately and another to be processed 24 hours later.
 
 Let's use `asynqmon` tool to inspect the tasks.
 
@@ -259,23 +273,35 @@ Let's use `asynqmon` tool to inspect the tasks.
 asynqmon stats
 ```
 
-This command will show the number of tasks in each state and stats for the current date as well as redis information.
+You should able to see that there's one task in **Enqueued** state and another in **Scheduled** state.
 
-To understand the meaning of each state, see [Life of a Task Wiki page](https://github.com/hibiken/asynq/wiki/Life-of-a-Task).
+Note: To understand the meaning of each state, see [Life of a Task](https://github.com/hibiken/asynq/wiki/Life-of-a-Task) on our Wiki page.
 
-For in-depth guide on `asynqmon` tool, see the [README](/tools/asynqmon/README.md) for the CLI.
+Let's run `asynqmon` with `watch` command so that we can continuously run the command to see the changes.
 
-This was a quick tour of `asynq` basics. To see all of its features such as **[priority queues](https://github.com/hibiken/asynq/wiki/Priority-Queues)** and **[custom retry](https://github.com/hibiken/asynq/wiki/Task-Retry)**, see [the Wiki page](https://github.com/hibiken/asynq/wiki).
+```sh
+watch -n 3 asynqmon stats # Runs `asynqmon stats` every 3 seconds
+```
 
-## Monitoring CLI
+And finally, let's start the consumer program to process scheduled tasks.
 
-Asynq ships with a CLI tool to inspect the state of queues and tasks.
+```sh
+go run consumer.go
+```
 
-To install the CLI, run the following command:
+**Note**: This will not exit until you send a signal to terminate the program. See [Signal Wiki page](https://github.com/hibiken/asynq/wiki/Signals) for best practice on how to safely terminate background processing.
+
+This was a whirlwind tour of `asynq` basics. To learn more about all of its features such as **[priority queues](https://github.com/hibiken/asynq/wiki/Priority-Queues)** and **[custom retry](https://github.com/hibiken/asynq/wiki/Task-Retry)**, see our [Wiki page](https://github.com/hibiken/asynq/wiki).
+
+## Command Line Tool
+
+Asynq ships with a command line tool to inspect the state of queues and tasks.
+
+To install, run the following command:
 
     go get github.com/hibiken/asynq/tools/asynqmon
 
-For details on how to use the tool, see the [README](/tools/asynqmon/README.md) for the asynqmon CLI.
+For details on how to use the tool, refer to the tool's [README](/tools/asynqmon/README.md).
 
 ## Acknowledgements
 
