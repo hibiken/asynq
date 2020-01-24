@@ -35,26 +35,23 @@ The argument value should be one of "enqueued", "inprogress", "scheduled",
 Example:
 asynqmon ls dead -> Lists all tasks in dead state
 
-Enqueued tasks can optionally be filtered by providing queue names after ":"
+Enqueued tasks requires a queue name after ":"
 Example:
-asynqmon ls enqueued:critical -> List tasks from critical queue only
+asynqmon ls enqueued:default  -> List tasks from default queue
+asynqmon ls enqueued:critical -> List tasks from critical queue 
 `,
 	Args: cobra.ExactValidArgs(1),
 	Run:  ls,
 }
 
+// Flags
+var pageSize uint
+var pageNum uint
+
 func init() {
 	rootCmd.AddCommand(lsCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// lsCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// lsCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	lsCmd.Flags().UintVar(&pageSize, "size", 30, "page size")
+	lsCmd.Flags().UintVar(&pageNum, "page", 0, "page number - zero indexed (default 0)")
 }
 
 func ls(cmd *cobra.Command, args []string) {
@@ -67,7 +64,11 @@ func ls(cmd *cobra.Command, args []string) {
 	parts := strings.Split(args[0], ":")
 	switch parts[0] {
 	case "enqueued":
-		listEnqueued(r, parts[1:]...)
+		if len(parts) != 2 {
+			fmt.Printf("error: Missing queue name\n`asynqmon ls enqueued:[queue name]`\n")
+			os.Exit(1)
+		}
+		listEnqueued(r, parts[1])
 	case "inprogress":
 		listInProgress(r)
 	case "scheduled":
@@ -77,7 +78,7 @@ func ls(cmd *cobra.Command, args []string) {
 	case "dead":
 		listDead(r)
 	default:
-		fmt.Printf("error: `asynqmon ls [state]` only accepts %v as the argument.\n", lsValidArgs)
+		fmt.Printf("error: `asynqmon ls [state]`\nonly accepts %v as the argument.\n", lsValidArgs)
 		os.Exit(1)
 	}
 }
@@ -113,24 +114,14 @@ func parseQueryID(queryID string) (id xid.ID, score int64, qtype string, err err
 	return id, score, qtype, nil
 }
 
-func listEnqueued(r *rdb.RDB, qnames ...string) {
-	tasks, err := r.ListEnqueued(qnames...)
+func listEnqueued(r *rdb.RDB, qname string) {
+	tasks, err := r.ListEnqueued(qname, rdb.Pagination{Size: pageSize, Page: pageNum})
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	if len(tasks) == 0 {
-		msg := "No enqueued tasks"
-		if len(qnames) > 0 {
-			msg += " in"
-			for i, q := range qnames {
-				msg += fmt.Sprintf(" %q queue", q)
-				if i != len(qnames)-1 {
-					msg += ","
-				}
-			}
-		}
-		fmt.Println(msg)
+		fmt.Printf("No enqueued tasks in %q queue\n", qname)
 		return
 	}
 	cols := []string{"ID", "Type", "Payload", "Queue"}
@@ -140,10 +131,11 @@ func listEnqueued(r *rdb.RDB, qnames ...string) {
 		}
 	}
 	printTable(cols, printRows)
+	fmt.Printf("\nShowing %d tasks from page %d\n", len(tasks), pageNum)
 }
 
 func listInProgress(r *rdb.RDB) {
-	tasks, err := r.ListInProgress()
+	tasks, err := r.ListInProgress(rdb.Pagination{Size: pageSize, Page: pageNum})
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -159,10 +151,11 @@ func listInProgress(r *rdb.RDB) {
 		}
 	}
 	printTable(cols, printRows)
+	fmt.Printf("\nShowing %d tasks from page %d\n", len(tasks), pageNum)
 }
 
 func listScheduled(r *rdb.RDB) {
-	tasks, err := r.ListScheduled()
+	tasks, err := r.ListScheduled(rdb.Pagination{Size: pageSize, Page: pageNum})
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -179,10 +172,11 @@ func listScheduled(r *rdb.RDB) {
 		}
 	}
 	printTable(cols, printRows)
+	fmt.Printf("\nShowing %d tasks from page %d\n", len(tasks), pageNum)
 }
 
 func listRetry(r *rdb.RDB) {
-	tasks, err := r.ListRetry()
+	tasks, err := r.ListRetry(rdb.Pagination{Size: pageSize, Page: pageNum})
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -199,10 +193,11 @@ func listRetry(r *rdb.RDB) {
 		}
 	}
 	printTable(cols, printRows)
+	fmt.Printf("\nShowing %d tasks from page %d\n", len(tasks), pageNum)
 }
 
 func listDead(r *rdb.RDB) {
-	tasks, err := r.ListDead()
+	tasks, err := r.ListDead(rdb.Pagination{Size: pageSize, Page: pageNum})
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -218,6 +213,7 @@ func listDead(r *rdb.RDB) {
 		}
 	}
 	printTable(cols, printRows)
+	fmt.Printf("\nShowing %d tasks from page %d\n", len(tasks), pageNum)
 }
 
 func printTable(cols []string, printRows func(w io.Writer, tmpl string)) {
