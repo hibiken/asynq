@@ -5,6 +5,7 @@
 package rdb
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -231,25 +232,24 @@ func TestListEnqueued(t *testing.T) {
 	t1 := &EnqueuedTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, Queue: m1.Queue}
 	t2 := &EnqueuedTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, Queue: m2.Queue}
 	t3 := &EnqueuedTask{ID: m3.ID, Type: m3.Type, Payload: m3.Payload, Queue: m3.Queue}
-	t4 := &EnqueuedTask{ID: m4.ID, Type: m4.Type, Payload: m4.Payload, Queue: m4.Queue}
 	tests := []struct {
 		enqueued map[string][]*base.TaskMessage
-		qnames   []string
+		qname    string
 		want     []*EnqueuedTask
 	}{
 		{
 			enqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {m1, m2},
 			},
-			qnames: []string{},
-			want:   []*EnqueuedTask{t1, t2},
+			qname: base.DefaultQueueName,
+			want:  []*EnqueuedTask{t1, t2},
 		},
 		{
 			enqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {},
 			},
-			qnames: []string{},
-			want:   []*EnqueuedTask{},
+			qname: base.DefaultQueueName,
+			want:  []*EnqueuedTask{},
 		},
 		{
 			enqueued: map[string][]*base.TaskMessage{
@@ -257,8 +257,8 @@ func TestListEnqueued(t *testing.T) {
 				"critical":            {m3},
 				"low":                 {m4},
 			},
-			qnames: []string{},
-			want:   []*EnqueuedTask{t1, t2, t3, t4},
+			qname: base.DefaultQueueName,
+			want:  []*EnqueuedTask{t1, t2},
 		},
 		{
 			enqueued: map[string][]*base.TaskMessage{
@@ -266,17 +266,8 @@ func TestListEnqueued(t *testing.T) {
 				"critical":            {m3},
 				"low":                 {m4},
 			},
-			qnames: []string{"critical"},
-			want:   []*EnqueuedTask{t3},
-		},
-		{
-			enqueued: map[string][]*base.TaskMessage{
-				base.DefaultQueueName: {m1, m2},
-				"critical":            {m3},
-				"low":                 {m4},
-			},
-			qnames: []string{"critical", "low"},
-			want:   []*EnqueuedTask{t3, t4},
+			qname: "critical",
+			want:  []*EnqueuedTask{t3},
 		},
 	}
 
@@ -286,9 +277,10 @@ func TestListEnqueued(t *testing.T) {
 			h.SeedEnqueuedQueue(t, r.client, msgs, qname)
 		}
 
-		got, err := r.ListEnqueued(tc.qnames...)
+		got, err := r.ListEnqueued(tc.qname, Pagination{Size: 20, Page: 0})
+		op := fmt.Sprintf("r.ListEnqueued(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
-			t.Errorf("r.ListEnqueued() = %v, %v, want %v, nil", got, err, tc.want)
+			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
 		sortOpt := cmp.Transformer("SortMsg", func(in []*EnqueuedTask) []*EnqueuedTask {
@@ -299,8 +291,73 @@ func TestListEnqueued(t *testing.T) {
 			return out
 		})
 		if diff := cmp.Diff(tc.want, got, sortOpt); diff != "" {
-			t.Errorf("r.ListEnqueued() = %v, %v, want %v, nil; (-want, +got)\n%s", got, err, tc.want, diff)
+			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
+		}
+	}
+}
+func TestListEnqueuedPagination(t *testing.T) {
+	r := setup(t)
+	var msgs []*base.TaskMessage
+	for i := 0; i < 100; i++ {
+		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
+		msgs = append(msgs, msg)
+	}
+	// create 100 tasks in default queue
+	h.SeedEnqueuedQueue(t, r.client, msgs)
+
+	msgs = []*base.TaskMessage(nil) // empty list
+	for i := 0; i < 100; i++ {
+		msg := h.NewTaskMessage(fmt.Sprintf("custom %d", i), nil)
+		msgs = append(msgs, msg)
+	}
+	// create 100 tasks in custom queue
+	h.SeedEnqueuedQueue(t, r.client, msgs, "custom")
+
+	tests := []struct {
+		desc      string
+		qname     string
+		page      uint
+		size      uint
+		wantSize  int
+		wantFirst string
+		wantLast  string
+	}{
+		{"first page", "default", 0, 20, 20, "task 0", "task 19"},
+		{"second page", "default", 1, 20, 20, "task 20", "task 39"},
+		{"different page size", "default", 2, 30, 30, "task 60", "task 89"},
+		{"last page", "default", 3, 30, 10, "task 90", "task 99"},
+		{"out of range", "default", 4, 30, 0, "", ""},
+		{"second page with custom queue", "custom", 1, 20, 20, "custom 20", "custom 39"},
+	}
+
+	for _, tc := range tests {
+		got, err := r.ListEnqueued(tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListEnqueued(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
+		if err != nil {
+			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
+			continue
+		}
+
+		if len(got) != tc.wantSize {
+			t.Errorf("%s; %s returned a list of size %d, want %d", tc.desc, op, len(got), tc.wantSize)
+			continue
+		}
+
+		if tc.wantSize == 0 {
+			continue
+		}
+
+		first := got[0]
+		if first.Type != tc.wantFirst {
+			t.Errorf("%s; %s returned a list with first message %q, want %q",
+				tc.desc, op, first.Type, tc.wantFirst)
+		}
+
+		last := got[len(got)-1]
+		if last.Type != tc.wantLast {
+			t.Errorf("%s; %s returned a list with the last message %q, want %q",
+				tc.desc, op, last.Type, tc.wantLast)
 		}
 	}
 }
@@ -330,9 +387,10 @@ func TestListInProgress(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedInProgressQueue(t, r.client, tc.inProgress)
 
-		got, err := r.ListInProgress()
+		got, err := r.ListInProgress(Pagination{Size: 20, Page: 0})
+		op := "r.ListInProgress(Pagination{Size: 20, Page: 0})"
 		if err != nil {
-			t.Errorf("r.ListInProgress() = %v, %v, want %v, nil", got, err, tc.want)
+			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
 		sortOpt := cmp.Transformer("SortMsg", func(in []*InProgressTask) []*InProgressTask {
@@ -343,8 +401,63 @@ func TestListInProgress(t *testing.T) {
 			return out
 		})
 		if diff := cmp.Diff(tc.want, got, sortOpt); diff != "" {
-			t.Errorf("r.ListInProgress() = %v, %v, want %v, nil; (-want, +got)\n%s", got, err, tc.want, diff)
+			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
+		}
+	}
+}
+
+func TestListInProgressPagination(t *testing.T) {
+	r := setup(t)
+	var msgs []*base.TaskMessage
+	for i := 0; i < 100; i++ {
+		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
+		msgs = append(msgs, msg)
+	}
+	h.SeedInProgressQueue(t, r.client, msgs)
+
+	tests := []struct {
+		desc      string
+		page      uint
+		size      uint
+		wantSize  int
+		wantFirst string
+		wantLast  string
+	}{
+		{"first page", 0, 20, 20, "task 0", "task 19"},
+		{"second page", 1, 20, 20, "task 20", "task 39"},
+		{"different page size", 2, 30, 30, "task 60", "task 89"},
+		{"last page", 3, 30, 10, "task 90", "task 99"},
+		{"out of range", 4, 30, 0, "", ""},
+	}
+
+	for _, tc := range tests {
+		got, err := r.ListInProgress(Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListInProgress(Pagination{Size: %d, Page: %d})", tc.size, tc.page)
+		if err != nil {
+			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
+			continue
+		}
+
+		if len(got) != tc.wantSize {
+			t.Errorf("%s; %s returned list of size %d, want %d", tc.desc, op, len(got), tc.wantSize)
+			continue
+		}
+
+		if tc.wantSize == 0 {
+			continue
+		}
+
+		first := got[0]
+		if first.Type != tc.wantFirst {
+			t.Errorf("%s; %s returned a list with first message %q, want %q",
+				tc.desc, op, first.Type, tc.wantFirst)
+		}
+
+		last := got[len(got)-1]
+		if last.Type != tc.wantLast {
+			t.Errorf("%s; %s returned a list with the last message %q, want %q",
+				tc.desc, op, last.Type, tc.wantLast)
 		}
 	}
 }
@@ -379,9 +492,10 @@ func TestListScheduled(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedScheduledQueue(t, r.client, tc.scheduled)
 
-		got, err := r.ListScheduled()
+		got, err := r.ListScheduled(Pagination{Size: 20, Page: 0})
+		op := "r.ListScheduled(Pagination{Size: 20, Page: 0})"
 		if err != nil {
-			t.Errorf("r.ListScheduled() = %v, %v, want %v, nil", got, err, tc.want)
+			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
 		sortOpt := cmp.Transformer("SortMsg", func(in []*ScheduledTask) []*ScheduledTask {
@@ -392,8 +506,64 @@ func TestListScheduled(t *testing.T) {
 			return out
 		})
 		if diff := cmp.Diff(tc.want, got, sortOpt, timeCmpOpt); diff != "" {
-			t.Errorf("r.ListScheduled() = %v, %v, want %v, nil; (-want, +got)\n%s", got, err, tc.want, diff)
+			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
+		}
+	}
+}
+
+func TestListScheduledPagination(t *testing.T) {
+	r := setup(t)
+	// create 100 tasks with an increasing number of wait time.
+	for i := 0; i < 100; i++ {
+		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
+		if err := r.Schedule(msg, time.Now().Add(time.Duration(i)*time.Second)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tests := []struct {
+		desc      string
+		page      uint
+		size      uint
+		wantSize  int
+		wantFirst string
+		wantLast  string
+	}{
+		{"first page", 0, 20, 20, "task 0", "task 19"},
+		{"second page", 1, 20, 20, "task 20", "task 39"},
+		{"different page size", 2, 30, 30, "task 60", "task 89"},
+		{"last page", 3, 30, 10, "task 90", "task 99"},
+		{"out of range", 4, 30, 0, "", ""},
+	}
+
+	for _, tc := range tests {
+		got, err := r.ListScheduled(Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListScheduled(Pagination{Size: %d, Page: %d})", tc.size, tc.page)
+		if err != nil {
+			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
+			continue
+		}
+
+		if len(got) != tc.wantSize {
+			t.Errorf("%s; %s returned list of size %d, want %d", tc.desc, op, len(got), tc.wantSize)
+			continue
+		}
+
+		if tc.wantSize == 0 {
+			continue
+		}
+
+		first := got[0]
+		if first.Type != tc.wantFirst {
+			t.Errorf("%s; %s returned a list with first message %q, want %q",
+				tc.desc, op, first.Type, tc.wantFirst)
+		}
+
+		last := got[len(got)-1]
+		if last.Type != tc.wantLast {
+			t.Errorf("%s; %s returned a list with the last message %q, want %q",
+				tc.desc, op, last.Type, tc.wantLast)
 		}
 	}
 }
@@ -464,9 +634,10 @@ func TestListRetry(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedRetryQueue(t, r.client, tc.retry)
 
-		got, err := r.ListRetry()
+		got, err := r.ListRetry(Pagination{Size: 20, Page: 0})
+		op := "r.ListRetry(Pagination{Size: 20, Page: 0})"
 		if err != nil {
-			t.Errorf("r.ListRetry() = %v, %v, want %v, nil", got, err, tc.want)
+			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
 		sortOpt := cmp.Transformer("SortMsg", func(in []*RetryTask) []*RetryTask {
@@ -478,8 +649,64 @@ func TestListRetry(t *testing.T) {
 		})
 
 		if diff := cmp.Diff(tc.want, got, sortOpt, timeCmpOpt); diff != "" {
-			t.Errorf("r.ListRetry() = %v, %v, want %v, nil; (-want, +got)\n%s", got, err, tc.want, diff)
+			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
+		}
+	}
+}
+
+func TestListRetryPagination(t *testing.T) {
+	r := setup(t)
+	// create 100 tasks with an increasing number of wait time.
+	for i := 0; i < 100; i++ {
+		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
+		if err := r.Retry(msg, time.Now().Add(time.Duration(i)*time.Second), "error"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tests := []struct {
+		desc      string
+		page      uint
+		size      uint
+		wantSize  int
+		wantFirst string
+		wantLast  string
+	}{
+		{"first page", 0, 20, 20, "task 0", "task 19"},
+		{"second page", 1, 20, 20, "task 20", "task 39"},
+		{"different page size", 2, 30, 30, "task 60", "task 89"},
+		{"last page", 3, 30, 10, "task 90", "task 99"},
+		{"out of range", 4, 30, 0, "", ""},
+	}
+
+	for _, tc := range tests {
+		got, err := r.ListRetry(Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListRetry(Pagination{Size: %d, Page: %d})", tc.size, tc.page)
+		if err != nil {
+			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
+			continue
+		}
+
+		if len(got) != tc.wantSize {
+			t.Errorf("%s; %s returned list of size %d, want %d", tc.desc, op, len(got), tc.wantSize)
+			continue
+		}
+
+		if tc.wantSize == 0 {
+			continue
+		}
+
+		first := got[0]
+		if first.Type != tc.wantFirst {
+			t.Errorf("%s; %s returned a list with first message %q, want %q",
+				tc.desc, op, first.Type, tc.wantFirst)
+		}
+
+		last := got[len(got)-1]
+		if last.Type != tc.wantLast {
+			t.Errorf("%s; %s returned a list with the last message %q, want %q",
+				tc.desc, op, last.Type, tc.wantLast)
 		}
 	}
 }
@@ -542,9 +769,10 @@ func TestListDead(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedDeadQueue(t, r.client, tc.dead)
 
-		got, err := r.ListDead()
+		got, err := r.ListDead(Pagination{Size: 20, Page: 0})
+		op := "r.ListDead(Pagination{Size: 20, Page: 0})"
 		if err != nil {
-			t.Errorf("r.ListDead() = %v, %v, want %v, nil", got, err, tc.want)
+			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
 		sortOpt := cmp.Transformer("SortMsg", func(in []*DeadTask) []*DeadTask {
@@ -555,8 +783,63 @@ func TestListDead(t *testing.T) {
 			return out
 		})
 		if diff := cmp.Diff(tc.want, got, sortOpt, timeCmpOpt); diff != "" {
-			t.Errorf("r.ListDead() = %v, %v, want %v, nil; (-want, +got)\n%s", got, err, tc.want, diff)
+			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
+		}
+	}
+}
+
+func TestListDeadPagination(t *testing.T) {
+	r := setup(t)
+	var entries []h.ZSetEntry
+	for i := 0; i < 100; i++ {
+		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
+		entries = append(entries, h.ZSetEntry{Msg: msg, Score: float64(i)})
+	}
+	h.SeedDeadQueue(t, r.client, entries)
+
+	tests := []struct {
+		desc      string
+		page      uint
+		size      uint
+		wantSize  int
+		wantFirst string
+		wantLast  string
+	}{
+		{"first page", 0, 20, 20, "task 0", "task 19"},
+		{"second page", 1, 20, 20, "task 20", "task 39"},
+		{"different page size", 2, 30, 30, "task 60", "task 89"},
+		{"last page", 3, 30, 10, "task 90", "task 99"},
+		{"out of range", 4, 30, 0, "", ""},
+	}
+
+	for _, tc := range tests {
+		got, err := r.ListDead(Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListDead(Pagination{Size: %d, Page: %d})", tc.size, tc.page)
+		if err != nil {
+			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
+			continue
+		}
+
+		if len(got) != tc.wantSize {
+			t.Errorf("%s; %s returned list of size %d, want %d", tc.desc, op, len(got), tc.wantSize)
+			continue
+		}
+
+		if tc.wantSize == 0 {
+			continue
+		}
+
+		first := got[0]
+		if first.Type != tc.wantFirst {
+			t.Errorf("%s; %s returned a list with first message %q, want %q",
+				tc.desc, op, first.Type, tc.wantFirst)
+		}
+
+		last := got[len(got)-1]
+		if last.Type != tc.wantLast {
+			t.Errorf("%s; %s returned a list with the last message %q, want %q",
+				tc.desc, op, last.Type, tc.wantLast)
 		}
 	}
 }

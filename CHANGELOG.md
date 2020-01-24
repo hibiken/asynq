@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `asynqmon ls` command is now paginated (default 30 tasks from first page)
+- `asynqmon ls enqueued:[queue name]` requires queue name to be specified
+
 ## [0.2.1] - 2020-01-22
 
 ### Fixed
