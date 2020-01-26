@@ -273,13 +273,16 @@ func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 // and reports the number of tasks restored.
 func (r *RDB) RestoreUnfinished() (int64, error) {
 	script := redis.NewScript(`
-	local len = redis.call("LLEN", KEYS[1])
-	for i = len, 1, -1 do
-		redis.call("RPOPLPUSH", KEYS[1], KEYS[2])
+	local msgs = redis.call("LRANGE", KEYS[1], 0, -1)
+	for _, msg in ipairs(msgs) do
+		local decoded = cjson.decode(msg)
+		local qkey = ARGV[1] .. decoded["Queue"]
+		redis.call("LREM", KEYS[1], 0, msg)
+		redis.call("RPUSH", qkey, msg)
 	end
-	return len
+	return table.getn(msgs)
 	`)
-	res, err := script.Run(r.client, []string{base.InProgressQueue, base.DefaultQueue}).Result()
+	res, err := script.Run(r.client, []string{base.InProgressQueue}, base.QueuePrefix).Result()
 	if err != nil {
 		return 0, err
 	}
