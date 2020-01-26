@@ -156,7 +156,7 @@ func (r *RDB) Requeue(msg *base.TaskMessage) error {
 	return redis.status_reply("OK")
 	`)
 	return script.Run(r.client,
-		[]string{base.InProgressQueue, base.DefaultQueue},
+		[]string{base.InProgressQueue, base.QueueKey(msg.Queue)},
 		string(bytes)).Err()
 }
 
