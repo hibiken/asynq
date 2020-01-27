@@ -65,7 +65,7 @@ Example:
     asynqmon ls retry
     asynqmon ls scheduled
     asynqmon ls dead
-    asynqmon ls enqueued
+    asynqmon ls enqueued:default
     asynqmon ls inprogress
 
 ### Enqueue
