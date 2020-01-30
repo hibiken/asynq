@@ -11,7 +11,7 @@ It is backed by Redis and it is designed to have a low barrier to entry. It shou
 
 **Important Note**: Current major version is zero (v0.x.x) to accomodate rapid development and fast iteration while getting early feedback from users. The public API could change without a major version update before v1.0.0 release.
 
-![Gif](/docs/assets/asynqmon_stats.gif)
+![Gif](/docs/assets/demo.gif)
 
 ## Installation
 
