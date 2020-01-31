@@ -7,3 +7,5 @@ env:
 go: [1.12.x, 1.13.x]
 services:
   - redis-server
+after_success:
+  - bash ./.travis/benchcmp.sh
