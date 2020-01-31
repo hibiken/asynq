@@ -33,10 +33,11 @@ type Background struct {
 	mu      sync.Mutex
 	running bool
 
-	rdb       *rdb.RDB
-	scheduler *scheduler
-	processor *processor
-	syncer    *syncer
+	rdb         *rdb.RDB
+	scheduler   *scheduler
+	processor   *processor
+	syncer      *syncer
+	heartbeater *heartbeater
 }
 
 // Config specifies the background-task processing behavior.
@@ -109,16 +110,24 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	}
 	qcfg := normalizeQueueCfg(queues)
 
+	host, err := os.Hostname()
+	if err != nil {
+		host = "unknown-host"
+	}
+	pid := os.Getpid()
+
+	rdb := rdb.NewRDB(createRedisClient(r))
 	syncRequestCh := make(chan *syncRequest)
 	syncer := newSyncer(syncRequestCh, 5*time.Second)
-	rdb := rdb.NewRDB(createRedisClient(r))
+	heartbeater := newHeartbeater(rdb, 5*time.Second, host, pid, queues, n)
 	scheduler := newScheduler(rdb, 5*time.Second, qcfg)
 	processor := newProcessor(rdb, n, qcfg, cfg.StrictPriority, delayFunc, syncRequestCh)
 	return &Background{
-		rdb:       rdb,
-		scheduler: scheduler,
-		processor: processor,
-		syncer:    syncer,
+		rdb:         rdb,
+		scheduler:   scheduler,
+		processor:   processor,
+		syncer:      syncer,
+		heartbeater: heartbeater,
 	}
 }
 
@@ -165,6 +174,7 @@ func (bg *Background) Run(handler Handler) {
 		sig := <-sigs
 		if sig == syscall.SIGTSTP {
 			bg.processor.stop()
+			bg.heartbeater.setState("stopped")
 			continue
 		}
 		break
@@ -184,6 +194,7 @@ func (bg *Background) start(handler Handler) {
 	bg.running = true
 	bg.processor.handler = handler
 
+	bg.heartbeater.start()
 	bg.syncer.start()
 	bg.scheduler.start()
 	bg.processor.start()
@@ -202,6 +213,7 @@ func (bg *Background) stop() {
 	// Note: processor and all worker goroutines need to be exited
 	// before shutting down syncer to avoid goroutine leak.
 	bg.syncer.terminate()
+	bg.heartbeater.terminate()
 
 	bg.rdb.Close()
 	bg.processor.handler = nil

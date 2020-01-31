@@ -87,6 +87,7 @@ func TestSyncerRetry(t *testing.T) {
 		t.Errorf("%q has length %d; want %d", base.InProgressQueue, l, len(inProgress))
 	}
 
+	// FIXME: This assignment introduces data race and running the test with -race will fail.
 	// simualate failover.
 	rdbClient = rdb.NewRDB(goodClient)
 
