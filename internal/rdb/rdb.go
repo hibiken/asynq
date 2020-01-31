@@ -346,3 +346,29 @@ func (r *RDB) forwardSingle(src, dst string) error {
 	return script.Run(r.client,
 		[]string{src, dst}, now).Err()
 }
+
+// WriteProcessStatus writes process information to redis with expiration
+// set to the value ttl.
+func (r *RDB) WriteProcessStatus(ps *base.ProcessStatus, ttl time.Duration) error {
+	bytes, err := json.Marshal(ps)
+	if err != nil {
+		return err
+	}
+	key := base.ProcessStatusKey(ps.Host, ps.PID)
+	return r.client.Set(key, string(bytes), ttl).Err()
+}
+
+// ReadProcessStatus reads process information stored in redis.
+func (r *RDB) ReadProcessStatus(host string, pid int) (*base.ProcessStatus, error) {
+	key := base.ProcessStatusKey(host, pid)
+	data, err := r.client.Get(key).Result()
+	if err != nil {
+		return nil, err
+	}
+	var ps base.ProcessStatus
+	err = json.Unmarshal([]byte(data), &ps)
+	if err != nil {
+		return nil, err
+	}
+	return &ps, nil
+}

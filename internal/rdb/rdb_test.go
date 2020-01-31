@@ -738,3 +738,49 @@ func TestCheckAndEnqueue(t *testing.T) {
 		}
 	}
 }
+
+func TestReadWriteProcessStatus(t *testing.T) {
+	r := setup(t)
+	ps1 := &base.ProcessStatus{
+		Concurrency: 10,
+		Queues:      map[string]uint{"default": 2, "email": 5, "low": 1},
+		PID:         98765,
+		Host:        "localhost",
+		State:       "running",
+		Started:     time.Now(),
+	}
+
+	tests := []struct {
+		ps  *base.ProcessStatus
+		ttl time.Duration
+	}{
+		{ps1, 5 * time.Second},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+
+		err := r.WriteProcessStatus(tc.ps, tc.ttl)
+		if err != nil {
+			t.Errorf("r.WriteProcessStatus returned an error: %v", err)
+			continue
+		}
+
+		got, err := r.ReadProcessStatus(tc.ps.Host, tc.ps.PID)
+		if err != nil {
+			t.Errorf("r.ReadProcessStatus returned an error: %v", err)
+			continue
+		}
+
+		if diff := cmp.Diff(tc.ps, got); diff != "" {
+			t.Errorf("r.ReadProcessStatus(%q, %d) = %+v, want %+v; (-want,+got)\n%s",
+				tc.ps.Host, tc.ps.PID, got, tc.ps, diff)
+		}
+
+		key := base.ProcessStatusKey(tc.ps.Host, tc.ps.PID)
+		gotTTL := r.client.TTL(key).Val()
+		if !cmp.Equal(tc.ttl, gotTTL, timeCmpOpt) {
+			t.Errorf("redis TTL %q returned %v, want %v", key, gotTTL, tc.ttl)
+		}
+	}
+}

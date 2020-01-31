@@ -6,6 +6,7 @@
 package base
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ const DefaultQueueName = "default"
 
 // Redis keys
 const (
+	psPrefix        = "asynq:ps:"                    // HASH
 	processedPrefix = "asynq:processed:"             // STRING - asynq:processed:<yyyy-mm-dd>
 	failurePrefix   = "asynq:failure:"               // STRING - asynq:failure:<yyyy-mm-dd>
 	QueuePrefix     = "asynq:queues:"                // LIST   - asynq:queues:<qname>
@@ -45,6 +47,11 @@ func FailureKey(t time.Time) string {
 	return failurePrefix + t.UTC().Format("2006-01-02")
 }
 
+// ProcessStatusKey returns a redis key string for process status.
+func ProcessStatusKey(hostname string, pid int) string {
+	return fmt.Sprintf("%s%s:%d", psPrefix, hostname, pid)
+}
+
 // TaskMessage is the internal representation of a task with additional metadata fields.
 // Serialized data of this type gets written to redis.
 type TaskMessage struct {
@@ -68,4 +75,14 @@ type TaskMessage struct {
 
 	// ErrorMsg holds the error message from the last failure.
 	ErrorMsg string
+}
+
+// ProcessStatus holds information about running background worker process.
+type ProcessStatus struct {
+	Concurrency int
+	Queues      map[string]uint
+	PID         int
+	Host        string
+	State       string
+	Started     time.Time
 }

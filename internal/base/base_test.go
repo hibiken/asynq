@@ -60,3 +60,21 @@ func TestFailureKey(t *testing.T) {
 		}
 	}
 }
+
+func TestProcessStatusKey(t *testing.T) {
+	tests := []struct {
+		hostname string
+		pid      int
+		want     string
+	}{
+		{"localhost", 9876, "asynq:ps:localhost:9876"},
+		{"127.0.0.1", 1234, "asynq:ps:127.0.0.1:1234"},
+	}
+
+	for _, tc := range tests {
+		got := ProcessStatusKey(tc.hostname, tc.pid)
+		if got != tc.want {
+			t.Errorf("ProcessStatusKey(%s, %d) = %s, want %s", tc.hostname, tc.pid, got, tc.want)
+		}
+	}
+}
