@@ -10,7 +10,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/go-redis/redis/v7"
@@ -214,19 +213,4 @@ func listDead(r *rdb.RDB) {
 	}
 	printTable(cols, printRows)
 	fmt.Printf("\nShowing %d tasks from page %d\n", len(tasks), pageNum)
-}
-
-func printTable(cols []string, printRows func(w io.Writer, tmpl string)) {
-	format := strings.Repeat("%v\t", len(cols)) + "\n"
-	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	var headers []interface{}
-	var seps []interface{}
-	for _, name := range cols {
-		headers = append(headers, name)
-		seps = append(seps, strings.Repeat("-", len(name)))
-	}
-	fmt.Fprintf(tw, format, headers...)
-	fmt.Fprintf(tw, format, seps...)
-	printRows(tw, format)
-	tw.Flush()
 }

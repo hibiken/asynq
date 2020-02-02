@@ -6,11 +6,13 @@ package rdb
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 )
@@ -739,48 +741,81 @@ func TestCheckAndEnqueue(t *testing.T) {
 	}
 }
 
-func TestReadWriteProcessStatus(t *testing.T) {
+func TestReadWriteClearProcessInfo(t *testing.T) {
 	r := setup(t)
-	ps1 := &base.ProcessStatus{
-		Concurrency: 10,
-		Queues:      map[string]uint{"default": 2, "email": 5, "low": 1},
-		PID:         98765,
-		Host:        "localhost",
-		State:       "running",
-		Started:     time.Now(),
+	pinfo := &base.ProcessInfo{
+		Concurrency:       10,
+		Queues:            map[string]uint{"default": 2, "email": 5, "low": 1},
+		PID:               98765,
+		Host:              "localhost",
+		State:             "running",
+		Started:           time.Now(),
+		ActiveWorkerCount: 1,
 	}
 
 	tests := []struct {
-		ps  *base.ProcessStatus
+		pi  *base.ProcessInfo
 		ttl time.Duration
 	}{
-		{ps1, 5 * time.Second},
+		{pinfo, 5 * time.Second},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
-		err := r.WriteProcessStatus(tc.ps, tc.ttl)
+		err := r.WriteProcessInfo(tc.pi, tc.ttl)
 		if err != nil {
-			t.Errorf("r.WriteProcessStatus returned an error: %v", err)
+			t.Errorf("r.WriteProcessInfo returned an error: %v", err)
 			continue
 		}
 
-		got, err := r.ReadProcessStatus(tc.ps.Host, tc.ps.PID)
+		got, err := r.ReadProcessInfo(tc.pi.Host, tc.pi.PID)
 		if err != nil {
-			t.Errorf("r.ReadProcessStatus returned an error: %v", err)
+			t.Errorf("r.ReadProcessInfo returned an error: %v", err)
 			continue
 		}
 
-		if diff := cmp.Diff(tc.ps, got); diff != "" {
-			t.Errorf("r.ReadProcessStatus(%q, %d) = %+v, want %+v; (-want,+got)\n%s",
-				tc.ps.Host, tc.ps.PID, got, tc.ps, diff)
+		ignoreOpt := cmpopts.IgnoreUnexported(base.ProcessInfo{})
+		if diff := cmp.Diff(tc.pi, got, ignoreOpt); diff != "" {
+			t.Errorf("r.ReadProcessInfo(%q, %d) = %+v, want %+v; (-want,+got)\n%s",
+				tc.pi.Host, tc.pi.PID, got, tc.pi, diff)
 		}
 
-		key := base.ProcessStatusKey(tc.ps.Host, tc.ps.PID)
+		key := base.ProcessInfoKey(tc.pi.Host, tc.pi.PID)
 		gotTTL := r.client.TTL(key).Val()
 		if !cmp.Equal(tc.ttl, gotTTL, timeCmpOpt) {
 			t.Errorf("redis TTL %q returned %v, want %v", key, gotTTL, tc.ttl)
 		}
+
+		now := time.Now().UTC()
+		allKeys, err := r.client.ZRangeByScore(base.AllProcesses, &redis.ZRangeBy{
+			Min: strconv.Itoa(int(now.Unix())),
+			Max: "+inf",
+		}).Result()
+		if err != nil {
+			t.Errorf("redis ZRANGEBYSCORE %q %d +inf returned an error: %v",
+				base.AllProcesses, now.Unix(), err)
+			continue
+		}
+
+		wantAllKeys := []string{key}
+		if diff := cmp.Diff(wantAllKeys, allKeys); diff != "" {
+			t.Errorf("all keys = %v, want %v; (-want,+got)\n%s", allKeys, wantAllKeys, diff)
+		}
+
+		if err := r.ClearProcessInfo(tc.pi); err != nil {
+			t.Errorf("r.ClearProcessInfo returned an error: %v", err)
+			continue
+		}
+
+		// 1 means key exists
+		if r.client.Exists(key).Val() == 1 {
+			t.Errorf("expected %q to be deleted", key)
+		}
+
+		if r.client.ZCard(base.AllProcesses).Val() != 0 {
+			t.Errorf("expected %q to be empty", base.AllProcesses)
+		}
+
 	}
 }

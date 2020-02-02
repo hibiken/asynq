@@ -65,7 +65,8 @@ func TestProcessorSuccess(t *testing.T) {
 			processed = append(processed, task)
 			return nil
 		}
-		p := newProcessor(rdbClient, 10, defaultQueueConfig, false, defaultDelayFunc, nil)
+		pi := base.NewProcessInfo("localhost", 1234, 10, defaultQueueConfig, false)
+		p := newProcessor(rdbClient, pi, defaultDelayFunc, nil)
 		p.handler = HandlerFunc(handler)
 
 		p.start()
@@ -148,7 +149,8 @@ func TestProcessorRetry(t *testing.T) {
 		handler := func(task *Task) error {
 			return fmt.Errorf(errMsg)
 		}
-		p := newProcessor(rdbClient, 10, defaultQueueConfig, false, delayFunc, nil)
+		pi := base.NewProcessInfo("localhost", 1234, 10, defaultQueueConfig, false)
+		p := newProcessor(rdbClient, pi, delayFunc, nil)
 		p.handler = HandlerFunc(handler)
 
 		p.start()
@@ -207,7 +209,8 @@ func TestProcessorQueues(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		p := newProcessor(nil, 10, tc.queueCfg, false, defaultDelayFunc, nil)
+		pi := base.NewProcessInfo("localhost", 1234, 10, tc.queueCfg, false)
+		p := newProcessor(nil, pi, defaultDelayFunc, nil)
 		got := p.queues()
 		if diff := cmp.Diff(tc.want, got, sortOpt); diff != "" {
 			t.Errorf("with queue config: %v\n(*processor).queues() = %v, want %v\n(-want,+got):\n%s",
@@ -273,7 +276,8 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 			"low":                 1,
 		}
 		// Note: Set concurrency to 1 to make sure tasks are processed one at a time.
-		p := newProcessor(rdbClient, 1 /*concurrency */, queueCfg, true /* strict */, defaultDelayFunc, nil)
+		pi := base.NewProcessInfo("localhost", 1234, 1 /*concurrency */, queueCfg, true /* strict */)
+		p := newProcessor(rdbClient, pi, defaultDelayFunc, nil)
 		p.handler = HandlerFunc(handler)
 
 		p.start()

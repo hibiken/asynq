@@ -41,6 +41,18 @@ var SortZSetEntryOpt = cmp.Transformer("SortZSetEntries", func(in []ZSetEntry) [
 	return out
 })
 
+// SortProcessInfoOpt is a cmp.Option to sort base.ProcessInfo for comparing slice of process info.
+var SortProcessInfoOpt = cmp.Transformer("SortProcessInfo", func(in []*base.ProcessInfo) []*base.ProcessInfo {
+	out := append([]*base.ProcessInfo(nil), in...) // Copy input to avoid mutating it
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Host != out[j].Host {
+			return out[i].Host < out[j].Host
+		}
+		return out[i].PID < out[j].PID
+	})
+	return out
+})
+
 // IgnoreIDOpt is an cmp.Option to ignore ID field in task messages when comparing.
 var IgnoreIDOpt = cmpopts.IgnoreFields(base.TaskMessage{}, "ID")
 
