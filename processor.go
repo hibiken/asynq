@@ -19,6 +19,8 @@ import (
 type processor struct {
 	rdb *rdb.RDB
 
+	pinfo *base.ProcessInfo
+
 	handler Handler
 
 	queueConfig map[string]uint
@@ -53,25 +55,21 @@ type processor struct {
 type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
 // newProcessor constructs a new processor.
-//
-// r is an instance of RDB used by the processor.
-// n specifies the max number of concurrenct worker goroutines.
-// qfcg is a mapping of queue names to associated priority level.
-// strict specifies whether queue priority should be treated strictly.
-// fn is a function to compute retry delay.
-func newProcessor(r *rdb.RDB, n int, qcfg map[string]uint, strict bool, fn retryDelayFunc, syncRequestCh chan<- *syncRequest) *processor {
+func newProcessor(r *rdb.RDB, pinfo *base.ProcessInfo, fn retryDelayFunc, syncRequestCh chan<- *syncRequest) *processor {
+	qcfg := normalizeQueueCfg(pinfo.Queues)
 	orderedQueues := []string(nil)
-	if strict {
+	if pinfo.StrictPriority {
 		orderedQueues = sortByPriority(qcfg)
 	}
 	return &processor{
 		rdb:            r,
+		pinfo:          pinfo,
 		queueConfig:    qcfg,
 		orderedQueues:  orderedQueues,
 		retryDelayFunc: fn,
 		syncRequestCh:  syncRequestCh,
 		errLogLimiter:  rate.NewLimiter(rate.Every(3*time.Second), 1),
-		sema:           make(chan struct{}, n),
+		sema:           make(chan struct{}, pinfo.Concurrency),
 		done:           make(chan struct{}),
 		abort:          make(chan struct{}),
 		quit:           make(chan struct{}),
@@ -153,8 +151,12 @@ func (p *processor) exec() {
 		p.requeue(msg)
 		return
 	case p.sema <- struct{}{}: // acquire token
+		p.pinfo.IncrActiveWorkerCount(1)
 		go func() {
-			defer func() { <-p.sema /* release token */ }()
+			defer func() {
+				<-p.sema /* release token */
+				p.pinfo.IncrActiveWorkerCount(-1)
+			}()
 
 			resCh := make(chan error, 1)
 			task := NewTask(msg.Type, msg.Payload)
@@ -331,3 +333,35 @@ type byPriority []*queue
 func (x byPriority) Len() int           { return len(x) }
 func (x byPriority) Less(i, j int) bool { return x[i].priority < x[j].priority }
 func (x byPriority) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
+
+// normalizeQueueCfg divides priority numbers by their
+// greatest common divisor.
+func normalizeQueueCfg(queueCfg map[string]uint) map[string]uint {
+	var xs []uint
+	for _, x := range queueCfg {
+		xs = append(xs, x)
+	}
+	d := gcd(xs...)
+	res := make(map[string]uint)
+	for q, x := range queueCfg {
+		res[q] = x / d
+	}
+	return res
+}
+
+func gcd(xs ...uint) uint {
+	fn := func(x, y uint) uint {
+		for y > 0 {
+			x, y = y, x%y
+		}
+		return x
+	}
+	res := xs[0]
+	for i := 0; i < len(xs); i++ {
+		res = fn(xs[i], res)
+		if res == 1 {
+			return 1
+		}
+	}
+	return res
+}

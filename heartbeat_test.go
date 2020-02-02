@@ -29,12 +29,15 @@ func TestHeartbeater(t *testing.T) {
 		{time.Second, "some.address.ec2.aws.com", 45678, map[string]uint{"default": 1}, 10},
 	}
 
+	timeCmpOpt := cmpopts.EquateApproxTime(10 * time.Millisecond)
+	ignoreOpt := cmpopts.IgnoreUnexported(base.ProcessInfo{})
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 
-		hb := newHeartbeater(rdbClient, tc.interval, tc.host, tc.pid, tc.queues, tc.concurrency)
+		pi := base.NewProcessInfo(tc.host, tc.pid, tc.concurrency, tc.queues, false)
+		hb := newHeartbeater(rdbClient, pi, tc.interval)
 
-		want := &base.ProcessStatus{
+		want := &base.ProcessInfo{
 			Host:        tc.host,
 			PID:         tc.pid,
 			Queues:      tc.queues,
@@ -47,35 +50,34 @@ func TestHeartbeater(t *testing.T) {
 		// allow for heartbeater to write to redis
 		time.Sleep(tc.interval * 2)
 
-		got, err := rdbClient.ReadProcessStatus(tc.host, tc.pid)
+		got, err := rdbClient.ReadProcessInfo(tc.host, tc.pid)
 		if err != nil {
 			t.Errorf("could not read process status from redis: %v", err)
 			hb.terminate()
 			continue
 		}
 
-		var timeCmpOpt = cmpopts.EquateApproxTime(10 * time.Millisecond)
-		if diff := cmp.Diff(want, got, timeCmpOpt); diff != "" {
+		if diff := cmp.Diff(want, got, timeCmpOpt, ignoreOpt); diff != "" {
 			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", got, want, diff)
 			hb.terminate()
 			continue
 		}
 
 		// state change
-		hb.setState("stopped")
+		pi.SetState("stopped")
 
 		// allow for heartbeater to write to redis
 		time.Sleep(tc.interval * 2)
 
 		want.State = "stopped"
-		got, err = rdbClient.ReadProcessStatus(tc.host, tc.pid)
+		got, err = rdbClient.ReadProcessInfo(tc.host, tc.pid)
 		if err != nil {
 			t.Errorf("could not read process status from redis: %v", err)
 			hb.terminate()
 			continue
 		}
 
-		if diff := cmp.Diff(want, got, timeCmpOpt); diff != "" {
+		if diff := cmp.Diff(want, got, timeCmpOpt, ignoreOpt); diff != "" {
 			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", got, want, diff)
 			hb.terminate()
 			continue

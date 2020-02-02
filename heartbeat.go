@@ -5,20 +5,18 @@
 package asynq
 
 import (
-	"sync"
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
-// heartbeater is responsible for writing process status to redis periodically to
+// heartbeater is responsible for writing process info to redis periodically to
 // indicate that the background worker process is up.
 type heartbeater struct {
 	rdb *rdb.RDB
 
-	mu sync.Mutex
-	ps *base.ProcessStatus
+	pinfo *base.ProcessInfo
 
 	// channel to communicate back to the long running "heartbeater" goroutine.
 	done chan struct{}
@@ -27,16 +25,10 @@ type heartbeater struct {
 	interval time.Duration
 }
 
-func newHeartbeater(rdb *rdb.RDB, interval time.Duration, host string, pid int, queues map[string]uint, n int) *heartbeater {
-	ps := &base.ProcessStatus{
-		Concurrency: n,
-		Queues:      queues,
-		Host:        host,
-		PID:         pid,
-	}
+func newHeartbeater(rdb *rdb.RDB, pinfo *base.ProcessInfo, interval time.Duration) *heartbeater {
 	return &heartbeater{
 		rdb:      rdb,
-		ps:       ps,
+		pinfo:    pinfo,
 		done:     make(chan struct{}),
 		interval: interval,
 	}
@@ -48,31 +40,28 @@ func (h *heartbeater) terminate() {
 	h.done <- struct{}{}
 }
 
-func (h *heartbeater) setState(state string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.ps.State = state
-}
-
 func (h *heartbeater) start() {
-	h.ps.Started = time.Now()
-	h.ps.State = "running"
+	h.pinfo.SetStarted(time.Now())
+	h.pinfo.SetState("running")
 	go func() {
+		h.beat()
 		for {
 			select {
 			case <-h.done:
 				logger.info("Heartbeater done")
 				return
 			case <-time.After(h.interval):
-				// Note: Set TTL to be long enough value so that it won't expire before we write again
-				// and short enough to expire quickly once process is shut down.
-				h.mu.Lock()
-				err := h.rdb.WriteProcessStatus(h.ps, h.interval*2)
-				h.mu.Unlock()
-				if err != nil {
-					logger.error("could not write heartbeat data: %v", err)
-				}
+				h.beat()
 			}
 		}
 	}()
+}
+
+func (h *heartbeater) beat() {
+	// Note: Set TTL to be long enough so that it won't expire before we write again
+	// and short enough to expire quickly once the process is shut down or killed.
+	err := h.rdb.WriteProcessInfo(h.pinfo, h.interval*2)
+	if err != nil {
+		logger.error("could not write heartbeat data: %v", err)
+	}
 }

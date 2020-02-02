@@ -755,3 +755,40 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 	}
 	return nil
 }
+
+// ListProcesses returns the list of process statuses.
+func (r *RDB) ListProcesses() ([]*base.ProcessInfo, error) {
+	// Note: Script also removes stale keys.
+	script := redis.NewScript(`
+	local res = {}
+	local now = tonumber(ARGV[1])
+	local keys = redis.call("ZRANGEBYSCORE", KEYS[1], now, "+inf")
+	for _, key in ipairs(keys) do
+		local ps = redis.call("GET", key)
+		if ps then
+			table.insert(res, ps)
+		end  
+	end
+	redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
+	return res
+	`)
+	res, err := script.Run(r.client,
+		[]string{base.AllProcesses}, time.Now().UTC().Unix()).Result()
+	if err != nil {
+		return nil, err
+	}
+	data, err := cast.ToStringSliceE(res)
+	if err != nil {
+		return nil, err
+	}
+	var processes []*base.ProcessInfo
+	for _, s := range data {
+		var ps base.ProcessInfo
+		err := json.Unmarshal([]byte(s), &ps)
+		if err != nil {
+			continue // skip bad data
+		}
+		processes = append(processes, &ps)
+	}
+	return processes, nil
+}

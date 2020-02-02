@@ -8,6 +8,7 @@ package base
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/xid"
@@ -19,6 +20,7 @@ const DefaultQueueName = "default"
 // Redis keys
 const (
 	psPrefix        = "asynq:ps:"                    // HASH
+	AllProcesses    = "asynq:ps"                     // ZSET
 	processedPrefix = "asynq:processed:"             // STRING - asynq:processed:<yyyy-mm-dd>
 	failurePrefix   = "asynq:failure:"               // STRING - asynq:failure:<yyyy-mm-dd>
 	QueuePrefix     = "asynq:queues:"                // LIST   - asynq:queues:<qname>
@@ -47,8 +49,8 @@ func FailureKey(t time.Time) string {
 	return failurePrefix + t.UTC().Format("2006-01-02")
 }
 
-// ProcessStatusKey returns a redis key string for process status.
-func ProcessStatusKey(hostname string, pid int) string {
+// ProcessInfoKey returns a redis key string for process info.
+func ProcessInfoKey(hostname string, pid int) string {
 	return fmt.Sprintf("%s%s:%d", psPrefix, hostname, pid)
 }
 
@@ -77,12 +79,47 @@ type TaskMessage struct {
 	ErrorMsg string
 }
 
-// ProcessStatus holds information about running background worker process.
-type ProcessStatus struct {
-	Concurrency int
-	Queues      map[string]uint
-	PID         int
-	Host        string
-	State       string
-	Started     time.Time
+// ProcessInfo holds information about running background worker process.
+type ProcessInfo struct {
+	mu                sync.Mutex
+	Concurrency       int
+	Queues            map[string]uint
+	StrictPriority    bool
+	PID               int
+	Host              string
+	State             string
+	Started           time.Time
+	ActiveWorkerCount int
+}
+
+// NewProcessInfo returns a new instance of ProcessInfo.
+func NewProcessInfo(host string, pid, concurrency int, queues map[string]uint, strict bool) *ProcessInfo {
+	return &ProcessInfo{
+		Host:           host,
+		PID:            pid,
+		Concurrency:    concurrency,
+		Queues:         queues,
+		StrictPriority: strict,
+	}
+}
+
+// SetState set the state field of the process info.
+func (p *ProcessInfo) SetState(state string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.State = state
+}
+
+// SetStarted set the started field of the process info.
+func (p *ProcessInfo) SetStarted(t time.Time) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Started = t
+}
+
+// IncrActiveWorkerCount increments active worker count by delta.
+func (p *ProcessInfo) IncrActiveWorkerCount(delta int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.ActiveWorkerCount += delta
 }

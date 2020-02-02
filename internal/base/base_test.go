@@ -5,6 +5,7 @@
 package base
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -61,7 +62,7 @@ func TestFailureKey(t *testing.T) {
 	}
 }
 
-func TestProcessStatusKey(t *testing.T) {
+func TestProcessInfoKey(t *testing.T) {
 	tests := []struct {
 		hostname string
 		pid      int
@@ -72,9 +73,36 @@ func TestProcessStatusKey(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := ProcessStatusKey(tc.hostname, tc.pid)
+		got := ProcessInfoKey(tc.hostname, tc.pid)
 		if got != tc.want {
-			t.Errorf("ProcessStatusKey(%s, %d) = %s, want %s", tc.hostname, tc.pid, got, tc.want)
+			t.Errorf("ProcessInfoKey(%s, %d) = %s, want %s", tc.hostname, tc.pid, got, tc.want)
 		}
 	}
+}
+
+// Note: Run this test with -race flag to check for data race.
+func TestProcessInfoSetter(t *testing.T) {
+	pi := NewProcessInfo("localhost", 1234, 8, map[string]uint{"default": 1}, false)
+
+	var wg sync.WaitGroup
+
+	wg.Add(3)
+
+	go func() {
+		pi.SetState("runnning")
+		wg.Done()
+	}()
+
+	go func() {
+		pi.SetStarted(time.Now())
+		pi.IncrActiveWorkerCount(1)
+		wg.Done()
+	}()
+
+	go func() {
+		pi.SetState("stopped")
+		wg.Done()
+	}()
+
+	wg.Wait()
 }

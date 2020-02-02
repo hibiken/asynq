@@ -33,6 +33,7 @@ type Background struct {
 	mu      sync.Mutex
 	running bool
 
+	pinfo       *base.ProcessInfo
 	rdb         *rdb.RDB
 	scheduler   *scheduler
 	processor   *processor
@@ -108,7 +109,6 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	if queues == nil || len(queues) == 0 {
 		queues = defaultQueueConfig
 	}
-	qcfg := normalizeQueueCfg(queues)
 
 	host, err := os.Hostname()
 	if err != nil {
@@ -116,13 +116,15 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	}
 	pid := os.Getpid()
 
+	pinfo := base.NewProcessInfo(host, pid, n, queues, cfg.StrictPriority)
 	rdb := rdb.NewRDB(createRedisClient(r))
 	syncRequestCh := make(chan *syncRequest)
 	syncer := newSyncer(syncRequestCh, 5*time.Second)
-	heartbeater := newHeartbeater(rdb, 5*time.Second, host, pid, queues, n)
-	scheduler := newScheduler(rdb, 5*time.Second, qcfg)
-	processor := newProcessor(rdb, n, qcfg, cfg.StrictPriority, delayFunc, syncRequestCh)
+	heartbeater := newHeartbeater(rdb, pinfo, 5*time.Second)
+	scheduler := newScheduler(rdb, 5*time.Second, queues)
+	processor := newProcessor(rdb, pinfo, delayFunc, syncRequestCh)
 	return &Background{
+		pinfo:       pinfo,
 		rdb:         rdb,
 		scheduler:   scheduler,
 		processor:   processor,
@@ -174,7 +176,7 @@ func (bg *Background) Run(handler Handler) {
 		sig := <-sigs
 		if sig == syscall.SIGTSTP {
 			bg.processor.stop()
-			bg.heartbeater.setState("stopped")
+			bg.pinfo.SetState("stopped")
 			continue
 		}
 		break
@@ -215,41 +217,10 @@ func (bg *Background) stop() {
 	bg.syncer.terminate()
 	bg.heartbeater.terminate()
 
+	bg.rdb.ClearProcessInfo(bg.pinfo)
 	bg.rdb.Close()
 	bg.processor.handler = nil
 	bg.running = false
 
 	logger.info("Bye!")
-}
-
-// normalizeQueueCfg divides priority numbers by their
-// greatest common divisor.
-func normalizeQueueCfg(queueCfg map[string]uint) map[string]uint {
-	var xs []uint
-	for _, x := range queueCfg {
-		xs = append(xs, x)
-	}
-	d := gcd(xs...)
-	res := make(map[string]uint)
-	for q, x := range queueCfg {
-		res[q] = x / d
-	}
-	return res
-}
-
-func gcd(xs ...uint) uint {
-	fn := func(x, y uint) uint {
-		for y > 0 {
-			x, y = y, x%y
-		}
-		return x
-	}
-	res := xs[0]
-	for i := 0; i < len(xs); i++ {
-		res = fn(xs[i], res)
-		if res == 1 {
-			return 1
-		}
-	}
-	return res
 }
