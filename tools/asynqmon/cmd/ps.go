@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -27,11 +28,12 @@ backed by the specified redis instance.
 The command shows the following for each process:
 * Host and PID of the process
 * Number of active workers out of worker pool
-* Queues configuration
-* State of the process ("running" | "stopped")
+* Queue configuration
+* State of the worker process ("running" | "stopped")
+* Time the process was started
 
 A "running" process is processing tasks in queues.
-A "stopped" process are no longer processing new tasks.`,
+A "stopped" process is no longer processing new tasks.`,
 	Args: cobra.NoArgs,
 	Run:  ps,
 }
@@ -41,12 +43,11 @@ func init() {
 }
 
 func ps(cmd *cobra.Command, args []string) {
-	c := redis.NewClient(&redis.Options{
+	r := rdb.NewRDB(redis.NewClient(&redis.Options{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),
 		Password: viper.GetString("password"),
-	})
-	r := rdb.NewRDB(c)
+	}))
 
 	processes, err := r.ListProcesses()
 	if err != nil {
@@ -57,6 +58,17 @@ func ps(cmd *cobra.Command, args []string) {
 		fmt.Println("No processes")
 		return
 	}
+
+	// sort by hostname and pid
+	sort.Slice(processes, func(i, j int) bool {
+		x, y := processes[i], processes[j]
+		if x.Host != y.Host {
+			return x.Host < y.Host
+		}
+		return x.PID < y.PID
+	})
+
+	// print processes
 	cols := []string{"Host", "PID", "State", "Active Workers", "Queues", "Started"}
 	printRows := func(w io.Writer, tmpl string) {
 		for _, ps := range processes {
@@ -75,11 +87,28 @@ func timeAgo(since time.Time) string {
 	return fmt.Sprintf("%v ago", d)
 }
 
-func formatQueues(queues map[string]uint) string {
+func formatQueues(qmap map[string]uint) string {
+	// sort queues by priority and name
+	type queue struct {
+		name     string
+		priority uint
+	}
+	var queues []*queue
+	for qname, p := range qmap {
+		queues = append(queues, &queue{qname, p})
+	}
+	sort.Slice(queues, func(i, j int) bool {
+		x, y := queues[i], queues[j]
+		if x.priority != y.priority {
+			return x.priority > y.priority
+		}
+		return x.name < y.name
+	})
+
 	var b strings.Builder
 	l := len(queues)
-	for qname, p := range queues {
-		fmt.Fprintf(&b, "%s:%d", qname, p)
+	for _, q := range queues {
+		fmt.Fprintf(&b, "%s:%d", q.name, q.priority)
 		l--
 		if l > 0 {
 			b.WriteString(" ")
