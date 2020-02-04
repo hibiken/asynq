@@ -19,7 +19,7 @@ var delallValidArgs = []string{"scheduled", "retry", "dead"}
 // delallCmd represents the delall command
 var delallCmd = &cobra.Command{
 	Use:   "delall [state]",
-	Short: "Deletes all tasks from the specified state",
+	Short: "Deletes all tasks in the specified state",
 	Long: `Delall (asynqmon delall) will delete all tasks in the specified state.
 
 The argument should be one of "scheduled", "retry", or "dead".

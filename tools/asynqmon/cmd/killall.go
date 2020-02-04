@@ -19,7 +19,7 @@ var killallValidArgs = []string{"scheduled", "retry"}
 // killallCmd represents the killall command
 var killallCmd = &cobra.Command{
 	Use:   "killall [state]",
-	Short: "Update all tasks to dead state from the specified state",
+	Short: "Kills all tasks in the specified state",
 	Long: `Killall (asynqmon killall) will update all tasks from the specified state to dead state.
 
 The argument should be either "scheduled" or "retry".
