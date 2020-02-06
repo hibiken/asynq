@@ -184,11 +184,16 @@ func listRetry(r *rdb.RDB) {
 		fmt.Println("No retry tasks")
 		return
 	}
-	cols := []string{"ID", "Type", "Payload", "Retry In", "Last Error", "Retried", "Max Retry", "Queue"}
+	cols := []string{"ID", "Type", "Payload", "Next Retry", "Last Error", "Retried", "Max Retry", "Queue"}
 	printRows := func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
-			retryIn := fmt.Sprintf("%.0f seconds", t.ProcessAt.Sub(time.Now()).Seconds())
-			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "r"), t.Type, t.Payload, retryIn, t.ErrorMsg, t.Retried, t.Retry, t.Queue)
+			var nextRetry string
+			if d := t.ProcessAt.Sub(time.Now()); d > 0 {
+				nextRetry = fmt.Sprintf("in %v", d.Round(time.Second))
+			} else {
+				nextRetry = "right now"
+			}
+			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "r"), t.Type, t.Payload, nextRetry, t.ErrorMsg, t.Retried, t.Retry, t.Queue)
 		}
 	}
 	printTable(cols, printRows)
