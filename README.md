@@ -21,7 +21,7 @@ To install `asynq` library, run the following command:
 go get -u github.com/hibiken/asynq
 ```
 
-## Quick Start
+## Quickstart
 
 First, make sure you are running a Redis server locally.
 
