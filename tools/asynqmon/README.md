@@ -8,6 +8,7 @@ Asynqmon is a command line tool to monitor the tasks managed by `asynq` package.
 - [Quick Start](#quick-start)
   - [Stats](#stats)
   - [History](#history)
+  - [Process Status](#process-status)
   - [List](#list)
   - [Enqueue](#enqueue)
   - [Delete](#delete)
@@ -22,7 +23,7 @@ In order to use the tool, compile it using the following command:
 
 This will create the asynqmon executable under your `$GOPATH/bin` directory.
 
-## Quick Start
+## Quickstart
 
 The tool has a few commands to inspect the state of tasks and queues.
 
@@ -55,6 +56,16 @@ Example:
     asynqmon history --days=30
 
 ![Gif](/docs/assets/asynqmon_history.gif)
+
+### Process Status
+
+PS (ProcessStatus) command shows the list of running worker processes.
+
+Example:
+
+    asynqmon ps
+
+![Gif](/docs/assets/asynqmon_ps.gif)
 
 ### List
 
