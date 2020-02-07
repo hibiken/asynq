@@ -26,7 +26,7 @@ go get -u github.com/hibiken/asynq
 First, make sure you are running a Redis server locally.
 
 ```sh
-redis-server
+$ redis-server
 ```
 
 To create and schedule tasks, use `Client` and provide a task and when to process the task.
@@ -113,7 +113,9 @@ Asynq ships with a command line tool to inspect the state of queues and tasks.
 
 To install, run the following command:
 
-    go get github.com/hibiken/asynq/tools/asynqmon
+```sh
+go get -u github.com/hibiken/asynq/tools/asynqmon
+```
 
 For details on how to use the tool, refer to the tool's [README](/tools/asynqmon/README.md).
 
