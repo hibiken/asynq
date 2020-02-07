@@ -11,7 +11,7 @@ import (
 	"github.com/go-redis/redis/v7"
 )
 
-// Task represents a task to be performed.
+// Task represents a unit of work to be performed.
 type Task struct {
 	// Type indicates the type of task to be performed.
 	Type string
@@ -20,10 +20,9 @@ type Task struct {
 	Payload Payload
 }
 
-// NewTask returns a new Task. The typename and payload argument set Type
-// and Payload field respectively.
+// NewTask returns a new Task given a type name and payload data.
 //
-// The payload must be serializable to JSON.
+// The payload values must be serializable.
 func NewTask(typename string, payload map[string]interface{}) *Task {
 	return &Task{
 		Type:    typename,
@@ -31,13 +30,11 @@ func NewTask(typename string, payload map[string]interface{}) *Task {
 	}
 }
 
-// RedisConnOpt is a discriminated union of redis-client-option types.
+// RedisConnOpt is a discriminated union of types that represent Redis connection configuration option.
 //
 // RedisConnOpt represents a sum of following types:
 //
 // RedisClientOpt | *RedisClientOpt | RedisFailoverClientOpt | *RedisFailoverClientOpt
-//
-// Passing unexpected type to a RedisConnOpt variable can cause panic.
 type RedisConnOpt interface{}
 
 // RedisClientOpt is used to create a redis client that connects
@@ -53,7 +50,7 @@ type RedisClientOpt struct {
 	// Redis server password.
 	Password string
 
-	// Redis DB to select after connecting to the server.
+	// Redis DB to select after connecting to a server.
 	// See: https://redis.io/commands/select.
 	DB int
 
@@ -61,13 +58,13 @@ type RedisClientOpt struct {
 	// Default is 10 connections per every CPU as reported by runtime.NumCPU.
 	PoolSize int
 
-	// TLS Config used to connect to the server.
+	// TLS Config used to connect to a server.
 	// TLS will be negotiated only if this field is set.
 	TLSConfig *tls.Config
 }
 
 // RedisFailoverClientOpt is used to creates a redis client that talks
-// to redis sentinels for service discovery and has automatic failover
+// to redis sentinels for service discovery and has an automatic failover
 // capability.
 type RedisFailoverClientOpt struct {
 	// Redis master name that monitored by sentinels.
@@ -84,7 +81,7 @@ type RedisFailoverClientOpt struct {
 	// Redis server password.
 	Password string
 
-	// Redis DB to select after connecting to the server.
+	// Redis DB to select after connecting to a server.
 	// See: https://redis.io/commands/select.
 	DB int
 
@@ -92,11 +89,14 @@ type RedisFailoverClientOpt struct {
 	// Default is 10 connections per every CPU as reported by runtime.NumCPU.
 	PoolSize int
 
-	// TLS Config used to connect to the server.
+	// TLS Config used to connect to a server.
 	// TLS will be negotiated only if this field is set.
 	TLSConfig *tls.Config
 }
 
+// createRedisClient returns a redis client given a redis connection configuration.
+//
+// Passing an unexpected type as a RedisConnOpt argument will cause panic.
 func createRedisClient(r RedisConnOpt) *redis.Client {
 	switch r := r.(type) {
 	case *RedisClientOpt:
