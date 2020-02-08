@@ -41,6 +41,14 @@ func (r *RDB) Close() error {
 	return r.client.Close()
 }
 
+// KEYS[1] -> asynq:queues:<qname>
+// KEYS[2] -> asynq:queues
+// ARGV[1] -> task message data
+var enqueueCmd = redis.NewScript(`
+redis.call("LPUSH", KEYS[1], ARGV[1])
+redis.call("SADD", KEYS[2], KEYS[1])
+return 1`)
+
 // Enqueue inserts the given task to the tail of the queue.
 func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 	bytes, err := json.Marshal(msg)
@@ -48,23 +56,18 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 		return err
 	}
 	key := base.QueueKey(msg.Queue)
-	script := redis.NewScript(`
-	redis.call("LPUSH", KEYS[1], ARGV[1])
-	redis.call("SADD", KEYS[2], KEYS[1])
-	return 1
-	`)
-	return script.Run(r.client, []string{key, base.AllQueues}, string(bytes)).Err()
+	return enqueueCmd.Run(r.client, []string{key, base.AllQueues}, bytes).Err()
 }
 
-// Dequeue queries given queues in order and pops a task message if there
-// is one and returns it. If all queues are empty, ErrNoProcessableTask
-// error is returned.
+// Dequeue queries given queues in order and pops a task message if there is one and returns it.
+// If all queues are empty, ErrNoProcessableTask error is returned.
 func (r *RDB) Dequeue(qnames ...string) (*base.TaskMessage, error) {
 	var data string
 	var err error
 	if len(qnames) == 1 {
 		data, err = r.dequeueSingle(base.QueueKey(qnames[0]))
 	} else {
+		// TODO(hibiken): Take keys are argument and don't compute every time
 		var keys []string
 		for _, q := range qnames {
 			keys = append(keys, base.QueueKey(q))
@@ -90,27 +93,43 @@ func (r *RDB) dequeueSingle(queue string) (data string, err error) {
 	return r.client.BRPopLPush(queue, base.InProgressQueue, time.Second).Result()
 }
 
+// KEYS[1] -> asynq:in_progress
+// ARGV    -> List of queues to query in order
+var dequeueCmd = redis.NewScript(`
+local res
+for _, qkey in ipairs(ARGV) do
+	res = redis.call("RPOPLPUSH", qkey, KEYS[1])
+	if res then
+		return res
+	end
+end
+return res`)
+
 func (r *RDB) dequeue(queues ...string) (data string, err error) {
 	var args []interface{}
 	for _, qkey := range queues {
 		args = append(args, qkey)
 	}
-	script := redis.NewScript(`
-	local res
-	for _, qkey in ipairs(ARGV) do
-		res = redis.call("RPOPLPUSH", qkey, KEYS[1])
-		if res then
-			return res
-		end
-	end
-	return res
-	`)
-	res, err := script.Run(r.client, []string{base.InProgressQueue}, args...).Result()
+	res, err := dequeueCmd.Run(r.client, []string{base.InProgressQueue}, args...).Result()
 	if err != nil {
 		return "", err
 	}
 	return cast.ToStringE(res)
 }
+
+// KEYS[1] -> asynq:in_progress
+// KEYS[2] -> asynq:processed:<yyyy-mm-dd>
+// ARGV[1] -> base.TaskMessage value
+// ARGV[2] -> stats expiration timestamp
+// Note: LREM count ZERO means "remove all elements equal to val"
+var doneCmd = redis.NewScript(`
+redis.call("LREM", KEYS[1], 0, ARGV[1]) 
+local n = redis.call("INCR", KEYS[2])
+if tonumber(n) == 1 then
+	redis.call("EXPIREAT", KEYS[2], ARGV[2])
+end
+return redis.status_reply("OK")
+`)
 
 // Done removes the task from in-progress queue to mark the task as done.
 func (r *RDB) Done(msg *base.TaskMessage) error {
@@ -118,44 +137,30 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 	if err != nil {
 		return err
 	}
-	// Note: LREM count ZERO means "remove all elements equal to val"
-	// KEYS[1] -> asynq:in_progress
-	// KEYS[2] -> asynq:processed:<yyyy-mm-dd>
-	// ARGV[1] -> base.TaskMessage value
-	// ARGV[2] -> stats expiration timestamp
-	script := redis.NewScript(`
-	redis.call("LREM", KEYS[1], 0, ARGV[1]) 
-	local n = redis.call("INCR", KEYS[2])
-	if tonumber(n) == 1 then
-		redis.call("EXPIREAT", KEYS[2], ARGV[2])
-	end
-	return redis.status_reply("OK")
-	`)
 	now := time.Now()
 	processedKey := base.ProcessedKey(now)
 	expireAt := now.Add(statsTTL)
-	return script.Run(r.client,
+	return doneCmd.Run(r.client,
 		[]string{base.InProgressQueue, processedKey},
-		string(bytes), expireAt.Unix()).Err()
+		bytes, expireAt.Unix()).Err()
 }
 
-// Requeue moves the task from in-progress queue to the default
-// queue.
+// KEYS[1] -> asynq:in_progress
+// KEYS[2] -> asynq:queues:<qname>
+// ARGV[1] -> base.TaskMessage value
+// Note: Use RPUSH to push to the head of the queue.
+var requeueCmd = redis.NewScript(`
+redis.call("LREM", KEYS[1], 0, ARGV[1])
+redis.call("RPUSH", KEYS[2], ARGV[1])
+return redis.status_reply("OK")`)
+
+// Requeue moves the task from in-progress queue to the specified queue.
 func (r *RDB) Requeue(msg *base.TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	// Note: Use RPUSH to push to the head of the queue.
-	// KEYS[1] -> asynq:in_progress
-	// KEYS[2] -> asynq:queues:default
-	// ARGV[1] -> base.TaskMessage value
-	script := redis.NewScript(`
-	redis.call("LREM", KEYS[1], 0, ARGV[1])
-	redis.call("RPUSH", KEYS[2], ARGV[1])
-	return redis.status_reply("OK")
-	`)
-	return script.Run(r.client,
+	return requeueCmd.Run(r.client,
 		[]string{base.InProgressQueue, base.QueueKey(msg.Queue)},
 		string(bytes)).Err()
 }
@@ -171,6 +176,27 @@ func (r *RDB) Schedule(msg *base.TaskMessage, processAt time.Time) error {
 		&redis.Z{Member: string(bytes), Score: score}).Err()
 }
 
+// KEYS[1] -> asynq:in_progress
+// KEYS[2] -> asynq:retry
+// KEYS[3] -> asynq:processed:<yyyy-mm-dd>
+// KEYS[4] -> asynq:failure:<yyyy-mm-dd>
+// ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
+// ARGV[2] -> base.TaskMessage value to add to Retry queue
+// ARGV[3] -> retry_at UNIX timestamp
+// ARGV[4] -> stats expiration timestamp
+var retryCmd = redis.NewScript(`
+redis.call("LREM", KEYS[1], 0, ARGV[1])
+redis.call("ZADD", KEYS[2], ARGV[3], ARGV[2])
+local n = redis.call("INCR", KEYS[3])
+if tonumber(n) == 1 then
+	redis.call("EXPIREAT", KEYS[3], ARGV[4])
+end
+local m = redis.call("INCR", KEYS[4])
+if tonumber(m) == 1 then
+	redis.call("EXPIREAT", KEYS[4], ARGV[4])
+end
+return redis.status_reply("OK")`)
+
 // Retry moves the task from in-progress to retry queue, incrementing retry count
 // and assigning error message to the task message.
 func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) error {
@@ -185,32 +211,11 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) e
 	if err != nil {
 		return err
 	}
-	// KEYS[1] -> asynq:in_progress
-	// KEYS[2] -> asynq:retry
-	// KEYS[3] -> asynq:processed:<yyyy-mm-dd>
-	// KEYS[4] -> asynq:failure:<yyyy-mm-dd>
-	// ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
-	// ARGV[2] -> base.TaskMessage value to add to Retry queue
-	// ARGV[3] -> retry_at UNIX timestamp
-	// ARGV[4] -> stats expiration timestamp
-	script := redis.NewScript(`
-	redis.call("LREM", KEYS[1], 0, ARGV[1])
-	redis.call("ZADD", KEYS[2], ARGV[3], ARGV[2])
-	local n = redis.call("INCR", KEYS[3])
-	if tonumber(n) == 1 then
-		redis.call("EXPIREAT", KEYS[3], ARGV[4])
-	end
-	local m = redis.call("INCR", KEYS[4])
-	if tonumber(m) == 1 then
-		redis.call("EXPIREAT", KEYS[4], ARGV[4])
-	end
-	return redis.status_reply("OK")
-	`)
 	now := time.Now()
 	processedKey := base.ProcessedKey(now)
 	failureKey := base.FailureKey(now)
 	expireAt := now.Add(statsTTL)
-	return script.Run(r.client,
+	return retryCmd.Run(r.client,
 		[]string{base.InProgressQueue, base.RetryQueue, processedKey, failureKey},
 		string(bytesToRemove), string(bytesToAdd), processAt.Unix(), expireAt.Unix()).Err()
 }
@@ -219,6 +224,31 @@ const (
 	maxDeadTasks         = 10000
 	deadExpirationInDays = 90
 )
+
+// KEYS[1] -> asynq:in_progress
+// KEYS[2] -> asynq:dead
+// KEYS[3] -> asynq:processed:<yyyy-mm-dd>
+// KEYS[4] -> asynq.failure:<yyyy-mm-dd>
+// ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
+// ARGV[2] -> base.TaskMessage value to add to Dead queue
+// ARGV[3] -> died_at UNIX timestamp
+// ARGV[4] -> cutoff timestamp (e.g., 90 days ago)
+// ARGV[5] -> max number of tasks in dead queue (e.g., 100)
+// ARGV[6] -> stats expiration timestamp
+var killCmd = redis.NewScript(`
+redis.call("LREM", KEYS[1], 0, ARGV[1])
+redis.call("ZADD", KEYS[2], ARGV[3], ARGV[2])
+redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[4])
+redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[5])
+local n = redis.call("INCR", KEYS[3])
+if tonumber(n) == 1 then
+	redis.call("EXPIREAT", KEYS[3], ARGV[6])
+end
+local m = redis.call("INCR", KEYS[4])
+if tonumber(m) == 1 then
+	redis.call("EXPIREAT", KEYS[4], ARGV[6])
+end
+return redis.status_reply("OK")`)
 
 // Kill sends the task to "dead" queue from in-progress queue, assigning
 // the error message to the task.
@@ -239,50 +269,27 @@ func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 	processedKey := base.ProcessedKey(now)
 	failureKey := base.FailureKey(now)
 	expireAt := now.Add(statsTTL)
-	// KEYS[1] -> asynq:in_progress
-	// KEYS[2] -> asynq:dead
-	// KEYS[3] -> asynq:processed:<yyyy-mm-dd>
-	// KEYS[4] -> asynq.failure:<yyyy-mm-dd>
-	// ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
-	// ARGV[2] -> base.TaskMessage value to add to Dead queue
-	// ARGV[3] -> died_at UNIX timestamp
-	// ARGV[4] -> cutoff timestamp (e.g., 90 days ago)
-	// ARGV[5] -> max number of tasks in dead queue (e.g., 100)
-	// ARGV[6] -> stats expiration timestamp
-	script := redis.NewScript(`
-	redis.call("LREM", KEYS[1], 0, ARGV[1])
-	redis.call("ZADD", KEYS[2], ARGV[3], ARGV[2])
-	redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[4])
-	redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[5])
-	local n = redis.call("INCR", KEYS[3])
-	if tonumber(n) == 1 then
-		redis.call("EXPIREAT", KEYS[3], ARGV[6])
-	end
-	local m = redis.call("INCR", KEYS[4])
-	if tonumber(m) == 1 then
-		redis.call("EXPIREAT", KEYS[4], ARGV[6])
-	end
-	return redis.status_reply("OK")
-	`)
-	return script.Run(r.client,
+	return killCmd.Run(r.client,
 		[]string{base.InProgressQueue, base.DeadQueue, processedKey, failureKey},
 		string(bytesToRemove), string(bytesToAdd), now.Unix(), limit, maxDeadTasks, expireAt.Unix()).Err()
 }
 
-// RestoreUnfinished  moves all tasks from in-progress list to the queue
+// KEYS[1] -> asynq:in_progress
+// ARGV[1] -> queue prefix
+var requeueAllCmd = redis.NewScript(`
+local msgs = redis.call("LRANGE", KEYS[1], 0, -1)
+for _, msg in ipairs(msgs) do
+	local decoded = cjson.decode(msg)
+	local qkey = ARGV[1] .. decoded["Queue"]
+	redis.call("RPUSH", qkey, msg)
+	redis.call("LREM", KEYS[1], 0, msg)
+end
+return table.getn(msgs)`)
+
+// RequeueAll moves all tasks from in-progress list to the queue
 // and reports the number of tasks restored.
-func (r *RDB) RestoreUnfinished() (int64, error) {
-	script := redis.NewScript(`
-	local msgs = redis.call("LRANGE", KEYS[1], 0, -1)
-	for _, msg in ipairs(msgs) do
-		local decoded = cjson.decode(msg)
-		local qkey = ARGV[1] .. decoded["Queue"]
-		redis.call("LREM", KEYS[1], 0, msg)
-		redis.call("RPUSH", qkey, msg)
-	end
-	return table.getn(msgs)
-	`)
-	res, err := script.Run(r.client, []string{base.InProgressQueue}, base.QueuePrefix).Result()
+func (r *RDB) RequeueAll() (int64, error) {
+	res, err := requeueAllCmd.Run(r.client, []string{base.InProgressQueue}, base.QueuePrefix).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -313,39 +320,54 @@ func (r *RDB) CheckAndEnqueue(qnames ...string) error {
 	return nil
 }
 
+// KEYS[1] -> source queue (e.g. scheduled or retry queue)
+// ARGV[1] -> current unix time
+// ARGV[2] -> queue prefix
+var forwardCmd = redis.NewScript(`
+local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+for _, msg in ipairs(msgs) do
+	local decoded = cjson.decode(msg)
+	local qkey = ARGV[2] .. decoded["Queue"]
+	redis.call("LPUSH", qkey, msg)
+	redis.call("ZREM", KEYS[1], msg)
+end
+return msgs`)
+
 // forward moves all tasks with a score less than the current unix time
 // from the src zset.
 func (r *RDB) forward(src string) error {
-	script := redis.NewScript(`
-	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
-	for _, msg in ipairs(msgs) do
-		redis.call("ZREM", KEYS[1], msg)
-		local decoded = cjson.decode(msg)
-		local qkey = ARGV[2] .. decoded["Queue"]
-		redis.call("LPUSH", qkey, msg)
-	end
-	return msgs
-	`)
 	now := float64(time.Now().Unix())
-	return script.Run(r.client,
+	return forwardCmd.Run(r.client,
 		[]string{src}, now, base.QueuePrefix).Err()
 }
+
+// KEYS[1] -> source queue (e.g. scheduled or retry queue)
+// KEYS[2] -> destination queue
+var forwardSingleCmd = redis.NewScript(`
+local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+for _, msg in ipairs(msgs) do
+	redis.call("LPUSH", KEYS[2], msg)
+	redis.call("ZREM", KEYS[1], msg)
+end
+return msgs`)
 
 // forwardSingle moves all tasks with a score less than the current unix time
 // from the src zset to dst list.
 func (r *RDB) forwardSingle(src, dst string) error {
-	script := redis.NewScript(`
-	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
-	for _, msg in ipairs(msgs) do
-		redis.call("ZREM", KEYS[1], msg)
-		redis.call("LPUSH", KEYS[2], msg)
-	end
-	return msgs
-	`)
 	now := float64(time.Now().Unix())
-	return script.Run(r.client,
+	return forwardSingleCmd.Run(r.client,
 		[]string{src, dst}, now).Err()
 }
+
+// KEYS[1] -> asynq:ps
+// KEYS[2] -> asynq:ps:<host:pid>
+// ARGV[1] -> expiration time
+// ARGV[2] -> TTL in seconds
+// ARGV[3] -> process info
+var writeProcessInfoCmd = redis.NewScript(`
+redis.call("ZADD", KEYS[1], ARGV[1], KEYS[2])
+redis.call("SETEX", KEYS[2], ARGV[2], ARGV[3])
+return redis.status_reply("OK")`)
 
 // WriteProcessInfo writes process information to redis with expiration
 // set to the value ttl.
@@ -358,17 +380,7 @@ func (r *RDB) WriteProcessInfo(ps *base.ProcessInfo, ttl time.Duration) error {
 	// ref: https://github.com/antirez/redis/issues/135#issuecomment-2361996
 	exp := time.Now().Add(ttl).UTC()
 	key := base.ProcessInfoKey(ps.Host, ps.PID)
-	// KEYS[1] -> asynq:ps
-	// KEYS[2] -> asynq:ps:<host:pid>
-	// ARGV[1] -> expiration time
-	// ARGV[2] -> TTL in seconds
-	// ARGV[3] -> process info
-	script := redis.NewScript(`
-	redis.call("ZADD", KEYS[1], ARGV[1], KEYS[2])
-	redis.call("SETEX", KEYS[2], ARGV[2], ARGV[3])
-	return redis.status_reply("OK")
-	`)
-	return script.Run(r.client, []string{base.AllProcesses, key}, float64(exp.Unix()), ttl.Seconds(), string(bytes)).Err()
+	return writeProcessInfoCmd.Run(r.client, []string{base.AllProcesses, key}, float64(exp.Unix()), ttl.Seconds(), string(bytes)).Err()
 }
 
 // ReadProcessInfo reads process information stored in redis.
@@ -386,13 +398,15 @@ func (r *RDB) ReadProcessInfo(host string, pid int) (*base.ProcessInfo, error) {
 	return &pinfo, nil
 }
 
+// KEYS[1] -> asynq:ps
+// KEYS[2] -> asynq:ps:<host:pid>
+var clearProcessInfoCmd = redis.NewScript(`
+redis.call("ZREM", KEYS[1], KEYS[2])
+redis.call("DEL", KEYS[2])
+return redis.status_reply("OK")`)
+
 // ClearProcessInfo deletes process information from redis.
 func (r *RDB) ClearProcessInfo(ps *base.ProcessInfo) error {
 	key := base.ProcessInfoKey(ps.Host, ps.PID)
-	script := redis.NewScript(`
-	redis.call("ZREM", KEYS[1], KEYS[2])
-	redis.call("DEL", KEYS[2])
-	return redis.status_reply("OK")
-	`)
-	return script.Run(r.client, []string{base.AllProcesses, key}).Err()
+	return clearProcessInfoCmd.Run(r.client, []string{base.AllProcesses, key}).Err()
 }

@@ -541,7 +541,7 @@ func TestKill(t *testing.T) {
 	}
 }
 
-func TestRestoreUnfinished(t *testing.T) {
+func TestRequeueAll(t *testing.T) {
 	r := setup(t)
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("export_csv", nil)
@@ -613,9 +613,9 @@ func TestRestoreUnfinished(t *testing.T) {
 			h.SeedEnqueuedQueue(t, r.client, msgs, qname)
 		}
 
-		got, err := r.RestoreUnfinished()
+		got, err := r.RequeueAll()
 		if got != tc.want || err != nil {
-			t.Errorf("(*RDB).RestoreUnfinished() = %v %v, want %v nil", got, err, tc.want)
+			t.Errorf("(*RDB).RequeueAll() = %v %v, want %v nil", got, err, tc.want)
 			continue
 		}
 
