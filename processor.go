@@ -191,7 +191,7 @@ func (p *processor) exec() {
 // restore moves all tasks from "in-progress" back to queue
 // to restore all unfinished tasks.
 func (p *processor) restore() {
-	n, err := p.rdb.RestoreUnfinished()
+	n, err := p.rdb.RequeueAll()
 	if err != nil {
 		logger.error("Could not restore unfinished tasks: %v", err)
 	}

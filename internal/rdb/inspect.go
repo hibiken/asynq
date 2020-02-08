@@ -86,49 +86,48 @@ type DeadTask struct {
 	Queue        string
 }
 
+// KEYS[1] -> asynq:queues
+// KEYS[2] -> asynq:in_progress
+// KEYS[3] -> asynq:scheduled
+// KEYS[4] -> asynq:retry
+// KEYS[5] -> asynq:dead
+// KEYS[6] -> asynq:processed:<yyyy-mm-dd>
+// KEYS[7] -> asynq:failure:<yyyy-mm-dd>
+var currentStatsCmd = redis.NewScript(`
+local res = {}
+local queues = redis.call("SMEMBERS", KEYS[1])
+for _, qkey in ipairs(queues) do
+	table.insert(res, qkey)
+	table.insert(res, redis.call("LLEN", qkey))
+end
+table.insert(res, KEYS[2])
+table.insert(res, redis.call("LLEN", KEYS[2]))
+table.insert(res, KEYS[3])
+table.insert(res, redis.call("ZCARD", KEYS[3]))
+table.insert(res, KEYS[4])
+table.insert(res, redis.call("ZCARD", KEYS[4]))
+table.insert(res, KEYS[5])
+table.insert(res, redis.call("ZCARD", KEYS[5]))
+local pcount = 0
+local p = redis.call("GET", KEYS[6])
+if p then
+	pcount = tonumber(p) 
+end
+table.insert(res, "processed")
+table.insert(res, pcount)
+local fcount = 0
+local f = redis.call("GET", KEYS[7])
+if f then
+	fcount = tonumber(f)
+end
+table.insert(res, "failed")
+table.insert(res, fcount)
+return res`)
+
 // CurrentStats returns a current state of the queues.
 func (r *RDB) CurrentStats() (*Stats, error) {
-	// KEYS[1] -> asynq:queues
-	// KEYS[2] -> asynq:in_progress
-	// KEYS[3] -> asynq:scheduled
-	// KEYS[4] -> asynq:retry
-	// KEYS[5] -> asynq:dead
-	// KEYS[6] -> asynq:processed:<yyyy-mm-dd>
-	// KEYS[7] -> asynq:failure:<yyyy-mm-dd>
-	script := redis.NewScript(`
-	local res = {}
-	local queues = redis.call("SMEMBERS", KEYS[1])
-	for _, qkey in ipairs(queues) do
-	  table.insert(res, qkey)
-	  table.insert(res, redis.call("LLEN", qkey))
-	end
-	table.insert(res, KEYS[2])
-	table.insert(res, redis.call("LLEN", KEYS[2]))
-	table.insert(res, KEYS[3])
-	table.insert(res, redis.call("ZCARD", KEYS[3]))
-	table.insert(res, KEYS[4])
-	table.insert(res, redis.call("ZCARD", KEYS[4]))
-	table.insert(res, KEYS[5])
-	table.insert(res, redis.call("ZCARD", KEYS[5]))
-	local pcount = 0
-	local p = redis.call("GET", KEYS[6])
-	if p then
-		pcount = tonumber(p) 
-	end
-	table.insert(res, "processed")
-	table.insert(res, pcount)
-	local fcount = 0
-	local f = redis.call("GET", KEYS[7])
-	if f then
-		fcount = tonumber(f)
-	end
-	table.insert(res, "failed")
-	table.insert(res, fcount)
-	return res
-	`)
-
 	now := time.Now()
-	res, err := script.Run(r.client, []string{
+	res, err := currentStatsCmd.Run(r.client, []string{
 		base.AllQueues,
 		base.InProgressQueue,
 		base.ScheduledQueue,
@@ -173,6 +172,17 @@ func (r *RDB) CurrentStats() (*Stats, error) {
 	return stats, nil
 }
 
+var historicalStatsCmd = redis.NewScript(`
+local res = {}
+for _, key in ipairs(KEYS) do
+	local n = redis.call("GET", key)
+	if not n then
+	n = 0
+	end
+	table.insert(res, tonumber(n))
+end
+return res`)
+
 // HistoricalStats returns a list of stats from the last n days.
 func (r *RDB) HistoricalStats(n int) ([]*DailyStats, error) {
 	if n < 1 {
@@ -188,18 +198,7 @@ func (r *RDB) HistoricalStats(n int) ([]*DailyStats, error) {
 		keys = append(keys, base.ProcessedKey(ts))
 		keys = append(keys, base.FailureKey(ts))
 	}
-	script := redis.NewScript(`
-	local res = {}
-	for _, key in ipairs(KEYS) do
-	  local n = redis.call("GET", key)
-	  if not n then
-		n = 0
-	  end
-	  table.insert(res, tonumber(n))
-	end
-	return res
-	`)
-	res, err := script.Run(r.client, keys, len(keys)).Result()
+	res, err := historicalStatsCmd.Run(r.client, keys, len(keys)).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -475,21 +474,21 @@ func (r *RDB) EnqueueAllDeadTasks() (int64, error) {
 	return r.removeAndEnqueueAll(base.DeadQueue)
 }
 
-func (r *RDB) removeAndEnqueue(zset, id string, score float64) (int64, error) {
-	script := redis.NewScript(`
-	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
-	for _, msg in ipairs(msgs) do
-		local decoded = cjson.decode(msg)
-		if decoded["ID"] == ARGV[2] then
-			redis.call("ZREM", KEYS[1], msg)
-			local qkey = ARGV[3] .. decoded["Queue"]
-			redis.call("LPUSH", qkey, msg)
-			return 1
-		end
+var removeAndEnqueueCmd = redis.NewScript(`
+local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
+for _, msg in ipairs(msgs) do
+	local decoded = cjson.decode(msg)
+	if decoded["ID"] == ARGV[2] then
+		local qkey = ARGV[3] .. decoded["Queue"]
+		redis.call("LPUSH", qkey, msg)
+		redis.call("ZREM", KEYS[1], msg)
+		return 1
 	end
-	return 0
-	`)
-	res, err := script.Run(r.client, []string{zset}, score, id, base.QueuePrefix).Result()
+end
+return 0`)
+
+func (r *RDB) removeAndEnqueue(zset, id string, score float64) (int64, error) {
+	res, err := removeAndEnqueueCmd.Run(r.client, []string{zset}, score, id, base.QueuePrefix).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -500,18 +499,18 @@ func (r *RDB) removeAndEnqueue(zset, id string, score float64) (int64, error) {
 	return n, nil
 }
 
+var removeAndEnqueueAllCmd = redis.NewScript(`
+local msgs = redis.call("ZRANGE", KEYS[1], 0, -1)
+for _, msg in ipairs(msgs) do
+	local decoded = cjson.decode(msg)
+	local qkey = ARGV[1] .. decoded["Queue"]
+	redis.call("LPUSH", qkey, msg)
+	redis.call("ZREM", KEYS[1], msg)
+end
+return table.getn(msgs)`)
+
 func (r *RDB) removeAndEnqueueAll(zset string) (int64, error) {
-	script := redis.NewScript(`
-	local msgs = redis.call("ZRANGE", KEYS[1], 0, -1)
-	for _, msg in ipairs(msgs) do
-		redis.call("ZREM", KEYS[1], msg)
-		local decoded = cjson.decode(msg)
-		local qkey = ARGV[1] .. decoded["Queue"]
-		redis.call("LPUSH", qkey, msg)
-	end
-	return table.getn(msgs)
-	`)
-	res, err := script.Run(r.client, []string{zset}, base.QueuePrefix).Result()
+	res, err := removeAndEnqueueAllCmd.Run(r.client, []string{zset}, base.QueuePrefix).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -562,31 +561,31 @@ func (r *RDB) KillAllScheduledTasks() (int64, error) {
 	return r.removeAndKillAll(base.ScheduledQueue)
 }
 
-func (r *RDB) removeAndKill(zset, id string, score float64) (int64, error) {
-	// KEYS[1] -> ZSET to move task from (e.g., retry queue)
-	// KEYS[2] -> asynq:dead
-	// ARGV[1] -> score of the task to kill
-	// ARGV[2] -> id of the task to kill
-	// ARGV[3] -> current timestamp
-	// ARGV[4] -> cutoff timestamp (e.g., 90 days ago)
-	// ARGV[5] -> max number of tasks in dead queue (e.g., 100)
-	script := redis.NewScript(`
-	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
-	for _, msg in ipairs(msgs) do
-		local decoded = cjson.decode(msg)
-		if decoded["ID"] == ARGV[2] then
-			redis.call("ZREM", KEYS[1], msg)
-			redis.call("ZADD", KEYS[2], ARGV[3], msg)
-			redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[4])
-			redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[5])
-			return 1
-		end
+// KEYS[1] -> ZSET to move task from (e.g., retry queue)
+// KEYS[2] -> asynq:dead
+// ARGV[1] -> score of the task to kill
+// ARGV[2] -> id of the task to kill
+// ARGV[3] -> current timestamp
+// ARGV[4] -> cutoff timestamp (e.g., 90 days ago)
+// ARGV[5] -> max number of tasks in dead queue (e.g., 100)
+var removeAndKillCmd = redis.NewScript(`
+local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
+for _, msg in ipairs(msgs) do
+	local decoded = cjson.decode(msg)
+	if decoded["ID"] == ARGV[2] then
+		redis.call("ZREM", KEYS[1], msg)
+		redis.call("ZADD", KEYS[2], ARGV[3], msg)
+		redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[4])
+		redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[5])
+		return 1
 	end
-	return 0
-	`)
+end
+return 0`)
+
+func (r *RDB) removeAndKill(zset, id string, score float64) (int64, error) {
 	now := time.Now()
 	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
-	res, err := script.Run(r.client,
+	res, err := removeAndKillCmd.Run(r.client,
 		[]string{zset, base.DeadQueue},
 		score, id, now.Unix(), limit, maxDeadTasks).Result()
 	if err != nil {
@@ -599,25 +598,25 @@ func (r *RDB) removeAndKill(zset, id string, score float64) (int64, error) {
 	return n, nil
 }
 
+// KEYS[1] -> ZSET to move task from (e.g., retry queue)
+// KEYS[2] -> asynq:dead
+// ARGV[1] -> current timestamp
+// ARGV[2] -> cutoff timestamp (e.g., 90 days ago)
+// ARGV[3] -> max number of tasks in dead queue (e.g., 100)
+var removeAndKillAllCmd = redis.NewScript(`
+local msgs = redis.call("ZRANGE", KEYS[1], 0, -1)
+for _, msg in ipairs(msgs) do
+	redis.call("ZADD", KEYS[2], ARGV[1], msg)
+	redis.call("ZREM", KEYS[1], msg)
+	redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
+	redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
+end
+return table.getn(msgs)`)
+
 func (r *RDB) removeAndKillAll(zset string) (int64, error) {
-	// KEYS[1] -> ZSET to move task from (e.g., retry queue)
-	// KEYS[2] -> asynq:dead
-	// ARGV[1] -> current timestamp
-	// ARGV[2] -> cutoff timestamp (e.g., 90 days ago)
-	// ARGV[3] -> max number of tasks in dead queue (e.g., 100)
-	script := redis.NewScript(`
-	local msgs = redis.call("ZRANGE", KEYS[1], 0, -1)
-	for _, msg in ipairs(msgs) do
-		redis.call("ZREM", KEYS[1], msg)
-		redis.call("ZADD", KEYS[2], ARGV[1], msg)
-		redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
-		redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
-	end
-	return table.getn(msgs)
-	`)
 	now := time.Now()
 	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
-	res, err := script.Run(r.client, []string{zset, base.DeadQueue},
+	res, err := removeAndKillAllCmd.Run(r.client, []string{zset, base.DeadQueue},
 		now.Unix(), limit, maxDeadTasks).Result()
 	if err != nil {
 		return 0, err
@@ -650,19 +649,19 @@ func (r *RDB) DeleteScheduledTask(id xid.ID, score int64) error {
 	return r.deleteTask(base.ScheduledQueue, id.String(), float64(score))
 }
 
-func (r *RDB) deleteTask(zset, id string, score float64) error {
-	script := redis.NewScript(`
-	local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
-	for _, msg in ipairs(msgs) do
-		local decoded = cjson.decode(msg)
-		if decoded["ID"] == ARGV[2] then
-			redis.call("ZREM", KEYS[1], msg)
-			return 1
-		end
+var deleteTaskCmd = redis.NewScript(`
+local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
+for _, msg in ipairs(msgs) do
+	local decoded = cjson.decode(msg)
+	if decoded["ID"] == ARGV[2] then
+		redis.call("ZREM", KEYS[1], msg)
+		return 1
 	end
-	return 0
-	`)
-	res, err := script.Run(r.client, []string{zset}, score, id).Result()
+end
+return 0`)
+
+func (r *RDB) deleteTask(zset, id string, score float64) error {
+	res, err := deleteTaskCmd.Run(r.client, []string{zset}, score, id).Result()
 	if err != nil {
 		return err
 	}
@@ -709,6 +708,27 @@ func (e *ErrQueueNotEmpty) Error() string {
 	return fmt.Sprintf("queue %q is not empty", e.qname)
 }
 
+// Skip checking whether queue is empty before removing.
+var removeQueueForceCmd = redis.NewScript(`
+local n = redis.call("SREM", KEYS[1], KEYS[2])
+if n == 0 then
+	return redis.error_reply("LIST NOT FOUND")
+end
+redis.call("DEL", KEYS[2])
+return redis.status_reply("OK")`)
+
+// Checks whether queue is empty before removing.
+var removeQueueCmd = redis.NewScript(`
+local l = redis.call("LLEN", KEYS[2]) if l > 0 then
+	return redis.error_reply("LIST NOT EMPTY")
+end
+local n = redis.call("SREM", KEYS[1], KEYS[2])
+if n == 0 then
+	return redis.error_reply("LIST NOT FOUND")
+end
+redis.call("DEL", KEYS[2])
+return redis.status_reply("OK")`)
+
 // RemoveQueue removes the specified queue.
 //
 // If force is set to true, it will remove the queue regardless
@@ -718,27 +738,9 @@ func (e *ErrQueueNotEmpty) Error() string {
 func (r *RDB) RemoveQueue(qname string, force bool) error {
 	var script *redis.Script
 	if force {
-		script = redis.NewScript(`
-		local n = redis.call("SREM", KEYS[1], KEYS[2])
-		if n == 0 then
-			return redis.error_reply("LIST NOT FOUND")
-		end
-		redis.call("DEL", KEYS[2])
-		return redis.status_reply("OK")
-		`)
+		script = removeQueueForceCmd
 	} else {
-		script = redis.NewScript(`
-		local l = redis.call("LLEN", KEYS[2])
-		if l > 0 then
-			return redis.error_reply("LIST NOT EMPTY")
-		end
-		local n = redis.call("SREM", KEYS[1], KEYS[2])
-		if n == 0 then
-			return redis.error_reply("LIST NOT FOUND")
-		end
-		redis.call("DEL", KEYS[2])
-		return redis.status_reply("OK")
-		`)
+		script = removeQueueCmd
 	}
 	err := script.Run(r.client,
 		[]string{base.AllQueues, base.QueueKey(qname)},
@@ -756,23 +758,23 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 	return nil
 }
 
+// Note: Script also removes stale keys.
+var listProcessesCmd = redis.NewScript(`
+local res = {}
+local now = tonumber(ARGV[1])
+local keys = redis.call("ZRANGEBYSCORE", KEYS[1], now, "+inf")
+for _, key in ipairs(keys) do
+	local ps = redis.call("GET", key)
+	if ps then
+		table.insert(res, ps)
+	end  
+end
+redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
+return res`)
+
 // ListProcesses returns the list of process statuses.
 func (r *RDB) ListProcesses() ([]*base.ProcessInfo, error) {
-	// Note: Script also removes stale keys.
-	script := redis.NewScript(`
-	local res = {}
-	local now = tonumber(ARGV[1])
-	local keys = redis.call("ZRANGEBYSCORE", KEYS[1], now, "+inf")
-	for _, key in ipairs(keys) do
-		local ps = redis.call("GET", key)
-		if ps then
-			table.insert(res, ps)
-		end  
-	end
-	redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
-	return res
-	`)
-	res, err := script.Run(r.client,
+	res, err := listProcessesCmd.Run(r.client,
 		[]string{base.AllProcesses}, time.Now().UTC().Unix()).Result()
 	if err != nil {
 		return nil, err
