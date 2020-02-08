@@ -119,6 +119,11 @@ go get -u github.com/hibiken/asynq/tools/asynqmon
 
 For details on how to use the tool, refer to the tool's [README](/tools/asynqmon/README.md).
 
+## Contributing
+
+We are open to, and grateful for, any contributions (Github issues/pull-requests, feedback on Gitter channel, etc) made by the community.
+Please see the [Contribution Guide](/CONTRIBUTING.md) before contributing.
+
 ## Acknowledgements
 
 - [Sidekiq](https://github.com/mperham/sidekiq) : Many of the design ideas are taken from sidekiq and its Web UI
