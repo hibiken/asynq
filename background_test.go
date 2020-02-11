@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func TestBackground(t *testing.T) {
 	})
 
 	// no-op handler
-	h := func(task *Task) error {
+	h := func(ctx context.Context, task *Task) error {
 		return nil
 	}
 
