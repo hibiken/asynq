@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -73,7 +74,7 @@ func newProcessor(r *rdb.RDB, pinfo *base.ProcessInfo, fn retryDelayFunc, syncRe
 		done:           make(chan struct{}),
 		abort:          make(chan struct{}),
 		quit:           make(chan struct{}),
-		handler:        HandlerFunc(func(t *Task) error { return fmt.Errorf("handler not set") }),
+		handler:        HandlerFunc(func(ctx context.Context, t *Task) error { return fmt.Errorf("handler not set") }),
 	}
 }
 
@@ -160,8 +161,10 @@ func (p *processor) exec() {
 
 			resCh := make(chan error, 1)
 			task := NewTask(msg.Type, msg.Payload)
+			// TODO: Set timeout if provided
+			ctx := context.Background()
 			go func() {
-				resCh <- perform(p.handler, task)
+				resCh <- perform(ctx, task, p.handler)
 			}()
 
 			select {
@@ -282,13 +285,13 @@ func (p *processor) queues() []string {
 // perform calls the handler with the given task.
 // If the call returns without panic, it simply returns the value,
 // otherwise, it recovers from panic and returns an error.
-func perform(h Handler, task *Task) (err error) {
+func perform(ctx context.Context, task *Task, h Handler) (err error) {
 	defer func() {
 		if x := recover(); x != nil {
 			err = fmt.Errorf("panic: %v", x)
 		}
 	}()
-	return h.ProcessTask(task)
+	return h.ProcessTask(ctx, task)
 }
 
 // uniq dedupes elements and returns a slice of unique names of length l.
