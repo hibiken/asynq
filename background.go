@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -141,18 +142,18 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 // If ProcessTask return a non-nil error or panics, the task
 // will be retried after delay.
 type Handler interface {
-	ProcessTask(*Task) error
+	ProcessTask(context.Context, *Task) error
 }
 
 // The HandlerFunc type is an adapter to allow the use of
 // ordinary functions as a Handler. If f is a function
 // with the appropriate signature, HandlerFunc(f) is a
 // Handler that calls f.
-type HandlerFunc func(*Task) error
+type HandlerFunc func(context.Context, *Task) error
 
-// ProcessTask calls fn(task)
-func (fn HandlerFunc) ProcessTask(task *Task) error {
-	return fn(task)
+// ProcessTask calls fn(ctx, task)
+func (fn HandlerFunc) ProcessTask(ctx context.Context, task *Task) error {
+	return fn(ctx, task)
 }
 
 // Run starts the background-task processing and blocks until

@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -37,7 +38,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 
 		var wg sync.WaitGroup
 		wg.Add(count)
-		handler := func(t *Task) error {
+		handler := func(ctx context.Context, t *Task) error {
 			wg.Done()
 			return nil
 		}
@@ -82,7 +83,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 
 		var wg sync.WaitGroup
 		wg.Add(count * 2)
-		handler := func(t *Task) error {
+		handler := func(ctx context.Context, t *Task) error {
 			// randomly fail 1% of tasks
 			if rand.Intn(100) == 1 {
 				return fmt.Errorf(":(")
@@ -141,7 +142,7 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 
 		var wg sync.WaitGroup
 		wg.Add(highCount + defaultCount + lowCount)
-		handler := func(t *Task) error {
+		handler := func(ctx context.Context, t *Task) error {
 			wg.Done()
 			return nil
 		}

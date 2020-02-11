@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -59,7 +60,7 @@ func TestProcessorSuccess(t *testing.T) {
 		// instantiate a new processor
 		var mu sync.Mutex
 		var processed []*Task
-		handler := func(task *Task) error {
+		handler := func(ctx context.Context, task *Task) error {
 			mu.Lock()
 			defer mu.Unlock()
 			processed = append(processed, task)
@@ -146,7 +147,7 @@ func TestProcessorRetry(t *testing.T) {
 		delayFunc := func(n int, e error, t *Task) time.Duration {
 			return tc.delay
 		}
-		handler := func(task *Task) error {
+		handler := func(ctx context.Context, task *Task) error {
 			return fmt.Errorf(errMsg)
 		}
 		pi := base.NewProcessInfo("localhost", 1234, 10, defaultQueueConfig, false)
@@ -264,7 +265,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		// instantiate a new processor
 		var mu sync.Mutex
 		var processed []*Task
-		handler := func(task *Task) error {
+		handler := func(ctx context.Context, task *Task) error {
 			mu.Lock()
 			defer mu.Unlock()
 			processed = append(processed, task)
@@ -303,7 +304,7 @@ func TestPerform(t *testing.T) {
 	}{
 		{
 			desc: "handler returns nil",
-			handler: func(t *Task) error {
+			handler: func(ctx context.Context, t *Task) error {
 				return nil
 			},
 			task:    NewTask("gen_thumbnail", map[string]interface{}{"src": "some/img/path"}),
@@ -311,7 +312,7 @@ func TestPerform(t *testing.T) {
 		},
 		{
 			desc: "handler returns error",
-			handler: func(t *Task) error {
+			handler: func(ctx context.Context, t *Task) error {
 				return fmt.Errorf("something went wrong")
 			},
 			task:    NewTask("gen_thumbnail", map[string]interface{}{"src": "some/img/path"}),
@@ -319,7 +320,7 @@ func TestPerform(t *testing.T) {
 		},
 		{
 			desc: "handler panics",
-			handler: func(t *Task) error {
+			handler: func(ctx context.Context, t *Task) error {
 				panic("something went terribly wrong")
 			},
 			task:    NewTask("gen_thumbnail", map[string]interface{}{"src": "some/img/path"}),
@@ -328,7 +329,7 @@ func TestPerform(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := perform(tc.handler, tc.task)
+		got := perform(context.Background(), tc.task, tc.handler)
 		if !tc.wantErr && got != nil {
 			t.Errorf("%s: perform() = %v, want nil", tc.desc, got)
 			continue
