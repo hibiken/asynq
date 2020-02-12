@@ -57,6 +57,9 @@ func main() {
 
     // Use custom queue called "critical"
     err = client.Schedule(t1, time.Now(), asynq.Queue("critical"))
+
+    // Use timeout to specify how long a task may run (Default is no limit)
+    err = client.Schedule(t1, time.Now(), asynq.Timeout(30 * time.Second))
 }
 ```
 
@@ -94,7 +97,7 @@ func main() {
 // If ProcessTask return a non-nil error or panics, the task
 // will be retried after delay.
 type Handler interface {
-    ProcessTask(*Task) error
+    ProcessTask(context.Context, *asynq.Task) error
 }
 ```
 

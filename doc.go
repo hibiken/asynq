@@ -45,7 +45,7 @@ Example of a type that implements the Handler interface.
         // ...
     }
 
-    func (h *TaskHandler) ProcessTask(task *asynq.Task) error {
+    func (h *TaskHandler) ProcessTask(ctx context.Context, task *asynq.Task) error {
         switch task.Type {
         case "send_email":
             id, err := task.Payload.GetInt("user_id")
