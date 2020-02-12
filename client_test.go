@@ -42,6 +42,7 @@ func TestClient(t *testing.T) {
 						Payload: task.Payload.data,
 						Retry:   defaultMaxRetry,
 						Queue:   "default",
+						Timeout: time.Duration(0).String(),
 					},
 				},
 			},
@@ -60,6 +61,7 @@ func TestClient(t *testing.T) {
 						Payload: task.Payload.data,
 						Retry:   defaultMaxRetry,
 						Queue:   "default",
+						Timeout: time.Duration(0).String(),
 					},
 					Score: float64(time.Now().Add(2 * time.Hour).Unix()),
 				},
@@ -79,6 +81,7 @@ func TestClient(t *testing.T) {
 						Payload: task.Payload.data,
 						Retry:   3,
 						Queue:   "default",
+						Timeout: time.Duration(0).String(),
 					},
 				},
 			},
@@ -98,6 +101,7 @@ func TestClient(t *testing.T) {
 						Payload: task.Payload.data,
 						Retry:   0, // Retry count should be set to zero
 						Queue:   "default",
+						Timeout: time.Duration(0).String(),
 					},
 				},
 			},
@@ -118,6 +122,7 @@ func TestClient(t *testing.T) {
 						Payload: task.Payload.data,
 						Retry:   10, // Last option takes precedence
 						Queue:   "default",
+						Timeout: time.Duration(0).String(),
 					},
 				},
 			},
@@ -137,6 +142,7 @@ func TestClient(t *testing.T) {
 						Payload: task.Payload.data,
 						Retry:   defaultMaxRetry,
 						Queue:   "custom",
+						Timeout: time.Duration(0).String(),
 					},
 				},
 			},
@@ -156,6 +162,27 @@ func TestClient(t *testing.T) {
 						Payload: task.Payload.data,
 						Retry:   defaultMaxRetry,
 						Queue:   "high",
+						Timeout: time.Duration(0).String(),
+					},
+				},
+			},
+			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
+		},
+		{
+			desc:      "Timeout option sets the timeout duration",
+			task:      task,
+			processAt: time.Now(),
+			opts: []Option{
+				Timeout(20 * time.Second),
+			},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default": []*base.TaskMessage{
+					&base.TaskMessage{
+						Type:    task.Type,
+						Payload: task.Payload.data,
+						Retry:   defaultMaxRetry,
+						Queue:   "default",
+						Timeout: (20 * time.Second).String(),
 					},
 				},
 			},
