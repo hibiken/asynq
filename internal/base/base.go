@@ -77,6 +77,12 @@ type TaskMessage struct {
 
 	// ErrorMsg holds the error message from the last failure.
 	ErrorMsg string
+
+	// Timeout specifies how long a task may run.
+	// The string value should be compatible with time.Duration.ParseDuration.
+	//
+	// Zero means no limit.
+	Timeout string
 }
 
 // ProcessInfo holds information about running background worker process.

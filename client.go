@@ -34,8 +34,9 @@ type Option interface{}
 
 // Internal option representations.
 type (
-	retryOption int
-	queueOption string
+	retryOption   int
+	queueOption   string
+	timeoutOption time.Duration
 )
 
 // MaxRetry returns an option to specify the max number of times
@@ -56,15 +57,24 @@ func Queue(name string) Option {
 	return queueOption(strings.ToLower(name))
 }
 
+// Timeout returns an option to specify how long a task may run.
+//
+// Zero duration means no limit.
+func Timeout(d time.Duration) Option {
+	return timeoutOption(d)
+}
+
 type option struct {
-	retry int
-	queue string
+	retry   int
+	queue   string
+	timeout time.Duration
 }
 
 func composeOptions(opts ...Option) option {
 	res := option{
-		retry: defaultMaxRetry,
-		queue: base.DefaultQueueName,
+		retry:   defaultMaxRetry,
+		queue:   base.DefaultQueueName,
+		timeout: 0,
 	}
 	for _, opt := range opts {
 		switch opt := opt.(type) {
@@ -72,6 +82,8 @@ func composeOptions(opts ...Option) option {
 			res.retry = int(opt)
 		case queueOption:
 			res.queue = string(opt)
+		case timeoutOption:
+			res.timeout = time.Duration(opt)
 		default:
 			// ignore unexpected option
 		}
@@ -99,6 +111,7 @@ func (c *Client) Schedule(task *Task, processAt time.Time, opts ...Option) error
 		Payload: task.Payload.data,
 		Queue:   opt.queue,
 		Retry:   opt.retry,
+		Timeout: opt.timeout.String(),
 	}
 	return c.enqueue(msg, processAt)
 }
