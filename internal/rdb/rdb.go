@@ -422,7 +422,7 @@ func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
 }
 
 // PublishCancelation publish cancelation message to all subscribers.
-// The message is a string representing the task to be canceled.
+// The message is the ID for the task to be canceled.
 func (r *RDB) PublishCancelation(id string) error {
 	return r.client.Publish(base.CancelChannel, id).Err()
 }

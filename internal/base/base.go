@@ -132,9 +132,9 @@ func (p *ProcessInfo) IncrActiveWorkerCount(delta int) {
 	p.ActiveWorkerCount += delta
 }
 
-// Cancelations hold cancel functions for all in-progress tasks.
+// Cancelations is a collection that holds cancel functions for all in-progress tasks.
 //
-// Its methods are safe to be used in multiple concurrent goroutines
+// Its methods are safe to be used in multiple goroutines.
 type Cancelations struct {
 	mu          sync.Mutex
 	cancelFuncs map[string]context.CancelFunc
@@ -147,14 +147,14 @@ func NewCancelations() *Cancelations {
 	}
 }
 
-// Add adds a new cancel func to the set.
+// Add adds a new cancel func to the collection.
 func (c *Cancelations) Add(id string, fn context.CancelFunc) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cancelFuncs[id] = fn
 }
 
-// Delete deletes a cancel func from the set given an id.
+// Delete deletes a cancel func from the collection given an id.
 func (c *Cancelations) Delete(id string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
