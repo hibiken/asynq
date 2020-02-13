@@ -40,6 +40,7 @@ type Background struct {
 	processor   *processor
 	syncer      *syncer
 	heartbeater *heartbeater
+	subscriber  *subscriber
 }
 
 // Config specifies the background-task processing behavior.
@@ -120,10 +121,12 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	pinfo := base.NewProcessInfo(host, pid, n, queues, cfg.StrictPriority)
 	rdb := rdb.NewRDB(createRedisClient(r))
 	syncRequestCh := make(chan *syncRequest)
+	cancelations := base.NewCancelations()
 	syncer := newSyncer(syncRequestCh, 5*time.Second)
 	heartbeater := newHeartbeater(rdb, pinfo, 5*time.Second)
 	scheduler := newScheduler(rdb, 5*time.Second, queues)
-	processor := newProcessor(rdb, pinfo, delayFunc, syncRequestCh)
+	processor := newProcessor(rdb, pinfo, delayFunc, syncRequestCh, cancelations)
+	subscriber := newSubscriber(rdb, cancelations)
 	return &Background{
 		pinfo:       pinfo,
 		rdb:         rdb,
@@ -131,6 +134,7 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 		processor:   processor,
 		syncer:      syncer,
 		heartbeater: heartbeater,
+		subscriber:  subscriber,
 	}
 }
 
@@ -198,6 +202,7 @@ func (bg *Background) start(handler Handler) {
 	bg.processor.handler = handler
 
 	bg.heartbeater.start()
+	bg.subscriber.start()
 	bg.syncer.start()
 	bg.scheduler.start()
 	bg.processor.start()
@@ -216,6 +221,7 @@ func (bg *Background) stop() {
 	// Note: processor and all worker goroutines need to be exited
 	// before shutting down syncer to avoid goroutine leak.
 	bg.syncer.terminate()
+	bg.subscriber.terminate()
 	bg.heartbeater.terminate()
 
 	bg.rdb.ClearProcessInfo(bg.pinfo)
