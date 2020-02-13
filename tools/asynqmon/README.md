@@ -13,6 +13,7 @@ Asynqmon is a command line tool to monitor the tasks managed by `asynq` package.
   - [Enqueue](#enqueue)
   - [Delete](#delete)
   - [Kill](#kill)
+  - [Cancel](#cancel)
 - [Config File](#config-file)
 
 ## Installation
@@ -132,6 +133,18 @@ Example:
     asynqmon killall retry
 
 Running the above command will move all **Retry** tasks to **Dead** state.
+
+### Cancel
+
+Command `cancel` takes a task ID and sends a cancelation signal to the goroutine processing the specified task.  
+You can obtain the task ID by running `ls` command.
+
+The task should be in "in-progress" state.
+Handler implementation needs to be context aware in order to actually stop processing.
+
+Example:
+
+    asynqmon cancel bnogo8gt6toe23vhef0g
 
 ## Config File
 
