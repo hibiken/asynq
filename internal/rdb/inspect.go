@@ -245,10 +245,10 @@ func reverse(x []string) {
 // for the list operation.
 type Pagination struct {
 	// Number of items in the page.
-	Size uint
+	Size int
 
 	// Page number starting from zero.
-	Page uint
+	Page int
 }
 
 func (p Pagination) start() int64 {

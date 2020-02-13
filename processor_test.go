@@ -192,11 +192,11 @@ func TestProcessorQueues(t *testing.T) {
 	})
 
 	tests := []struct {
-		queueCfg map[string]uint
+		queueCfg map[string]int
 		want     []string
 	}{
 		{
-			queueCfg: map[string]uint{
+			queueCfg: map[string]int{
 				"high":    6,
 				"default": 3,
 				"low":     1,
@@ -204,7 +204,7 @@ func TestProcessorQueues(t *testing.T) {
 			want: []string{"high", "default", "low"},
 		},
 		{
-			queueCfg: map[string]uint{
+			queueCfg: map[string]int{
 				"default": 1,
 			},
 			want: []string{"default"},
@@ -274,7 +274,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 			processed = append(processed, task)
 			return nil
 		}
-		queueCfg := map[string]uint{
+		queueCfg := map[string]int{
 			"critical":            3,
 			base.DefaultQueueName: 2,
 			"low":                 1,

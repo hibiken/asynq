@@ -47,7 +47,7 @@ type Background struct {
 type Config struct {
 	// Maximum number of concurrent processing of tasks.
 	//
-	// If set to zero or negative value, NewBackground will overwrite the value to one.
+	// If set to a zero or negative value, NewBackground will overwrite the value to one.
 	Concurrency int
 
 	// Function to calculate retry delay for a failed task.
@@ -59,15 +59,15 @@ type Config struct {
 	// t is the task in question.
 	RetryDelayFunc func(n int, e error, t *Task) time.Duration
 
-	// List of queues to process with given priority level. Keys are the names of the
-	// queues and values are associated priority level.
+	// List of queues to process with given priority value. Keys are the names of the
+	// queues and values are associated priority value.
 	//
 	// If set to nil or not specified, the background will process only the "default" queue.
 	//
 	// Priority is treated as follows to avoid starving low priority queues.
 	//
 	// Example:
-	// Queues: map[string]uint{
+	// Queues: map[string]int{
 	//     "critical": 6,
 	//     "default":  3,
 	//     "low":      1,
@@ -75,7 +75,9 @@ type Config struct {
 	// With the above config and given that all queues are not empty, the tasks
 	// in "critical", "default", "low" should be processed 60%, 30%, 10% of
 	// the time respectively.
-	Queues map[string]uint
+	//
+	// If a queue has a zero or negative priority value, the queue will be ignored.
+	Queues map[string]int
 
 	// StrictPriority indicates whether the queue priority should be treated strictly.
 	//
@@ -92,7 +94,7 @@ func defaultDelayFunc(n int, e error, t *Task) time.Duration {
 	return time.Duration(s) * time.Second
 }
 
-var defaultQueueConfig = map[string]uint{
+var defaultQueueConfig = map[string]int{
 	base.DefaultQueueName: 1,
 }
 
@@ -107,8 +109,13 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	if delayFunc == nil {
 		delayFunc = defaultDelayFunc
 	}
-	queues := cfg.Queues
-	if queues == nil || len(queues) == 0 {
+	queues := make(map[string]int)
+	for qname, p := range cfg.Queues {
+		if p > 0 {
+			queues[qname] = p
+		}
+	}
+	if len(queues) == 0 {
 		queues = defaultQueueConfig
 	}
 

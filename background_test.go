@@ -43,16 +43,16 @@ func TestBackground(t *testing.T) {
 
 func TestGCD(t *testing.T) {
 	tests := []struct {
-		input []uint
-		want  uint
+		input []int
+		want  int
 	}{
-		{[]uint{6, 2, 12}, 2},
-		{[]uint{3, 3, 3}, 3},
-		{[]uint{6, 3, 1}, 1},
-		{[]uint{1}, 1},
-		{[]uint{1, 0, 2}, 1},
-		{[]uint{8, 0, 4}, 4},
-		{[]uint{9, 12, 18, 30}, 3},
+		{[]int{6, 2, 12}, 2},
+		{[]int{3, 3, 3}, 3},
+		{[]int{6, 3, 1}, 1},
+		{[]int{1}, 1},
+		{[]int{1, 0, 2}, 1},
+		{[]int{8, 0, 4}, 4},
+		{[]int{9, 12, 18, 30}, 3},
 	}
 
 	for _, tc := range tests {
@@ -65,46 +65,46 @@ func TestGCD(t *testing.T) {
 
 func TestNormalizeQueueCfg(t *testing.T) {
 	tests := []struct {
-		input map[string]uint
-		want  map[string]uint
+		input map[string]int
+		want  map[string]int
 	}{
 		{
-			input: map[string]uint{
+			input: map[string]int{
 				"high":    100,
 				"default": 20,
 				"low":     5,
 			},
-			want: map[string]uint{
+			want: map[string]int{
 				"high":    20,
 				"default": 4,
 				"low":     1,
 			},
 		},
 		{
-			input: map[string]uint{
+			input: map[string]int{
 				"default": 10,
 			},
-			want: map[string]uint{
+			want: map[string]int{
 				"default": 1,
 			},
 		},
 		{
-			input: map[string]uint{
+			input: map[string]int{
 				"critical": 5,
 				"default":  1,
 			},
-			want: map[string]uint{
+			want: map[string]int{
 				"critical": 5,
 				"default":  1,
 			},
 		},
 		{
-			input: map[string]uint{
+			input: map[string]int{
 				"critical": 6,
 				"default":  3,
 				"low":      0,
 			},
-			want: map[string]uint{
+			want: map[string]int{
 				"critical": 2,
 				"default":  1,
 				"low":      0,

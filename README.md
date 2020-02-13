@@ -72,9 +72,8 @@ func main() {
     bg := asynq.NewBackground(r, &asynq.Config{
         // Specify how many concurrent workers to use
         Concurrency: 10,
-        // You can optionally create multiple queues
-        // with different priority level
-        Queues: map[string]uint{
+        // You can optionally create multiple queues with different priority.
+        Queues: map[string]int{
             "critical": 6,
             "default":  3,
             "low":      1,

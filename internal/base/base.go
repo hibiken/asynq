@@ -91,7 +91,7 @@ type TaskMessage struct {
 type ProcessInfo struct {
 	mu                sync.Mutex
 	Concurrency       int
-	Queues            map[string]uint
+	Queues            map[string]int
 	StrictPriority    bool
 	PID               int
 	Host              string
@@ -101,7 +101,7 @@ type ProcessInfo struct {
 }
 
 // NewProcessInfo returns a new instance of ProcessInfo.
-func NewProcessInfo(host string, pid, concurrency int, queues map[string]uint, strict bool) *ProcessInfo {
+func NewProcessInfo(host string, pid, concurrency int, queues map[string]int, strict bool) *ProcessInfo {
 	return &ProcessInfo{
 		Host:           host,
 		PID:            pid,

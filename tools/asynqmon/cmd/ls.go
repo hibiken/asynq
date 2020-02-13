@@ -44,16 +44,24 @@ asynqmon ls enqueued:critical -> List tasks from critical queue
 }
 
 // Flags
-var pageSize uint
-var pageNum uint
+var pageSize int
+var pageNum int
 
 func init() {
 	rootCmd.AddCommand(lsCmd)
-	lsCmd.Flags().UintVar(&pageSize, "size", 30, "page size")
-	lsCmd.Flags().UintVar(&pageNum, "page", 0, "page number - zero indexed (default 0)")
+	lsCmd.Flags().IntVar(&pageSize, "size", 30, "page size")
+	lsCmd.Flags().IntVar(&pageNum, "page", 0, "page number - zero indexed (default 0)")
 }
 
 func ls(cmd *cobra.Command, args []string) {
+	if pageSize < 0 {
+		fmt.Println("page size cannot be negative.")
+		os.Exit(1)
+	}
+	if pageNum < 0 {
+		fmt.Println("page number cannot be negative.")
+		os.Exit(1)
+	}
 	c := redis.NewClient(&redis.Options{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),

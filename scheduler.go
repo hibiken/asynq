@@ -23,7 +23,7 @@ type scheduler struct {
 	qnames []string
 }
 
-func newScheduler(r *rdb.RDB, avgInterval time.Duration, qcfg map[string]uint) *scheduler {
+func newScheduler(r *rdb.RDB, avgInterval time.Duration, qcfg map[string]int) *scheduler {
 	var qnames []string
 	for q := range qcfg {
 		qnames = append(qnames, q)
