@@ -24,7 +24,7 @@ type processor struct {
 
 	handler Handler
 
-	queueConfig map[string]uint
+	queueConfig map[string]int
 
 	// orderedQueues is set only in strict-priority mode.
 	orderedQueues []string
@@ -324,7 +324,7 @@ func uniq(names []string, l int) []string {
 
 // sortByPriority returns a list of queue names sorted by
 // their priority level in descending order.
-func sortByPriority(qcfg map[string]uint) []string {
+func sortByPriority(qcfg map[string]int) []string {
 	var queues []*queue
 	for qname, n := range qcfg {
 		queues = append(queues, &queue{qname, n})
@@ -339,7 +339,7 @@ func sortByPriority(qcfg map[string]uint) []string {
 
 type queue struct {
 	name     string
-	priority uint
+	priority int
 }
 
 type byPriority []*queue
@@ -350,21 +350,21 @@ func (x byPriority) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 
 // normalizeQueueCfg divides priority numbers by their
 // greatest common divisor.
-func normalizeQueueCfg(queueCfg map[string]uint) map[string]uint {
-	var xs []uint
+func normalizeQueueCfg(queueCfg map[string]int) map[string]int {
+	var xs []int
 	for _, x := range queueCfg {
 		xs = append(xs, x)
 	}
 	d := gcd(xs...)
-	res := make(map[string]uint)
+	res := make(map[string]int)
 	for q, x := range queueCfg {
 		res[q] = x / d
 	}
 	return res
 }
 
-func gcd(xs ...uint) uint {
-	fn := func(x, y uint) uint {
+func gcd(xs ...int) int {
+	fn := func(x, y int) int {
 		for y > 0 {
 			x, y = y, x%y
 		}

@@ -23,10 +23,10 @@ func TestHeartbeater(t *testing.T) {
 		interval    time.Duration
 		host        string
 		pid         int
-		queues      map[string]uint
+		queues      map[string]int
 		concurrency int
 	}{
-		{time.Second, "some.address.ec2.aws.com", 45678, map[string]uint{"default": 1}, 10},
+		{time.Second, "some.address.ec2.aws.com", 45678, map[string]int{"default": 1}, 10},
 	}
 
 	timeCmpOpt := cmpopts.EquateApproxTime(10 * time.Millisecond)

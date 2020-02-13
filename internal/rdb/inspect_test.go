@@ -317,8 +317,8 @@ func TestListEnqueuedPagination(t *testing.T) {
 	tests := []struct {
 		desc      string
 		qname     string
-		page      uint
-		size      uint
+		page      int
+		size      int
 		wantSize  int
 		wantFirst string
 		wantLast  string
@@ -418,8 +418,8 @@ func TestListInProgressPagination(t *testing.T) {
 
 	tests := []struct {
 		desc      string
-		page      uint
-		size      uint
+		page      int
+		size      int
 		wantSize  int
 		wantFirst string
 		wantLast  string
@@ -524,8 +524,8 @@ func TestListScheduledPagination(t *testing.T) {
 
 	tests := []struct {
 		desc      string
-		page      uint
-		size      uint
+		page      int
+		size      int
 		wantSize  int
 		wantFirst string
 		wantLast  string
@@ -667,8 +667,8 @@ func TestListRetryPagination(t *testing.T) {
 
 	tests := []struct {
 		desc      string
-		page      uint
-		size      uint
+		page      int
+		size      int
 		wantSize  int
 		wantFirst string
 		wantLast  string
@@ -800,8 +800,8 @@ func TestListDeadPagination(t *testing.T) {
 
 	tests := []struct {
 		desc      string
-		page      uint
-		size      uint
+		page      int
+		size      int
 		wantSize  int
 		wantFirst string
 		wantLast  string
@@ -2056,7 +2056,7 @@ func TestListProcesses(t *testing.T) {
 
 	ps1 := &base.ProcessInfo{
 		Concurrency:       10,
-		Queues:            map[string]uint{"default": 1},
+		Queues:            map[string]int{"default": 1},
 		Host:              "do.droplet1",
 		PID:               1234,
 		State:             "running",
@@ -2066,7 +2066,7 @@ func TestListProcesses(t *testing.T) {
 
 	ps2 := &base.ProcessInfo{
 		Concurrency:       20,
-		Queues:            map[string]uint{"email": 1},
+		Queues:            map[string]int{"email": 1},
 		Host:              "do.droplet2",
 		PID:               9876,
 		State:             "stopped",
