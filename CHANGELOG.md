@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `Handler` interface has changed. `ProcessTask` method takes two arguments `context.Context` and `*asynq.Task`
+- `Queues` field in `Config` has change from `map[string]uint` to `map[string]int`
 
 ### Added
 
