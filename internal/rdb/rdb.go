@@ -410,3 +410,19 @@ func (r *RDB) ClearProcessInfo(ps *base.ProcessInfo) error {
 	key := base.ProcessInfoKey(ps.Host, ps.PID)
 	return clearProcessInfoCmd.Run(r.client, []string{base.AllProcesses, key}).Err()
 }
+
+// CancelationPubSub returns a pubsub for cancelation messages.
+func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
+	pubsub := r.client.Subscribe(base.CancelChannel)
+	_, err := pubsub.Receive()
+	if err != nil {
+		return nil, err
+	}
+	return pubsub, nil
+}
+
+// PublishCancelation publish cancelation message to all subscribers.
+// The message is a string representing the task to be canceled.
+func (r *RDB) PublishCancelation(id string) error {
+	return r.client.Publish(base.CancelChannel, id).Err()
+}
