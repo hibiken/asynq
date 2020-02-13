@@ -87,11 +87,11 @@ func timeAgo(since time.Time) string {
 	return fmt.Sprintf("%v ago", d)
 }
 
-func formatQueues(qmap map[string]uint) string {
+func formatQueues(qmap map[string]int) string {
 	// sort queues by priority and name
 	type queue struct {
 		name     string
-		priority uint
+		priority int
 	}
 	var queues []*queue
 	for qname, p := range qmap {

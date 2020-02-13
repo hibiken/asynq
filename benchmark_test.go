@@ -120,7 +120,7 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 		client := NewClient(redis)
 		bg := NewBackground(redis, &Config{
 			Concurrency: 10,
-			Queues: map[string]uint{
+			Queues: map[string]int{
 				"high":    6,
 				"default": 3,
 				"low":     1,

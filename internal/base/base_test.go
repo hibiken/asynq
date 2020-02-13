@@ -82,7 +82,7 @@ func TestProcessInfoKey(t *testing.T) {
 
 // Note: Run this test with -race flag to check for data race.
 func TestProcessInfoSetter(t *testing.T) {
-	pi := NewProcessInfo("localhost", 1234, 8, map[string]uint{"default": 1}, false)
+	pi := NewProcessInfo("localhost", 1234, 8, map[string]int{"default": 1}, false)
 
 	var wg sync.WaitGroup
 

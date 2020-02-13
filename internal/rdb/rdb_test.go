@@ -745,7 +745,7 @@ func TestReadWriteClearProcessInfo(t *testing.T) {
 	r := setup(t)
 	pinfo := &base.ProcessInfo{
 		Concurrency:       10,
-		Queues:            map[string]uint{"default": 2, "email": 5, "low": 1},
+		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		PID:               98765,
 		Host:              "localhost",
 		State:             "running",
