@@ -6,6 +6,7 @@
 package base
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ const (
 	RetryQueue      = "asynq:retry"                  // ZSET
 	DeadQueue       = "asynq:dead"                   // ZSET
 	InProgressQueue = "asynq:in_progress"            // LIST
+	CancelChannel   = "asynq:cancel"                 // PubSub channel
 )
 
 // QueueKey returns a redis key string for the given queue name.
@@ -128,4 +130,51 @@ func (p *ProcessInfo) IncrActiveWorkerCount(delta int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.ActiveWorkerCount += delta
+}
+
+// Cancelations hold cancel functions for all in-progress tasks.
+//
+// Its methods are safe to be used in multiple concurrent goroutines
+type Cancelations struct {
+	mu          sync.Mutex
+	cancelFuncs map[string]context.CancelFunc
+}
+
+// NewCancelations returns a Cancelations instance.
+func NewCancelations() *Cancelations {
+	return &Cancelations{
+		cancelFuncs: make(map[string]context.CancelFunc),
+	}
+}
+
+// Add adds a new cancel func to the set.
+func (c *Cancelations) Add(id string, fn context.CancelFunc) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cancelFuncs[id] = fn
+}
+
+// Delete deletes a cancel func from the set given an id.
+func (c *Cancelations) Delete(id string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.cancelFuncs, id)
+}
+
+// Get returns a cancel func given an id.
+func (c *Cancelations) Get(id string) context.CancelFunc {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cancelFuncs[id]
+}
+
+// GetAll returns all cancel funcs.
+func (c *Cancelations) GetAll() []context.CancelFunc {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var res []context.CancelFunc
+	for _, fn := range c.cancelFuncs {
+		res = append(res, fn)
+	}
+	return res
 }
