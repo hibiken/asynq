@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `Handler` interface has changed. `ProcessTask` method takes two arguments `context.Context` and `*asynq.Task`
+
+### Added
+
+- `Client` can optionally schedule task with `asynq.Timeout(duration)` to specify timeout duration for task. Default is no timeout.
+- `asynqmon cancel [task id]` will send a cancelation signal to the goroutine processing the speicified task.
+
 ## [0.3.0] - 2020-02-04
 
 ### Added

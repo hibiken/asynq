@@ -11,8 +11,6 @@ It is backed by Redis and it is designed to have a low barrier to entry. It shou
 
 **Important Note**: Current major version is zero (v0.x.x) to accomodate rapid development and fast iteration while getting early feedback from users. The public API could change without a major version update before v1.0.0 release.
 
-[Quick Tour of Asynq (YouTube video)](https://www.youtube.com/watch?v=FzMJdddNcmA&t=62s)
-
 ![Gif](/docs/assets/demo.gif)
 
 ## Installation
