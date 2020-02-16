@@ -16,7 +16,6 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
-// FIXME: Make this test better.
 func TestHeartbeater(t *testing.T) {
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
@@ -28,7 +27,7 @@ func TestHeartbeater(t *testing.T) {
 		queues      map[string]int
 		concurrency int
 	}{
-		{time.Second, "some.address.ec2.aws.com", 45678, map[string]int{"default": 1}, 10},
+		{time.Second, "localhost", 45678, map[string]int{"default": 1}, 10},
 	}
 
 	timeCmpOpt := cmpopts.EquateApproxTime(10 * time.Millisecond)
@@ -40,6 +39,9 @@ func TestHeartbeater(t *testing.T) {
 		workerCh := make(chan int)
 		hb := newHeartbeater(rdbClient, tc.host, tc.pid, tc.concurrency, tc.queues, false, tc.interval, stateCh, workerCh)
 
+		var wg sync.WaitGroup
+		hb.start(&wg)
+
 		want := &base.ProcessInfo{
 			Host:        tc.host,
 			PID:         tc.pid,
@@ -48,21 +50,25 @@ func TestHeartbeater(t *testing.T) {
 			Started:     time.Now(),
 			State:       "running",
 		}
-		var wg sync.WaitGroup
-		hb.start(&wg)
 
 		// allow for heartbeater to write to redis
 		time.Sleep(tc.interval * 2)
 
-		got, err := rdbClient.ReadProcessInfo(tc.host, tc.pid)
+		ps, err := rdbClient.ListProcesses()
 		if err != nil {
 			t.Errorf("could not read process status from redis: %v", err)
 			hb.terminate()
 			continue
 		}
 
-		if diff := cmp.Diff(want, got, timeCmpOpt, ignoreOpt); diff != "" {
-			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", got, want, diff)
+		if len(ps) != 1 {
+			t.Errorf("(*RDB).ListProcesses returned %d process info, want 1", len(ps))
+			hb.terminate()
+			continue
+		}
+
+		if diff := cmp.Diff(want, ps[0], timeCmpOpt, ignoreOpt); diff != "" {
+			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ps[0], want, diff)
 			hb.terminate()
 			continue
 		}
@@ -74,15 +80,21 @@ func TestHeartbeater(t *testing.T) {
 		time.Sleep(tc.interval * 2)
 
 		want.State = "stopped"
-		got, err = rdbClient.ReadProcessInfo(tc.host, tc.pid)
+		ps, err = rdbClient.ListProcesses()
 		if err != nil {
 			t.Errorf("could not read process status from redis: %v", err)
 			hb.terminate()
 			continue
 		}
 
-		if diff := cmp.Diff(want, got, timeCmpOpt, ignoreOpt); diff != "" {
-			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", got, want, diff)
+		if len(ps) != 1 {
+			t.Errorf("(*RDB).ListProcesses returned %d process info, want 1", len(ps))
+			hb.terminate()
+			continue
+		}
+
+		if diff := cmp.Diff(want, ps[0], timeCmpOpt, ignoreOpt); diff != "" {
+			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ps[0], want, diff)
 			hb.terminate()
 			continue
 		}
