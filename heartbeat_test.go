@@ -34,8 +34,9 @@ func TestHeartbeater(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 
-		pi := base.NewProcessInfo(tc.host, tc.pid, tc.concurrency, tc.queues, false)
-		hb := newHeartbeater(rdbClient, pi, tc.interval)
+		stateCh := make(chan string)
+		workerCh := make(chan int)
+		hb := newHeartbeater(rdbClient, tc.host, tc.pid, tc.concurrency, tc.queues, false, tc.interval, stateCh, workerCh)
 
 		want := &base.ProcessInfo{
 			Host:        tc.host,
@@ -64,7 +65,7 @@ func TestHeartbeater(t *testing.T) {
 		}
 
 		// state change
-		pi.SetState("stopped")
+		stateCh <- "stopped"
 
 		// allow for heartbeater to write to redis
 		time.Sleep(tc.interval * 2)

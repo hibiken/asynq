@@ -5,7 +5,6 @@
 package base
 
 import (
-	"sync"
 	"testing"
 	"time"
 )
@@ -78,31 +77,4 @@ func TestProcessInfoKey(t *testing.T) {
 			t.Errorf("ProcessInfoKey(%s, %d) = %s, want %s", tc.hostname, tc.pid, got, tc.want)
 		}
 	}
-}
-
-// Note: Run this test with -race flag to check for data race.
-func TestProcessInfoSetter(t *testing.T) {
-	pi := NewProcessInfo("localhost", 1234, 8, map[string]int{"default": 1}, false)
-
-	var wg sync.WaitGroup
-
-	wg.Add(3)
-
-	go func() {
-		pi.SetState("runnning")
-		wg.Done()
-	}()
-
-	go func() {
-		pi.SetStarted(time.Now())
-		pi.IncrActiveWorkerCount(1)
-		wg.Done()
-	}()
-
-	go func() {
-		pi.SetState("stopped")
-		wg.Done()
-	}()
-
-	wg.Wait()
 }
