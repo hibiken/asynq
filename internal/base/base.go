@@ -89,7 +89,6 @@ type TaskMessage struct {
 
 // ProcessInfo holds information about running background worker process.
 type ProcessInfo struct {
-	mu                sync.Mutex
 	Concurrency       int
 	Queues            map[string]int
 	StrictPriority    bool
@@ -109,27 +108,6 @@ func NewProcessInfo(host string, pid, concurrency int, queues map[string]int, st
 		Queues:         queues,
 		StrictPriority: strict,
 	}
-}
-
-// SetState set the state field of the process info.
-func (p *ProcessInfo) SetState(state string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.State = state
-}
-
-// SetStarted set the started field of the process info.
-func (p *ProcessInfo) SetStarted(t time.Time) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.Started = t
-}
-
-// IncrActiveWorkerCount increments active worker count by delta.
-func (p *ProcessInfo) IncrActiveWorkerCount(delta int) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.ActiveWorkerCount += delta
 }
 
 // Cancelations is a collection that holds cancel functions for all in-progress tasks.

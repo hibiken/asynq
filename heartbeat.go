@@ -21,15 +21,24 @@ type heartbeater struct {
 	// channel to communicate back to the long running "heartbeater" goroutine.
 	done chan struct{}
 
+	// channel to receive updates on process state.
+	stateCh <-chan string
+
+	// channel to recieve updates on workers count.
+	workerCh <-chan int
+
 	// interval between heartbeats.
 	interval time.Duration
 }
 
-func newHeartbeater(rdb *rdb.RDB, pinfo *base.ProcessInfo, interval time.Duration) *heartbeater {
+func newHeartbeater(rdb *rdb.RDB, host string, pid, concurrency int, queues map[string]int, strict bool,
+	interval time.Duration, stateCh <-chan string, workerCh <-chan int) *heartbeater {
 	return &heartbeater{
 		rdb:      rdb,
-		pinfo:    pinfo,
+		pinfo:    base.NewProcessInfo(host, pid, concurrency, queues, strict),
 		done:     make(chan struct{}),
+		stateCh:  stateCh,
+		workerCh: workerCh,
 		interval: interval,
 	}
 }
@@ -41,17 +50,24 @@ func (h *heartbeater) terminate() {
 }
 
 func (h *heartbeater) start() {
-	h.pinfo.SetStarted(time.Now())
-	h.pinfo.SetState("running")
+	h.pinfo.Started = time.Now()
+	h.pinfo.State = "running"
 	go func() {
 		h.beat()
+		timer := time.NewTimer(h.interval)
 		for {
 			select {
 			case <-h.done:
+				h.rdb.ClearProcessInfo(h.pinfo)
 				logger.info("Heartbeater done")
 				return
-			case <-time.After(h.interval):
+			case state := <-h.stateCh:
+				h.pinfo.State = state
+			case delta := <-h.workerCh:
+				h.pinfo.ActiveWorkerCount += delta
+			case <-timer.C:
 				h.beat()
+				timer.Reset(h.interval)
 			}
 		}
 	}()

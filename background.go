@@ -34,7 +34,9 @@ type Background struct {
 	mu      sync.Mutex
 	running bool
 
-	pinfo       *base.ProcessInfo
+	// channel to send state updates.
+	stateCh chan<- string
+
 	rdb         *rdb.RDB
 	scheduler   *scheduler
 	processor   *processor
@@ -125,17 +127,18 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	}
 	pid := os.Getpid()
 
-	pinfo := base.NewProcessInfo(host, pid, n, queues, cfg.StrictPriority)
 	rdb := rdb.NewRDB(createRedisClient(r))
 	syncRequestCh := make(chan *syncRequest)
+	stateCh := make(chan string)
+	workerCh := make(chan int)
 	cancelations := base.NewCancelations()
 	syncer := newSyncer(syncRequestCh, 5*time.Second)
-	heartbeater := newHeartbeater(rdb, pinfo, 5*time.Second)
+	heartbeater := newHeartbeater(rdb, host, pid, n, queues, cfg.StrictPriority, 5*time.Second, stateCh, workerCh)
 	scheduler := newScheduler(rdb, 5*time.Second, queues)
-	processor := newProcessor(rdb, pinfo, delayFunc, syncRequestCh, cancelations)
+	processor := newProcessor(rdb, queues, cfg.StrictPriority, n, delayFunc, syncRequestCh, workerCh, cancelations)
 	subscriber := newSubscriber(rdb, cancelations)
 	return &Background{
-		pinfo:       pinfo,
+		stateCh:     stateCh,
 		rdb:         rdb,
 		scheduler:   scheduler,
 		processor:   processor,
@@ -188,7 +191,7 @@ func (bg *Background) Run(handler Handler) {
 		sig := <-sigs
 		if sig == syscall.SIGTSTP {
 			bg.processor.stop()
-			bg.pinfo.SetState("stopped")
+			bg.stateCh <- "stopped"
 			continue
 		}
 		break
@@ -231,7 +234,6 @@ func (bg *Background) stop() {
 	bg.subscriber.terminate()
 	bg.heartbeater.terminate()
 
-	bg.rdb.ClearProcessInfo(bg.pinfo)
 	bg.rdb.Close()
 	bg.processor.handler = nil
 	bg.running = false

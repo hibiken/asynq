@@ -20,8 +20,6 @@ import (
 type processor struct {
 	rdb *rdb.RDB
 
-	pinfo *base.ProcessInfo
-
 	handler Handler
 
 	queueConfig map[string]int
@@ -33,6 +31,9 @@ type processor struct {
 
 	// channel via which to send sync requests to syncer.
 	syncRequestCh chan<- *syncRequest
+
+	// channel to send worker count updates.
+	workerCh chan<- int
 
 	// rate limiter to prevent spamming logs with a bunch of errors.
 	errLogLimiter *rate.Limiter
@@ -59,22 +60,23 @@ type processor struct {
 type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
 // newProcessor constructs a new processor.
-func newProcessor(r *rdb.RDB, pinfo *base.ProcessInfo, fn retryDelayFunc, syncRequestCh chan<- *syncRequest, cancelations *base.Cancelations) *processor {
-	qcfg := normalizeQueueCfg(pinfo.Queues)
+func newProcessor(r *rdb.RDB, queues map[string]int, strict bool, concurrency int, fn retryDelayFunc,
+	syncRequestCh chan<- *syncRequest, workerCh chan<- int, cancelations *base.Cancelations) *processor {
+	qcfg := normalizeQueueCfg(queues)
 	orderedQueues := []string(nil)
-	if pinfo.StrictPriority {
+	if strict {
 		orderedQueues = sortByPriority(qcfg)
 	}
 	return &processor{
 		rdb:            r,
-		pinfo:          pinfo,
 		queueConfig:    qcfg,
 		orderedQueues:  orderedQueues,
 		retryDelayFunc: fn,
 		syncRequestCh:  syncRequestCh,
+		workerCh:       workerCh,
 		cancelations:   cancelations,
 		errLogLimiter:  rate.NewLimiter(rate.Every(3*time.Second), 1),
-		sema:           make(chan struct{}, pinfo.Concurrency),
+		sema:           make(chan struct{}, concurrency),
 		done:           make(chan struct{}),
 		abort:          make(chan struct{}),
 		quit:           make(chan struct{}),
@@ -162,11 +164,11 @@ func (p *processor) exec() {
 		p.requeue(msg)
 		return
 	case p.sema <- struct{}{}: // acquire token
-		p.pinfo.IncrActiveWorkerCount(1)
+		p.workerCh <- 1
 		go func() {
 			defer func() {
+				p.workerCh <- -1
 				<-p.sema /* release token */
-				p.pinfo.IncrActiveWorkerCount(-1)
 			}()
 
 			resCh := make(chan error, 1)
