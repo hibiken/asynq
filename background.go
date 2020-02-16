@@ -229,10 +229,13 @@ func (bg *Background) stop() {
 		return
 	}
 
+	// Note: The order of termination is important.
+	// Sender goroutines should be terminated before the receiver goroutines.
+	//
+	// processor -> syncer      (via syncRequestCh)
+	// processor -> heartbeater (via workerCh)
 	bg.scheduler.terminate()
 	bg.processor.terminate()
-	// Note: processor and all worker goroutines need to be exited
-	// before shutting down syncer to avoid goroutine leak.
 	bg.syncer.terminate()
 	bg.subscriber.terminate()
 	bg.heartbeater.terminate()
@@ -240,7 +243,6 @@ func (bg *Background) stop() {
 	bg.wg.Wait()
 
 	bg.rdb.Close()
-	bg.processor.handler = nil
 	bg.running = false
 
 	logger.info("Bye!")
