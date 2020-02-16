@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -34,7 +35,8 @@ func TestSubscriber(t *testing.T) {
 		cancelations.Add(tc.registeredID, fakeCancelFunc)
 
 		subscriber := newSubscriber(rdbClient, cancelations)
-		subscriber.start()
+		var wg sync.WaitGroup
+		subscriber.start(&wg)
 
 		if err := rdbClient.PublishCancelation(tc.publishID); err != nil {
 			subscriber.terminate()

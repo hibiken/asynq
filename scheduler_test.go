@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -69,7 +70,8 @@ func TestScheduler(t *testing.T) {
 		h.SeedRetryQueue(t, r, tc.initRetry)         // initialize retry queue
 		h.SeedEnqueuedQueue(t, r, tc.initQueue)      // initialize default queue
 
-		s.start()
+		var wg sync.WaitGroup
+		s.start(&wg)
 		time.Sleep(tc.wait)
 		s.terminate()
 

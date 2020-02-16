@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
+// FIXME: Make this test better.
 func TestHeartbeater(t *testing.T) {
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
@@ -46,7 +48,8 @@ func TestHeartbeater(t *testing.T) {
 			Started:     time.Now(),
 			State:       "running",
 		}
-		hb.start()
+		var wg sync.WaitGroup
+		hb.start(&wg)
 
 		// allow for heartbeater to write to redis
 		time.Sleep(tc.interval * 2)

@@ -72,7 +72,8 @@ func TestProcessorSuccess(t *testing.T) {
 		p := newProcessor(rdbClient, defaultQueueConfig, false, 10, defaultDelayFunc, nil, workerCh, cancelations)
 		p.handler = HandlerFunc(handler)
 
-		p.start()
+		var wg sync.WaitGroup
+		p.start(&wg)
 		for _, msg := range tc.incoming {
 			err := rdbClient.Enqueue(msg)
 			if err != nil {
@@ -159,7 +160,8 @@ func TestProcessorRetry(t *testing.T) {
 		p := newProcessor(rdbClient, defaultQueueConfig, false, 10, delayFunc, nil, workerCh, cancelations)
 		p.handler = HandlerFunc(handler)
 
-		p.start()
+		var wg sync.WaitGroup
+		p.start(&wg)
 		for _, msg := range tc.incoming {
 			err := rdbClient.Enqueue(msg)
 			if err != nil {
@@ -290,7 +292,8 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 			defaultDelayFunc, nil, workerCh, cancelations)
 		p.handler = HandlerFunc(handler)
 
-		p.start()
+		var wg sync.WaitGroup
+		p.start(&wg)
 		time.Sleep(tc.wait)
 		p.terminate()
 		close(workerCh)

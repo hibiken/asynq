@@ -37,6 +37,9 @@ type Background struct {
 	// channel to send state updates.
 	stateCh chan<- string
 
+	// wait group to wait for all goroutines to finish.
+	wg sync.WaitGroup
+
 	rdb         *rdb.RDB
 	scheduler   *scheduler
 	processor   *processor
@@ -211,11 +214,11 @@ func (bg *Background) start(handler Handler) {
 	bg.running = true
 	bg.processor.handler = handler
 
-	bg.heartbeater.start()
-	bg.subscriber.start()
-	bg.syncer.start()
-	bg.scheduler.start()
-	bg.processor.start()
+	bg.heartbeater.start(&bg.wg)
+	bg.subscriber.start(&bg.wg)
+	bg.syncer.start(&bg.wg)
+	bg.scheduler.start(&bg.wg)
+	bg.processor.start(&bg.wg)
 }
 
 // stops the background-task processing.
@@ -233,6 +236,8 @@ func (bg *Background) stop() {
 	bg.syncer.terminate()
 	bg.subscriber.terminate()
 	bg.heartbeater.terminate()
+
+	bg.wg.Wait()
 
 	bg.rdb.Close()
 	bg.processor.handler = nil

@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -27,7 +28,8 @@ func TestSyncer(t *testing.T) {
 	const interval = time.Second
 	syncRequestCh := make(chan *syncRequest)
 	syncer := newSyncer(syncRequestCh, interval)
-	syncer.start()
+	var wg sync.WaitGroup
+	syncer.start(&wg)
 	defer syncer.terminate()
 
 	for _, msg := range inProgress {
@@ -66,7 +68,8 @@ func TestSyncerRetry(t *testing.T) {
 	const interval = time.Second
 	syncRequestCh := make(chan *syncRequest)
 	syncer := newSyncer(syncRequestCh, interval)
-	syncer.start()
+	var wg sync.WaitGroup
+	syncer.start(&wg)
 	defer syncer.terminate()
 
 	for _, msg := range inProgress {
