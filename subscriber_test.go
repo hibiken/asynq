@@ -27,8 +27,11 @@ func TestSubscriber(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		var mu sync.Mutex
 		called := false
 		fakeCancelFunc := func() {
+			mu.Lock()
+			defer mu.Unlock()
 			called = true
 		}
 		cancelations := base.NewCancelations()
@@ -46,6 +49,7 @@ func TestSubscriber(t *testing.T) {
 		// allow for redis to publish message
 		time.Sleep(time.Second)
 
+		mu.Lock()
 		if called != tc.wantCalled {
 			if tc.wantCalled {
 				t.Errorf("fakeCancelFunc was not called, want the function to be called")
@@ -53,6 +57,7 @@ func TestSubscriber(t *testing.T) {
 				t.Errorf("fakeCancelFunc was called, want the function to not be called")
 			}
 		}
+		mu.Unlock()
 
 		subscriber.terminate()
 	}
