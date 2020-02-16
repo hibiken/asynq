@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"sync"
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
@@ -49,10 +50,12 @@ func (h *heartbeater) terminate() {
 	h.done <- struct{}{}
 }
 
-func (h *heartbeater) start() {
+func (h *heartbeater) start(wg *sync.WaitGroup) {
 	h.pinfo.Started = time.Now()
 	h.pinfo.State = "running"
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		h.beat()
 		timer := time.NewTimer(h.interval)
 		for {

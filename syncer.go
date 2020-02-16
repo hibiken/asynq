@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"sync"
 	"time"
 )
 
@@ -39,8 +40,10 @@ func (s *syncer) terminate() {
 	s.done <- struct{}{}
 }
 
-func (s *syncer) start() {
+func (s *syncer) start(wg *sync.WaitGroup) {
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		var requests []*syncRequest
 		for {
 			select {

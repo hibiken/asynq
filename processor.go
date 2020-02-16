@@ -119,11 +119,13 @@ func (p *processor) terminate() {
 	p.restore() // move any unfinished tasks back to the queue.
 }
 
-func (p *processor) start() {
+func (p *processor) start(wg *sync.WaitGroup) {
 	// NOTE: The call to "restore" needs to complete before starting
 	// the processor goroutine.
 	p.restore()
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-p.done:

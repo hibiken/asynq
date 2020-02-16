@@ -5,6 +5,8 @@
 package asynq
 
 import (
+	"sync"
+
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 )
@@ -33,14 +35,16 @@ func (s *subscriber) terminate() {
 	s.done <- struct{}{}
 }
 
-func (s *subscriber) start() {
+func (s *subscriber) start(wg *sync.WaitGroup) {
 	pubsub, err := s.rdb.CancelationPubSub()
 	cancelCh := pubsub.Channel()
 	if err != nil {
 		logger.error("cannot subscribe to cancelation channel: %v", err)
 		return
 	}
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-s.done:

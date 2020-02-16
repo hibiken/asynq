@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"sync"
 	"time"
 
 	"github.com/hibiken/asynq/internal/rdb"
@@ -43,8 +44,10 @@ func (s *scheduler) terminate() {
 }
 
 // start starts the "scheduler" goroutine.
-func (s *scheduler) start() {
+func (s *scheduler) start(wg *sync.WaitGroup) {
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			select {
 			case <-s.done:
