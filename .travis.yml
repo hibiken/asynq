@@ -5,6 +5,7 @@ git:
 env:
   - GO111MODULE=on # go modules are the default
 go: [1.12.x, 1.13.x]
+gobuild_args: -race -v
 services:
   - redis-server
 after_success:
