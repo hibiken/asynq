@@ -17,29 +17,20 @@ import (
 type heartbeater struct {
 	rdb *rdb.RDB
 
-	pinfo *base.ProcessInfo
+	ps *base.ProcessState
 
 	// channel to communicate back to the long running "heartbeater" goroutine.
 	done chan struct{}
-
-	// channel to receive updates on process state.
-	stateCh <-chan string
-
-	// channel to recieve updates on workers count.
-	workerCh <-chan int
 
 	// interval between heartbeats.
 	interval time.Duration
 }
 
-func newHeartbeater(rdb *rdb.RDB, host string, pid, concurrency int, queues map[string]int, strict bool,
-	interval time.Duration, stateCh <-chan string, workerCh <-chan int) *heartbeater {
+func newHeartbeater(rdb *rdb.RDB, ps *base.ProcessState, interval time.Duration) *heartbeater {
 	return &heartbeater{
 		rdb:      rdb,
-		pinfo:    base.NewProcessInfo(host, pid, concurrency, queues, strict),
+		ps:       ps,
 		done:     make(chan struct{}),
-		stateCh:  stateCh,
-		workerCh: workerCh,
 		interval: interval,
 	}
 }
@@ -51,26 +42,20 @@ func (h *heartbeater) terminate() {
 }
 
 func (h *heartbeater) start(wg *sync.WaitGroup) {
-	h.pinfo.Started = time.Now()
-	h.pinfo.State = "running"
+	h.ps.SetStarted(time.Now())
+	h.ps.SetStatus(base.StatusRunning)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		h.beat()
-		timer := time.NewTimer(h.interval)
 		for {
 			select {
 			case <-h.done:
-				h.rdb.ClearProcessInfo(h.pinfo)
+				h.rdb.ClearProcessInfo(h.ps.Get())
 				logger.info("Heartbeater done")
 				return
-			case state := <-h.stateCh:
-				h.pinfo.State = state
-			case delta := <-h.workerCh:
-				h.pinfo.ActiveWorkerCount += delta
-			case <-timer.C:
+			case <-time.After(h.interval):
 				h.beat()
-				timer.Reset(h.interval)
 			}
 		}
 	}()
@@ -79,7 +64,7 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 func (h *heartbeater) beat() {
 	// Note: Set TTL to be long enough so that it won't expire before we write again
 	// and short enough to expire quickly once the process is shut down or killed.
-	err := h.rdb.WriteProcessInfo(h.pinfo, h.interval*2)
+	err := h.rdb.WriteProcessInfo(h.ps.Get(), h.interval*2)
 	if err != nil {
 		logger.error("could not write heartbeat data: %v", err)
 	}
