@@ -2059,7 +2059,7 @@ func TestListProcesses(t *testing.T) {
 		Queues:            map[string]int{"default": 1},
 		Host:              "do.droplet1",
 		PID:               1234,
-		State:             "running",
+		Status:            "running",
 		Started:           time.Now().Add(-time.Hour),
 		ActiveWorkerCount: 5,
 	}
@@ -2069,7 +2069,7 @@ func TestListProcesses(t *testing.T) {
 		Queues:            map[string]int{"email": 1},
 		Host:              "do.droplet2",
 		PID:               9876,
-		State:             "stopped",
+		Status:            "stopped",
 		Started:           time.Now().Add(-2 * time.Hour),
 		ActiveWorkerCount: 20,
 	}

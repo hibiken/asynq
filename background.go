@@ -34,8 +34,7 @@ type Background struct {
 	mu      sync.Mutex
 	running bool
 
-	// channel to send state updates.
-	stateCh chan<- string
+	ps *base.ProcessState
 
 	// wait group to wait for all goroutines to finish.
 	wg sync.WaitGroup
@@ -131,18 +130,17 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	pid := os.Getpid()
 
 	rdb := rdb.NewRDB(createRedisClient(r))
-	syncRequestCh := make(chan *syncRequest)
-	stateCh := make(chan string)
-	workerCh := make(chan int)
-	cancelations := base.NewCancelations()
-	syncer := newSyncer(syncRequestCh, 5*time.Second)
-	heartbeater := newHeartbeater(rdb, host, pid, n, queues, cfg.StrictPriority, 5*time.Second, stateCh, workerCh)
+	ps := base.NewProcessState(host, pid, n, queues, cfg.StrictPriority)
+	syncCh := make(chan *syncRequest)
+	cancels := base.NewCancelations()
+	syncer := newSyncer(syncCh, 5*time.Second)
+	heartbeater := newHeartbeater(rdb, ps, 5*time.Second)
 	scheduler := newScheduler(rdb, 5*time.Second, queues)
-	processor := newProcessor(rdb, queues, cfg.StrictPriority, n, delayFunc, syncRequestCh, workerCh, cancelations)
-	subscriber := newSubscriber(rdb, cancelations)
+	processor := newProcessor(rdb, ps, delayFunc, syncCh, cancels)
+	subscriber := newSubscriber(rdb, cancels)
 	return &Background{
-		stateCh:     stateCh,
 		rdb:         rdb,
+		ps:          ps,
 		scheduler:   scheduler,
 		processor:   processor,
 		syncer:      syncer,
@@ -194,7 +192,7 @@ func (bg *Background) Run(handler Handler) {
 		sig := <-sigs
 		if sig == syscall.SIGTSTP {
 			bg.processor.stop()
-			bg.stateCh <- "stopped"
+			bg.ps.SetStatus(base.StatusStopped)
 			continue
 		}
 		break
@@ -232,8 +230,7 @@ func (bg *Background) stop() {
 	// Note: The order of termination is important.
 	// Sender goroutines should be terminated before the receiver goroutines.
 	//
-	// processor -> syncer      (via syncRequestCh)
-	// processor -> heartbeater (via workerCh)
+	// processor -> syncer (via syncCh)
 	bg.scheduler.terminate()
 	bg.processor.terminate()
 	bg.syncer.terminate()

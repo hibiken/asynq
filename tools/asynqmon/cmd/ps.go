@@ -73,7 +73,7 @@ func ps(cmd *cobra.Command, args []string) {
 	printRows := func(w io.Writer, tmpl string) {
 		for _, ps := range processes {
 			fmt.Fprintf(w, tmpl,
-				ps.Host, ps.PID, ps.State,
+				ps.Host, ps.PID, ps.Status,
 				fmt.Sprintf("%d/%d", ps.ActiveWorkerCount, ps.Concurrency),
 				formatQueues(ps.Queues), timeAgo(ps.Started))
 		}

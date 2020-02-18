@@ -748,7 +748,7 @@ func TestReadWriteClearProcessInfo(t *testing.T) {
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		PID:               98765,
 		Host:              "localhost",
-		State:             "running",
+		Status:            "running",
 		Started:           time.Now(),
 		ActiveWorkerCount: 1,
 	}

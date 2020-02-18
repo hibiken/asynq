@@ -35,9 +35,8 @@ func TestHeartbeater(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 
-		stateCh := make(chan string)
-		workerCh := make(chan int)
-		hb := newHeartbeater(rdbClient, tc.host, tc.pid, tc.concurrency, tc.queues, false, tc.interval, stateCh, workerCh)
+		state := base.NewProcessState(tc.host, tc.pid, tc.concurrency, tc.queues, false)
+		hb := newHeartbeater(rdbClient, state, tc.interval)
 
 		var wg sync.WaitGroup
 		hb.start(&wg)
@@ -48,7 +47,7 @@ func TestHeartbeater(t *testing.T) {
 			Queues:      tc.queues,
 			Concurrency: tc.concurrency,
 			Started:     time.Now(),
-			State:       "running",
+			Status:      "running",
 		}
 
 		// allow for heartbeater to write to redis
@@ -73,13 +72,13 @@ func TestHeartbeater(t *testing.T) {
 			continue
 		}
 
-		// state change
-		stateCh <- "stopped"
+		// status change
+		state.SetStatus(base.StatusStopped)
 
 		// allow for heartbeater to write to redis
 		time.Sleep(tc.interval * 2)
 
-		want.State = "stopped"
+		want.Status = "stopped"
 		ps, err = rdbClient.ListProcesses()
 		if err != nil {
 			t.Errorf("could not read process status from redis: %v", err)

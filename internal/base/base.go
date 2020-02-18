@@ -87,6 +87,105 @@ type TaskMessage struct {
 	Timeout string
 }
 
+// ProcessState holds process level information.
+//
+// ProcessStates are safe for concurrent use by multiple goroutines.
+type ProcessState struct {
+	mu                sync.Mutex // guards all data fields
+	concurrency       int
+	queues            map[string]int
+	strictPriority    bool
+	pid               int
+	host              string
+	status            PStatus
+	started           time.Time
+	activeWorkerCount int
+}
+
+// PStatus represents status of a process.
+type PStatus int
+
+const (
+	// StatusIdle indicates process is in idle state.
+	StatusIdle PStatus = iota
+
+	// StatusRunning indicates process is up and processing tasks.
+	StatusRunning
+
+	// StatusStopped indicates process is up but not processing new tasks.
+	StatusStopped
+)
+
+var statuses = []string{
+	"idle",
+	"running",
+	"stopped",
+}
+
+func (s PStatus) String() string {
+	if StatusIdle <= s && s <= StatusStopped {
+		return statuses[s]
+	}
+	return "unknown status"
+}
+
+// NewProcessState returns a new instance of ProcessState.
+func NewProcessState(host string, pid, concurrency int, queues map[string]int, strict bool) *ProcessState {
+	return &ProcessState{
+		host:           host,
+		pid:            pid,
+		concurrency:    concurrency,
+		queues:         cloneQueueConfig(queues),
+		strictPriority: strict,
+		status:         StatusIdle,
+	}
+}
+
+// SetStatus updates the state of process.
+func (ps *ProcessState) SetStatus(status PStatus) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.status = status
+}
+
+// SetStarted records when the process started processing.
+func (ps *ProcessState) SetStarted(t time.Time) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.started = t
+}
+
+// IncrWorkerCount increments the worker count by delta.
+func (ps *ProcessState) IncrWorkerCount(delta int) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	ps.activeWorkerCount += delta
+}
+
+// Get returns current state of process as a ProcessInfo.
+func (ps *ProcessState) Get() *ProcessInfo {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	return &ProcessInfo{
+		Host:              ps.host,
+		PID:               ps.pid,
+		Concurrency:       ps.concurrency,
+		Queues:            cloneQueueConfig(ps.queues),
+		StrictPriority:    ps.strictPriority,
+		Status:            ps.status.String(),
+		Started:           ps.started,
+		ActiveWorkerCount: ps.activeWorkerCount,
+	}
+}
+
+func cloneQueueConfig(qcfg map[string]int) map[string]int {
+	res := make(map[string]int)
+	for qname, n := range qcfg {
+		res[qname] = n
+	}
+	return res
+}
+
 // ProcessInfo holds information about running background worker process.
 type ProcessInfo struct {
 	Concurrency       int
@@ -94,25 +193,14 @@ type ProcessInfo struct {
 	StrictPriority    bool
 	PID               int
 	Host              string
-	State             string
+	Status            string
 	Started           time.Time
 	ActiveWorkerCount int
 }
 
-// NewProcessInfo returns a new instance of ProcessInfo.
-func NewProcessInfo(host string, pid, concurrency int, queues map[string]int, strict bool) *ProcessInfo {
-	return &ProcessInfo{
-		Host:           host,
-		PID:            pid,
-		Concurrency:    concurrency,
-		Queues:         queues,
-		StrictPriority: strict,
-	}
-}
-
 // Cancelations is a collection that holds cancel functions for all in-progress tasks.
 //
-// Its methods are safe to be used in multiple goroutines.
+// Cancelations are safe for concurrent use by multipel goroutines.
 type Cancelations struct {
 	mu          sync.Mutex
 	cancelFuncs map[string]context.CancelFunc

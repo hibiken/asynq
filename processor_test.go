@@ -68,8 +68,9 @@ func TestProcessorSuccess(t *testing.T) {
 		}
 		workerCh := make(chan int)
 		go fakeHeartbeater(workerCh)
+		ps := base.NewProcessState("localhost", 1234, 10, defaultQueueConfig, false)
 		cancelations := base.NewCancelations()
-		p := newProcessor(rdbClient, defaultQueueConfig, false, 10, defaultDelayFunc, nil, workerCh, cancelations)
+		p := newProcessor(rdbClient, ps, defaultDelayFunc, nil, cancelations)
 		p.handler = HandlerFunc(handler)
 
 		var wg sync.WaitGroup
@@ -156,8 +157,9 @@ func TestProcessorRetry(t *testing.T) {
 		}
 		workerCh := make(chan int)
 		go fakeHeartbeater(workerCh)
+		ps := base.NewProcessState("localhost", 1234, 10, defaultQueueConfig, false)
 		cancelations := base.NewCancelations()
-		p := newProcessor(rdbClient, defaultQueueConfig, false, 10, delayFunc, nil, workerCh, cancelations)
+		p := newProcessor(rdbClient, ps, delayFunc, nil, cancelations)
 		p.handler = HandlerFunc(handler)
 
 		var wg sync.WaitGroup
@@ -219,7 +221,8 @@ func TestProcessorQueues(t *testing.T) {
 
 	for _, tc := range tests {
 		cancelations := base.NewCancelations()
-		p := newProcessor(nil, tc.queueCfg, false, 10, defaultDelayFunc, nil, nil, cancelations)
+		ps := base.NewProcessState("localhost", 1234, 10, tc.queueCfg, false)
+		p := newProcessor(nil, ps, defaultDelayFunc, nil, cancelations)
 		got := p.queues()
 		if diff := cmp.Diff(tc.want, got, sortOpt); diff != "" {
 			t.Errorf("with queue config: %v\n(*processor).queues() = %v, want %v\n(-want,+got):\n%s",
@@ -288,8 +291,8 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		workerCh := make(chan int)
 		go fakeHeartbeater(workerCh)
 		cancelations := base.NewCancelations()
-		p := newProcessor(rdbClient, queueCfg, true /* strict */, 1, /* concurrency */
-			defaultDelayFunc, nil, workerCh, cancelations)
+		ps := base.NewProcessState("localhost", 1234, 1 /* concurrency */, queueCfg, true /*strict*/)
+		p := newProcessor(rdbClient, ps, defaultDelayFunc, nil, cancelations)
 		p.handler = HandlerFunc(handler)
 
 		var wg sync.WaitGroup

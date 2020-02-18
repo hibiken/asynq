@@ -20,6 +20,8 @@ import (
 type processor struct {
 	rdb *rdb.RDB
 
+	ps *base.ProcessState
+
 	handler Handler
 
 	queueConfig map[string]int
@@ -31,9 +33,6 @@ type processor struct {
 
 	// channel via which to send sync requests to syncer.
 	syncRequestCh chan<- *syncRequest
-
-	// channel to send worker count updates.
-	workerCh chan<- int
 
 	// rate limiter to prevent spamming logs with a bunch of errors.
 	errLogLimiter *rate.Limiter
@@ -60,23 +59,23 @@ type processor struct {
 type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
 // newProcessor constructs a new processor.
-func newProcessor(r *rdb.RDB, queues map[string]int, strict bool, concurrency int, fn retryDelayFunc,
-	syncRequestCh chan<- *syncRequest, workerCh chan<- int, cancelations *base.Cancelations) *processor {
-	qcfg := normalizeQueueCfg(queues)
+func newProcessor(r *rdb.RDB, ps *base.ProcessState, fn retryDelayFunc, syncCh chan<- *syncRequest, c *base.Cancelations) *processor {
+	info := ps.Get()
+	qcfg := normalizeQueueCfg(info.Queues)
 	orderedQueues := []string(nil)
-	if strict {
+	if info.StrictPriority {
 		orderedQueues = sortByPriority(qcfg)
 	}
 	return &processor{
 		rdb:            r,
+		ps:             ps,
 		queueConfig:    qcfg,
 		orderedQueues:  orderedQueues,
 		retryDelayFunc: fn,
-		syncRequestCh:  syncRequestCh,
-		workerCh:       workerCh,
-		cancelations:   cancelations,
+		syncRequestCh:  syncCh,
+		cancelations:   c,
 		errLogLimiter:  rate.NewLimiter(rate.Every(3*time.Second), 1),
-		sema:           make(chan struct{}, concurrency),
+		sema:           make(chan struct{}, info.Concurrency),
 		done:           make(chan struct{}),
 		abort:          make(chan struct{}),
 		quit:           make(chan struct{}),
@@ -166,10 +165,10 @@ func (p *processor) exec() {
 		p.requeue(msg)
 		return
 	case p.sema <- struct{}{}: // acquire token
-		p.workerCh <- 1
+		p.ps.IncrWorkerCount(1)
 		go func() {
 			defer func() {
-				p.workerCh <- -1
+				p.ps.IncrWorkerCount(-1)
 				<-p.sema /* release token */
 			}()
 
