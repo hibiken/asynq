@@ -74,7 +74,25 @@ func TestProcessInfoKey(t *testing.T) {
 	for _, tc := range tests {
 		got := ProcessInfoKey(tc.hostname, tc.pid)
 		if got != tc.want {
-			t.Errorf("ProcessInfoKey(%s, %d) = %s, want %s", tc.hostname, tc.pid, got, tc.want)
+			t.Errorf("ProcessInfoKey(%q, %d) = %q, want %q", tc.hostname, tc.pid, got, tc.want)
+		}
+	}
+}
+
+func TestWorkersKey(t *testing.T) {
+	tests := []struct {
+		hostname string
+		pid      int
+		want     string
+	}{
+		{"localhost", 9876, "asynq:workers:localhost:9876"},
+		{"127.0.0.1", 1234, "asynq:workers:127.0.0.1:1234"},
+	}
+
+	for _, tc := range tests {
+		got := WorkersKey(tc.hostname, tc.pid)
+		if got != tc.want {
+			t.Errorf("WorkersKey(%q, %d) = %q, want = %q", tc.hostname, tc.pid, got, tc.want)
 		}
 	}
 }
