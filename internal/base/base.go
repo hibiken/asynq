@@ -20,8 +20,9 @@ const DefaultQueueName = "default"
 
 // Redis keys
 const (
-	psPrefix        = "asynq:ps:"                    // HASH
 	AllProcesses    = "asynq:ps"                     // ZSET
+	psPrefix        = "asynq:ps:"                    // STRING - asynq:ps:<host>:<pid>
+	workersPrefix   = "asynq:workers:"               // HASH   - asynq:workers:<host:<pid>
 	processedPrefix = "asynq:processed:"             // STRING - asynq:processed:<yyyy-mm-dd>
 	failurePrefix   = "asynq:failure:"               // STRING - asynq:failure:<yyyy-mm-dd>
 	QueuePrefix     = "asynq:queues:"                // LIST   - asynq:queues:<qname>
@@ -34,26 +35,29 @@ const (
 	CancelChannel   = "asynq:cancel"                 // PubSub channel
 )
 
-// QueueKey returns a redis key string for the given queue name.
+// QueueKey returns a redis key for the given queue name.
 func QueueKey(qname string) string {
 	return QueuePrefix + strings.ToLower(qname)
 }
 
-// ProcessedKey returns a redis key string for processed count
-// for the given day.
+// ProcessedKey returns a redis key for processed count for the given day.
 func ProcessedKey(t time.Time) string {
 	return processedPrefix + t.UTC().Format("2006-01-02")
 }
 
-// FailureKey returns a redis key string for failure count
-// for the given day.
+// FailureKey returns a redis key for failure count for the given day.
 func FailureKey(t time.Time) string {
 	return failurePrefix + t.UTC().Format("2006-01-02")
 }
 
-// ProcessInfoKey returns a redis key string for process info.
+// ProcessInfoKey returns a redis key for process info.
 func ProcessInfoKey(hostname string, pid int) string {
 	return fmt.Sprintf("%s%s:%d", psPrefix, hostname, pid)
+}
+
+// WorkersKey returns a redis key for the workers given hostname and pid.
+func WorkersKey(hostname string, pid int) string {
+	return fmt.Sprintf("%s%s:%d", workersPrefix, hostname, pid)
 }
 
 // TaskMessage is the internal representation of a task with additional metadata fields.
