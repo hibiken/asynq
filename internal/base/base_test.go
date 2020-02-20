@@ -5,8 +5,14 @@
 package base
 
 import (
+	"context"
+	"math/rand"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/rs/xid"
 )
 
 func TestQueueKey(t *testing.T) {
@@ -94,5 +100,117 @@ func TestWorkersKey(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("WorkersKey(%q, %d) = %q, want = %q", tc.hostname, tc.pid, got, tc.want)
 		}
+	}
+}
+
+// Test for process state being accessed by multiple goroutines.
+// Run with -race flag to check for data race.
+func TestProcessStateConcurrentAccess(t *testing.T) {
+	ps := NewProcessState("127.0.0.1", 1234, 10, map[string]int{"default": 1}, false)
+	var wg sync.WaitGroup
+	started := time.Now()
+	msgs := []*TaskMessage{
+		&TaskMessage{ID: xid.New(), Type: "type1", Payload: map[string]interface{}{"user_id": 42}},
+		&TaskMessage{ID: xid.New(), Type: "type2"},
+		&TaskMessage{ID: xid.New(), Type: "type3"},
+	}
+
+	// Simulate hearbeater calling SetStatus and SetStarted.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ps.SetStarted(started)
+		ps.SetStatus(StatusRunning)
+	}()
+
+	// Simulate processor starting worker goroutines.
+	for _, msg := range msgs {
+		wg.Add(1)
+		ps.AddWorkerStats(msg, time.Now())
+		go func(msg *TaskMessage) {
+			defer wg.Done()
+			time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
+			ps.DeleteWorkerStats(msg)
+		}(msg)
+	}
+
+	// Simulate hearbeater calling Get and GetWorkers
+	wg.Add(1)
+	go func() {
+		wg.Done()
+		for i := 0; i < 5; i++ {
+			ps.Get()
+			ps.GetWorkers()
+			time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
+		}
+	}()
+
+	wg.Wait()
+
+	want := &ProcessInfo{
+		Host:              "127.0.0.1",
+		PID:               1234,
+		Concurrency:       10,
+		Queues:            map[string]int{"default": 1},
+		StrictPriority:    false,
+		Status:            "running",
+		Started:           started,
+		ActiveWorkerCount: 0,
+	}
+
+	got := ps.Get()
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("(*ProcessState).Get() = %+v, want %+v; (-want,+got)\n%s",
+			got, want, diff)
+	}
+}
+
+// Test for cancelations being accessed by multiple goroutines.
+// Run with -race flag to check for data race.
+func TestCancelationsConcurrentAccess(t *testing.T) {
+	c := NewCancelations()
+
+	_, cancel1 := context.WithCancel(context.Background())
+	_, cancel2 := context.WithCancel(context.Background())
+	_, cancel3 := context.WithCancel(context.Background())
+	var key1, key2, key3 = "key1", "key2", "key3"
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.Add(key1, cancel1)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.Add(key2, cancel2)
+		time.Sleep(200 * time.Millisecond)
+		c.Delete(key2)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.Add(key3, cancel3)
+	}()
+
+	wg.Wait()
+
+	_, ok := c.Get(key1)
+	if !ok {
+		t.Errorf("(*Cancelations).Get(%q) = _, false, want <function>, true", key1)
+	}
+
+	_, ok = c.Get(key2)
+	if ok {
+		t.Errorf("(*Cancelations).Get(%q) = _, true, want <nil>, false", key2)
+	}
+
+	funcs := c.GetAll()
+	if len(funcs) != 2 {
+		t.Errorf("(*Cancelations).GetAll() returns %d functions, want 2", len(funcs))
 	}
 }
