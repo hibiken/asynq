@@ -5,8 +5,10 @@ git:
 env:
   - GO111MODULE=on # go modules are the default
 go: [1.12.x, 1.13.x]
-gobuild_args: -race -v
+script:
+  - go test -race -v -coverprofile=coverage.txt -covermode=atomic ./...
 services:
   - redis-server
 after_success:
   - bash ./.travis/benchcmp.sh
+  - bash <(curl -s https://codecov.io/bash)
