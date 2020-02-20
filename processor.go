@@ -165,10 +165,10 @@ func (p *processor) exec() {
 		p.requeue(msg)
 		return
 	case p.sema <- struct{}{}: // acquire token
-		p.ps.IncrWorkerCount(1)
+		p.ps.AddWorkerStats(msg, time.Now())
 		go func() {
 			defer func() {
-				p.ps.IncrWorkerCount(-1)
+				p.ps.DeleteWorkerStats(msg)
 				<-p.sema /* release token */
 			}()
 

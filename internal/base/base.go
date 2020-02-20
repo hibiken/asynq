@@ -95,15 +95,15 @@ type TaskMessage struct {
 //
 // ProcessStates are safe for concurrent use by multiple goroutines.
 type ProcessState struct {
-	mu                sync.Mutex // guards all data fields
-	concurrency       int
-	queues            map[string]int
-	strictPriority    bool
-	pid               int
-	host              string
-	status            PStatus
-	started           time.Time
-	activeWorkerCount int
+	mu             sync.Mutex // guards all data fields
+	concurrency    int
+	queues         map[string]int
+	strictPriority bool
+	pid            int
+	host           string
+	status         PStatus
+	started        time.Time
+	workers        map[string]*workerStats
 }
 
 // PStatus represents status of a process.
@@ -133,6 +133,11 @@ func (s PStatus) String() string {
 	return "unknown status"
 }
 
+type workerStats struct {
+	msg     *TaskMessage
+	started time.Time
+}
+
 // NewProcessState returns a new instance of ProcessState.
 func NewProcessState(host string, pid, concurrency int, queues map[string]int, strict bool) *ProcessState {
 	return &ProcessState{
@@ -142,6 +147,7 @@ func NewProcessState(host string, pid, concurrency int, queues map[string]int, s
 		queues:         cloneQueueConfig(queues),
 		strictPriority: strict,
 		status:         StatusIdle,
+		workers:        make(map[string]*workerStats),
 	}
 }
 
@@ -159,11 +165,18 @@ func (ps *ProcessState) SetStarted(t time.Time) {
 	ps.started = t
 }
 
-// IncrWorkerCount increments the worker count by delta.
-func (ps *ProcessState) IncrWorkerCount(delta int) {
+// AddWorkerStats records when a worker started and which task it's processing.
+func (ps *ProcessState) AddWorkerStats(msg *TaskMessage, started time.Time) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
-	ps.activeWorkerCount += delta
+	ps.workers[msg.ID.String()] = &workerStats{msg, started}
+}
+
+// DeleteWorkerStats removes a worker's entry from the process state.
+func (ps *ProcessState) DeleteWorkerStats(msg *TaskMessage) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	delete(ps.workers, msg.ID.String())
 }
 
 // Get returns current state of process as a ProcessInfo.
@@ -178,8 +191,27 @@ func (ps *ProcessState) Get() *ProcessInfo {
 		StrictPriority:    ps.strictPriority,
 		Status:            ps.status.String(),
 		Started:           ps.started,
-		ActiveWorkerCount: ps.activeWorkerCount,
+		ActiveWorkerCount: len(ps.workers),
 	}
+}
+
+// GetWorkers returns a list of currently running workers' info.
+func (ps *ProcessState) GetWorkers() []*WorkerInfo {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+	var res []*WorkerInfo
+	for _, w := range ps.workers {
+		res = append(res, &WorkerInfo{
+			Host:    ps.host,
+			PID:     ps.pid,
+			ID:      w.msg.ID,
+			Type:    w.msg.Type,
+			Queue:   w.msg.Queue,
+			Payload: clonePayload(w.msg.Payload),
+			Started: w.started,
+		})
+	}
+	return res
 }
 
 func cloneQueueConfig(qcfg map[string]int) map[string]int {
@@ -190,16 +222,35 @@ func cloneQueueConfig(qcfg map[string]int) map[string]int {
 	return res
 }
 
-// ProcessInfo holds information about running background worker process.
+func clonePayload(payload map[string]interface{}) map[string]interface{} {
+	res := make(map[string]interface{})
+	for k, v := range payload {
+		res[k] = v
+	}
+	return res
+}
+
+// ProcessInfo holds information about a running background worker process.
 type ProcessInfo struct {
+	Host              string
+	PID               int
 	Concurrency       int
 	Queues            map[string]int
 	StrictPriority    bool
-	PID               int
-	Host              string
 	Status            string
 	Started           time.Time
 	ActiveWorkerCount int
+}
+
+// WorkerInfo holds information about a running worker.
+type WorkerInfo struct {
+	Host    string
+	PID     int
+	ID      xid.ID
+	Type    string
+	Queue   string
+	Payload map[string]interface{}
+	Started time.Time
 }
 
 // Cancelations is a collection that holds cancel functions for all in-progress tasks.
@@ -232,10 +283,11 @@ func (c *Cancelations) Delete(id string) {
 }
 
 // Get returns a cancel func given an id.
-func (c *Cancelations) Get(id string) context.CancelFunc {
+func (c *Cancelations) Get(id string) (fn context.CancelFunc, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.cancelFuncs[id]
+	fn, ok = c.cancelFuncs[id]
+	return fn, ok
 }
 
 // GetAll returns all cancel funcs.

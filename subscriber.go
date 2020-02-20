@@ -52,8 +52,8 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 				logger.info("Subscriber done")
 				return
 			case msg := <-cancelCh:
-				cancel := s.cancelations.Get(msg.Payload)
-				if cancel != nil {
+				cancel, ok := s.cancelations.Get(msg.Payload)
+				if ok {
 					cancel()
 				}
 			}
