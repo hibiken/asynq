@@ -51,7 +51,7 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-h.done:
-				h.rdb.ClearProcessInfo(h.ps.Get())
+				h.rdb.ClearProcessState(h.ps)
 				logger.info("Heartbeater done")
 				return
 			case <-time.After(h.interval):
@@ -64,7 +64,7 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 func (h *heartbeater) beat() {
 	// Note: Set TTL to be long enough so that it won't expire before we write again
 	// and short enough to expire quickly once the process is shut down or killed.
-	err := h.rdb.WriteProcessInfo(h.ps.Get(), h.interval*2)
+	err := h.rdb.WriteProcessState(h.ps, h.interval*2)
 	if err != nil {
 		logger.error("could not write heartbeat data: %v", err)
 	}

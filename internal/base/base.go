@@ -22,6 +22,7 @@ const DefaultQueueName = "default"
 const (
 	AllProcesses    = "asynq:ps"                     // ZSET
 	psPrefix        = "asynq:ps:"                    // STRING - asynq:ps:<host>:<pid>
+	AllWorkers      = "asynq:workers"                // ZSET
 	workersPrefix   = "asynq:workers:"               // HASH   - asynq:workers:<host:<pid>
 	processedPrefix = "asynq:processed:"             // STRING - asynq:processed:<yyyy-mm-dd>
 	failurePrefix   = "asynq:failure:"               // STRING - asynq:failure:<yyyy-mm-dd>

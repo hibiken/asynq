@@ -359,56 +359,70 @@ func (r *RDB) forwardSingle(src, dst string) error {
 		[]string{src, dst}, now).Err()
 }
 
-// KEYS[1] -> asynq:ps
-// KEYS[2] -> asynq:ps:<host:pid>
-// ARGV[1] -> expiration time
-// ARGV[2] -> TTL in seconds
-// ARGV[3] -> process info
+// KEYS[1]  -> asynq:ps:<host:pid>
+// KEYS[2]  -> asynq:ps
+// KEYS[3]  -> asynq:workers<host:pid>
+// keys[4]  -> asynq:workers
+// ARGV[1]  -> expiration time
+// ARGV[2]  -> TTL in seconds
+// ARGV[3]  -> process info
+// ARGV[4:] -> alternate key-value pair of (worker id, worker data)
+// Note: Add key to ZSET with expiration time as score.
+// ref: https://github.com/antirez/redis/issues/135#issuecomment-2361996
 var writeProcessInfoCmd = redis.NewScript(`
-redis.call("ZADD", KEYS[1], ARGV[1], KEYS[2])
-redis.call("SETEX", KEYS[2], ARGV[2], ARGV[3])
+redis.call("SETEX", KEYS[1], ARGV[2], ARGV[3])
+redis.call("ZADD", KEYS[2], ARGV[1], KEYS[1])
+for i = 4, table.getn(ARGV)-1, 2 do
+	redis.call("HSET", KEYS[3], ARGV[i], ARGV[i+1])
+end
+redis.call("EXPIRE", KEYS[3], ARGV[2])
+redis.call("ZADD", KEYS[4], ARGV[1], KEYS[3])
 return redis.status_reply("OK")`)
 
-// WriteProcessInfo writes process information to redis with expiration
-// set to the value ttl.
-func (r *RDB) WriteProcessInfo(ps *base.ProcessInfo, ttl time.Duration) error {
-	bytes, err := json.Marshal(ps)
+// WriteProcessState writes process state data to redis with expiration  set to the value ttl.
+func (r *RDB) WriteProcessState(ps *base.ProcessState, ttl time.Duration) error {
+	info := ps.Get()
+	bytes, err := json.Marshal(info)
 	if err != nil {
 		return err
 	}
-	// Note: Add key to ZSET with expiration time as score.
-	// ref: https://github.com/antirez/redis/issues/135#issuecomment-2361996
+	var args []interface{} // args to the lua script
 	exp := time.Now().Add(ttl).UTC()
-	key := base.ProcessInfoKey(ps.Host, ps.PID)
-	return writeProcessInfoCmd.Run(r.client, []string{base.AllProcesses, key}, float64(exp.Unix()), ttl.Seconds(), string(bytes)).Err()
-}
-
-// ReadProcessInfo reads process information stored in redis.
-func (r *RDB) ReadProcessInfo(host string, pid int) (*base.ProcessInfo, error) {
-	key := base.ProcessInfoKey(host, pid)
-	data, err := r.client.Get(key).Result()
-	if err != nil {
-		return nil, err
+	workers := ps.GetWorkers()
+	args = append(args, float64(exp.Unix()), ttl.Seconds(), bytes)
+	for _, w := range workers {
+		bytes, err := json.Marshal(w)
+		if err != nil {
+			continue // skip bad data
+		}
+		args = append(args, w.ID.String(), bytes)
 	}
-	var pinfo base.ProcessInfo
-	err = json.Unmarshal([]byte(data), &pinfo)
-	if err != nil {
-		return nil, err
-	}
-	return &pinfo, nil
+	pkey := base.ProcessInfoKey(info.Host, info.PID)
+	wkey := base.WorkersKey(info.Host, info.PID)
+	return writeProcessInfoCmd.Run(r.client,
+		[]string{pkey, base.AllProcesses, wkey, base.AllWorkers},
+		args...).Err()
 }
 
 // KEYS[1] -> asynq:ps
 // KEYS[2] -> asynq:ps:<host:pid>
+// KEYS[3] -> asynq:workers
+// KEYS[4] -> asynq:workers<host:pid>
 var clearProcessInfoCmd = redis.NewScript(`
 redis.call("ZREM", KEYS[1], KEYS[2])
 redis.call("DEL", KEYS[2])
+redis.call("ZREM", KEYS[3], KEYS[4])
+redis.call("DEL", KEYS[4])
 return redis.status_reply("OK")`)
 
-// ClearProcessInfo deletes process information from redis.
-func (r *RDB) ClearProcessInfo(ps *base.ProcessInfo) error {
-	key := base.ProcessInfoKey(ps.Host, ps.PID)
-	return clearProcessInfoCmd.Run(r.client, []string{base.AllProcesses, key}).Err()
+// ClearProcessState deletes process state data from redis.
+func (r *RDB) ClearProcessState(ps *base.ProcessState) error {
+	info := ps.Get()
+	host, pid := info.Host, info.PID
+	pkey := base.ProcessInfoKey(host, pid)
+	wkey := base.WorkersKey(host, pid)
+	return clearProcessInfoCmd.Run(r.client,
+		[]string{base.AllProcesses, pkey, base.AllWorkers, wkey}).Err()
 }
 
 // CancelationPubSub returns a pubsub for cancelation messages.
