@@ -5,8 +5,8 @@
 package rdb
 
 import (
+	"encoding/json"
 	"fmt"
-	"strconv"
 	"testing"
 	"time"
 
@@ -741,81 +741,237 @@ func TestCheckAndEnqueue(t *testing.T) {
 	}
 }
 
-func TestReadWriteClearProcessInfo(t *testing.T) {
+func TestWriteProcessState(t *testing.T) {
 	r := setup(t)
-	pinfo := &base.ProcessInfo{
+	host, pid := "localhost", 98765
+	queues := map[string]int{"default": 2, "email": 5, "low": 1}
+
+	started := time.Now()
+	ps := base.NewProcessState(host, pid, 10, queues, false)
+	ps.SetStarted(started)
+	ps.SetStatus(base.StatusRunning)
+	ttl := 5 * time.Second
+
+	h.FlushDB(t, r.client)
+
+	err := r.WriteProcessState(ps, ttl)
+	if err != nil {
+		t.Errorf("r.WriteProcessState returned an error: %v", err)
+	}
+
+	// Check ProcessInfo was written correctly
+	pkey := base.ProcessInfoKey(host, pid)
+	data := r.client.Get(pkey).Val()
+	var got base.ProcessInfo
+	err = json.Unmarshal([]byte(data), &got)
+	if err != nil {
+		t.Fatalf("could not decode json: %v", err)
+	}
+	want := base.ProcessInfo{
+		Host:              "localhost",
+		PID:               98765,
 		Concurrency:       10,
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
-		PID:               98765,
-		Host:              "localhost",
+		StrictPriority:    false,
 		Status:            "running",
-		Started:           time.Now(),
-		ActiveWorkerCount: 1,
+		Started:           started,
+		ActiveWorkerCount: 0,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("persisted ProcessInfo was %v, want %v; (-want,+got)\n%s",
+			got, want, diff)
+	}
+	// Check ProcessInfo TTL was set correctly
+	gotTTL := r.client.TTL(pkey).Val()
+	timeCmpOpt := cmpopts.EquateApproxTime(time.Second)
+	if !cmp.Equal(ttl, gotTTL, timeCmpOpt) {
+		t.Errorf("TTL of %q was %v, want %v", pkey, gotTTL, ttl)
+	}
+	// Check ProcessInfo key was added to the set correctly
+	gotProcesses := r.client.ZRange(base.AllProcesses, 0, -1).Val()
+	wantProcesses := []string{pkey}
+	if diff := cmp.Diff(wantProcesses, gotProcesses); diff != "" {
+		t.Errorf("%q contained %v, want %v", base.AllProcesses, gotProcesses, wantProcesses)
 	}
 
-	tests := []struct {
-		pi  *base.ProcessInfo
-		ttl time.Duration
-	}{
-		{pinfo, 5 * time.Second},
+	// Check WorkersInfo was written correctly
+	wkey := base.WorkersKey(host, pid)
+	workerExist := r.client.Exists(wkey).Val()
+	if workerExist != 0 {
+		t.Errorf("%q key exists", wkey)
+	}
+	// Check WorkersInfo key was added to the set correctly
+	gotWorkerKeys := r.client.ZRange(base.AllWorkers, 0, -1).Val()
+	wantWorkerKeys := []string{wkey}
+	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
+		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)
+	}
+}
+
+func TestWriteProcessStateWithWorkers(t *testing.T) {
+	r := setup(t)
+	host, pid := "localhost", 98765
+	queues := map[string]int{"default": 2, "email": 5, "low": 1}
+	concurrency := 10
+
+	started := time.Now().Add(-10 * time.Minute)
+	w1Started := time.Now().Add(-time.Minute)
+	w2Started := time.Now().Add(-time.Second)
+	msg1 := h.NewTaskMessage("send_email", map[string]interface{}{"user_id": "123"})
+	msg2 := h.NewTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/imgfile"})
+	ps := base.NewProcessState(host, pid, concurrency, queues, false)
+	ps.SetStarted(started)
+	ps.SetStatus(base.StatusRunning)
+	ps.AddWorkerStats(msg1, w1Started)
+	ps.AddWorkerStats(msg2, w2Started)
+	ttl := 5 * time.Second
+
+	h.FlushDB(t, r.client)
+
+	err := r.WriteProcessState(ps, ttl)
+	if err != nil {
+		t.Errorf("r.WriteProcessState returned an error: %v", err)
 	}
 
-	for _, tc := range tests {
-		h.FlushDB(t, r.client)
+	// Check ProcessInfo was written correctly
+	pkey := base.ProcessInfoKey(host, pid)
+	data := r.client.Get(pkey).Val()
+	var got base.ProcessInfo
+	err = json.Unmarshal([]byte(data), &got)
+	if err != nil {
+		t.Fatalf("could not decode json: %v", err)
+	}
+	want := base.ProcessInfo{
+		Host:              host,
+		PID:               pid,
+		Concurrency:       concurrency,
+		Queues:            queues,
+		StrictPriority:    false,
+		Status:            "running",
+		Started:           started,
+		ActiveWorkerCount: 2,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("persisted ProcessInfo was %v, want %v; (-want,+got)\n%s",
+			got, want, diff)
+	}
+	// Check ProcessInfo TTL was set correctly
+	gotTTL := r.client.TTL(pkey).Val()
+	timeCmpOpt := cmpopts.EquateApproxTime(time.Second)
+	if !cmp.Equal(ttl, gotTTL, timeCmpOpt) {
+		t.Errorf("TTL of %q was %v, want %v", pkey, gotTTL, ttl)
+	}
+	// Check ProcessInfo key was added to the set correctly
+	gotProcesses := r.client.ZRange(base.AllProcesses, 0, -1).Val()
+	wantProcesses := []string{pkey}
+	if diff := cmp.Diff(wantProcesses, gotProcesses); diff != "" {
+		t.Errorf("%q contained %v, want %v", base.AllProcesses, gotProcesses, wantProcesses)
+	}
 
-		err := r.WriteProcessInfo(tc.pi, tc.ttl)
-		if err != nil {
-			t.Errorf("r.WriteProcessInfo returned an error: %v", err)
-			continue
+	// Check WorkersInfo was written correctly
+	wkey := base.WorkersKey(host, pid)
+	wdata := r.client.HGetAll(wkey).Val()
+	if len(wdata) != 2 {
+		t.Fatalf("HGETALL %q returned a hash of size %d, want 2", wkey, len(wdata))
+	}
+	gotWorkers := make(map[string]*base.WorkerInfo)
+	for key, val := range wdata {
+		var w base.WorkerInfo
+		if err := json.Unmarshal([]byte(val), &w); err != nil {
+			t.Fatalf("could not unmarshal worker's data: %v", err)
 		}
+		gotWorkers[key] = &w
+	}
+	wantWorkers := map[string]*base.WorkerInfo{
+		msg1.ID.String(): &base.WorkerInfo{
+			Host:    host,
+			PID:     pid,
+			ID:      msg1.ID,
+			Type:    msg1.Type,
+			Queue:   msg1.Queue,
+			Payload: msg1.Payload,
+			Started: w1Started,
+		},
+		msg2.ID.String(): &base.WorkerInfo{
+			Host:    host,
+			PID:     pid,
+			ID:      msg2.ID,
+			Type:    msg2.Type,
+			Queue:   msg2.Queue,
+			Payload: msg2.Payload,
+			Started: w2Started,
+		},
+	}
+	if diff := cmp.Diff(wantWorkers, gotWorkers); diff != "" {
+		t.Errorf("persisted workers info was %v, want %v; (-want,+got)\n%s",
+			gotWorkers, wantWorkers, diff)
+	}
 
-		got, err := r.ReadProcessInfo(tc.pi.Host, tc.pi.PID)
-		if err != nil {
-			t.Errorf("r.ReadProcessInfo returned an error: %v", err)
-			continue
-		}
+	// Check WorkersInfo TTL was set correctly
+	gotTTL = r.client.TTL(wkey).Val()
+	if !cmp.Equal(ttl, gotTTL, timeCmpOpt) {
+		t.Errorf("TTL of %q was %v, want %v", wkey, gotTTL, ttl)
+	}
+	// Check WorkersInfo key was added to the set correctly
+	gotWorkerKeys := r.client.ZRange(base.AllWorkers, 0, -1).Val()
+	wantWorkerKeys := []string{wkey}
+	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
+		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)
+	}
+}
 
-		ignoreOpt := cmpopts.IgnoreUnexported(base.ProcessInfo{})
-		if diff := cmp.Diff(tc.pi, got, ignoreOpt); diff != "" {
-			t.Errorf("r.ReadProcessInfo(%q, %d) = %+v, want %+v; (-want,+got)\n%s",
-				tc.pi.Host, tc.pi.PID, got, tc.pi, diff)
-		}
+func TestClearProcessState(t *testing.T) {
+	r := setup(t)
+	host, pid := "127.0.0.1", 1234
 
-		key := base.ProcessInfoKey(tc.pi.Host, tc.pi.PID)
-		gotTTL := r.client.TTL(key).Val()
-		if !cmp.Equal(tc.ttl, gotTTL, timeCmpOpt) {
-			t.Errorf("redis TTL %q returned %v, want %v", key, gotTTL, tc.ttl)
-		}
+	h.FlushDB(t, r.client)
 
-		now := time.Now().UTC()
-		allKeys, err := r.client.ZRangeByScore(base.AllProcesses, &redis.ZRangeBy{
-			Min: strconv.Itoa(int(now.Unix())),
-			Max: "+inf",
-		}).Result()
-		if err != nil {
-			t.Errorf("redis ZRANGEBYSCORE %q %d +inf returned an error: %v",
-				base.AllProcesses, now.Unix(), err)
-			continue
-		}
+	pkey := base.ProcessInfoKey(host, pid)
+	wkey := base.WorkersKey(host, pid)
+	otherPKey := base.ProcessInfoKey("otherhost", 12345)
+	otherWKey := base.WorkersKey("otherhost", 12345)
+	// Populate the keys.
+	if err := r.client.Set(pkey, "process-info", 0).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.client.HSet(wkey, "worker-key", "worker-info").Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.client.ZAdd(base.AllProcesses, &redis.Z{Member: pkey}).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.client.ZAdd(base.AllProcesses, &redis.Z{Member: otherPKey}).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.client.ZAdd(base.AllWorkers, &redis.Z{Member: wkey}).Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.client.ZAdd(base.AllWorkers, &redis.Z{Member: otherWKey}).Err(); err != nil {
+		t.Fatal(err)
+	}
 
-		wantAllKeys := []string{key}
-		if diff := cmp.Diff(wantAllKeys, allKeys); diff != "" {
-			t.Errorf("all keys = %v, want %v; (-want,+got)\n%s", allKeys, wantAllKeys, diff)
-		}
+	ps := base.NewProcessState(host, pid, 10, map[string]int{"default": 1}, false)
 
-		if err := r.ClearProcessInfo(tc.pi); err != nil {
-			t.Errorf("r.ClearProcessInfo returned an error: %v", err)
-			continue
-		}
+	err := r.ClearProcessState(ps)
+	if err != nil {
+		t.Fatalf("(*RDB).ClearProcessState failed: %v", err)
+	}
 
-		// 1 means key exists
-		if r.client.Exists(key).Val() == 1 {
-			t.Errorf("expected %q to be deleted", key)
-		}
-
-		if r.client.ZCard(base.AllProcesses).Val() != 0 {
-			t.Errorf("expected %q to be empty", base.AllProcesses)
-		}
-
+	// Check all keys are cleared
+	if r.client.Exists(pkey).Val() != 0 {
+		t.Errorf("Redis key %q exists", pkey)
+	}
+	if r.client.Exists(wkey).Val() != 0 {
+		t.Errorf("Redis key %q exists", wkey)
+	}
+	gotProcessKeys := r.client.ZRange(base.AllProcesses, 0, -1).Val()
+	wantProcessKeys := []string{otherPKey}
+	if diff := cmp.Diff(wantProcessKeys, gotProcessKeys); diff != "" {
+		t.Errorf("%q contained %v, want %v", base.AllProcesses, gotProcessKeys, wantProcessKeys)
+	}
+	gotWorkerKeys := r.client.ZRange(base.AllWorkers, 0, -1).Val()
+	wantWorkerKeys := []string{otherWKey}
+	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
+		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)
 	}
 }
