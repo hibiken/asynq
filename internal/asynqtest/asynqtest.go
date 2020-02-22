@@ -53,6 +53,13 @@ var SortProcessInfoOpt = cmp.Transformer("SortProcessInfo", func(in []*base.Proc
 	return out
 })
 
+// SortStringSliceOpt is a cmp.Option to sort string slice.
+var SortStringSliceOpt = cmp.Transformer("SortStringSlice", func(in []string) []string {
+	out := append([]string(nil), in...)
+	sort.Strings(out)
+	return out
+})
+
 // IgnoreIDOpt is an cmp.Option to ignore ID field in task messages when comparing.
 var IgnoreIDOpt = cmpopts.IgnoreFields(base.TaskMessage{}, "ID")
 

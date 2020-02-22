@@ -7,6 +7,7 @@ package rdb
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -974,4 +975,45 @@ func TestClearProcessState(t *testing.T) {
 	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
 		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)
 	}
+}
+
+func TestCancelationPubSub(t *testing.T) {
+	r := setup(t)
+
+	pubsub, err := r.CancelationPubSub()
+	if err != nil {
+		t.Fatalf("(*RDB).CancelationPubSub() returned an error: %v", err)
+	}
+
+	cancelCh := pubsub.Channel()
+
+	var (
+		mu       sync.Mutex
+		received []string
+	)
+
+	go func() {
+		for msg := range cancelCh {
+			mu.Lock()
+			received = append(received, msg.Payload)
+			mu.Unlock()
+		}
+	}()
+
+	publish := []string{"one", "two", "three"}
+
+	for _, msg := range publish {
+		r.PublishCancelation(msg)
+	}
+
+	// allow for message to reach subscribers.
+	time.Sleep(time.Second)
+
+	pubsub.Close()
+
+	mu.Lock()
+	if diff := cmp.Diff(publish, received, h.SortStringSliceOpt); diff != "" {
+		t.Errorf("subscriber received %v, want %v; (-want,+got)\n%s", received, publish, diff)
+	}
+	mu.Unlock()
 }
