@@ -372,6 +372,7 @@ func (r *RDB) forwardSingle(src, dst string) error {
 var writeProcessInfoCmd = redis.NewScript(`
 redis.call("SETEX", KEYS[1], ARGV[2], ARGV[3])
 redis.call("ZADD", KEYS[2], ARGV[1], KEYS[1])
+redis.call("DEL", KEYS[3])
 for i = 4, table.getn(ARGV)-1, 2 do
 	redis.call("HSET", KEYS[3], ARGV[i], ARGV[i+1])
 end
