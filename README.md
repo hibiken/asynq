@@ -35,7 +35,7 @@ To create and schedule tasks, use `Client` and provide a task and when to proces
 ```go
 func main() {
     r := &asynq.RedisClientOpt{
-        Addr: "localhost:6379",
+        Addr: "127.0.0.1:6379",
     }
 
     client := asynq.NewClient(r)
@@ -46,19 +46,21 @@ func main() {
     t2 := asynq.NewTask("send_reminder_email", map[string]interface{}{"user_id": 42})
 
     // Process immediately
-    err := client.Schedule(t1, time.Now())
+    err := client.Enqueue(t1)
 
     // Process 24 hrs later
-    err = client.Schedule(t2, time.Now().Add(24 * time.Hour))
+    err = client.EnqueueIn(24*time.Hour, t2)
 
-    // If processing fails, retry up to 10 times (Default is 25)
-    err = client.Schedule(t1, time.Now(), asynq.Retry(10))
+    // Process at specified time.
+    t := time.Date(2020, time.March, 6, 10, 0, 0, 0, time.UTC)
+    err = client.EnqueueAt(t, t2)
 
-    // Use custom queue called "critical"
-    err = client.Schedule(t1, time.Now(), asynq.Queue("critical"))
-
-    // Use timeout to specify how long a task may run (Default is no limit)
-    err = client.Schedule(t1, time.Now(), asynq.Timeout(30 * time.Second))
+    // Pass options to specify processing behavior for a given task.
+    //
+    // MaxRetry specifies the maximum number of times this task will be retried (Default is 25).
+    // Queue specifies which queue to enqueue this task to (Default is "default").
+    // Timeout specifies the the timeout for the task's context (Default is no timeout).
+    err = client.Enqueue(t1, asynq.MaxRetry(10), asynq.Queue("critical"), asynq.Timeout(time.Minute))
 }
 ```
 
@@ -67,13 +69,13 @@ To start the background workers, use `Background` and provide your `Handler` to 
 ```go
 func main() {
     r := &asynq.RedisClientOpt{
-        Addr: "localhost:6379",
+        Addr: "127.0.0.1:6379",
     }
 
     bg := asynq.NewBackground(r, &asynq.Config{
         // Specify how many concurrent workers to use
         Concurrency: 10,
-        // You can optionally create multiple queues with different priority.
+        // Optionally specify multiple queues with different priority.
         Queues: map[string]int{
             "critical": 6,
             "default":  3,

@@ -96,14 +96,13 @@ const (
 	defaultMaxRetry = 25
 )
 
-// Schedule registers a task to be processed at the specified time.
+// EnqueueAt schedules task to be enqueued at the specified time.
 //
-// Schedule returns nil if the task is registered successfully,
-// otherwise returns a non-nil error.
+// EnqueueAt returns nil if the task is scheduled successfully, otherwise returns a non-nil error.
 //
-// opts specifies the behavior of task processing. If there are conflicting
-// Option values the last one overrides others.
-func (c *Client) Schedule(task *Task, processAt time.Time, opts ...Option) error {
+// The argument opts specifies the behavior of task processing.
+// If there are conflicting Option values the last one overrides others.
+func (c *Client) EnqueueAt(t time.Time, task *Task, opts ...Option) error {
 	opt := composeOptions(opts...)
 	msg := &base.TaskMessage{
 		ID:      xid.New(),
@@ -113,12 +112,32 @@ func (c *Client) Schedule(task *Task, processAt time.Time, opts ...Option) error
 		Retry:   opt.retry,
 		Timeout: opt.timeout.String(),
 	}
-	return c.enqueue(msg, processAt)
+	return c.enqueue(msg, t)
 }
 
-func (c *Client) enqueue(msg *base.TaskMessage, processAt time.Time) error {
-	if time.Now().After(processAt) {
+// Enqueue enqueues task to be processed immediately.
+//
+// Enqueue returns nil if the task is enqueued successfully, otherwise returns a non-nil error.
+//
+// The argument opts specifies the behavior of task processing.
+// If there are conflicting Option values the last one overrides others.
+func (c *Client) Enqueue(task *Task, opts ...Option) error {
+	return c.EnqueueAt(time.Now(), task, opts...)
+}
+
+// EnqueueIn schedules task to be enqueued after the specified delay.
+//
+// EnqueueIn returns nil if the task is scheduled successfully, otherwise returns a non-nil error.
+//
+// The argument opts specifies the behavior of task processing.
+// If there are conflicting Option values the last one overrides others.
+func (c *Client) EnqueueIn(d time.Duration, task *Task, opts ...Option) error {
+	return c.EnqueueAt(time.Now().Add(d), task, opts...)
+}
+
+func (c *Client) enqueue(msg *base.TaskMessage, t time.Time) error {
+	if time.Now().After(t) {
 		return c.rdb.Enqueue(msg)
 	}
-	return c.rdb.Schedule(msg, processAt)
+	return c.rdb.Schedule(msg, t)
 }
