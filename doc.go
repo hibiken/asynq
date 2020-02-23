@@ -9,8 +9,8 @@ Asynq uses Redis as a message broker. To connect to redis server,
 specify the options using one of RedisConnOpt types.
 
     redis = &asynq.RedisClientOpt{
-        Addr:     "localhost:6379",
-        Password: "secretpassword",
+        Addr:     "127.0.0.1:6379",
+        Password: "xxxxx",
         DB:       3,
     }
 
@@ -24,8 +24,11 @@ Task is created with two parameters: its type and payload.
         "send_email",
         map[string]interface{}{"user_id": 42})
 
-    // Schedule the task t to be processed a minute from now.
-    err := client.Schedule(t, time.Now().Add(time.Minute))
+    // Enqueue the task to be processed immediately.
+    err := client.Enqueue(t)
+
+    // Schedule the task to be processed in one minute.
+    err = client.EnqueueIn(time.Minute, t)
 
 The Background is used to run the background task processing with a given
 handler.

@@ -34,9 +34,15 @@ func TestBackground(t *testing.T) {
 
 	bg.start(HandlerFunc(h))
 
-	client.Schedule(NewTask("send_email", map[string]interface{}{"recipient_id": 123}), time.Now())
+	err := client.Enqueue(NewTask("send_email", map[string]interface{}{"recipient_id": 123}))
+	if err != nil {
+		t.Errorf("could not enqueue a task: %v", err)
+	}
 
-	client.Schedule(NewTask("send_email", map[string]interface{}{"recipient_id": 456}), time.Now().Add(time.Hour))
+	err = client.EnqueueAt(time.Now().Add(time.Hour), NewTask("send_email", map[string]interface{}{"recipient_id": 456}))
+	if err != nil {
+		t.Errorf("could not enqueue a task: %v", err)
+	}
 
 	bg.stop()
 }

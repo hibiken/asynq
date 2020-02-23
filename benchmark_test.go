@@ -33,7 +33,9 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
 			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
-			client.Schedule(t, time.Now())
+			if err := client.Enqueue(t); err != nil {
+				b.Fatalf("could not enqueue a task: %v", err)
+			}
 		}
 
 		var wg sync.WaitGroup
@@ -74,11 +76,15 @@ func BenchmarkEndToEnd(b *testing.B) {
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
 			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
-			client.Schedule(t, time.Now())
+			if err := client.Enqueue(t); err != nil {
+				b.Fatalf("could not enqueue a task: %v", err)
+			}
 		}
 		for i := 0; i < count; i++ {
 			t := NewTask(fmt.Sprintf("scheduled%d", i), map[string]interface{}{"data": i})
-			client.Schedule(t, time.Now().Add(time.Second))
+			if err := client.EnqueueAt(time.Now().Add(time.Second), t); err != nil {
+				b.Fatalf("could not enqueue a task: %v", err)
+			}
 		}
 
 		var wg sync.WaitGroup
@@ -129,15 +135,21 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 		// Create a bunch of tasks
 		for i := 0; i < highCount; i++ {
 			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
-			client.Schedule(t, time.Now(), Queue("high"))
+			if err := client.Enqueue(t, Queue("high")); err != nil {
+				b.Fatalf("could not enqueue a task: %v", err)
+			}
 		}
 		for i := 0; i < defaultCount; i++ {
 			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
-			client.Schedule(t, time.Now())
+			if err := client.Enqueue(t); err != nil {
+				b.Fatalf("could not enqueue a task: %v", err)
+			}
 		}
 		for i := 0; i < lowCount; i++ {
 			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
-			client.Schedule(t, time.Now(), Queue("low"))
+			if err := client.Enqueue(t, Queue("low")); err != nil {
+				b.Fatalf("could not enqueue a task: %v", err)
+			}
 		}
 
 		var wg sync.WaitGroup
