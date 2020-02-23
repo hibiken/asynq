@@ -53,6 +53,15 @@ var SortProcessInfoOpt = cmp.Transformer("SortProcessInfo", func(in []*base.Proc
 	return out
 })
 
+// SortWorkerInfoOpt is a cmp.Option to sort base.WorkerInfo for comparing slice of worker info.
+var SortWorkerInfoOpt = cmp.Transformer("SortWorkerInfo", func(in []*base.WorkerInfo) []*base.WorkerInfo {
+	out := append([]*base.WorkerInfo(nil), in...) // Copy input to avoid mutating it
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].ID.String() < out[j].ID.String()
+	})
+	return out
+})
+
 // SortStringSliceOpt is a cmp.Option to sort string slice.
 var SortStringSliceOpt = cmp.Transformer("SortStringSlice", func(in []string) []string {
 	out := append([]string(nil), in...)

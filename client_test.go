@@ -15,7 +15,7 @@ import (
 
 func TestClient(t *testing.T) {
 	r := setup(t)
-	client := NewClient(&RedisClientOpt{
+	client := NewClient(RedisClientOpt{
 		Addr: "localhost:6379",
 		DB:   14,
 	})

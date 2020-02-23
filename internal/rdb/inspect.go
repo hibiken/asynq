@@ -794,3 +794,39 @@ func (r *RDB) ListProcesses() ([]*base.ProcessInfo, error) {
 	}
 	return processes, nil
 }
+
+// Note: Script also removes stale keys.
+var listWorkersCmd = redis.NewScript(`
+local res = {}
+local now = tonumber(ARGV[1])
+local keys = redis.call("ZRANGEBYSCORE", KEYS[1], now, "+inf")
+for _, key in ipairs(keys) do
+	local workers = redis.call("HVALS", key)
+	for _, w in ipairs(workers) do
+		table.insert(res, w)
+	end  
+end
+redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
+return res`)
+
+// ListWorkers returns the list of worker stats.
+func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
+	res, err := listWorkersCmd.Run(r.client, []string{base.AllWorkers}, time.Now().UTC().Unix()).Result()
+	if err != nil {
+		return nil, err
+	}
+	data, err := cast.ToStringSliceE(res)
+	if err != nil {
+		return nil, err
+	}
+	var workers []*base.WorkerInfo
+	for _, s := range data {
+		var w base.WorkerInfo
+		err := json.Unmarshal([]byte(s), &w)
+		if err != nil {
+			continue // skip bad data
+		}
+		workers = append(workers, &w)
+	}
+	return workers, nil
+}
