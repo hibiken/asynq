@@ -132,6 +132,7 @@ Please see the [Contribution Guide](/CONTRIBUTING.md) before contributing.
 ## Acknowledgements
 
 - [Sidekiq](https://github.com/mperham/sidekiq) : Many of the design ideas are taken from sidekiq and its Web UI
+- [RQ](https://github.com/rq/rq) : Client APIs are inspired by rq library.
 - [Cobra](https://github.com/spf13/cobra) : Asynqmon CLI is built with cobra
 
 ## License
