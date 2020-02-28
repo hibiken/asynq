@@ -89,6 +89,35 @@ type Config struct {
 	// The tasks in lower priority queues are processed only when those queues with
 	// higher priorities are empty.
 	StrictPriority bool
+
+	// ErrorHandler handles errors returned by the task handler.
+	//
+	// HandleError is invoked only if the task handler returns a non-nil error.
+	//
+	// Example:
+	// func reportError(task *asynq.Task, err error, retried, maxRetry int) {
+	// 	   if retried >= maxRetry {
+	//         err = fmt.Errorf("retry exhausted for task %s: %w", task.Type, err)
+	// 	   }
+	//     errorReportingService.Notify(err)
+	// })
+	//
+	// ErrorHandler: asynq.ErrorHandlerFunc(reportError)
+	ErrorHandler ErrorHandler
+}
+
+// An ErrorHandler handles errors returned by the task handler.
+type ErrorHandler interface {
+	HandleError(task *Task, err error, retried, maxRetry int)
+}
+
+// The ErrorHandlerFunc type is an adapter to allow the use of  ordinary functions as a ErrorHandler.
+// If f is a function with the appropriate signature, ErrorHandlerFunc(f) is a ErrorHandler that calls f.
+type ErrorHandlerFunc func(task *Task, err error, retried, maxRetry int)
+
+// HandleError calls fn(task, err, retried, maxRetry)
+func (fn ErrorHandlerFunc) HandleError(task *Task, err error, retried, maxRetry int) {
+	fn(task, err, retried, maxRetry)
 }
 
 // Formula taken from https://github.com/mperham/sidekiq.
@@ -149,7 +178,7 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	}
 }
 
-// A Handler processes a task.
+// A Handler processes tasks.
 //
 // ProcessTask should return nil if the processing of a task
 // is successful.
