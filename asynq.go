@@ -138,6 +138,6 @@ func createRedisClient(r RedisConnOpt) *redis.Client {
 			TLSConfig:        r.TLSConfig,
 		})
 	default:
-		panic(fmt.Sprintf("unexpected type %T for RedisConnOpt", r))
+		panic(fmt.Sprintf("asynq: unexpected type %T for RedisConnOpt", r))
 	}
 }

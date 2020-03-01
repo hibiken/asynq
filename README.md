@@ -30,7 +30,7 @@ First, make sure you are running a Redis server locally.
 $ redis-server
 ```
 
-To create and schedule tasks, use `Client` and provide a task and when to process the task.
+To create and schedule tasks, use `Client` and provide a task and when to enqueue the task.
 
 ```go
 func main() {
@@ -41,9 +41,9 @@ func main() {
     client := asynq.NewClient(r)
 
     // Create a task with task type and payload
-    t1 := asynq.NewTask("send_welcome_email", map[string]interface{}{"user_id": 42})
+    t1 := asynq.NewTask("email:signup", map[string]interface{}{"user_id": 42})
 
-    t2 := asynq.NewTask("send_reminder_email", map[string]interface{}{"user_id": 42})
+    t2 := asynq.NewTask("email:reminder", map[string]interface{}{"user_id": 42})
 
     // Process immediately
     err := client.Enqueue(t1)
@@ -52,8 +52,8 @@ func main() {
     err = client.EnqueueIn(24*time.Hour, t2)
 
     // Process at specified time.
-    t := time.Date(2020, time.March, 6, 10, 0, 0, 0, time.UTC)
-    err = client.EnqueueAt(t, t2)
+    target := time.Date(2020, time.March, 6, 10, 0, 0, 0, time.UTC)
+    err = client.EnqueueAt(target, t2)
 
     // Pass options to specify processing behavior for a given task.
     //
@@ -65,6 +65,21 @@ func main() {
 ```
 
 To start the background workers, use `Background` and provide your `Handler` to process the tasks.
+
+`Handler` is an interface with one method `ProcessTask` with the following signature.
+
+```go
+// ProcessTask should return nil if the processing of a task
+// is successful.
+//
+// If ProcessTask return a non-nil error or panics, the task
+// will be retried after delay.
+type Handler interface {
+    ProcessTask(context.Context, *asynq.Task) error
+}
+```
+
+You can optionally use `ServeMux` to create a handler, just as you would with `"net/http"` Handler.
 
 ```go
 func main() {
@@ -84,20 +99,23 @@ func main() {
         // See the godoc for other configuration options
     })
 
-    bg.Run(handler)
+    mux := asynq.NewServeMux()
+    mux.HandleFunc("email:signup", signupEmailHandler)
+    mux.HandleFunc("email:reminder", reminderEmailHandler)
+    // ...register other handlers...
+
+    bg.Run(mux)
 }
-```
 
-`Handler` is an interface with one method `ProcessTask` with the following signature.
-
-```go
-// ProcessTask should return nil if the processing of a task
-// is successful.
-//
-// If ProcessTask return a non-nil error or panics, the task
-// will be retried after delay.
-type Handler interface {
-    ProcessTask(context.Context, *asynq.Task) error
+// function with the same signature as the ProcessTask method for the Handler interface.
+func signupEmailHandler(ctx context.Context, t *asynq.Task) error {
+    id, err := t.Payload.GetInt("user_id")
+    if err != nil {
+        return err
+    }
+    fmt.Printf("Send welcome email to user %d\n", id)
+    // ...your email sending logic...
+    return nil
 }
 ```
 
