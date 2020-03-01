@@ -197,7 +197,7 @@ func TestProcessorRetry(t *testing.T) {
 		}
 
 		if n != tc.wantErrCount {
-			t.Errorf("error handler was called %d, want %d", n, tc.wantErrCount)
+			t.Errorf("error handler was called %d times, want %d", n, tc.wantErrCount)
 		}
 	}
 }
