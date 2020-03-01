@@ -165,7 +165,7 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	syncer := newSyncer(syncCh, 5*time.Second)
 	heartbeater := newHeartbeater(rdb, ps, 5*time.Second)
 	scheduler := newScheduler(rdb, 5*time.Second, queues)
-	processor := newProcessor(rdb, ps, delayFunc, syncCh, cancels)
+	processor := newProcessor(rdb, ps, delayFunc, syncCh, cancels, cfg.ErrorHandler)
 	subscriber := newSubscriber(rdb, cancels)
 	return &Background{
 		rdb:         rdb,

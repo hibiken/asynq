@@ -31,6 +31,8 @@ type processor struct {
 
 	retryDelayFunc retryDelayFunc
 
+	errHandler ErrorHandler
+
 	// channel via which to send sync requests to syncer.
 	syncRequestCh chan<- *syncRequest
 
@@ -59,7 +61,8 @@ type processor struct {
 type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
 // newProcessor constructs a new processor.
-func newProcessor(r *rdb.RDB, ps *base.ProcessState, fn retryDelayFunc, syncCh chan<- *syncRequest, c *base.Cancelations) *processor {
+func newProcessor(r *rdb.RDB, ps *base.ProcessState, fn retryDelayFunc,
+	syncCh chan<- *syncRequest, c *base.Cancelations, errHandler ErrorHandler) *processor {
 	info := ps.Get()
 	qcfg := normalizeQueueCfg(info.Queues)
 	orderedQueues := []string(nil)
@@ -79,6 +82,7 @@ func newProcessor(r *rdb.RDB, ps *base.ProcessState, fn retryDelayFunc, syncCh c
 		done:           make(chan struct{}),
 		abort:          make(chan struct{}),
 		quit:           make(chan struct{}),
+		errHandler:     errHandler,
 		handler:        HandlerFunc(func(ctx context.Context, t *Task) error { return fmt.Errorf("handler not set") }),
 	}
 }
@@ -192,6 +196,9 @@ func (p *processor) exec() {
 				// 2) Retry -> Removes the message from InProgress & Adds the message to Retry
 				// 3) Kill  -> Removes the message from InProgress & Adds the message to Dead
 				if resErr != nil {
+					if p.errHandler != nil {
+						p.errHandler.HandleError(task, resErr, msg.Retried, msg.Retry)
+					}
 					if msg.Retried >= msg.Retry {
 						p.kill(msg, resErr)
 					} else {
