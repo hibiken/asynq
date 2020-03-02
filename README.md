@@ -12,15 +12,7 @@ It is backed by Redis and it is designed to have a low barrier to entry. It shou
 
 **Important Note**: Current major version is zero (v0.x.x) to accomodate rapid development and fast iteration while getting early feedback from users. The public API could change without a major version update before v1.0.0 release.
 
-![Gif](/docs/assets/demo.gif)
-
-## Installation
-
-To install `asynq` library, run the following command:
-
-```sh
-go get -u github.com/hibiken/asynq
-```
+![Task Queue Diagram](/docs/assets/task-queue.png)
 
 ## Quickstart
 
@@ -30,7 +22,7 @@ First, make sure you are running a Redis server locally.
 $ redis-server
 ```
 
-To create and schedule tasks, use `Client` and provide a task and when to enqueue the task.
+To create and schedule tasks, use `Client` and provide a task and when to enqueue the task. Scheduled tasks will be stored in Redis and will be enqueued at the specified time.
 
 ```go
 func main() {
@@ -45,21 +37,21 @@ func main() {
 
     t2 := asynq.NewTask("email:reminder", map[string]interface{}{"user_id": 42})
 
-    // Process immediately
+    // Enqueue immediately
     err := client.Enqueue(t1)
 
-    // Process 24 hrs later
+    // Enqueue 24 hrs later
     err = client.EnqueueIn(24*time.Hour, t2)
 
-    // Process at specified time.
+    // Enqueue at specified time.
     target := time.Date(2020, time.March, 6, 10, 0, 0, 0, time.UTC)
     err = client.EnqueueAt(target, t2)
 
-    // Pass options to specify processing behavior for a given task.
+    // Pass vararg options to specify processing behavior for the given task.
     //
-    // MaxRetry specifies the maximum number of times this task will be retried (Default is 25).
-    // Queue specifies which queue to enqueue this task to (Default is "default").
-    // Timeout specifies the the timeout for the task's context (Default is no timeout).
+    // MaxRetry specifies the max number of retry if the task fails (Default is 25).
+    // Queue specifies which queue to enqueue this task to (Default is "default" queue).
+    // Timeout specifies the the task timeout (Default is no timeout).
     err = client.Enqueue(t1, asynq.MaxRetry(10), asynq.Queue("critical"), asynq.Timeout(time.Minute))
 }
 ```
@@ -69,11 +61,9 @@ To start the background workers, use `Background` and provide your `Handler` to 
 `Handler` is an interface with one method `ProcessTask` with the following signature.
 
 ```go
-// ProcessTask should return nil if the processing of a task
-// is successful.
+// ProcessTask should return nil if the processing of a task is successful.
 //
-// If ProcessTask return a non-nil error or panics, the task
-// will be retried after delay.
+// If ProcessTask return a non-nil error or panics, the task will be retried after delay.
 type Handler interface {
     ProcessTask(context.Context, *asynq.Task) error
 }
@@ -99,6 +89,7 @@ func main() {
         // See the godoc for other configuration options
     })
 
+    // mux maps a type to a handler
     mux := asynq.NewServeMux()
     mux.HandleFunc("email:signup", signupEmailHandler)
     mux.HandleFunc("email:reminder", reminderEmailHandler)
@@ -121,7 +112,31 @@ func signupEmailHandler(ctx context.Context, t *asynq.Task) error {
 
 For a more detailed walk-through of the library, see our [Getting Started Guide](https://github.com/hibiken/asynq/wiki/Getting-Started).
 
-To Learn more about `asynq` features and APIs, see our [Wiki pages](https://github.com/hibiken/asynq/wiki) and [godoc](https://godoc.org/github.com/hibiken/asynq).
+To Learn more about `asynq` features and APIs, see our [Wiki](https://github.com/hibiken/asynq/wiki) and [godoc](https://godoc.org/github.com/hibiken/asynq).
+
+## Command Line Tool
+
+Asynq ships with a command line tool to inspect the state of queues and tasks.
+
+Here's an example of running the `stats` command.
+
+![Gif](/docs/assets/demo.gif)
+
+For details on how to use the tool, refer to the tool's [README](/tools/asynqmon/README.md).
+
+## Installation
+
+To install `asynq` library, run the following command:
+
+```sh
+go get -u github.com/hibiken/asynq
+```
+
+To install the CLI tool, run the following command:
+
+```sh
+go get -u github.com/hibiken/asynq/tools/asynqmon
+```
 
 ## Requirements
 
@@ -129,18 +144,6 @@ To Learn more about `asynq` features and APIs, see our [Wiki pages](https://gith
 | -------------------------- | ------- |
 | [Redis](https://redis.io/) | v2.8+   |
 | [Go](https://golang.org/)  | v1.12+  |
-
-## Command Line Tool
-
-Asynq ships with a command line tool to inspect the state of queues and tasks.
-
-To install, run the following command:
-
-```sh
-go get -u github.com/hibiken/asynq/tools/asynqmon
-```
-
-For details on how to use the tool, refer to the tool's [README](/tools/asynqmon/README.md).
 
 ## Contributing
 
