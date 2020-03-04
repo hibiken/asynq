@@ -22,7 +22,9 @@ First, make sure you are running a Redis server locally.
 $ redis-server
 ```
 
-To create and schedule tasks, use `Client` and provide a task and when to enqueue the task. Scheduled tasks will be stored in Redis and will be enqueued at the specified time.
+To create and schedule tasks, use `Client` and provide a task and when to enqueue the task.  
+A task will be processed by a background worker as soon as the task gets enqueued.  
+Scheduled tasks will be stored in Redis and will be enqueued at the specified time.  
 
 ```go
 func main() {
@@ -32,20 +34,19 @@ func main() {
 
     client := asynq.NewClient(r)
 
-    // Create a task with task type and payload
+    // Create a task with task type and payload.
     t1 := asynq.NewTask("email:signup", map[string]interface{}{"user_id": 42})
 
     t2 := asynq.NewTask("email:reminder", map[string]interface{}{"user_id": 42})
 
-    // Enqueue immediately
+    // Enqueue immediately.
     err := client.Enqueue(t1)
 
-    // Enqueue 24 hrs later
+    // Enqueue 24 hrs later.
     err = client.EnqueueIn(24*time.Hour, t2)
 
-    // Enqueue at specified time.
-    target := time.Date(2020, time.March, 6, 10, 0, 0, 0, time.UTC)
-    err = client.EnqueueAt(target, t2)
+    // Enqueue at specific time.
+    err = client.EnqueueAt(time.Date(2020, time.March, 6, 10, 0, 0, 0, time.UTC), t2)
 
     // Pass vararg options to specify processing behavior for the given task.
     //
