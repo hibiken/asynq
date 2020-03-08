@@ -90,6 +90,13 @@ type TaskMessage struct {
 	//
 	// Zero means no limit.
 	Timeout string
+
+	// Deadline specifies the deadline for the task.
+	// Task won't be processed if it exceeded its deadline.
+	// The string shoulbe be in RFC3339 format.
+	//
+	// time.Time's zero value means no deadline.
+	Deadline string
 }
 
 // ProcessState holds process level information.

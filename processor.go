@@ -188,7 +188,7 @@ func (p *processor) exec() {
 			select {
 			case <-p.quit:
 				// time is up, quit this worker goroutine.
-				logger.warn("Quitting worker to process task id=%s", msg.ID)
+				logger.warn("Quitting worker. task id=%s", msg.ID)
 				return
 			case resErr := <-resCh:
 				// Note: One of three things should happen.
@@ -391,14 +391,18 @@ func gcd(xs ...int) int {
 }
 
 // createContext returns a context and cancel function for a given task message.
-func createContext(msg *base.TaskMessage) (context.Context, context.CancelFunc) {
+func createContext(msg *base.TaskMessage) (ctx context.Context, cancel context.CancelFunc) {
+	ctx = context.Background()
 	timeout, err := time.ParseDuration(msg.Timeout)
-	if err != nil {
-		logger.error("cannot parse timeout duration for %+v", msg)
-		return context.WithCancel(context.Background())
+	if err == nil && timeout != 0 {
+		ctx, cancel = context.WithTimeout(ctx, timeout)
 	}
-	if timeout == 0 {
-		return context.WithCancel(context.Background())
+	deadline, err := time.Parse(time.RFC3339, msg.Deadline)
+	if err == nil && !deadline.IsZero() {
+		ctx, cancel = context.WithDeadline(ctx, deadline)
 	}
-	return context.WithTimeout(context.Background(), timeout)
+	if cancel == nil {
+		ctx, cancel = context.WithCancel(ctx)
+	}
+	return ctx, cancel
 }

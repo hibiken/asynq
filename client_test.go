@@ -25,6 +25,9 @@ func TestClientEnqueueAt(t *testing.T) {
 	var (
 		now          = time.Now()
 		oneHourLater = now.Add(time.Hour)
+
+		noTimeout  = time.Duration(0).String()
+		noDeadline = time.Time{}.Format(time.RFC3339)
 	)
 
 	tests := []struct {
@@ -43,11 +46,12 @@ func TestClientEnqueueAt(t *testing.T) {
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": []*base.TaskMessage{
 					&base.TaskMessage{
-						Type:    task.Type,
-						Payload: task.Payload.data,
-						Retry:   defaultMaxRetry,
-						Queue:   "default",
-						Timeout: time.Duration(0).String(),
+						Type:     task.Type,
+						Payload:  task.Payload.data,
+						Retry:    defaultMaxRetry,
+						Queue:    "default",
+						Timeout:  noTimeout,
+						Deadline: noDeadline,
 					},
 				},
 			},
@@ -62,11 +66,12 @@ func TestClientEnqueueAt(t *testing.T) {
 			wantScheduled: []h.ZSetEntry{
 				{
 					Msg: &base.TaskMessage{
-						Type:    task.Type,
-						Payload: task.Payload.data,
-						Retry:   defaultMaxRetry,
-						Queue:   "default",
-						Timeout: time.Duration(0).String(),
+						Type:     task.Type,
+						Payload:  task.Payload.data,
+						Retry:    defaultMaxRetry,
+						Queue:    "default",
+						Timeout:  noTimeout,
+						Deadline: noDeadline,
 					},
 					Score: float64(oneHourLater.Unix()),
 				},
@@ -106,6 +111,11 @@ func TestClientEnqueue(t *testing.T) {
 
 	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
 
+	var (
+		noTimeout  = time.Duration(0).String()
+		noDeadline = time.Time{}.Format(time.RFC3339)
+	)
+
 	tests := []struct {
 		desc         string
 		task         *Task
@@ -121,11 +131,12 @@ func TestClientEnqueue(t *testing.T) {
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": []*base.TaskMessage{
 					&base.TaskMessage{
-						Type:    task.Type,
-						Payload: task.Payload.data,
-						Retry:   3,
-						Queue:   "default",
-						Timeout: time.Duration(0).String(),
+						Type:     task.Type,
+						Payload:  task.Payload.data,
+						Retry:    3,
+						Queue:    "default",
+						Timeout:  noTimeout,
+						Deadline: noDeadline,
 					},
 				},
 			},
@@ -139,11 +150,12 @@ func TestClientEnqueue(t *testing.T) {
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": []*base.TaskMessage{
 					&base.TaskMessage{
-						Type:    task.Type,
-						Payload: task.Payload.data,
-						Retry:   0, // Retry count should be set to zero
-						Queue:   "default",
-						Timeout: time.Duration(0).String(),
+						Type:     task.Type,
+						Payload:  task.Payload.data,
+						Retry:    0, // Retry count should be set to zero
+						Queue:    "default",
+						Timeout:  noTimeout,
+						Deadline: noDeadline,
 					},
 				},
 			},
@@ -158,11 +170,12 @@ func TestClientEnqueue(t *testing.T) {
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": []*base.TaskMessage{
 					&base.TaskMessage{
-						Type:    task.Type,
-						Payload: task.Payload.data,
-						Retry:   10, // Last option takes precedence
-						Queue:   "default",
-						Timeout: time.Duration(0).String(),
+						Type:     task.Type,
+						Payload:  task.Payload.data,
+						Retry:    10, // Last option takes precedence
+						Queue:    "default",
+						Timeout:  noTimeout,
+						Deadline: noDeadline,
 					},
 				},
 			},
@@ -176,11 +189,12 @@ func TestClientEnqueue(t *testing.T) {
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"custom": []*base.TaskMessage{
 					&base.TaskMessage{
-						Type:    task.Type,
-						Payload: task.Payload.data,
-						Retry:   defaultMaxRetry,
-						Queue:   "custom",
-						Timeout: time.Duration(0).String(),
+						Type:     task.Type,
+						Payload:  task.Payload.data,
+						Retry:    defaultMaxRetry,
+						Queue:    "custom",
+						Timeout:  noTimeout,
+						Deadline: noDeadline,
 					},
 				},
 			},
@@ -194,17 +208,18 @@ func TestClientEnqueue(t *testing.T) {
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"high": []*base.TaskMessage{
 					&base.TaskMessage{
-						Type:    task.Type,
-						Payload: task.Payload.data,
-						Retry:   defaultMaxRetry,
-						Queue:   "high",
-						Timeout: time.Duration(0).String(),
+						Type:     task.Type,
+						Payload:  task.Payload.data,
+						Retry:    defaultMaxRetry,
+						Queue:    "high",
+						Timeout:  noTimeout,
+						Deadline: noDeadline,
 					},
 				},
 			},
 		},
 		{
-			desc: "Timeout option sets the timeout duration",
+			desc: "With timeout option",
 			task: task,
 			opts: []Option{
 				Timeout(20 * time.Second),
@@ -212,11 +227,31 @@ func TestClientEnqueue(t *testing.T) {
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": []*base.TaskMessage{
 					&base.TaskMessage{
-						Type:    task.Type,
-						Payload: task.Payload.data,
-						Retry:   defaultMaxRetry,
-						Queue:   "default",
-						Timeout: (20 * time.Second).String(),
+						Type:     task.Type,
+						Payload:  task.Payload.data,
+						Retry:    defaultMaxRetry,
+						Queue:    "default",
+						Timeout:  (20 * time.Second).String(),
+						Deadline: noDeadline,
+					},
+				},
+			},
+		},
+		{
+			desc: "With deadline option",
+			task: task,
+			opts: []Option{
+				Deadline(time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC)),
+			},
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default": []*base.TaskMessage{
+					&base.TaskMessage{
+						Type:     task.Type,
+						Payload:  task.Payload.data,
+						Retry:    defaultMaxRetry,
+						Queue:    "default",
+						Timeout:  noTimeout,
+						Deadline: time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC).Format(time.RFC3339),
 					},
 				},
 			},
@@ -250,6 +285,11 @@ func TestClientEnqueueIn(t *testing.T) {
 
 	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
 
+	var (
+		noTimeout  = time.Duration(0).String()
+		noDeadline = time.Time{}.Format(time.RFC3339)
+	)
+
 	tests := []struct {
 		desc          string
 		task          *Task
@@ -267,11 +307,12 @@ func TestClientEnqueueIn(t *testing.T) {
 			wantScheduled: []h.ZSetEntry{
 				{
 					Msg: &base.TaskMessage{
-						Type:    task.Type,
-						Payload: task.Payload.data,
-						Retry:   defaultMaxRetry,
-						Queue:   "default",
-						Timeout: time.Duration(0).String(),
+						Type:     task.Type,
+						Payload:  task.Payload.data,
+						Retry:    defaultMaxRetry,
+						Queue:    "default",
+						Timeout:  noTimeout,
+						Deadline: noDeadline,
 					},
 					Score: float64(time.Now().Add(time.Hour).Unix()),
 				},
@@ -285,11 +326,12 @@ func TestClientEnqueueIn(t *testing.T) {
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": []*base.TaskMessage{
 					&base.TaskMessage{
-						Type:    task.Type,
-						Payload: task.Payload.data,
-						Retry:   defaultMaxRetry,
-						Queue:   "default",
-						Timeout: time.Duration(0).String(),
+						Type:     task.Type,
+						Payload:  task.Payload.data,
+						Retry:    defaultMaxRetry,
+						Queue:    "default",
+						Timeout:  noTimeout,
+						Deadline: noDeadline,
 					},
 				},
 			},

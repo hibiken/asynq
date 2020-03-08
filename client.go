@@ -34,9 +34,10 @@ type Option interface{}
 
 // Internal option representations.
 type (
-	retryOption   int
-	queueOption   string
-	timeoutOption time.Duration
+	retryOption    int
+	queueOption    string
+	timeoutOption  time.Duration
+	deadlineOption time.Time
 )
 
 // MaxRetry returns an option to specify the max number of times
@@ -64,17 +65,24 @@ func Timeout(d time.Duration) Option {
 	return timeoutOption(d)
 }
 
+// Deadline returns an option to specify the deadline for the given task.
+func Deadline(t time.Time) Option {
+	return deadlineOption(t)
+}
+
 type option struct {
-	retry   int
-	queue   string
-	timeout time.Duration
+	retry    int
+	queue    string
+	timeout  time.Duration
+	deadline time.Time
 }
 
 func composeOptions(opts ...Option) option {
 	res := option{
-		retry:   defaultMaxRetry,
-		queue:   base.DefaultQueueName,
-		timeout: 0,
+		retry:    defaultMaxRetry,
+		queue:    base.DefaultQueueName,
+		timeout:  0,
+		deadline: time.Time{},
 	}
 	for _, opt := range opts {
 		switch opt := opt.(type) {
@@ -84,6 +92,8 @@ func composeOptions(opts ...Option) option {
 			res.queue = string(opt)
 		case timeoutOption:
 			res.timeout = time.Duration(opt)
+		case deadlineOption:
+			res.deadline = time.Time(opt)
 		default:
 			// ignore unexpected option
 		}
@@ -105,12 +115,13 @@ const (
 func (c *Client) EnqueueAt(t time.Time, task *Task, opts ...Option) error {
 	opt := composeOptions(opts...)
 	msg := &base.TaskMessage{
-		ID:      xid.New(),
-		Type:    task.Type,
-		Payload: task.Payload.data,
-		Queue:   opt.queue,
-		Retry:   opt.retry,
-		Timeout: opt.timeout.String(),
+		ID:       xid.New(),
+		Type:     task.Type,
+		Payload:  task.Payload.data,
+		Queue:    opt.queue,
+		Retry:    opt.retry,
+		Timeout:  opt.timeout.String(),
+		Deadline: opt.deadline.Format(time.RFC3339),
 	}
 	return c.enqueue(msg, t)
 }
