@@ -67,7 +67,6 @@ func (r *RDB) Dequeue(qnames ...string) (*base.TaskMessage, error) {
 	if len(qnames) == 1 {
 		data, err = r.dequeueSingle(base.QueueKey(qnames[0]))
 	} else {
-		// TODO(hibiken): Take keys are argument and don't compute every time
 		var keys []string
 		for _, q := range qnames {
 			keys = append(keys, base.QueueKey(q))
