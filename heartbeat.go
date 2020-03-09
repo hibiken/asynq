@@ -9,13 +9,15 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
 // heartbeater is responsible for writing process info to redis periodically to
 // indicate that the background worker process is up.
 type heartbeater struct {
-	rdb *rdb.RDB
+	logger *log.Logger
+	rdb    *rdb.RDB
 
 	ps *base.ProcessState
 
@@ -26,8 +28,9 @@ type heartbeater struct {
 	interval time.Duration
 }
 
-func newHeartbeater(rdb *rdb.RDB, ps *base.ProcessState, interval time.Duration) *heartbeater {
+func newHeartbeater(l *log.Logger, rdb *rdb.RDB, ps *base.ProcessState, interval time.Duration) *heartbeater {
 	return &heartbeater{
+		logger:   l,
 		rdb:      rdb,
 		ps:       ps,
 		done:     make(chan struct{}),
@@ -36,7 +39,7 @@ func newHeartbeater(rdb *rdb.RDB, ps *base.ProcessState, interval time.Duration)
 }
 
 func (h *heartbeater) terminate() {
-	logger.info("Heartbeater shutting down...")
+	h.logger.Info("Heartbeater shutting down...")
 	// Signal the heartbeater goroutine to stop.
 	h.done <- struct{}{}
 }
@@ -52,7 +55,7 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 			select {
 			case <-h.done:
 				h.rdb.ClearProcessState(h.ps)
-				logger.info("Heartbeater done")
+				h.logger.Info("Heartbeater done")
 				return
 			case <-time.After(h.interval):
 				h.beat()
@@ -66,6 +69,6 @@ func (h *heartbeater) beat() {
 	// and short enough to expire quickly once the process is shut down or killed.
 	err := h.rdb.WriteProcessState(h.ps, h.interval*2)
 	if err != nil {
-		logger.error("could not write heartbeat data: %v", err)
+		h.logger.Error("could not write heartbeat data: %v", err)
 	}
 }

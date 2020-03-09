@@ -37,7 +37,7 @@ func TestSubscriber(t *testing.T) {
 		cancelations := base.NewCancelations()
 		cancelations.Add(tc.registeredID, fakeCancelFunc)
 
-		subscriber := newSubscriber(rdbClient, cancelations)
+		subscriber := newSubscriber(testLogger, rdbClient, cancelations)
 		var wg sync.WaitGroup
 		subscriber.start(&wg)
 

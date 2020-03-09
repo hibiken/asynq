@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
@@ -38,6 +39,8 @@ type Background struct {
 
 	// wait group to wait for all goroutines to finish.
 	wg sync.WaitGroup
+
+	logger *log.Logger
 
 	rdb         *rdb.RDB
 	scheduler   *scheduler
@@ -158,16 +161,18 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	}
 	pid := os.Getpid()
 
+	logger := log.NewLogger(os.Stderr)
 	rdb := rdb.NewRDB(createRedisClient(r))
 	ps := base.NewProcessState(host, pid, n, queues, cfg.StrictPriority)
 	syncCh := make(chan *syncRequest)
 	cancels := base.NewCancelations()
-	syncer := newSyncer(syncCh, 5*time.Second)
-	heartbeater := newHeartbeater(rdb, ps, 5*time.Second)
-	scheduler := newScheduler(rdb, 5*time.Second, queues)
-	processor := newProcessor(rdb, ps, delayFunc, syncCh, cancels, cfg.ErrorHandler)
-	subscriber := newSubscriber(rdb, cancels)
+	syncer := newSyncer(logger, syncCh, 5*time.Second)
+	heartbeater := newHeartbeater(logger, rdb, ps, 5*time.Second)
+	scheduler := newScheduler(logger, rdb, 5*time.Second, queues)
+	processor := newProcessor(logger, rdb, ps, delayFunc, syncCh, cancels, cfg.ErrorHandler)
+	subscriber := newSubscriber(logger, rdb, cancels)
 	return &Background{
+		logger:      logger,
 		rdb:         rdb,
 		ps:          ps,
 		scheduler:   scheduler,
@@ -205,14 +210,14 @@ func (fn HandlerFunc) ProcessTask(ctx context.Context, task *Task) error {
 // a signal, it gracefully shuts down all pending workers and other
 // goroutines to process the tasks.
 func (bg *Background) Run(handler Handler) {
-	logger.SetPrefix(fmt.Sprintf("asynq: pid=%d ", os.Getpid()))
-	logger.info("Starting processing")
+	bg.logger.SetPrefix(fmt.Sprintf("asynq: pid=%d ", os.Getpid()))
+	bg.logger.Info("Starting processing")
 
 	bg.start(handler)
 	defer bg.stop()
 
-	logger.info("Send signal TSTP to stop processing new tasks")
-	logger.info("Send signal TERM or INT to terminate the process")
+	bg.logger.Info("Send signal TSTP to stop processing new tasks")
+	bg.logger.Info("Send signal TERM or INT to terminate the process")
 
 	// Wait for a signal to terminate.
 	sigs := make(chan os.Signal, 1)
@@ -227,7 +232,7 @@ func (bg *Background) Run(handler Handler) {
 		break
 	}
 	fmt.Println()
-	logger.info("Starting graceful shutdown")
+	bg.logger.Info("Starting graceful shutdown")
 }
 
 // starts the background-task processing.
@@ -271,5 +276,5 @@ func (bg *Background) stop() {
 	bg.rdb.Close()
 	bg.running = false
 
-	logger.info("Bye!")
+	bg.logger.Info("Bye!")
 }

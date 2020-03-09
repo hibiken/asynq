@@ -7,11 +7,15 @@ package asynq
 import (
 	"sync"
 	"time"
+
+	"github.com/hibiken/asynq/internal/log"
 )
 
 // syncer is responsible for queuing up failed requests to redis and retry
 // those requests to sync state between the background process and redis.
 type syncer struct {
+	logger *log.Logger
+
 	requestsCh <-chan *syncRequest
 
 	// channel to communicate back to the long running "syncer" goroutine.
@@ -26,8 +30,9 @@ type syncRequest struct {
 	errMsg string       // error message
 }
 
-func newSyncer(requestsCh <-chan *syncRequest, interval time.Duration) *syncer {
+func newSyncer(l *log.Logger, requestsCh <-chan *syncRequest, interval time.Duration) *syncer {
 	return &syncer{
+		logger:     l,
 		requestsCh: requestsCh,
 		done:       make(chan struct{}),
 		interval:   interval,
@@ -35,7 +40,7 @@ func newSyncer(requestsCh <-chan *syncRequest, interval time.Duration) *syncer {
 }
 
 func (s *syncer) terminate() {
-	logger.info("Syncer shutting down...")
+	s.logger.Info("Syncer shutting down...")
 	// Signal the syncer goroutine to stop.
 	s.done <- struct{}{}
 }
@@ -51,10 +56,10 @@ func (s *syncer) start(wg *sync.WaitGroup) {
 				// Try sync one last time before shutting down.
 				for _, req := range requests {
 					if err := req.fn(); err != nil {
-						logger.error(req.errMsg)
+						s.logger.Error(req.errMsg)
 					}
 				}
-				logger.info("Syncer done")
+				s.logger.Info("Syncer done")
 				return
 			case req := <-s.requestsCh:
 				requests = append(requests, req)
