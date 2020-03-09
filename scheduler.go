@@ -8,11 +8,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
 type scheduler struct {
-	rdb *rdb.RDB
+	logger *log.Logger
+	rdb    *rdb.RDB
 
 	// channel to communicate back to the long running "scheduler" goroutine.
 	done chan struct{}
@@ -24,12 +26,13 @@ type scheduler struct {
 	qnames []string
 }
 
-func newScheduler(r *rdb.RDB, avgInterval time.Duration, qcfg map[string]int) *scheduler {
+func newScheduler(l *log.Logger, r *rdb.RDB, avgInterval time.Duration, qcfg map[string]int) *scheduler {
 	var qnames []string
 	for q := range qcfg {
 		qnames = append(qnames, q)
 	}
 	return &scheduler{
+		logger:      l,
 		rdb:         r,
 		done:        make(chan struct{}),
 		avgInterval: avgInterval,
@@ -38,7 +41,7 @@ func newScheduler(r *rdb.RDB, avgInterval time.Duration, qcfg map[string]int) *s
 }
 
 func (s *scheduler) terminate() {
-	logger.info("Scheduler shutting down...")
+	s.logger.Info("Scheduler shutting down...")
 	// Signal the scheduler goroutine to stop polling.
 	s.done <- struct{}{}
 }
@@ -51,7 +54,7 @@ func (s *scheduler) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-s.done:
-				logger.info("Scheduler done")
+				s.logger.Info("Scheduler done")
 				return
 			case <-time.After(s.avgInterval):
 				s.exec()
@@ -62,6 +65,6 @@ func (s *scheduler) start(wg *sync.WaitGroup) {
 
 func (s *scheduler) exec() {
 	if err := s.rdb.CheckAndEnqueue(s.qnames...); err != nil {
-		logger.error("Could not enqueue scheduled tasks: %v", err)
+		s.logger.Error("Could not enqueue scheduled tasks: %v", err)
 	}
 }

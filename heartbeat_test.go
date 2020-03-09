@@ -36,7 +36,7 @@ func TestHeartbeater(t *testing.T) {
 		h.FlushDB(t, r)
 
 		state := base.NewProcessState(tc.host, tc.pid, tc.concurrency, tc.queues, false)
-		hb := newHeartbeater(rdbClient, state, tc.interval)
+		hb := newHeartbeater(testLogger, rdbClient, state, tc.interval)
 
 		var wg sync.WaitGroup
 		hb.start(&wg)

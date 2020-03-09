@@ -1,4 +1,8 @@
-package asynq
+// Copyright 2020 Kentaro Hibino. All rights reserved.
+// Use of this source code is governed by a MIT license
+// that can be found in the LICENSE file.
+
+package log
 
 import (
 	"bytes"
@@ -36,9 +40,9 @@ func TestLoggerInfo(t *testing.T) {
 
 	for _, tc := range tests {
 		var buf bytes.Buffer
-		logger := newLogger(&buf)
+		logger := NewLogger(&buf)
 
-		logger.info(tc.message)
+		logger.Info(tc.message)
 
 		got := buf.String()
 		matched, err := regexp.MatchString(tc.wantPattern, got)
@@ -68,9 +72,9 @@ func TestLoggerWarn(t *testing.T) {
 
 	for _, tc := range tests {
 		var buf bytes.Buffer
-		logger := newLogger(&buf)
+		logger := NewLogger(&buf)
 
-		logger.warn(tc.message)
+		logger.Warn(tc.message)
 
 		got := buf.String()
 		matched, err := regexp.MatchString(tc.wantPattern, got)
@@ -100,9 +104,9 @@ func TestLoggerError(t *testing.T) {
 
 	for _, tc := range tests {
 		var buf bytes.Buffer
-		logger := newLogger(&buf)
+		logger := NewLogger(&buf)
 
-		logger.error(tc.message)
+		logger.Error(tc.message)
 
 		got := buf.String()
 		matched, err := regexp.MatchString(tc.wantPattern, got)

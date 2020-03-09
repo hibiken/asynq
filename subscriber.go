@@ -8,11 +8,13 @@ import (
 	"sync"
 
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
 type subscriber struct {
-	rdb *rdb.RDB
+	logger *log.Logger
+	rdb    *rdb.RDB
 
 	// channel to communicate back to the long running "subscriber" goroutine.
 	done chan struct{}
@@ -21,8 +23,9 @@ type subscriber struct {
 	cancelations *base.Cancelations
 }
 
-func newSubscriber(rdb *rdb.RDB, cancelations *base.Cancelations) *subscriber {
+func newSubscriber(l *log.Logger, rdb *rdb.RDB, cancelations *base.Cancelations) *subscriber {
 	return &subscriber{
+		logger:       l,
 		rdb:          rdb,
 		done:         make(chan struct{}),
 		cancelations: cancelations,
@@ -30,7 +33,7 @@ func newSubscriber(rdb *rdb.RDB, cancelations *base.Cancelations) *subscriber {
 }
 
 func (s *subscriber) terminate() {
-	logger.info("Subscriber shutting down...")
+	s.logger.Info("Subscriber shutting down...")
 	// Signal the subscriber goroutine to stop.
 	s.done <- struct{}{}
 }
@@ -39,7 +42,7 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 	pubsub, err := s.rdb.CancelationPubSub()
 	cancelCh := pubsub.Channel()
 	if err != nil {
-		logger.error("cannot subscribe to cancelation channel: %v", err)
+		s.logger.Error("cannot subscribe to cancelation channel: %v", err)
 		return
 	}
 	wg.Add(1)
@@ -49,7 +52,7 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 			select {
 			case <-s.done:
 				pubsub.Close()
-				logger.info("Subscriber done")
+				s.logger.Info("Subscriber done")
 				return
 			case msg := <-cancelCh:
 				cancel, ok := s.cancelations.Get(msg.Payload)

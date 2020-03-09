@@ -13,12 +13,14 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
 	"golang.org/x/time/rate"
 )
 
 type processor struct {
-	rdb *rdb.RDB
+	logger *log.Logger
+	rdb    *rdb.RDB
 
 	ps *base.ProcessState
 
@@ -61,7 +63,7 @@ type processor struct {
 type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
 // newProcessor constructs a new processor.
-func newProcessor(r *rdb.RDB, ps *base.ProcessState, fn retryDelayFunc,
+func newProcessor(l *log.Logger, r *rdb.RDB, ps *base.ProcessState, fn retryDelayFunc,
 	syncCh chan<- *syncRequest, c *base.Cancelations, errHandler ErrorHandler) *processor {
 	info := ps.Get()
 	qcfg := normalizeQueueCfg(info.Queues)
@@ -70,6 +72,7 @@ func newProcessor(r *rdb.RDB, ps *base.ProcessState, fn retryDelayFunc,
 		orderedQueues = sortByPriority(qcfg)
 	}
 	return &processor{
+		logger:         l,
 		rdb:            r,
 		ps:             ps,
 		queueConfig:    qcfg,
@@ -91,7 +94,7 @@ func newProcessor(r *rdb.RDB, ps *base.ProcessState, fn retryDelayFunc,
 // It's safe to call this method multiple times.
 func (p *processor) stop() {
 	p.once.Do(func() {
-		logger.info("Processor shutting down...")
+		p.logger.Info("Processor shutting down...")
 		// Unblock if processor is waiting for sema token.
 		close(p.abort)
 		// Signal the processor goroutine to stop processing tasks
@@ -107,7 +110,7 @@ func (p *processor) terminate() {
 	// IDEA: Allow user to customize this timeout value.
 	const timeout = 8 * time.Second
 	time.AfterFunc(timeout, func() { close(p.quit) })
-	logger.info("Waiting for all workers to finish...")
+	p.logger.Info("Waiting for all workers to finish...")
 
 	// send cancellation signal to all in-progress task handlers
 	for _, cancel := range p.cancelations.GetAll() {
@@ -118,7 +121,7 @@ func (p *processor) terminate() {
 	for i := 0; i < cap(p.sema); i++ {
 		p.sema <- struct{}{}
 	}
-	logger.info("All workers have finished")
+	p.logger.Info("All workers have finished")
 	p.restore() // move any unfinished tasks back to the queue.
 }
 
@@ -132,7 +135,7 @@ func (p *processor) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-p.done:
-				logger.info("Processor done")
+				p.logger.Info("Processor done")
 				return
 			default:
 				p.exec()
@@ -158,7 +161,7 @@ func (p *processor) exec() {
 	}
 	if err != nil {
 		if p.errLogLimiter.Allow() {
-			logger.error("Dequeue error: %v", err)
+			p.logger.Error("Dequeue error: %v", err)
 		}
 		return
 	}
@@ -188,7 +191,7 @@ func (p *processor) exec() {
 			select {
 			case <-p.quit:
 				// time is up, quit this worker goroutine.
-				logger.warn("Quitting worker. task id=%s", msg.ID)
+				p.logger.Warn("Quitting worker. task id=%s", msg.ID)
 				return
 			case resErr := <-resCh:
 				// Note: One of three things should happen.
@@ -217,17 +220,17 @@ func (p *processor) exec() {
 func (p *processor) restore() {
 	n, err := p.rdb.RequeueAll()
 	if err != nil {
-		logger.error("Could not restore unfinished tasks: %v", err)
+		p.logger.Error("Could not restore unfinished tasks: %v", err)
 	}
 	if n > 0 {
-		logger.info("Restored %d unfinished tasks back to queue", n)
+		p.logger.Info("Restored %d unfinished tasks back to queue", n)
 	}
 }
 
 func (p *processor) requeue(msg *base.TaskMessage) {
 	err := p.rdb.Requeue(msg)
 	if err != nil {
-		logger.error("Could not push task id=%s back to queue: %v", msg.ID, err)
+		p.logger.Error("Could not push task id=%s back to queue: %v", msg.ID, err)
 	}
 }
 
@@ -235,7 +238,7 @@ func (p *processor) markAsDone(msg *base.TaskMessage) {
 	err := p.rdb.Done(msg)
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not remove task id=%s from %q", msg.ID, base.InProgressQueue)
-		logger.warn("%s; Will retry syncing", errMsg)
+		p.logger.Warn("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.rdb.Done(msg)
@@ -251,7 +254,7 @@ func (p *processor) retry(msg *base.TaskMessage, e error) {
 	err := p.rdb.Retry(msg, retryAt, e.Error())
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.InProgressQueue, base.RetryQueue)
-		logger.warn("%s; Will retry syncing", errMsg)
+		p.logger.Warn("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.rdb.Retry(msg, retryAt, e.Error())
@@ -262,11 +265,11 @@ func (p *processor) retry(msg *base.TaskMessage, e error) {
 }
 
 func (p *processor) kill(msg *base.TaskMessage, e error) {
-	logger.warn("Retry exhausted for task id=%s", msg.ID)
+	p.logger.Warn("Retry exhausted for task id=%s", msg.ID)
 	err := p.rdb.Kill(msg, e.Error())
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.InProgressQueue, base.DeadQueue)
-		logger.warn("%s; Will retry syncing", errMsg)
+		p.logger.Warn("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.rdb.Kill(msg, e.Error())
