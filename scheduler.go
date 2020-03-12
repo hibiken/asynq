@@ -8,12 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
 type scheduler struct {
-	logger *log.Logger
+	logger Logger
 	rdb    *rdb.RDB
 
 	// channel to communicate back to the long running "scheduler" goroutine.
@@ -26,7 +25,7 @@ type scheduler struct {
 	qnames []string
 }
 
-func newScheduler(l *log.Logger, r *rdb.RDB, avgInterval time.Duration, qcfg map[string]int) *scheduler {
+func newScheduler(l Logger, r *rdb.RDB, avgInterval time.Duration, qcfg map[string]int) *scheduler {
 	var qnames []string
 	for q := range qcfg {
 		qnames = append(qnames, q)

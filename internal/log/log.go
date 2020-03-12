@@ -8,6 +8,7 @@ package log
 import (
 	"io"
 	stdlog "log"
+	"os"
 )
 
 func NewLogger(out io.Writer) *Logger {
@@ -18,6 +19,11 @@ func NewLogger(out io.Writer) *Logger {
 
 type Logger struct {
 	*stdlog.Logger
+}
+
+func (l *Logger) Debug(format string, args ...interface{}) {
+	format = "DEBUG: " + format
+	l.Printf(format, args...)
 }
 
 func (l *Logger) Info(format string, args ...interface{}) {
@@ -33,4 +39,10 @@ func (l *Logger) Warn(format string, args ...interface{}) {
 func (l *Logger) Error(format string, args ...interface{}) {
 	format = "ERROR: " + format
 	l.Printf(format, args...)
+}
+
+func (l *Logger) Fatal(format string, args ...interface{}) {
+	format = "FATAL: " + format
+	l.Printf(format, args...)
+	os.Exit(1)
 }

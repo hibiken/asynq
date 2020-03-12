@@ -8,12 +8,11 @@ import (
 	"sync"
 
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
 type subscriber struct {
-	logger *log.Logger
+	logger Logger
 	rdb    *rdb.RDB
 
 	// channel to communicate back to the long running "subscriber" goroutine.
@@ -23,7 +22,7 @@ type subscriber struct {
 	cancelations *base.Cancelations
 }
 
-func newSubscriber(l *log.Logger, rdb *rdb.RDB, cancelations *base.Cancelations) *subscriber {
+func newSubscriber(l Logger, rdb *rdb.RDB, cancelations *base.Cancelations) *subscriber {
 	return &subscriber{
 		logger:       l,
 		rdb:          rdb,
