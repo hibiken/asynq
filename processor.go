@@ -13,13 +13,12 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
 	"golang.org/x/time/rate"
 )
 
 type processor struct {
-	logger *log.Logger
+	logger Logger
 	rdb    *rdb.RDB
 
 	ps *base.ProcessState
@@ -63,7 +62,7 @@ type processor struct {
 type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
 // newProcessor constructs a new processor.
-func newProcessor(l *log.Logger, r *rdb.RDB, ps *base.ProcessState, fn retryDelayFunc,
+func newProcessor(l Logger, r *rdb.RDB, ps *base.ProcessState, fn retryDelayFunc,
 	syncCh chan<- *syncRequest, c *base.Cancelations, errHandler ErrorHandler) *processor {
 	info := ps.Get()
 	qcfg := normalizeQueueCfg(info.Queues)

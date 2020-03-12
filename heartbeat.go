@@ -9,14 +9,13 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
 // heartbeater is responsible for writing process info to redis periodically to
 // indicate that the background worker process is up.
 type heartbeater struct {
-	logger *log.Logger
+	logger Logger
 	rdb    *rdb.RDB
 
 	ps *base.ProcessState
@@ -28,7 +27,7 @@ type heartbeater struct {
 	interval time.Duration
 }
 
-func newHeartbeater(l *log.Logger, rdb *rdb.RDB, ps *base.ProcessState, interval time.Duration) *heartbeater {
+func newHeartbeater(l Logger, rdb *rdb.RDB, ps *base.ProcessState, interval time.Duration) *heartbeater {
 	return &heartbeater{
 		logger:   l,
 		rdb:      rdb,

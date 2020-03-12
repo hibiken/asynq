@@ -40,7 +40,7 @@ type Background struct {
 	// wait group to wait for all goroutines to finish.
 	wg sync.WaitGroup
 
-	logger *log.Logger
+	logger Logger
 
 	rdb         *rdb.RDB
 	scheduler   *scheduler
@@ -107,6 +107,11 @@ type Config struct {
 	//
 	// ErrorHandler: asynq.ErrorHandlerFunc(reportError)
 	ErrorHandler ErrorHandler
+
+	// Logger specifies the logger used by the background instance.
+	//
+	// If unset, default logger is used.
+	Logger Logger
 }
 
 // An ErrorHandler handles errors returned by the task handler.
@@ -121,6 +126,25 @@ type ErrorHandlerFunc func(task *Task, err error, retried, maxRetry int)
 // HandleError calls fn(task, err, retried, maxRetry)
 func (fn ErrorHandlerFunc) HandleError(task *Task, err error, retried, maxRetry int) {
 	fn(task, err, retried, maxRetry)
+}
+
+// Logger implements logging with various log levels.
+type Logger interface {
+	// Debug logs a message at Debug level.
+	Debug(format string, args ...interface{})
+
+	// Info logs a message at Info level.
+	Info(format string, args ...interface{})
+
+	// Warn logs a message at Warning level.
+	Warn(format string, args ...interface{})
+
+	// Error logs a message at Error level.
+	Error(format string, args ...interface{})
+
+	// Fatal logs a message at Fatal level
+	// and process will exit with status set to 1.
+	Fatal(format string, args ...interface{})
 }
 
 // Formula taken from https://github.com/mperham/sidekiq.
@@ -154,6 +178,10 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	if len(queues) == 0 {
 		queues = defaultQueueConfig
 	}
+	logger := cfg.Logger
+	if logger == nil {
+		logger = log.NewLogger(os.Stderr)
+	}
 
 	host, err := os.Hostname()
 	if err != nil {
@@ -161,7 +189,6 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	}
 	pid := os.Getpid()
 
-	logger := log.NewLogger(os.Stderr)
 	rdb := rdb.NewRDB(createRedisClient(r))
 	ps := base.NewProcessState(host, pid, n, queues, cfg.StrictPriority)
 	syncCh := make(chan *syncRequest)
@@ -210,7 +237,13 @@ func (fn HandlerFunc) ProcessTask(ctx context.Context, task *Task) error {
 // a signal, it gracefully shuts down all pending workers and other
 // goroutines to process the tasks.
 func (bg *Background) Run(handler Handler) {
-	bg.logger.SetPrefix(fmt.Sprintf("asynq: pid=%d ", os.Getpid()))
+	type prefixLogger interface {
+		SetPrefix(prefix string)
+	}
+	// If logger supports setting prefix, then set prefix for log output.
+	if l, ok := bg.logger.(prefixLogger); ok {
+		l.SetPrefix(fmt.Sprintf("asynq: pid=%d ", os.Getpid()))
+	}
 	bg.logger.Info("Starting processing")
 
 	bg.start(handler)

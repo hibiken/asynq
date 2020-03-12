@@ -24,6 +24,38 @@ type tester struct {
 	wantPattern string // regexp that log output must match
 }
 
+func TestLoggerDebug(t *testing.T) {
+	tests := []tester{
+		{
+			desc:        "without trailing newline, logger adds newline",
+			message:     "hello, world!",
+			wantPattern: fmt.Sprintf("^%s %s%s DEBUG: hello, world!\n$", rgxdate, rgxtime, rgxmicroseconds),
+		},
+		{
+			desc:        "with trailing newline, logger preserves newline",
+			message:     "hello, world!\n",
+			wantPattern: fmt.Sprintf("^%s %s%s DEBUG: hello, world!\n$", rgxdate, rgxtime, rgxmicroseconds),
+		},
+	}
+
+	for _, tc := range tests {
+		var buf bytes.Buffer
+		logger := NewLogger(&buf)
+
+		logger.Debug(tc.message)
+
+		got := buf.String()
+		matched, err := regexp.MatchString(tc.wantPattern, got)
+		if err != nil {
+			t.Fatal("pattern did not compile:", err)
+		}
+		if !matched {
+			t.Errorf("logger.info(%q) outputted %q, should match pattern %q",
+				tc.message, got, tc.wantPattern)
+		}
+	}
+}
+
 func TestLoggerInfo(t *testing.T) {
 	tests := []tester{
 		{
