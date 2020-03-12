@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2020-03-12
+
 ### Added
 
 - `Client` can optionally schedule task with `asynq.Deadline(time)` to specify deadline for task's context. Default is no deadline.
+- `Logger` option was added to config, which allows user to specify the logger used by the background instance.
 
 ## [0.6.0] - 2020-03-01
 
