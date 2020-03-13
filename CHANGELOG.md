@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Use` method was added to `ServeMux` to apply middlewares to all handlers.
+
 ## [0.6.1] - 2020-03-12
 
 ### Added
