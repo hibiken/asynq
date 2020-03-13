@@ -44,8 +44,8 @@ func TestClientEnqueueAt(t *testing.T) {
 			processAt: now,
 			opts:      []Option{},
 			wantEnqueued: map[string][]*base.TaskMessage{
-				"default": []*base.TaskMessage{
-					&base.TaskMessage{
+				"default": {
+					{
 						Type:     task.Type,
 						Payload:  task.Payload.data,
 						Retry:    defaultMaxRetry,
@@ -129,8 +129,8 @@ func TestClientEnqueue(t *testing.T) {
 				MaxRetry(3),
 			},
 			wantEnqueued: map[string][]*base.TaskMessage{
-				"default": []*base.TaskMessage{
-					&base.TaskMessage{
+				"default": {
+					{
 						Type:     task.Type,
 						Payload:  task.Payload.data,
 						Retry:    3,
@@ -148,8 +148,8 @@ func TestClientEnqueue(t *testing.T) {
 				MaxRetry(-2),
 			},
 			wantEnqueued: map[string][]*base.TaskMessage{
-				"default": []*base.TaskMessage{
-					&base.TaskMessage{
+				"default": {
+					{
 						Type:     task.Type,
 						Payload:  task.Payload.data,
 						Retry:    0, // Retry count should be set to zero
@@ -168,8 +168,8 @@ func TestClientEnqueue(t *testing.T) {
 				MaxRetry(10),
 			},
 			wantEnqueued: map[string][]*base.TaskMessage{
-				"default": []*base.TaskMessage{
-					&base.TaskMessage{
+				"default": {
+					{
 						Type:     task.Type,
 						Payload:  task.Payload.data,
 						Retry:    10, // Last option takes precedence
@@ -187,8 +187,8 @@ func TestClientEnqueue(t *testing.T) {
 				Queue("custom"),
 			},
 			wantEnqueued: map[string][]*base.TaskMessage{
-				"custom": []*base.TaskMessage{
-					&base.TaskMessage{
+				"custom": {
+					{
 						Type:     task.Type,
 						Payload:  task.Payload.data,
 						Retry:    defaultMaxRetry,
@@ -206,8 +206,8 @@ func TestClientEnqueue(t *testing.T) {
 				Queue("HIGH"),
 			},
 			wantEnqueued: map[string][]*base.TaskMessage{
-				"high": []*base.TaskMessage{
-					&base.TaskMessage{
+				"high": {
+					{
 						Type:     task.Type,
 						Payload:  task.Payload.data,
 						Retry:    defaultMaxRetry,
@@ -225,8 +225,8 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout(20 * time.Second),
 			},
 			wantEnqueued: map[string][]*base.TaskMessage{
-				"default": []*base.TaskMessage{
-					&base.TaskMessage{
+				"default": {
+					{
 						Type:     task.Type,
 						Payload:  task.Payload.data,
 						Retry:    defaultMaxRetry,
@@ -244,8 +244,8 @@ func TestClientEnqueue(t *testing.T) {
 				Deadline(time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC)),
 			},
 			wantEnqueued: map[string][]*base.TaskMessage{
-				"default": []*base.TaskMessage{
-					&base.TaskMessage{
+				"default": {
+					{
 						Type:     task.Type,
 						Payload:  task.Payload.data,
 						Retry:    defaultMaxRetry,
@@ -324,8 +324,8 @@ func TestClientEnqueueIn(t *testing.T) {
 			delay: 0,
 			opts:  []Option{},
 			wantEnqueued: map[string][]*base.TaskMessage{
-				"default": []*base.TaskMessage{
-					&base.TaskMessage{
+				"default": {
+					{
 						Type:     task.Type,
 						Payload:  task.Payload.data,
 						Retry:    defaultMaxRetry,
