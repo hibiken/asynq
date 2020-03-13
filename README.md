@@ -32,28 +32,34 @@ func main() {
         Addr: "127.0.0.1:6379",
     }
 
-    client := asynq.NewClient(r)
+    c := asynq.NewClient(r)
 
-    // Create a task with task type and payload.
-    t1 := asynq.NewTask("email:signup", map[string]interface{}{"user_id": 42})
+    // Example 1: Enqueue task to be processed immediately.
 
-    t2 := asynq.NewTask("email:reminder", map[string]interface{}{"user_id": 42})
+    t := asynq.NewTask("email:signup", map[string]interface{}{"user_id": 42})
+    err := c.Enqueue(t)
+    if err != nil {
+        log.Fatal("could not enqueue task: %v", err)
+    } 
 
-    // Enqueue immediately.
-    err := client.Enqueue(t1)
 
-    // Enqueue 24 hrs later.
-    err = client.EnqueueIn(24*time.Hour, t2)
+    // Example 2: Schedule task to be processed in the future.
 
-    // Enqueue at specific time.
-    err = client.EnqueueAt(time.Date(2020, time.March, 6, 10, 0, 0, 0, time.UTC), t2)
+    t = asynq.NewTask("email:reminder", map[string]interface{}{"user_id": 42})
+    err = c.EnqueueIn(24*time.Hour, t)
+    if err != nil {
+        log.Fatal("could not schedule task: %v", err)
+    }
 
-    // Pass vararg options to specify processing behavior for the given task.
-    //
-    // MaxRetry specifies the max number of retry if the task fails (Default is 25).
-    // Queue specifies which queue to enqueue this task to (Default is "default" queue).
-    // Timeout specifies the the task timeout (Default is no timeout).
-    err = client.Enqueue(t1, asynq.MaxRetry(10), asynq.Queue("critical"), asynq.Timeout(time.Minute))
+
+    // Example 3: Pass options to tune task processing behavior. 
+    // Options include MaxRetry, Queue, Timeout, Deadline, etc.
+
+    t = asynq.NewTask("email:reminder", map[string]interface{}{"user_id": 42})
+    err = c.Enqueue(t, asynq.MaxRetry(10), asynq.Queue("critical"), asynq.Timeout(time.Minute))
+    if err != nil {
+        log.Fatal("could not enqueue task: %v", err)
+    }
 }
 ```
 
@@ -99,7 +105,7 @@ func main() {
     bg.Run(mux)
 }
 
-// function with the same signature as the ProcessTask method for the Handler interface.
+// function with the same signature as the sole method for the Handler interface.
 func signupEmailHandler(ctx context.Context, t *asynq.Task) error {
     id, err := t.Payload.GetInt("user_id")
     if err != nil {
