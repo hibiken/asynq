@@ -20,8 +20,8 @@ func TestPayloadGet(t *testing.T) {
 	user := map[string]interface{}{"name": "Ken", "score": 3.14}
 	location := map[string]string{"address": "123 Main St.", "state": "NY", "zipcode": "10002"}
 	favs := map[string][]string{
-		"movies":   []string{"forrest gump", "star wars"},
-		"tv_shows": []string{"game of thrones", "HIMYM", "breaking bad"},
+		"movies":   {"forrest gump", "star wars"},
+		"tv_shows": {"game of thrones", "HIMYM", "breaking bad"},
 	}
 	counter := map[string]int{
 		"a": 1,
@@ -138,8 +138,8 @@ func TestPayloadGetWithMarshaling(t *testing.T) {
 	user := map[string]interface{}{"name": "Ken", "score": 3.14}
 	location := map[string]string{"address": "123 Main St.", "state": "NY", "zipcode": "10002"}
 	favs := map[string][]string{
-		"movies":   []string{"forrest gump", "star wars"},
-		"tv_shows": []string{"game of throwns", "HIMYM", "breaking bad"},
+		"movies":   {"forrest gump", "star wars"},
+		"tv_shows": {"game of throwns", "HIMYM", "breaking bad"},
 	}
 	counter := map[string]int{
 		"a": 1,
