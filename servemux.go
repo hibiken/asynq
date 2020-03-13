@@ -23,15 +23,21 @@ import (
 // "images:thumbnails" and the former will receive tasks with type name beginning
 // with "images".
 type ServeMux struct {
-	mu sync.RWMutex
-	m  map[string]muxEntry
-	es []muxEntry // slice of entries sorted from longest to shortest.
+	mu  sync.RWMutex
+	m   map[string]muxEntry
+	es  []muxEntry // slice of entries sorted from longest to shortest.
+	mws []MiddlewareFunc
 }
 
 type muxEntry struct {
 	h       Handler
 	pattern string
 }
+
+// MiddlewareFunc is a function which receives an asynq.Handler and returns another asynq.Handler.
+// Typically, the returned handler is a closure which does something with the context and task passed
+// to it, and then calls the handler passed as parameter to the MiddlewareFunc.
+type MiddlewareFunc func(Handler) Handler
 
 // NewServeMux allocates and returns a new ServeMux.
 func NewServeMux() *ServeMux {
@@ -59,6 +65,9 @@ func (mux *ServeMux) Handler(t *Task) (h Handler, pattern string) {
 	h, pattern = mux.match(t.Type)
 	if h == nil {
 		h, pattern = NotFoundHandler(), ""
+	}
+	for i := len(mux.mws) - 1; i >= 0; i-- {
+		h = mux.mws[i](h)
 	}
 	return h, pattern
 }
@@ -128,6 +137,16 @@ func (mux *ServeMux) HandleFunc(pattern string, handler func(context.Context, *T
 		panic("asynq: nil handler")
 	}
 	mux.Handle(pattern, HandlerFunc(handler))
+}
+
+// Use appends a MiddlewareFunc to the chain.
+// Middlewares are executed in the order that they are applied to the ServeMux.
+func (mux *ServeMux) Use(mws ...MiddlewareFunc) {
+	mux.mu.Lock()
+	defer mux.mu.Unlock()
+	for _, fn := range mws {
+		mux.mws = append(mux.mws, fn)
+	}
 }
 
 // NotFound returns an error indicating that the handler was not found for the given task.
