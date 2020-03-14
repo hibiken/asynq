@@ -22,40 +22,109 @@ First, make sure you are running a Redis server locally.
 $ redis-server
 ```
 
-To create and schedule tasks, use `Client` and provide a task and when to enqueue the task.  
-A task will be processed by a background worker as soon as the task gets enqueued.  
-Scheduled tasks will be stored in Redis and will be enqueued at the specified time.  
+Next, write a package that encapslates task creation and task handling.
 
 ```go
-func main() {
-    r := &asynq.RedisClientOpt{
-        Addr: "127.0.0.1:6379",
-    }
+package tasks
 
+import (
+    "fmt"
+
+    "github.com/hibiken/asynq"
+)
+
+// A list of background task types.
+const (
+    EmailDelivery   = "email:deliver"
+    ImageProcessing = "image:process"
+)
+
+// Write function NewXXXTask to create a task.
+
+func NewEmailDeliveryTask(userID int, tmplID string) *asynq.Task {
+    payload := map[string]interface{}{"user_id": userID, "template_id": tmplID}
+    return asynq.NewTask(EmailDelivery, payload)
+}
+
+func NewImageProcessingTask(src, dst string) *asynq.Task {
+    payload := map[string]interface{}{"src": src, "dst": dst}
+    return asynq.NewTask(ImageProcessing, payload)
+}
+
+// Write function HandleXXXTask to handle the given task.
+// NOTE: It satisfies the asynq.HandlerFunc interface.
+
+func HandleEmailDeliveryTask(ctx context.Context, t *asynq.Task) error {
+    userID, err := t.Payload.GetInt("user_id")
+    if err != nil {
+        return err
+    }
+    tmplID, err := t.Payload.GetString("template_id")
+    if err != nil {
+        return err
+    }
+    fmt.Printf("Send Email to User: user_id = %d, template_id = %s\n", userID, tmplID)
+    // Email delivery logic ...
+    return nil
+}
+
+func HandleImageProcessingTask(ctx context.Context, t *asynq.Task) error {
+    src, err := t.Payload.GetString("src")
+    if err != nil {
+        return err
+    }
+    dst, err := t.Payload.GetString("dst")
+    if err != nil {
+        return err
+    }
+    fmt.Printf("Process image: src = %s, dst = %s\n", src, dst)
+    // Image processing logic ...
+    return nil
+}
+```
+
+In your web application code, import the above package and use [`Client`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Client) to enqueue tasks to the task queue.  
+A task will be processed by a background worker as soon as the task gets enqueued.  
+Scheduled tasks will be stored in Redis and will be enqueued at the specified time.
+
+```go
+package main
+
+import (
+    "time"
+
+    "github.com/hibiken/asynq"
+    "your/app/package/tasks"
+)
+
+const redisAddr = "127.0.0.1:6379"
+
+func main() {
+    r := &asynq.RedisClientOpt{Addr: redisAddr}
     c := asynq.NewClient(r)
 
     // Example 1: Enqueue task to be processed immediately.
 
-    t := asynq.NewTask("email:signup", map[string]interface{}{"user_id": 42})
+    t := tasks.NewEmailDeliveryTask(42, "some:template:id")
     err := c.Enqueue(t)
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
-    } 
+    }
 
 
     // Example 2: Schedule task to be processed in the future.
 
-    t = asynq.NewTask("email:reminder", map[string]interface{}{"user_id": 42})
+    t = tasks.NewEmailDeliveryTask(42, "other:template:id")
     err = c.EnqueueIn(24*time.Hour, t)
     if err != nil {
         log.Fatal("could not schedule task: %v", err)
     }
 
 
-    // Example 3: Pass options to tune task processing behavior. 
+    // Example 3: Pass options to tune task processing behavior.
     // Options include MaxRetry, Queue, Timeout, Deadline, etc.
 
-    t = asynq.NewTask("email:reminder", map[string]interface{}{"user_id": 42})
+    t = tasks.NewImageProcessingTask("some/blobstore/url", "other/blobstore/url")
     err = c.Enqueue(t, asynq.MaxRetry(10), asynq.Queue("critical"), asynq.Timeout(time.Minute))
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
@@ -63,26 +132,23 @@ func main() {
 }
 ```
 
-To start the background workers, use `Background` and provide your `Handler` to process the tasks.
+Next, create a binary to process these tasks in the background.  
+To start the background workers, use [`Background`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Background) and provide your [`Handler`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Handler) to process the tasks.
 
-`Handler` is an interface with one method `ProcessTask` with the following signature.
-
-```go
-// ProcessTask should return nil if the processing of a task is successful.
-//
-// If ProcessTask return a non-nil error or panics, the task will be retried after delay.
-type Handler interface {
-    ProcessTask(context.Context, *asynq.Task) error
-}
-```
-
-You can optionally use `ServeMux` to create a handler, just as you would with `"net/http"` Handler.
+You can optionally use [`ServeMux`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#ServeMux) to create a handler, just as you would with [`"net/http"`](https://golang.org/pkg/net/http/) Handler.
 
 ```go
+package main
+
+import (
+    "github.com/hibiken/asynq"
+    "your/app/package/tasks"
+)
+
+const redisAddr = "127.0.0.1:6379"
+
 func main() {
-    r := &asynq.RedisClientOpt{
-        Addr: "127.0.0.1:6379",
-    }
+    r := &asynq.RedisClientOpt{Addr: redisAddr}
 
     bg := asynq.NewBackground(r, &asynq.Config{
         // Specify how many concurrent workers to use
@@ -98,22 +164,11 @@ func main() {
 
     // mux maps a type to a handler
     mux := asynq.NewServeMux()
-    mux.HandleFunc("email:signup", signupEmailHandler)
-    mux.HandleFunc("email:reminder", reminderEmailHandler)
+    mux.HandleFunc(tasks.EmailDelivery, tasks.HandleEmailDeliveryTask)
+    mux.HandleFunc(tasks.ImageProcessing, tasks.HandleImageProcessingTask)
     // ...register other handlers...
 
     bg.Run(mux)
-}
-
-// function with the same signature as the sole method for the Handler interface.
-func signupEmailHandler(ctx context.Context, t *asynq.Task) error {
-    id, err := t.Payload.GetInt("user_id")
-    if err != nil {
-        return err
-    }
-    fmt.Printf("Send welcome email to user %d\n", id)
-    // ...your email sending logic...
-    return nil
 }
 ```
 
