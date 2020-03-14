@@ -14,333 +14,626 @@ import (
 	"github.com/hibiken/asynq/internal/base"
 )
 
-func TestPayloadGet(t *testing.T) {
-	names := []string{"luke", "anakin", "rey"}
-	primes := []int{2, 3, 5, 7, 11, 13, 17}
-	user := map[string]interface{}{"name": "Ken", "score": 3.14}
-	location := map[string]string{"address": "123 Main St.", "state": "NY", "zipcode": "10002"}
+type payloadTest struct {
+	data   map[string]interface{}
+	key    string
+	nonkey string
+}
+
+func TestPayloadString(t *testing.T) {
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"name": "gopher"},
+			key:    "name",
+			nonkey: "unknown",
+		},
+	}
+
+	for _, tc := range tests {
+		payload := Payload{tc.data}
+
+		got, err := payload.GetString(tc.key)
+		if err != nil || got != tc.data[tc.key] {
+			t.Errorf("Payload.GetString(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetString(tc.key)
+		if err != nil || got != tc.data[tc.key] {
+			t.Errorf("With Marshaling: Payload.GetString(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// access non-existent key.
+		got, err = payload.GetString(tc.nonkey)
+		if err == nil || got != "" {
+			t.Errorf("Payload.GetString(%q) = %v, %v; want '', error",
+				tc.key, got, err)
+		}
+	}
+}
+
+func TestPayloadInt(t *testing.T) {
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"user_id": 42},
+			key:    "user_id",
+			nonkey: "unknown",
+		},
+	}
+
+	for _, tc := range tests {
+		payload := Payload{tc.data}
+
+		got, err := payload.GetInt(tc.key)
+		if err != nil || got != tc.data[tc.key] {
+			t.Errorf("Payload.GetInt(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetInt(tc.key)
+		if err != nil || got != tc.data[tc.key] {
+			t.Errorf("With Marshaling: Payload.GetInt(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// access non-existent key.
+		got, err = payload.GetInt(tc.nonkey)
+		if err == nil || got != 0 {
+			t.Errorf("Payload.GetInt(%q) = %v, %v; want 0, error",
+				tc.key, got, err)
+		}
+	}
+}
+
+func TestPayloadFloat64(t *testing.T) {
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"pi": 3.14},
+			key:    "pi",
+			nonkey: "unknown",
+		},
+	}
+
+	for _, tc := range tests {
+		payload := Payload{tc.data}
+
+		got, err := payload.GetFloat64(tc.key)
+		if err != nil || got != tc.data[tc.key] {
+			t.Errorf("Payload.GetFloat64(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetFloat64(tc.key)
+		if err != nil || got != tc.data[tc.key] {
+			t.Errorf("With Marshaling: Payload.GetFloat64(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// access non-existent key.
+		got, err = payload.GetFloat64(tc.nonkey)
+		if err == nil || got != 0 {
+			t.Errorf("Payload.GetFloat64(%q) = %v, %v; want 0, error",
+				tc.key, got, err)
+		}
+	}
+}
+
+func TestPayloadBool(t *testing.T) {
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"enabled": true},
+			key:    "enabled",
+			nonkey: "unknown",
+		},
+	}
+
+	for _, tc := range tests {
+		payload := Payload{tc.data}
+
+		got, err := payload.GetBool(tc.key)
+		if err != nil || got != tc.data[tc.key] {
+			t.Errorf("Payload.GetBool(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetBool(tc.key)
+		if err != nil || got != tc.data[tc.key] {
+			t.Errorf("With Marshaling: Payload.GetBool(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// access non-existent key.
+		got, err = payload.GetBool(tc.nonkey)
+		if err == nil || got != false {
+			t.Errorf("Payload.GetBool(%q) = %v, %v; want false, error",
+				tc.key, got, err)
+		}
+	}
+}
+
+func TestPayloadStringSlice(t *testing.T) {
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"names": []string{"luke", "rey", "anakin"}},
+			key:    "names",
+			nonkey: "unknown",
+		},
+	}
+
+	for _, tc := range tests {
+		payload := Payload{tc.data}
+
+		got, err := payload.GetStringSlice(tc.key)
+		diff := cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("Payload.GetStringSlice(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetStringSlice(tc.key)
+		diff = cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("With Marshaling: Payload.GetStringSlice(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// access non-existent key.
+		got, err = payload.GetStringSlice(tc.nonkey)
+		if err == nil || got != nil {
+			t.Errorf("Payload.GetStringSlice(%q) = %v, %v; want nil, error",
+				tc.key, got, err)
+		}
+	}
+}
+
+func TestPayloadIntSlice(t *testing.T) {
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"nums": []int{9, 8, 7}},
+			key:    "nums",
+			nonkey: "unknown",
+		},
+	}
+
+	for _, tc := range tests {
+		payload := Payload{tc.data}
+
+		got, err := payload.GetIntSlice(tc.key)
+		diff := cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("Payload.GetIntSlice(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetIntSlice(tc.key)
+		diff = cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("With Marshaling: Payload.GetIntSlice(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// access non-existent key.
+		got, err = payload.GetIntSlice(tc.nonkey)
+		if err == nil || got != nil {
+			t.Errorf("Payload.GetIntSlice(%q) = %v, %v; want nil, error",
+				tc.key, got, err)
+		}
+	}
+}
+
+func TestPayloadStringMap(t *testing.T) {
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"user": map[string]interface{}{"name": "Jon Doe", "score": 2.2}},
+			key:    "user",
+			nonkey: "unknown",
+		},
+	}
+
+	for _, tc := range tests {
+		payload := Payload{tc.data}
+
+		got, err := payload.GetStringMap(tc.key)
+		diff := cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("Payload.GetStringMap(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetStringMap(tc.key)
+		diff = cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("With Marshaling: Payload.GetStringMap(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// access non-existent key.
+		got, err = payload.GetStringMap(tc.nonkey)
+		if err == nil || got != nil {
+			t.Errorf("Payload.GetStringMap(%q) = %v, %v; want nil, error",
+				tc.key, got, err)
+		}
+	}
+}
+
+func TestPayloadStringMapString(t *testing.T) {
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"address": map[string]string{"line": "123 Main St", "city": "San Francisco", "state": "CA"}},
+			key:    "address",
+			nonkey: "unknown",
+		},
+	}
+
+	for _, tc := range tests {
+		payload := Payload{tc.data}
+
+		got, err := payload.GetStringMapString(tc.key)
+		diff := cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("Payload.GetStringMapString(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetStringMapString(tc.key)
+		diff = cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("With Marshaling: Payload.GetStringMapString(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// access non-existent key.
+		got, err = payload.GetStringMapString(tc.nonkey)
+		if err == nil || got != nil {
+			t.Errorf("Payload.GetStringMapString(%q) = %v, %v; want nil, error",
+				tc.key, got, err)
+		}
+	}
+}
+
+func TestPayloadStringMapStringSlice(t *testing.T) {
 	favs := map[string][]string{
 		"movies":   {"forrest gump", "star wars"},
 		"tv_shows": {"game of thrones", "HIMYM", "breaking bad"},
 	}
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"favorites": favs},
+			key:    "favorites",
+			nonkey: "unknown",
+		},
+	}
+
+	for _, tc := range tests {
+		payload := Payload{tc.data}
+
+		got, err := payload.GetStringMapStringSlice(tc.key)
+		diff := cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("Payload.GetStringMapStringSlice(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetStringMapStringSlice(tc.key)
+		diff = cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("With Marshaling: Payload.GetStringMapStringSlice(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// access non-existent key.
+		got, err = payload.GetStringMapStringSlice(tc.nonkey)
+		if err == nil || got != nil {
+			t.Errorf("Payload.GetStringMapStringSlice(%q) = %v, %v; want nil, error",
+				tc.key, got, err)
+		}
+	}
+}
+
+func TestPayloadStringMapInt(t *testing.T) {
 	counter := map[string]int{
 		"a": 1,
 		"b": 101,
 		"c": 42,
 	}
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"counts": counter},
+			key:    "counts",
+			nonkey: "unknown",
+		},
+	}
+
+	for _, tc := range tests {
+		payload := Payload{tc.data}
+
+		got, err := payload.GetStringMapInt(tc.key)
+		diff := cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("Payload.GetStringMapInt(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetStringMapInt(tc.key)
+		diff = cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("With Marshaling: Payload.GetStringMapInt(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
+
+		// access non-existent key.
+		got, err = payload.GetStringMapInt(tc.nonkey)
+		if err == nil || got != nil {
+			t.Errorf("Payload.GetStringMapInt(%q) = %v, %v; want nil, error",
+				tc.key, got, err)
+		}
+	}
+}
+
+func TestPayloadStringMapBool(t *testing.T) {
 	features := map[string]bool{
 		"A": false,
 		"B": true,
 		"C": true,
 	}
-	now := time.Now()
-	duration := 15 * time.Minute
-
-	data := map[string]interface{}{
-		"greeting":  "Hello",
-		"user_id":   9876,
-		"pi":        3.1415,
-		"enabled":   false,
-		"names":     names,
-		"primes":    primes,
-		"user":      user,
-		"location":  location,
-		"favs":      favs,
-		"counter":   counter,
-		"features":  features,
-		"timestamp": now,
-		"duration":  duration,
-	}
-	payload := Payload{data}
-
-	gotStr, err := payload.GetString("greeting")
-	if gotStr != "Hello" || err != nil {
-		t.Errorf("Payload.GetString(%q) = %v, %v, want %v, nil",
-			"greeting", gotStr, err, "Hello")
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"features": features},
+			key:    "features",
+			nonkey: "unknown",
+		},
 	}
 
-	gotInt, err := payload.GetInt("user_id")
-	if gotInt != 9876 || err != nil {
-		t.Errorf("Payload.GetInt(%q) = %v, %v, want, %v, nil",
-			"user_id", gotInt, err, 9876)
-	}
+	for _, tc := range tests {
+		payload := Payload{tc.data}
 
-	gotFloat, err := payload.GetFloat64("pi")
-	if gotFloat != 3.1415 || err != nil {
-		t.Errorf("Payload.GetFloat64(%q) = %v, %v, want, %v, nil",
-			"pi", gotFloat, err, 3.141592)
-	}
+		got, err := payload.GetStringMapBool(tc.key)
+		diff := cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("Payload.GetStringMapBool(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
 
-	gotBool, err := payload.GetBool("enabled")
-	if gotBool != false || err != nil {
-		t.Errorf("Payload.GetBool(%q) = %v, %v, want, %v, nil",
-			"enabled", gotBool, err, false)
-	}
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetStringMapBool(tc.key)
+		diff = cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("With Marshaling: Payload.GetStringMapBool(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
 
-	gotStrSlice, err := payload.GetStringSlice("names")
-	if diff := cmp.Diff(gotStrSlice, names); diff != "" {
-		t.Errorf("Payload.GetStringSlice(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"names", gotStrSlice, err, names, diff)
-	}
-
-	gotIntSlice, err := payload.GetIntSlice("primes")
-	if diff := cmp.Diff(gotIntSlice, primes); diff != "" {
-		t.Errorf("Payload.GetIntSlice(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"primes", gotIntSlice, err, primes, diff)
-	}
-
-	gotStrMap, err := payload.GetStringMap("user")
-	if diff := cmp.Diff(gotStrMap, user); diff != "" {
-		t.Errorf("Payload.GetStringMap(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"user", gotStrMap, err, user, diff)
-	}
-
-	gotStrMapStr, err := payload.GetStringMapString("location")
-	if diff := cmp.Diff(gotStrMapStr, location); diff != "" {
-		t.Errorf("Payload.GetStringMapString(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"location", gotStrMapStr, err, location, diff)
-	}
-
-	gotStrMapStrSlice, err := payload.GetStringMapStringSlice("favs")
-	if diff := cmp.Diff(gotStrMapStrSlice, favs); diff != "" {
-		t.Errorf("Payload.GetStringMapStringSlice(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"favs", gotStrMapStrSlice, err, favs, diff)
-	}
-
-	gotStrMapInt, err := payload.GetStringMapInt("counter")
-	if diff := cmp.Diff(gotStrMapInt, counter); diff != "" {
-		t.Errorf("Payload.GetStringMapInt(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"counter", gotStrMapInt, err, counter, diff)
-	}
-
-	gotStrMapBool, err := payload.GetStringMapBool("features")
-	if diff := cmp.Diff(gotStrMapBool, features); diff != "" {
-		t.Errorf("Payload.GetStringMapBool(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"features", gotStrMapBool, err, features, diff)
-	}
-
-	gotTime, err := payload.GetTime("timestamp")
-	if !gotTime.Equal(now) {
-		t.Errorf("Payload.GetTime(%q) = %v, %v, want %v, nil",
-			"timestamp", gotTime, err, now)
-	}
-
-	gotDuration, err := payload.GetDuration("duration")
-	if gotDuration != duration {
-		t.Errorf("Payload.GetDuration(%q) = %v, %v, want %v, nil",
-			"duration", gotDuration, err, duration)
+		// access non-existent key.
+		got, err = payload.GetStringMapBool(tc.nonkey)
+		if err == nil || got != nil {
+			t.Errorf("Payload.GetStringMapBool(%q) = %v, %v; want nil, error",
+				tc.key, got, err)
+		}
 	}
 }
 
-func TestPayloadGetWithMarshaling(t *testing.T) {
-	names := []string{"luke", "anakin", "rey"}
-	primes := []int{2, 3, 5, 7, 11, 13, 17}
-	user := map[string]interface{}{"name": "Ken", "score": 3.14}
-	location := map[string]string{"address": "123 Main St.", "state": "NY", "zipcode": "10002"}
-	favs := map[string][]string{
-		"movies":   {"forrest gump", "star wars"},
-		"tv_shows": {"game of throwns", "HIMYM", "breaking bad"},
-	}
-	counter := map[string]int{
-		"a": 1,
-		"b": 101,
-		"c": 42,
-	}
-	features := map[string]bool{
-		"A": false,
-		"B": true,
-		"C": true,
-	}
-	now := time.Now()
-	duration := 15 * time.Minute
-
-	in := Payload{map[string]interface{}{
-		"subject":      "Hello",
-		"recipient_id": 9876,
-		"pi":           3.14,
-		"enabled":      true,
-		"names":        names,
-		"primes":       primes,
-		"user":         user,
-		"location":     location,
-		"favs":         favs,
-		"counter":      counter,
-		"features":     features,
-		"timestamp":    now,
-		"duration":     duration,
-	}}
-	// encode and then decode task messsage
-	inMsg := h.NewTaskMessage("testing", in.data)
-	data, err := json.Marshal(inMsg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var outMsg base.TaskMessage
-	err = json.Unmarshal(data, &outMsg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	out := Payload{outMsg.Payload}
-
-	gotStr, err := out.GetString("subject")
-	if gotStr != "Hello" || err != nil {
-		t.Errorf("Payload.GetString(%q) = %v, %v; want %q, nil",
-			"subject", gotStr, err, "Hello")
+func TestPayloadTime(t *testing.T) {
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"current": time.Now()},
+			key:    "current",
+			nonkey: "unknown",
+		},
 	}
 
-	gotInt, err := out.GetInt("recipient_id")
-	if gotInt != 9876 || err != nil {
-		t.Errorf("Payload.GetInt(%q) = %v, %v; want %v, nil",
-			"recipient_id", gotInt, err, 9876)
-	}
+	for _, tc := range tests {
+		payload := Payload{tc.data}
 
-	gotFloat, err := out.GetFloat64("pi")
-	if gotFloat != 3.14 || err != nil {
-		t.Errorf("Payload.GetFloat64(%q) = %v, %v; want %v, nil",
-			"pi", gotFloat, err, 3.14)
-	}
+		got, err := payload.GetTime(tc.key)
+		diff := cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("Payload.GetTime(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
 
-	gotBool, err := out.GetBool("enabled")
-	if gotBool != true || err != nil {
-		t.Errorf("Payload.GetBool(%q) = %v, %v; want %v, nil",
-			"enabled", gotBool, err, true)
-	}
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetTime(tc.key)
+		diff = cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("With Marshaling: Payload.GetTime(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
 
-	gotStrSlice, err := out.GetStringSlice("names")
-	if diff := cmp.Diff(gotStrSlice, names); diff != "" {
-		t.Errorf("Payload.GetStringSlice(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"names", gotStrSlice, err, names, diff)
-	}
-
-	gotIntSlice, err := out.GetIntSlice("primes")
-	if diff := cmp.Diff(gotIntSlice, primes); diff != "" {
-		t.Errorf("Payload.GetIntSlice(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"primes", gotIntSlice, err, primes, diff)
-	}
-
-	gotStrMap, err := out.GetStringMap("user")
-	if diff := cmp.Diff(gotStrMap, user); diff != "" {
-		t.Errorf("Payload.GetStringMap(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"user", gotStrMap, err, user, diff)
-	}
-
-	gotStrMapStr, err := out.GetStringMapString("location")
-	if diff := cmp.Diff(gotStrMapStr, location); diff != "" {
-		t.Errorf("Payload.GetStringMapString(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"location", gotStrMapStr, err, location, diff)
-	}
-
-	gotStrMapStrSlice, err := out.GetStringMapStringSlice("favs")
-	if diff := cmp.Diff(gotStrMapStrSlice, favs); diff != "" {
-		t.Errorf("Payload.GetStringMapStringSlice(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"favs", gotStrMapStrSlice, err, favs, diff)
-	}
-
-	gotStrMapInt, err := out.GetStringMapInt("counter")
-	if diff := cmp.Diff(gotStrMapInt, counter); diff != "" {
-		t.Errorf("Payload.GetStringMapInt(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"counter", gotStrMapInt, err, counter, diff)
-	}
-
-	gotStrMapBool, err := out.GetStringMapBool("features")
-	if diff := cmp.Diff(gotStrMapBool, features); diff != "" {
-		t.Errorf("Payload.GetStringMapBool(%q) = %v, %v, want %v, nil;\n(-want,+got)\n%s",
-			"features", gotStrMapBool, err, features, diff)
-	}
-
-	gotTime, err := out.GetTime("timestamp")
-	if !gotTime.Equal(now) {
-		t.Errorf("Payload.GetTime(%q) = %v, %v, want %v, nil",
-			"timestamp", gotTime, err, now)
-	}
-
-	gotDuration, err := out.GetDuration("duration")
-	if gotDuration != duration {
-		t.Errorf("Payload.GetDuration(%q) = %v, %v, want %v, nil",
-			"duration", gotDuration, err, duration)
+		// access non-existent key.
+		got, err = payload.GetTime(tc.nonkey)
+		if err == nil || !got.IsZero() {
+			t.Errorf("Payload.GetTime(%q) = %v, %v; want %v, error",
+				tc.key, got, err, time.Time{})
+		}
 	}
 }
 
-func TestPayloadKeyNotFound(t *testing.T) {
-	payload := Payload{nil}
-
-	key := "something"
-	gotStr, err := payload.GetString(key)
-	if err == nil || gotStr != "" {
-		t.Errorf("Payload.GetString(%q) = %v, %v; want '', error",
-			key, gotStr, err)
+func TestPayloadDuration(t *testing.T) {
+	tests := []payloadTest{
+		{
+			data:   map[string]interface{}{"duration": 15 * time.Minute},
+			key:    "duration",
+			nonkey: "unknown",
+		},
 	}
 
-	gotInt, err := payload.GetInt(key)
-	if err == nil || gotInt != 0 {
-		t.Errorf("Payload.GetInt(%q) = %v, %v; want 0, error",
-			key, gotInt, err)
-	}
+	for _, tc := range tests {
+		payload := Payload{tc.data}
 
-	gotFloat, err := payload.GetFloat64(key)
-	if err == nil || gotFloat != 0 {
-		t.Errorf("Payload.GetFloat64(%q = %v, %v; want 0, error",
-			key, gotFloat, err)
-	}
+		got, err := payload.GetDuration(tc.key)
+		diff := cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("Payload.GetDuration(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
 
-	gotBool, err := payload.GetBool(key)
-	if err == nil || gotBool != false {
-		t.Errorf("Payload.GetBool(%q) = %v, %v; want false, error",
-			key, gotBool, err)
-	}
+		// encode and then decode task messsage.
+		in := h.NewTaskMessage("testing", tc.data)
+		b, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out base.TaskMessage
+		err = json.Unmarshal(b, &out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		payload = Payload{out.Payload}
+		got, err = payload.GetDuration(tc.key)
+		diff = cmp.Diff(got, tc.data[tc.key])
+		if err != nil || diff != "" {
+			t.Errorf("With Marshaling: Payload.GetDuration(%q) = %v, %v, want %v, nil",
+				tc.key, got, err, tc.data[tc.key])
+		}
 
-	gotStrSlice, err := payload.GetStringSlice(key)
-	if err == nil || gotStrSlice != nil {
-		t.Errorf("Payload.GetStringSlice(%q) = %v, %v; want nil, error",
-			key, gotStrSlice, err)
-	}
-
-	gotIntSlice, err := payload.GetIntSlice(key)
-	if err == nil || gotIntSlice != nil {
-		t.Errorf("Payload.GetIntSlice(%q) = %v, %v; want nil, error",
-			key, gotIntSlice, err)
-	}
-
-	gotStrMap, err := payload.GetStringMap(key)
-	if err == nil || gotStrMap != nil {
-		t.Errorf("Payload.GetStringMap(%q) = %v, %v; want nil, error",
-			key, gotStrMap, err)
-	}
-
-	gotStrMapStr, err := payload.GetStringMapString(key)
-	if err == nil || gotStrMapStr != nil {
-		t.Errorf("Payload.GetStringMapString(%q) = %v, %v; want nil, error",
-			key, gotStrMapStr, err)
-	}
-
-	gotStrMapStrSlice, err := payload.GetStringMapStringSlice(key)
-	if err == nil || gotStrMapStrSlice != nil {
-		t.Errorf("Payload.GetStringMapStringSlice(%q) = %v, %v; want nil, error",
-			key, gotStrMapStrSlice, err)
-	}
-
-	gotStrMapInt, err := payload.GetStringMapInt(key)
-	if err == nil || gotStrMapInt != nil {
-		t.Errorf("Payload.GetStringMapInt(%q) = %v, %v, want nil, error",
-			key, gotStrMapInt, err)
-	}
-
-	gotStrMapBool, err := payload.GetStringMapBool(key)
-	if err == nil || gotStrMapBool != nil {
-		t.Errorf("Payload.GetStringMapBool(%q) = %v, %v, want nil, error",
-			key, gotStrMapBool, err)
-	}
-
-	gotTime, err := payload.GetTime(key)
-	if err == nil || !gotTime.IsZero() {
-		t.Errorf("Payload.GetTime(%q) = %v, %v, want %v, error",
-			key, gotTime, err, time.Time{})
-	}
-
-	gotDuration, err := payload.GetDuration(key)
-	if err == nil || gotDuration != 0 {
-		t.Errorf("Payload.GetDuration(%q) = %v, %v, want 0, error",
-			key, gotDuration, err)
+		// access non-existent key.
+		got, err = payload.GetDuration(tc.nonkey)
+		if err == nil || got != 0 {
+			t.Errorf("Payload.GetDuration(%q) = %v, %v; want %v, error",
+				tc.key, got, err, time.Duration(0))
+		}
 	}
 }
 
