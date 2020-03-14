@@ -884,7 +884,7 @@ func TestWriteProcessStateWithWorkers(t *testing.T) {
 		gotWorkers[key] = &w
 	}
 	wantWorkers := map[string]*base.WorkerInfo{
-		msg1.ID.String(): &base.WorkerInfo{
+		msg1.ID.String(): {
 			Host:    host,
 			PID:     pid,
 			ID:      msg1.ID,
@@ -893,7 +893,7 @@ func TestWriteProcessStateWithWorkers(t *testing.T) {
 			Payload: msg1.Payload,
 			Started: w1Started,
 		},
-		msg2.ID.String(): &base.WorkerInfo{
+		msg2.ID.String(): {
 			Host:    host,
 			PID:     pid,
 			ID:      msg2.ID,
