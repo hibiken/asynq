@@ -110,9 +110,9 @@ func TestProcessStateConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	started := time.Now()
 	msgs := []*TaskMessage{
-		&TaskMessage{ID: xid.New(), Type: "type1", Payload: map[string]interface{}{"user_id": 42}},
-		&TaskMessage{ID: xid.New(), Type: "type2"},
-		&TaskMessage{ID: xid.New(), Type: "type3"},
+		{ID: xid.New(), Type: "type1", Payload: map[string]interface{}{"user_id": 42}},
+		{ID: xid.New(), Type: "type2"},
+		{ID: xid.New(), Type: "type3"},
 	}
 
 	// Simulate hearbeater calling SetStatus and SetStarted.
