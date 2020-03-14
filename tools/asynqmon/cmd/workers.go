@@ -22,7 +22,7 @@ var workersCmd = &cobra.Command{
 	Short: "Shows all running workers information",
 	Long: `Workers (asynqmon workers) will show all running workers information.
 
-The command shows the follwoing for each worker:
+The command shows the following for each worker:
 * Process in which the worker is running
 * ID of the task worker is processing
 * Type of the task worker is processing
