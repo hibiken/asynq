@@ -205,7 +205,7 @@ go get -u github.com/hibiken/asynq/tools/asynqmon
 | Dependency                 | Version |
 | -------------------------- | ------- |
 | [Redis](https://redis.io/) | v2.8+   |
-| [Go](https://golang.org/)  | v1.12+  |
+| [Go](https://golang.org/)  | v1.13+  |
 
 ## Contributing
 

@@ -16,6 +16,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/rs/xid"
 )
 
 // TODO(hibiken): Get Redis address and db number from ENV variables.
@@ -65,6 +66,48 @@ func TestEnqueue(t *testing.T) {
 		}
 		if !r.client.SIsMember(base.AllQueues, qkey).Val() {
 			t.Errorf("%q is not a member of SET %q", qkey, base.AllQueues)
+		}
+	}
+}
+
+func TestEnqueueUnique(t *testing.T) {
+	r := setup(t)
+	m1 := base.TaskMessage{
+		ID:        xid.New(),
+		Type:      "email",
+		Payload:   map[string]interface{}{"user_id": 123},
+		Queue:     base.DefaultQueueName,
+		UniqueKey: "email:user_id=123:default",
+	}
+
+	tests := []struct {
+		msg *base.TaskMessage
+		ttl time.Duration // uniqueness ttl
+	}{
+		{&m1, time.Minute},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case.
+
+		err := r.EnqueueUnique(tc.msg, tc.ttl)
+		if err != nil {
+			t.Errorf("First message: (*RDB).EnqueueUnique(%v, %v) = %v, want nil",
+				tc.msg, tc.ttl, err)
+			continue
+		}
+
+		got := r.EnqueueUnique(tc.msg, tc.ttl)
+		if got != ErrDuplicateTask {
+			t.Errorf("Second message: (*RDB).EnqueueUnique(%v, %v) = %v, want %v",
+				tc.msg, tc.ttl, got, ErrDuplicateTask)
+			continue
+		}
+
+		gotTTL := r.client.TTL(tc.msg.UniqueKey).Val()
+		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
+			t.Errorf("TTL %q = %v, want %v", tc.msg.UniqueKey, gotTTL, tc.ttl)
+			continue
 		}
 	}
 }
@@ -188,6 +231,13 @@ func TestDone(t *testing.T) {
 	r := setup(t)
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("export_csv", nil)
+	t3 := &base.TaskMessage{
+		ID:        xid.New(),
+		Type:      "reindex",
+		Payload:   nil,
+		UniqueKey: "reindex:nil:default",
+		Queue:     "default",
+	}
 
 	tests := []struct {
 		inProgress     []*base.TaskMessage // initial state of the in-progress list
@@ -204,11 +254,25 @@ func TestDone(t *testing.T) {
 			target:         t1,
 			wantInProgress: []*base.TaskMessage{},
 		},
+		{
+			inProgress:     []*base.TaskMessage{t1, t2, t3},
+			target:         t3,
+			wantInProgress: []*base.TaskMessage{t1, t2},
+		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedInProgressQueue(t, r.client, tc.inProgress)
+		for _, msg := range tc.inProgress {
+			// Set uniqueness lock if unique key is present.
+			if len(msg.UniqueKey) > 0 {
+				err := r.client.SetNX(msg.UniqueKey, msg.ID.String(), time.Minute).Err()
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
 
 		err := r.Done(tc.target)
 		if err != nil {
@@ -231,6 +295,10 @@ func TestDone(t *testing.T) {
 		gotTTL := r.client.TTL(processedKey).Val()
 		if gotTTL > statsTTL {
 			t.Errorf("TTL %q = %v, want less than or equal to %v", processedKey, gotTTL, statsTTL)
+		}
+
+		if len(tc.target.UniqueKey) > 0 && r.client.Exists(tc.target.UniqueKey).Val() != 0 {
+			t.Errorf("Uniqueness lock %q still exists", tc.target.UniqueKey)
 		}
 	}
 }
@@ -339,6 +407,58 @@ func TestSchedule(t *testing.T) {
 		}
 		if int64(gotScheduled[0].Score) != tc.processAt.Unix() {
 			t.Errorf("%s inserted an item with score %d, want %d", desc, int64(gotScheduled[0].Score), tc.processAt.Unix())
+			continue
+		}
+	}
+}
+
+func TestScheduleUnique(t *testing.T) {
+	r := setup(t)
+	m1 := base.TaskMessage{
+		ID:        xid.New(),
+		Type:      "email",
+		Payload:   map[string]interface{}{"user_id": 123},
+		Queue:     base.DefaultQueueName,
+		UniqueKey: "email:user_id=123:default",
+	}
+
+	tests := []struct {
+		msg       *base.TaskMessage
+		processAt time.Time
+		ttl       time.Duration // uniqueness lock ttl
+	}{
+		{&m1, time.Now().Add(15 * time.Minute), time.Minute},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+
+		desc := fmt.Sprintf("(*RDB).ScheduleUnique(%v, %v, %v)", tc.msg, tc.processAt, tc.ttl)
+		err := r.ScheduleUnique(tc.msg, tc.processAt, tc.ttl)
+		if err != nil {
+			t.Errorf("Frist task: %s = %v, want nil", desc, err)
+			continue
+		}
+
+		gotScheduled := h.GetScheduledEntries(t, r.client)
+		if len(gotScheduled) != 1 {
+			t.Errorf("%s inserted %d items to %q, want 1 items inserted", desc, len(gotScheduled), base.ScheduledQueue)
+			continue
+		}
+		if int64(gotScheduled[0].Score) != tc.processAt.Unix() {
+			t.Errorf("%s inserted an item with score %d, want %d", desc, int64(gotScheduled[0].Score), tc.processAt.Unix())
+			continue
+		}
+
+		got := r.ScheduleUnique(tc.msg, tc.processAt, tc.ttl)
+		if got != ErrDuplicateTask {
+			t.Errorf("Second task: %s = %v, want %v",
+				desc, got, ErrDuplicateTask)
+		}
+
+		gotTTL := r.client.TTL(tc.msg.UniqueKey).Val()
+		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
+			t.Errorf("TTL %q = %v, want %v", tc.msg.UniqueKey, gotTTL, tc.ttl)
 			continue
 		}
 	}
@@ -784,8 +904,7 @@ func TestWriteProcessState(t *testing.T) {
 	}
 	// Check ProcessInfo TTL was set correctly
 	gotTTL := r.client.TTL(pkey).Val()
-	timeCmpOpt := cmpopts.EquateApproxTime(time.Second)
-	if !cmp.Equal(ttl, gotTTL, timeCmpOpt) {
+	if !cmp.Equal(ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 		t.Errorf("TTL of %q was %v, want %v", pkey, gotTTL, ttl)
 	}
 	// Check ProcessInfo key was added to the set correctly
@@ -858,8 +977,7 @@ func TestWriteProcessStateWithWorkers(t *testing.T) {
 	}
 	// Check ProcessInfo TTL was set correctly
 	gotTTL := r.client.TTL(pkey).Val()
-	timeCmpOpt := cmpopts.EquateApproxTime(time.Second)
-	if !cmp.Equal(ttl, gotTTL, timeCmpOpt) {
+	if !cmp.Equal(ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 		t.Errorf("TTL of %q was %v, want %v", pkey, gotTTL, ttl)
 	}
 	// Check ProcessInfo key was added to the set correctly

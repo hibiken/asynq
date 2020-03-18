@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Unique` option was added to allow client to enqueue a task only if it's unique within a certain time period.
+
 ## [0.6.2] - 2020-03-15
 
 ### Added

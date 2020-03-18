@@ -97,6 +97,11 @@ type TaskMessage struct {
 	//
 	// time.Time's zero value means no deadline.
 	Deadline string
+
+	// UniqueKey holds the redis key used for uniqueness lock for this task.
+	//
+	// Empty string indicates that no uniqueness lock was used.
+	UniqueKey string
 }
 
 // ProcessState holds process level information.
