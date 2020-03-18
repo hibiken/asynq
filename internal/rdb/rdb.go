@@ -22,6 +22,9 @@ var (
 
 	// ErrTaskNotFound indicates that a task that matches the given identifier was not found.
 	ErrTaskNotFound = errors.New("could not find a task")
+
+	// ErrDuplicateTask indicates that another task with the same unique key holds the uniqueness lock.
+	ErrDuplicateTask = errors.New("task already exists")
 )
 
 const statsTTL = 90 * 24 * time.Hour // 90 days
@@ -57,6 +60,46 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 	}
 	key := base.QueueKey(msg.Queue)
 	return enqueueCmd.Run(r.client, []string{key, base.AllQueues}, bytes).Err()
+}
+
+// KEYS[1] -> unique key in the form <type>:<payload>:<qname>
+// KEYS[2] -> asynq:queues:<qname>
+// KEYS[2] -> asynq:queues
+// ARGV[1] -> task ID
+// ARGV[2] -> uniqueness lock TTL
+// ARGV[3] -> task message data
+var enqueueUniqueCmd = redis.NewScript(`
+local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
+if not ok then
+  return 0
+end
+redis.call("LPUSH", KEYS[2], ARGV[3])
+redis.call("SADD", KEYS[3], KEYS[2])
+return 1
+`)
+
+// EnqueueUnique inserts the given task if the task's uniqueness lock can be acquired.
+// It returns ErrDuplicateTask if the lock cannot be acquired.
+func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	key := base.QueueKey(msg.Queue)
+	res, err := enqueueUniqueCmd.Run(r.client,
+		[]string{msg.UniqueKey, key, base.AllQueues},
+		msg.ID.String(), int(ttl.Seconds()), bytes).Result()
+	if err != nil {
+		return err
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return fmt.Errorf("could not cast %v to int64", res)
+	}
+	if n == 0 {
+		return ErrDuplicateTask
+	}
+	return nil
 }
 
 // Dequeue queries given queues in order and pops a task message if there is one and returns it.
@@ -118,8 +161,10 @@ func (r *RDB) dequeue(queues ...string) (data string, err error) {
 
 // KEYS[1] -> asynq:in_progress
 // KEYS[2] -> asynq:processed:<yyyy-mm-dd>
+// KEYS[3] -> unique key in the format <type>:<payload>:<qname>
 // ARGV[1] -> base.TaskMessage value
 // ARGV[2] -> stats expiration timestamp
+// ARGV[3] -> task ID
 // Note: LREM count ZERO means "remove all elements equal to val"
 var doneCmd = redis.NewScript(`
 redis.call("LREM", KEYS[1], 0, ARGV[1]) 
@@ -127,10 +172,14 @@ local n = redis.call("INCR", KEYS[2])
 if tonumber(n) == 1 then
 	redis.call("EXPIREAT", KEYS[2], ARGV[2])
 end
+if string.len(KEYS[3]) > 0 and redis.call("GET", KEYS[3]) == ARGV[3] then
+  redis.call("DEL", KEYS[3])
+end
 return redis.status_reply("OK")
 `)
 
 // Done removes the task from in-progress queue to mark the task as done.
+// It removes a uniqueness lock acquired by the task, if any.
 func (r *RDB) Done(msg *base.TaskMessage) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
@@ -140,8 +189,8 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 	processedKey := base.ProcessedKey(now)
 	expireAt := now.Add(statsTTL)
 	return doneCmd.Run(r.client,
-		[]string{base.InProgressQueue, processedKey},
-		bytes, expireAt.Unix()).Err()
+		[]string{base.InProgressQueue, processedKey, msg.UniqueKey},
+		bytes, expireAt.Unix(), msg.ID.String()).Err()
 }
 
 // KEYS[1] -> asynq:in_progress
@@ -164,15 +213,71 @@ func (r *RDB) Requeue(msg *base.TaskMessage) error {
 		string(bytes)).Err()
 }
 
+// KEYS[1] -> asynq:scheduled
+// KEYS[2] -> asynq:queues
+// ARGV[1] -> score (process_at timestamp)
+// ARGV[2] -> task message
+// ARGV[3] -> queue key
+var scheduleCmd = redis.NewScript(`
+redis.call("ZADD", KEYS[1], ARGV[1], ARGV[2])
+redis.call("SADD", KEYS[2], ARGV[3])
+return 1
+`)
+
 // Schedule adds the task to the backlog queue to be processed in the future.
 func (r *RDB) Schedule(msg *base.TaskMessage, processAt time.Time) error {
 	bytes, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
+	qkey := base.QueueKey(msg.Queue)
 	score := float64(processAt.Unix())
-	return r.client.ZAdd(base.ScheduledQueue,
-		&redis.Z{Member: string(bytes), Score: score}).Err()
+	return scheduleCmd.Run(r.client,
+		[]string{base.ScheduledQueue, base.AllQueues},
+		score, bytes, qkey).Err()
+}
+
+// KEYS[1] -> unique key in the format <type>:<payload>:<qname>
+// KEYS[2] -> asynq:scheduled
+// KEYS[3] -> asynq:queues
+// ARGV[1] -> task ID
+// ARGV[2] -> uniqueness lock TTL
+// ARGV[3] -> score (process_at timestamp)
+// ARGV[4] -> task message
+// ARGV[5] -> queue key
+var scheduleUniqueCmd = redis.NewScript(`
+local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
+if not ok then
+  return 0
+end
+redis.call("ZADD", KEYS[2], ARGV[3], ARGV[4])
+redis.call("SADD", KEYS[3], ARGV[5])
+return 1
+`)
+
+// Schedule adds the task to the backlog queue to be processed in the future if the uniqueness lock can be acquired.
+// It returns ErrDuplicateTask if the lock cannot be acquired.
+func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl time.Duration) error {
+	bytes, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	qkey := base.QueueKey(msg.Queue)
+	score := float64(processAt.Unix())
+	res, err := scheduleUniqueCmd.Run(r.client,
+		[]string{msg.UniqueKey, base.ScheduledQueue, base.AllQueues},
+		msg.ID.String(), int(ttl.Seconds()), score, bytes, qkey).Result()
+	if err != nil {
+		return err
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return fmt.Errorf("could not cast %v to int64", res)
+	}
+	if n == 0 {
+		return ErrDuplicateTask
+	}
+	return nil
 }
 
 // KEYS[1] -> asynq:in_progress

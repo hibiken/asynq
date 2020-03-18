@@ -5,10 +5,12 @@
 package asynq
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 )
@@ -358,6 +360,213 @@ func TestClientEnqueueIn(t *testing.T) {
 		gotScheduled := h.GetScheduledEntries(t, r)
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, h.IgnoreIDOpt); diff != "" {
 			t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledQueue, diff)
+		}
+	}
+}
+
+func TestUniqueKey(t *testing.T) {
+	tests := []struct {
+		desc  string
+		task  *Task
+		ttl   time.Duration
+		qname string
+		want  string
+	}{
+		{
+			"with zero TTL",
+			NewTask("email:send", map[string]interface{}{"a": 123, "b": "hello", "c": true}),
+			0,
+			"default",
+			"",
+		},
+		{
+			"with primitive types",
+			NewTask("email:send", map[string]interface{}{"a": 123, "b": "hello", "c": true}),
+			10 * time.Minute,
+			"default",
+			"email:send:a=123,b=hello,c=true:default",
+		},
+		{
+			"with unsorted keys",
+			NewTask("email:send", map[string]interface{}{"b": "hello", "c": true, "a": 123}),
+			10 * time.Minute,
+			"default",
+			"email:send:a=123,b=hello,c=true:default",
+		},
+		{
+			"with composite types",
+			NewTask("email:send",
+				map[string]interface{}{
+					"address": map[string]string{"line": "123 Main St", "city": "Boston", "state": "MA"},
+					"names":   []string{"bob", "mike", "rob"}}),
+			10 * time.Minute,
+			"default",
+			"email:send:address=map[city:Boston line:123 Main St state:MA],names=[bob mike rob]:default",
+		},
+		{
+			"with complex types",
+			NewTask("email:send",
+				map[string]interface{}{
+					"time":     time.Date(2020, time.July, 28, 0, 0, 0, 0, time.UTC),
+					"duration": time.Hour}),
+			10 * time.Minute,
+			"default",
+			"email:send:duration=1h0m0s,time=2020-07-28 00:00:00 +0000 UTC:default",
+		},
+		{
+			"with nil payload",
+			NewTask("reindex", nil),
+			10 * time.Minute,
+			"default",
+			"reindex:nil:default",
+		},
+	}
+
+	for _, tc := range tests {
+		got := uniqueKey(tc.task, tc.ttl, tc.qname)
+		if got != tc.want {
+			t.Errorf("%s: uniqueKey(%v, %v, %q) = %q, want %q", tc.desc, tc.task, tc.ttl, tc.qname, got, tc.want)
+		}
+	}
+}
+
+func TestEnqueueUnique(t *testing.T) {
+	r := setup(t)
+	c := NewClient(RedisClientOpt{
+		Addr: redisAddr,
+		DB:   redisDB,
+	})
+
+	tests := []struct {
+		task *Task
+		ttl  time.Duration
+	}{
+		{
+			NewTask("email", map[string]interface{}{"user_id": 123}),
+			time.Hour,
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r) // clean up db before each test case.
+
+		// Enqueue the task first. It should succeed.
+		err := c.Enqueue(tc.task, Unique(tc.ttl))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		gotTTL := r.TTL(uniqueKey(tc.task, tc.ttl, base.DefaultQueueName)).Val()
+		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
+			t.Errorf("TTL = %v, want %v", gotTTL, tc.ttl)
+			continue
+		}
+
+		// Enqueue the task again. It should fail.
+		err = c.Enqueue(tc.task, Unique(tc.ttl))
+		if err == nil {
+			t.Errorf("Enqueueing %+v did not return an error", tc.task)
+			continue
+		}
+		if !errors.Is(err, ErrDuplicateTask) {
+			t.Errorf("Enqueueing %+v returned an error that is not ErrDuplicateTask", tc.task)
+			continue
+		}
+	}
+}
+
+func TestEnqueueInUnique(t *testing.T) {
+	r := setup(t)
+	c := NewClient(RedisClientOpt{
+		Addr: redisAddr,
+		DB:   redisDB,
+	})
+
+	tests := []struct {
+		task *Task
+		d    time.Duration
+		ttl  time.Duration
+	}{
+		{
+			NewTask("reindex", nil),
+			time.Hour,
+			10 * time.Minute,
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r) // clean up db before each test case.
+
+		// Enqueue the task first. It should succeed.
+		err := c.EnqueueIn(tc.d, tc.task, Unique(tc.ttl))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		gotTTL := r.TTL(uniqueKey(tc.task, tc.ttl, base.DefaultQueueName)).Val()
+		wantTTL := time.Duration(tc.ttl.Seconds()+tc.d.Seconds()) * time.Second
+		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
+			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)
+			continue
+		}
+
+		// Enqueue the task again. It should fail.
+		err = c.EnqueueIn(tc.d, tc.task, Unique(tc.ttl))
+		if err == nil {
+			t.Errorf("Enqueueing %+v did not return an error", tc.task)
+			continue
+		}
+		if !errors.Is(err, ErrDuplicateTask) {
+			t.Errorf("Enqueueing %+v returned an error that is not ErrDuplicateTask", tc.task)
+			continue
+		}
+	}
+}
+
+func TestEnqueueAtUnique(t *testing.T) {
+	r := setup(t)
+	c := NewClient(RedisClientOpt{
+		Addr: redisAddr,
+		DB:   redisDB,
+	})
+
+	tests := []struct {
+		task *Task
+		at   time.Time
+		ttl  time.Duration
+	}{
+		{
+			NewTask("reindex", nil),
+			time.Now().Add(time.Hour),
+			10 * time.Minute,
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r) // clean up db before each test case.
+
+		// Enqueue the task first. It should succeed.
+		err := c.EnqueueAt(tc.at, tc.task, Unique(tc.ttl))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		gotTTL := r.TTL(uniqueKey(tc.task, tc.ttl, base.DefaultQueueName)).Val()
+		wantTTL := tc.at.Add(tc.ttl).Sub(time.Now())
+		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
+			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)
+			continue
+		}
+
+		// Enqueue the task again. It should fail.
+		err = c.EnqueueAt(tc.at, tc.task, Unique(tc.ttl))
+		if err == nil {
+			t.Errorf("Enqueueing %+v did not return an error", tc.task)
+			continue
+		}
+		if !errors.Is(err, ErrDuplicateTask) {
+			t.Errorf("Enqueueing %+v returned an error that is not ErrDuplicateTask", tc.task)
+			continue
 		}
 	}
 }

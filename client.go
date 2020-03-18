@@ -5,6 +5,9 @@
 package asynq
 
 import (
+	"errors"
+	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,6 +41,7 @@ type (
 	queueOption    string
 	timeoutOption  time.Duration
 	deadlineOption time.Time
+	uniqueOption   time.Duration
 )
 
 // MaxRetry returns an option to specify the max number of times
@@ -70,11 +74,30 @@ func Deadline(t time.Time) Option {
 	return deadlineOption(t)
 }
 
+// Unique returns an option to enqueue a task only if the given task is unique.
+// Task enqueued with this option is guaranteed to be unique within the given ttl.
+// Once the task gets processed successfully or once the TTL has expired, another task with the same uniqueness may be enqueued.
+// ErrDuplicateTask error is returned when enqueueing a duplicate task.
+//
+// Uniqueness of a task is based on the following properties:
+//     - Task Type
+//     - Task Payload
+//     - Queue Name
+func Unique(ttl time.Duration) Option {
+	return uniqueOption(ttl)
+}
+
+// ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
+//
+// ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
+var ErrDuplicateTask = errors.New("task already exists")
+
 type option struct {
-	retry    int
-	queue    string
-	timeout  time.Duration
-	deadline time.Time
+	retry     int
+	queue     string
+	timeout   time.Duration
+	deadline  time.Time
+	uniqueTTL time.Duration
 }
 
 func composeOptions(opts ...Option) option {
@@ -94,11 +117,46 @@ func composeOptions(opts ...Option) option {
 			res.timeout = time.Duration(opt)
 		case deadlineOption:
 			res.deadline = time.Time(opt)
+		case uniqueOption:
+			res.uniqueTTL = time.Duration(opt)
 		default:
 			// ignore unexpected option
 		}
 	}
 	return res
+}
+
+// uniqueKey computes the redis key used for the given task.
+// It returns an empty string if ttl is zero.
+func uniqueKey(t *Task, ttl time.Duration, qname string) string {
+	if ttl == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s:%s:%s", t.Type, serializePayload(t.Payload.data), qname)
+}
+
+func serializePayload(payload map[string]interface{}) string {
+	if payload == nil {
+		return "nil"
+	}
+	type entry struct {
+		k string
+		v interface{}
+	}
+	var es []entry
+	for k, v := range payload {
+		es = append(es, entry{k, v})
+	}
+	// sort entries by key
+	sort.Slice(es, func(i, j int) bool { return es[i].k < es[j].k })
+	var b strings.Builder
+	for _, e := range es {
+		if b.Len() > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(fmt.Sprintf("%s=%v", e.k, e.v))
+	}
+	return b.String()
 }
 
 const (
@@ -115,15 +173,25 @@ const (
 func (c *Client) EnqueueAt(t time.Time, task *Task, opts ...Option) error {
 	opt := composeOptions(opts...)
 	msg := &base.TaskMessage{
-		ID:       xid.New(),
-		Type:     task.Type,
-		Payload:  task.Payload.data,
-		Queue:    opt.queue,
-		Retry:    opt.retry,
-		Timeout:  opt.timeout.String(),
-		Deadline: opt.deadline.Format(time.RFC3339),
+		ID:        xid.New(),
+		Type:      task.Type,
+		Payload:   task.Payload.data,
+		Queue:     opt.queue,
+		Retry:     opt.retry,
+		Timeout:   opt.timeout.String(),
+		Deadline:  opt.deadline.Format(time.RFC3339),
+		UniqueKey: uniqueKey(task, opt.uniqueTTL, opt.queue),
 	}
-	return c.enqueue(msg, t)
+	var err error
+	if time.Now().After(t) {
+		err = c.enqueue(msg, opt.uniqueTTL)
+	} else {
+		err = c.schedule(msg, t, opt.uniqueTTL)
+	}
+	if err == rdb.ErrDuplicateTask {
+		return fmt.Errorf("%w", ErrDuplicateTask)
+	}
+	return err
 }
 
 // Enqueue enqueues task to be processed immediately.
@@ -146,9 +214,17 @@ func (c *Client) EnqueueIn(d time.Duration, task *Task, opts ...Option) error {
 	return c.EnqueueAt(time.Now().Add(d), task, opts...)
 }
 
-func (c *Client) enqueue(msg *base.TaskMessage, t time.Time) error {
-	if time.Now().After(t) {
-		return c.rdb.Enqueue(msg)
+func (c *Client) enqueue(msg *base.TaskMessage, uniqueTTL time.Duration) error {
+	if uniqueTTL > 0 {
+		return c.rdb.EnqueueUnique(msg, uniqueTTL)
+	}
+	return c.rdb.Enqueue(msg)
+}
+
+func (c *Client) schedule(msg *base.TaskMessage, t time.Time, uniqueTTL time.Duration) error {
+	if uniqueTTL > 0 {
+		ttl := t.Add(uniqueTTL).Sub(time.Now())
+		return c.rdb.ScheduleUnique(msg, t, ttl)
 	}
 	return c.rdb.Schedule(msg, t)
 }
