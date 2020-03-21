@@ -255,7 +255,7 @@ redis.call("SADD", KEYS[3], ARGV[5])
 return 1
 `)
 
-// Schedule adds the task to the backlog queue to be processed in the future if the uniqueness lock can be acquired.
+// ScheduleUnique adds the task to the backlog queue to be processed in the future if the uniqueness lock can be acquired.
 // It returns ErrDuplicateTask if the lock cannot be acquired.
 func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl time.Duration) error {
 	bytes, err := json.Marshal(msg)
