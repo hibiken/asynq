@@ -9,4 +9,5 @@ services:
   - redis-server
 after_success:
   - bash ./.travis/benchcmp.sh
+  - bash ./.travis/goreportcard.sh
   - bash <(curl -s https://codecov.io/bash)
