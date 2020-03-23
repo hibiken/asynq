@@ -22,7 +22,7 @@ First, make sure you are running a Redis server locally.
 $ redis-server
 ```
 
-Next, write a package that encapslates task creation and task handling.
+Next, write a package that encapsulates task creation and task handling.
 
 ```go
 package tasks
