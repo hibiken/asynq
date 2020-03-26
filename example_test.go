@@ -5,6 +5,7 @@
 package asynq_test
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -75,4 +76,20 @@ func ExampleServer_Quiet() {
 	}
 
 	srv.Stop()
+}
+
+func ExampleParseRedisURI() {
+	rconn, err := asynq.ParseRedisURI("redis://localhost:6379/10")
+	if err != nil {
+		log.Fatal(err)
+	}
+	r, ok := rconn.(asynq.RedisClientOpt)
+	if !ok {
+		log.Fatal("unexpected type")
+	}
+	fmt.Println(r.Addr)
+	fmt.Println(r.DB)
+	// Output:
+	// localhost:6379
+	// 10
 }
