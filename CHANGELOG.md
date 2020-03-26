@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ParseRedisURI` helper function is added to create a `RedisConnOpt` from a URI string.
+
 ## [0.8.0] - 2020-04-19
 
 ### Changed
