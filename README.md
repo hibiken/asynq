@@ -10,9 +10,22 @@
 Asynq is a simple Go library for queueing tasks and processing them in the background with workers.  
 It is backed by Redis and it is designed to have a low barrier to entry. It should be integrated in your web stack easily.
 
-**Important Note**: Current major version is zero (v0.x.x) to accomodate rapid development and fast iteration while getting early feedback from users. The public API could change without a major version update before v1.0.0 release.
-
 ![Task Queue Diagram](/docs/assets/task-queue.png)
+
+## Features
+
+- Guaranteed at least one execution of a task
+- Scheduling of tasks
+- Durability since tasks are written to Redis
+- Retries of failed tasks
+- Concurrency management via configuration
+- Weighted priority queues
+- Strict priority queues
+- Low latency to add a task since writes are fast in Redis
+- De-duplication of tasks using unique option
+- Allow timeout and deadline per task
+- Flexible handler interface with support for middlewares
+- CLI to inspect and remote-control queues and tasks
 
 ## Quickstart
 
@@ -206,6 +219,12 @@ go get -u github.com/hibiken/asynq/tools/asynqmon
 | -------------------------- | ------- |
 | [Redis](https://redis.io/) | v2.8+   |
 | [Go](https://golang.org/)  | v1.13+  |
+
+## Stability and Compatibility
+
+**Important Note**: Current major version is zero (v0.x.x) to accomodate rapid development and fast iteration while getting early feedback from users. The public API could change without a major version update before v1.0.0 release.
+
+The library is getting close to a stable release, and we are trying to minimize breaking API changes. However, we cannot make any guarantees at this time.
 
 ## Contributing
 
