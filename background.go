@@ -10,9 +10,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
@@ -252,18 +250,7 @@ func (bg *Background) Run(handler Handler) {
 	bg.logger.Info("Send signal TSTP to stop processing new tasks")
 	bg.logger.Info("Send signal TERM or INT to terminate the process")
 
-	// Wait for a signal to terminate.
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
-	for {
-		sig := <-sigs
-		if sig == syscall.SIGTSTP {
-			bg.processor.stop()
-			bg.ps.SetStatus(base.StatusStopped)
-			continue
-		}
-		break
-	}
+	bg.waitForSignals()
 	fmt.Println()
 	bg.logger.Info("Starting graceful shutdown")
 }
