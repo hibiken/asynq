@@ -11,7 +11,7 @@ import (
 	"github.com/hibiken/asynq/internal/base"
 )
 
-// waitForSignals waits for signals and handle them.
+// waitForSignals waits for signals and handles them.
 // It handles SIGTERM, SIGINT, and SIGTSTP.
 // SIGTERM and SIGINT will signal the process to exit.
 // SIGTSTP will signal the process to stop processing new tasks.
