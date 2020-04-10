@@ -247,9 +247,6 @@ func (bg *Background) Run(handler Handler) {
 	bg.start(handler)
 	defer bg.stop()
 
-	bg.logger.Info("Send signal TSTP to stop processing new tasks")
-	bg.logger.Info("Send signal TERM or INT to terminate the process")
-
 	bg.waitForSignals()
 	fmt.Println()
 	bg.logger.Info("Starting graceful shutdown")
