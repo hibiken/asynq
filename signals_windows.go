@@ -15,6 +15,7 @@ import (
 //
 // Note: Currently SIGTSTP is not supported for windows build.
 func (bg *Background) waitForSignals() {
+	bg.logger.Info("Send signal TERM or INT to terminate the process")
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, windows.SIGTERM, windows.SIGINT)
 	<-sigs
