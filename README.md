@@ -7,10 +7,20 @@
 [![Gitter chat](https://badges.gitter.im/go-asynq/gitter.svg)](https://gitter.im/go-asynq/community)
 [![codecov](https://codecov.io/gh/hibiken/asynq/branch/master/graph/badge.svg)](https://codecov.io/gh/hibiken/asynq)
 
-Asynq is a simple Go library for queueing tasks and processing them in the background with workers.  
-It is backed by Redis and it is designed to have a low barrier to entry. It should be integrated in your web stack easily.
+## Overview
 
-![Task Queue Diagram](/docs/assets/task-queue.png)
+Asynq is a Go library for queueing tasks and processing them in the background with workers. It is backed by Redis and it is designed to have a low barrier to entry. It should be integrated in your web stack easily.
+
+Highlevel overview of how Asynq works:
+
+- Client puts task on a queue
+- Server pulls task off queues and starts a worker goroutine for each task
+- Workers process tasks concurrently
+
+Task queues are used as a mechanism to distribute work across multiple machines.  
+A system can consist of multiple worker servers and brokers, giving way to high availability and horizontal scaling.
+
+![Task Queue Diagram](/docs/assets/overview.png)
 
 ## Stability and Compatibility
 
