@@ -12,6 +12,12 @@ It is backed by Redis and it is designed to have a low barrier to entry. It shou
 
 ![Task Queue Diagram](/docs/assets/task-queue.png)
 
+## Stability and Compatibility
+
+**Important Note**: Current major version is zero (v0.x.x) to accomodate rapid development and fast iteration while getting early feedback from users. The public API could change without a major version update before v1.0.0 release.
+
+**Status**: The library is currently undergoing heavy development with frequent, breaking API changes.
+
 ## Features
 
 - Guaranteed at least one execution of a task
@@ -219,12 +225,6 @@ go get -u github.com/hibiken/asynq/tools/asynqmon
 | -------------------------- | ------- |
 | [Redis](https://redis.io/) | v2.8+   |
 | [Go](https://golang.org/)  | v1.13+  |
-
-## Stability and Compatibility
-
-**Important Note**: Current major version is zero (v0.x.x) to accomodate rapid development and fast iteration while getting early feedback from users. The public API could change without a major version update before v1.0.0 release.
-
-The library is getting close to a stable release, and we are trying to minimize breaking API changes. However, we cannot make any guarantees at this time.
 
 ## Contributing
 
