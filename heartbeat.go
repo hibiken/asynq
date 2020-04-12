@@ -18,7 +18,7 @@ type heartbeater struct {
 	logger Logger
 	rdb    *rdb.RDB
 
-	ps *base.ProcessState
+	ss *base.ServerState
 
 	// channel to communicate back to the long running "heartbeater" goroutine.
 	done chan struct{}
@@ -27,11 +27,11 @@ type heartbeater struct {
 	interval time.Duration
 }
 
-func newHeartbeater(l Logger, rdb *rdb.RDB, ps *base.ProcessState, interval time.Duration) *heartbeater {
+func newHeartbeater(l Logger, rdb *rdb.RDB, ss *base.ServerState, interval time.Duration) *heartbeater {
 	return &heartbeater{
 		logger:   l,
 		rdb:      rdb,
-		ps:       ps,
+		ss:       ss,
 		done:     make(chan struct{}),
 		interval: interval,
 	}
@@ -44,8 +44,8 @@ func (h *heartbeater) terminate() {
 }
 
 func (h *heartbeater) start(wg *sync.WaitGroup) {
-	h.ps.SetStarted(time.Now())
-	h.ps.SetStatus(base.StatusRunning)
+	h.ss.SetStarted(time.Now())
+	h.ss.SetStatus(base.StatusRunning)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -53,7 +53,7 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-h.done:
-				h.rdb.ClearProcessState(h.ps)
+				h.rdb.ClearServerState(h.ss)
 				h.logger.Info("Heartbeater done")
 				return
 			case <-time.After(h.interval):
@@ -66,7 +66,7 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 func (h *heartbeater) beat() {
 	// Note: Set TTL to be long enough so that it won't expire before we write again
 	// and short enough to expire quickly once the process is shut down or killed.
-	err := h.rdb.WriteProcessState(h.ps, h.interval*2)
+	err := h.rdb.WriteServerState(h.ss, h.interval*2)
 	if err != nil {
 		h.logger.Error("could not write heartbeat data: %v", err)
 	}

@@ -21,7 +21,7 @@ type processor struct {
 	logger Logger
 	rdb    *rdb.RDB
 
-	ps *base.ProcessState
+	ss *base.ServerState
 
 	handler Handler
 
@@ -62,9 +62,9 @@ type processor struct {
 type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
 // newProcessor constructs a new processor.
-func newProcessor(l Logger, r *rdb.RDB, ps *base.ProcessState, fn retryDelayFunc,
+func newProcessor(l Logger, r *rdb.RDB, ss *base.ServerState, fn retryDelayFunc,
 	syncCh chan<- *syncRequest, c *base.Cancelations, errHandler ErrorHandler) *processor {
-	info := ps.Get()
+	info := ss.Get()
 	qcfg := normalizeQueueCfg(info.Queues)
 	orderedQueues := []string(nil)
 	if info.StrictPriority {
@@ -73,7 +73,7 @@ func newProcessor(l Logger, r *rdb.RDB, ps *base.ProcessState, fn retryDelayFunc
 	return &processor{
 		logger:         l,
 		rdb:            r,
-		ps:             ps,
+		ss:             ss,
 		queueConfig:    qcfg,
 		orderedQueues:  orderedQueues,
 		retryDelayFunc: fn,
@@ -171,10 +171,10 @@ func (p *processor) exec() {
 		p.requeue(msg)
 		return
 	case p.sema <- struct{}{}: // acquire token
-		p.ps.AddWorkerStats(msg, time.Now())
+		p.ss.AddWorkerStats(msg, time.Now())
 		go func() {
 			defer func() {
-				p.ps.DeleteWorkerStats(msg)
+				p.ss.DeleteWorkerStats(msg)
 				<-p.sema /* release token */
 			}()
 
