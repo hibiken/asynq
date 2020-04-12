@@ -24,7 +24,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 			DB:   redisDB,
 		}
 		client := NewClient(redis)
-		bg := NewBackground(redis, &Config{
+		srv := NewServer(redis, Config{
 			Concurrency: 10,
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
 				return time.Second
@@ -46,11 +46,11 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 		}
 		b.StartTimer() // end setup
 
-		bg.start(HandlerFunc(handler))
+		srv.start(HandlerFunc(handler))
 		wg.Wait()
 
 		b.StopTimer() // begin teardown
-		bg.stop()
+		srv.stop()
 		b.StartTimer() // end teardown
 	}
 }
@@ -67,7 +67,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 			DB:   redisDB,
 		}
 		client := NewClient(redis)
-		bg := NewBackground(redis, &Config{
+		srv := NewServer(redis, Config{
 			Concurrency: 10,
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
 				return time.Second
@@ -99,11 +99,11 @@ func BenchmarkEndToEnd(b *testing.B) {
 		}
 		b.StartTimer() // end setup
 
-		bg.start(HandlerFunc(handler))
+		srv.start(HandlerFunc(handler))
 		wg.Wait()
 
 		b.StopTimer() // begin teardown
-		bg.stop()
+		srv.stop()
 		b.StartTimer() // end teardown
 	}
 }
@@ -124,7 +124,7 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 			DB:   redisDB,
 		}
 		client := NewClient(redis)
-		bg := NewBackground(redis, &Config{
+		srv := NewServer(redis, Config{
 			Concurrency: 10,
 			Queues: map[string]int{
 				"high":    6,
@@ -160,11 +160,11 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 		}
 		b.StartTimer() // end setup
 
-		bg.start(HandlerFunc(handler))
+		srv.start(HandlerFunc(handler))
 		wg.Wait()
 
 		b.StopTimer() // begin teardown
-		bg.stop()
+		srv.stop()
 		b.StartTimer() // end teardown
 	}
 }

@@ -13,7 +13,7 @@ import (
 	"go.uber.org/goleak"
 )
 
-func TestBackground(t *testing.T) {
+func TestServer(t *testing.T) {
 	// https://github.com/go-redis/redis/issues/1029
 	ignoreOpt := goleak.IgnoreTopFunction("github.com/go-redis/redis/v7/internal/pool.(*ConnPool).reaper")
 	defer goleak.VerifyNoLeaks(t, ignoreOpt)
@@ -22,8 +22,8 @@ func TestBackground(t *testing.T) {
 		Addr: "localhost:6379",
 		DB:   15,
 	}
-	client := NewClient(r)
-	bg := NewBackground(r, &Config{
+	c := NewClient(r)
+	srv := NewServer(r, Config{
 		Concurrency: 10,
 	})
 
@@ -32,19 +32,19 @@ func TestBackground(t *testing.T) {
 		return nil
 	}
 
-	bg.start(HandlerFunc(h))
+	srv.start(HandlerFunc(h))
 
-	err := client.Enqueue(NewTask("send_email", map[string]interface{}{"recipient_id": 123}))
+	err := c.Enqueue(NewTask("send_email", map[string]interface{}{"recipient_id": 123}))
 	if err != nil {
 		t.Errorf("could not enqueue a task: %v", err)
 	}
 
-	err = client.EnqueueAt(time.Now().Add(time.Hour), NewTask("send_email", map[string]interface{}{"recipient_id": 456}))
+	err = c.EnqueueAt(time.Now().Add(time.Hour), NewTask("send_email", map[string]interface{}{"recipient_id": 456}))
 	if err != nil {
 		t.Errorf("could not enqueue a task: %v", err)
 	}
 
-	bg.stop()
+	srv.stop()
 }
 
 func TestGCD(t *testing.T) {
