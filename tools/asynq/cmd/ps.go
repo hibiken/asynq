@@ -22,7 +22,7 @@ import (
 var psCmd = &cobra.Command{
 	Use:   "ps",
 	Short: "Shows all background worker processes",
-	Long: `Ps (asynqmon ps) will show all background worker processes
+	Long: `Ps (asynq ps) will show all background worker processes
 backed by the specified redis instance.
 
 The command shows the following for each process:

@@ -20,11 +20,11 @@ var killallValidArgs = []string{"scheduled", "retry"}
 var killallCmd = &cobra.Command{
 	Use:   "killall [state]",
 	Short: "Kills all tasks in the specified state",
-	Long: `Killall (asynqmon killall) will update all tasks from the specified state to dead state.
+	Long: `Killall (asynq killall) will update all tasks from the specified state to dead state.
 
 The argument should be either "scheduled" or "retry".
 
-Example: asynqmon killall retry -> Update all retry tasks to dead tasks`,
+Example: asynq killall retry -> Update all retry tasks to dead tasks`,
 	ValidArgs: killallValidArgs,
 	Args:      cobra.ExactValidArgs(1),
 	Run:       killall,
@@ -59,7 +59,7 @@ func killall(cmd *cobra.Command, args []string) {
 	case "retry":
 		n, err = r.KillAllRetryTasks()
 	default:
-		fmt.Printf("error: `asynqmon killall [state]` only accepts %v as the argument.\n", killallValidArgs)
+		fmt.Printf("error: `asynq killall [state]` only accepts %v as the argument.\n", killallValidArgs)
 		os.Exit(1)
 	}
 	if err != nil {

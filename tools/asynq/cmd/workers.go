@@ -20,7 +20,7 @@ import (
 var workersCmd = &cobra.Command{
 	Use:   "workers",
 	Short: "Shows all running workers information",
-	Long: `Workers (asynqmon workers) will show all running workers information.
+	Long: `Workers (asynq workers) will show all running workers information.
 
 The command shows the following for each worker:
 * Process in which the worker is running

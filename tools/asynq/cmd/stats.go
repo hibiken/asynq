@@ -33,7 +33,7 @@ Specifically, the command shows the following:
 To monitor the tasks continuously, it's recommended that you run this
 command in conjunction with the watch command.
 
-Example: watch -n 3 asynqmon stats -> Shows current state of tasks every three seconds`,
+Example: watch -n 3 asynq stats -> Shows current state of tasks every three seconds`,
 	Args: cobra.NoArgs,
 	Run:  stats,
 }

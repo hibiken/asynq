@@ -18,16 +18,16 @@ import (
 var enqCmd = &cobra.Command{
 	Use:   "enq [task id]",
 	Short: "Enqueues a task given an identifier",
-	Long: `Enq (asynqmon enq) will enqueue a task given an identifier.
+	Long: `Enq (asynq enq) will enqueue a task given an identifier.
 
 The command takes one argument which specifies the task to enqueue.
 The task should be in either scheduled, retry or dead state.
-Identifier for a task should be obtained by running "asynqmon ls" command.
+Identifier for a task should be obtained by running "asynq ls" command.
 
 The task enqueued by this command will be processed as soon as the task 
 gets dequeued by a processor.
 
-Example: asynqmon enq d:1575732274:bnogo8gt6toe23vhef0g`,
+Example: asynq enq d:1575732274:bnogo8gt6toe23vhef0g`,
 	Args: cobra.ExactArgs(1),
 	Run:  enq,
 }

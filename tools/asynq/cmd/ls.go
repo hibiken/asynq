@@ -25,19 +25,19 @@ var lsValidArgs = []string{"enqueued", "inprogress", "scheduled", "retry", "dead
 var lsCmd = &cobra.Command{
 	Use:   "ls [state]",
 	Short: "Lists tasks in the specified state",
-	Long: `Ls (asynqmon ls) will list all tasks in the specified state in a table format.
+	Long: `Ls (asynq ls) will list all tasks in the specified state in a table format.
 
 The command takes one argument which specifies the state of tasks.
 The argument value should be one of "enqueued", "inprogress", "scheduled",
 "retry", or "dead".
 
 Example:
-asynqmon ls dead -> Lists all tasks in dead state
+asynq ls dead -> Lists all tasks in dead state
 
 Enqueued tasks requires a queue name after ":"
 Example:
-asynqmon ls enqueued:default  -> List tasks from default queue
-asynqmon ls enqueued:critical -> List tasks from critical queue 
+asynq ls enqueued:default  -> List tasks from default queue
+asynq ls enqueued:critical -> List tasks from critical queue 
 `,
 	Args: cobra.ExactValidArgs(1),
 	Run:  ls,
@@ -72,7 +72,7 @@ func ls(cmd *cobra.Command, args []string) {
 	switch parts[0] {
 	case "enqueued":
 		if len(parts) != 2 {
-			fmt.Printf("error: Missing queue name\n`asynqmon ls enqueued:[queue name]`\n")
+			fmt.Printf("error: Missing queue name\n`asynq ls enqueued:[queue name]`\n")
 			os.Exit(1)
 		}
 		listEnqueued(r, parts[1])
@@ -85,7 +85,7 @@ func ls(cmd *cobra.Command, args []string) {
 	case "dead":
 		listDead(r)
 	default:
-		fmt.Printf("error: `asynqmon ls [state]`\nonly accepts %v as the argument.\n", lsValidArgs)
+		fmt.Printf("error: `asynq ls [state]`\nonly accepts %v as the argument.\n", lsValidArgs)
 		os.Exit(1)
 	}
 }

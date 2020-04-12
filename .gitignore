@@ -15,7 +15,7 @@
 /examples
 
 # Ignore command binary
-/tools/asynqmon/asynqmon
+/tools/asynq/asynq
 
-# Ignore asynqmon config file
-.asynqmon.*
+# Ignore asynq config file
+.asynq.*

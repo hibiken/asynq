@@ -18,17 +18,17 @@ import (
 var cancelCmd = &cobra.Command{
 	Use:   "cancel [task id]",
 	Short: "Sends a cancelation signal to the goroutine processing the specified task",
-	Long: `Cancel (asynqmon cancel) will send a cancelation signal to the goroutine processing 
+	Long: `Cancel (asynq cancel) will send a cancelation signal to the goroutine processing 
 the specified task. 
 
 The command takes one argument which specifies the task to cancel.
 The task should be in in-progress state.
-Identifier for a task should be obtained by running "asynqmon ls" command.
+Identifier for a task should be obtained by running "asynq ls" command.
 
 Handler implementation needs to be context aware for cancelation signal to
 actually cancel the processing.
 
-Example: asynqmon cancel bnogo8gt6toe23vhef0g`,
+Example: asynq cancel bnogo8gt6toe23vhef0g`,
 	Args: cobra.ExactArgs(1),
 	Run:  cancel,
 }

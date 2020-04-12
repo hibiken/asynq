@@ -22,12 +22,12 @@ var days int
 var historyCmd = &cobra.Command{
 	Use:   "history",
 	Short: "Shows historical aggregate data",
-	Long: `History (asynqmon history) will show the number of processed and failed tasks
+	Long: `History (asynq history) will show the number of processed and failed tasks
 from the last x days.
 
 By default, it will show the data from the last 10 days.
 
-Example: asynqmon history -x=30 -> Shows stats from the last 30 days`,
+Example: asynq history -x=30 -> Shows stats from the last 30 days`,
 	Args: cobra.NoArgs,
 	Run:  history,
 }

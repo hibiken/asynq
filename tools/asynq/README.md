@@ -1,6 +1,6 @@
-# Asynqmon
+# Asynq CLI
 
-Asynqmon is a command line tool to monitor the tasks managed by `asynq` package.
+Asynq CLI is a command line tool to monitor the tasks managed by `asynq` package.
 
 ## Table of Contents
 
@@ -20,19 +20,19 @@ Asynqmon is a command line tool to monitor the tasks managed by `asynq` package.
 
 In order to use the tool, compile it using the following command:
 
-    go get github.com/hibiken/asynq/tools/asynqmon
+    go get github.com/hibiken/asynq/tools/asynq
 
-This will create the asynqmon executable under your `$GOPATH/bin` directory.
+This will create the asynq executable under your `$GOPATH/bin` directory.
 
 ## Quickstart
 
 The tool has a few commands to inspect the state of tasks and queues.
 
-Run `asynqmon help` to see all the available commands.
+Run `asynq help` to see all the available commands.
 
-Asynqmon needs to connect to a redis-server to inspect the state of queues and tasks. Use flags to specify the options to connect to the redis-server used by your application.
+Asynq CLI needs to connect to a redis-server to inspect the state of queues and tasks. Use flags to specify the options to connect to the redis-server used by your application.
 
-By default, Asynqmon will try to connect to a redis server running at `localhost:6379`.
+By default, CLI will try to connect to a redis server running at `localhost:6379`.
 
 ### Stats
 
@@ -40,11 +40,11 @@ Stats command gives the overview of the current state of tasks and queues. You c
 
 Example:
 
-    watch -n 3 asynqmon stats
+    watch -n 3 asynq stats
 
-This will run `asynqmon stats` command every 3 seconds.
+This will run `asynq stats` command every 3 seconds.
 
-![Gif](/docs/assets/asynqmon_stats.gif)
+![Gif](/docs/assets/asynq_stats.gif)
 
 ### History
 
@@ -54,9 +54,9 @@ By default, it shows the stats from the last 10 days. Use `--days` to specify th
 
 Example:
 
-    asynqmon history --days=30
+    asynq history --days=30
 
-![Gif](/docs/assets/asynqmon_history.gif)
+![Gif](/docs/assets/asynq_history.gif)
 
 ### Process Status
 
@@ -64,9 +64,9 @@ PS (ProcessStatus) command shows the list of running worker processes.
 
 Example:
 
-    asynqmon ps
+    asynq ps
 
-![Gif](/docs/assets/asynqmon_ps.gif)
+![Gif](/docs/assets/asynq_ps.gif)
 
 ### List
 
@@ -74,11 +74,11 @@ List command shows all tasks in the specified state in a table format
 
 Example:
 
-    asynqmon ls retry
-    asynqmon ls scheduled
-    asynqmon ls dead
-    asynqmon ls enqueued:default
-    asynqmon ls inprogress
+    asynq ls retry
+    asynq ls scheduled
+    asynq ls dead
+    asynq ls enqueued:default
+    asynq ls inprogress
 
 ### Enqueue
 
@@ -88,13 +88,13 @@ Command `enq` takes a task ID and moves the task to **Enqueued** state. You can 
 
 Example:
 
-    asynqmon enq d:1575732274:bnogo8gt6toe23vhef0g
+    asynq enq d:1575732274:bnogo8gt6toe23vhef0g
 
 Command `enqall` moves all tasks to **Enqueued** state from the specified state.
 
 Example:
 
-    asynqmon enqall retry
+    asynq enqall retry
 
 Running the above command will move all **Retry** tasks to **Enqueued** state.
 
@@ -106,13 +106,13 @@ Command `del` takes a task ID and deletes the task. You can obtain the task ID b
 
 Example:
 
-    asynqmon del r:1575732274:bnogo8gt6toe23vhef0g
+    asynq del r:1575732274:bnogo8gt6toe23vhef0g
 
 Command `delall` deletes all tasks which are in the specified state.
 
 Example:
 
-    asynqmon delall retry
+    asynq delall retry
 
 Running the above command will delete all **Retry** tasks.
 
@@ -124,13 +124,13 @@ Command `kill` takes a task ID and kills the task. You can obtain the task ID by
 
 Example:
 
-    asynqmon kill r:1575732274:bnogo8gt6toe23vhef0g
+    asynq kill r:1575732274:bnogo8gt6toe23vhef0g
 
 Command `killall` kills all tasks which are in the specified state.
 
 Example:
 
-    asynqmon killall retry
+    asynq killall retry
 
 Running the above command will move all **Retry** tasks to **Dead** state.
 
@@ -144,15 +144,15 @@ Handler implementation needs to be context aware in order to actually stop proce
 
 Example:
 
-    asynqmon cancel bnogo8gt6toe23vhef0g
+    asynq cancel bnogo8gt6toe23vhef0g
 
 ## Config File
 
 You can use a config file to set default values for the flags.
 This is useful, for example when you have to connect to a remote redis server.
 
-By default, `asynqmon` will try to read config file located in
-`$HOME/.asynqmon.(yaml|json)`. You can specify the file location via `--config` flag.
+By default, `asynq` will try to read config file located in
+`$HOME/.asynq.(yaml|json)`. You can specify the file location via `--config` flag.
 
 Config file example:
 

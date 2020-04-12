@@ -26,9 +26,9 @@ var password string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "asynqmon",
+	Use:   "asynq",
 	Short: "A monitoring tool for asynq queues",
-	Long:  `Asynqmon is a montoring CLI to inspect tasks and queues managed by asynq.`,
+	Long:  `Asynq is a montoring CLI to inspect tasks and queues managed by asynq.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -43,7 +43,7 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file to set flag defaut values (default is $HOME/.asynqmon.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file to set flag defaut values (default is $HOME/.asynq.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "redis server URI")
 	rootCmd.PersistentFlags().IntVarP(&db, "db", "n", 0, "redis database number (default is 0)")
 	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "password to use when connecting to redis server")
@@ -65,9 +65,9 @@ func initConfig() {
 			os.Exit(1)
 		}
 
-		// Search config in home directory with name ".asynqmon" (without extension).
+		// Search config in home directory with name ".asynq" (without extension).
 		viper.AddConfigPath(home)
-		viper.SetConfigName(".asynqmon")
+		viper.SetConfigName(".asynq")
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match
