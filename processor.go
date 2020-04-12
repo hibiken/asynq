@@ -64,7 +64,7 @@ type retryDelayFunc func(n int, err error, task *Task) time.Duration
 // newProcessor constructs a new processor.
 func newProcessor(l Logger, r *rdb.RDB, ss *base.ServerState, fn retryDelayFunc,
 	syncCh chan<- *syncRequest, c *base.Cancelations, errHandler ErrorHandler) *processor {
-	info := ss.Get()
+	info := ss.GetInfo()
 	qcfg := normalizeQueueCfg(info.Queues)
 	orderedQueues := []string(nil)
 	if info.StrictPriority {

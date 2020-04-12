@@ -463,9 +463,9 @@ func (r *RDB) forwardSingle(src, dst string) error {
 		[]string{src, dst}, now).Err()
 }
 
-// KEYS[1]  -> asynq:ps:<host:pid>
-// KEYS[2]  -> asynq:ps
-// KEYS[3]  -> asynq:workers<host:pid>
+// KEYS[1]  -> asynq:servers:<host:pid:sid>
+// KEYS[2]  -> asynq:servers
+// KEYS[3]  -> asynq:workers<host:pid:sid>
 // keys[4]  -> asynq:workers
 // ARGV[1]  -> expiration time
 // ARGV[2]  -> TTL in seconds
@@ -486,7 +486,7 @@ return redis.status_reply("OK")`)
 
 // WriteServerState writes server state data to redis with expiration  set to the value ttl.
 func (r *RDB) WriteServerState(ss *base.ServerState, ttl time.Duration) error {
-	info := ss.Get()
+	info := ss.GetInfo()
 	bytes, err := json.Marshal(info)
 	if err != nil {
 		return err
@@ -502,17 +502,17 @@ func (r *RDB) WriteServerState(ss *base.ServerState, ttl time.Duration) error {
 		}
 		args = append(args, w.ID.String(), bytes)
 	}
-	pkey := base.ProcessInfoKey(info.Host, info.PID)
-	wkey := base.WorkersKey(info.Host, info.PID)
+	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
+	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
 	return writeProcessInfoCmd.Run(r.client,
-		[]string{pkey, base.AllProcesses, wkey, base.AllWorkers},
+		[]string{skey, base.AllServers, wkey, base.AllWorkers},
 		args...).Err()
 }
 
-// KEYS[1] -> asynq:ps
-// KEYS[2] -> asynq:ps:<host:pid>
+// KEYS[1] -> asynq:servers
+// KEYS[2] -> asynq:servers:<host:pid:sid>
 // KEYS[3] -> asynq:workers
-// KEYS[4] -> asynq:workers<host:pid>
+// KEYS[4] -> asynq:workers<host:pid:sid>
 var clearProcessInfoCmd = redis.NewScript(`
 redis.call("ZREM", KEYS[1], KEYS[2])
 redis.call("DEL", KEYS[2])
@@ -522,12 +522,12 @@ return redis.status_reply("OK")`)
 
 // ClearServerState deletes server state data from redis.
 func (r *RDB) ClearServerState(ss *base.ServerState) error {
-	info := ss.Get()
-	host, pid := info.Host, info.PID
-	pkey := base.ProcessInfoKey(host, pid)
-	wkey := base.WorkersKey(host, pid)
+	info := ss.GetInfo()
+	host, pid, id := info.Host, info.PID, info.ServerID
+	skey := base.ServerInfoKey(host, pid, id)
+	wkey := base.WorkersKey(host, pid, id)
 	return clearProcessInfoCmd.Run(r.client,
-		[]string{base.AllProcesses, pkey, base.AllWorkers, wkey}).Err()
+		[]string{base.AllServers, skey, base.AllWorkers, wkey}).Err()
 }
 
 // CancelationPubSub returns a pubsub for cancelation messages.

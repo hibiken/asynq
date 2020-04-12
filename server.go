@@ -276,7 +276,8 @@ func (srv *Server) Start(handler Handler) error {
 // Stops the background-task processing.
 // TODO: do we need to return error?
 func (srv *Server) Stop() {
-	if srv.ss.Status() != base.StatusRunning {
+	switch srv.ss.Status() {
+	case base.StatusIdle, base.StatusStopped:
 		// server is not running, do nothing and return.
 		return
 	}

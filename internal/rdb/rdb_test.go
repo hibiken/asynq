@@ -862,60 +862,61 @@ func TestCheckAndEnqueue(t *testing.T) {
 	}
 }
 
-func TestWriteProcessState(t *testing.T) {
+func TestWriteServerState(t *testing.T) {
 	r := setup(t)
-	host, pid := "localhost", 98765
 	queues := map[string]int{"default": 2, "email": 5, "low": 1}
 
 	started := time.Now()
-	ps := base.NewProcessState(host, pid, 10, queues, false)
-	ps.SetStarted(started)
-	ps.SetStatus(base.StatusRunning)
+	ss := base.NewServerState("localhost", 4242, 10, queues, false)
+	ss.SetStarted(started)
+	ss.SetStatus(base.StatusRunning)
 	ttl := 5 * time.Second
 
 	h.FlushDB(t, r.client)
 
-	err := r.WriteProcessState(ps, ttl)
+	err := r.WriteServerState(ss, ttl)
 	if err != nil {
-		t.Errorf("r.WriteProcessState returned an error: %v", err)
+		t.Errorf("r.WriteServerState returned an error: %v", err)
 	}
 
-	// Check ProcessInfo was written correctly
-	pkey := base.ProcessInfoKey(host, pid)
-	data := r.client.Get(pkey).Val()
-	var got base.ProcessInfo
+	// Check ServerInfo was written correctly
+	info := ss.GetInfo()
+	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
+	data := r.client.Get(skey).Val()
+	var got base.ServerInfo
 	err = json.Unmarshal([]byte(data), &got)
 	if err != nil {
 		t.Fatalf("could not decode json: %v", err)
 	}
-	want := base.ProcessInfo{
-		Host:              "localhost",
-		PID:               98765,
-		Concurrency:       10,
+	want := base.ServerInfo{
+		Host:              info.Host,
+		PID:               info.PID,
+		Concurrency:       info.Concurrency,
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
 		Status:            "running",
 		Started:           started,
 		ActiveWorkerCount: 0,
 	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("persisted ProcessInfo was %v, want %v; (-want,+got)\n%s",
+	ignoreOpt := cmpopts.IgnoreFields(base.ServerInfo{}, "ServerID")
+	if diff := cmp.Diff(want, got, ignoreOpt); diff != "" {
+		t.Errorf("persisted ServerInfo was %v, want %v; (-want,+got)\n%s",
 			got, want, diff)
 	}
-	// Check ProcessInfo TTL was set correctly
-	gotTTL := r.client.TTL(pkey).Val()
+	// Check ServerInfo TTL was set correctly
+	gotTTL := r.client.TTL(skey).Val()
 	if !cmp.Equal(ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
-		t.Errorf("TTL of %q was %v, want %v", pkey, gotTTL, ttl)
+		t.Errorf("TTL of %q was %v, want %v", skey, gotTTL, ttl)
 	}
-	// Check ProcessInfo key was added to the set correctly
-	gotProcesses := r.client.ZRange(base.AllProcesses, 0, -1).Val()
-	wantProcesses := []string{pkey}
+	// Check ServerInfo key was added to the set correctly
+	gotProcesses := r.client.ZRange(base.AllServers, 0, -1).Val()
+	wantProcesses := []string{skey}
 	if diff := cmp.Diff(wantProcesses, gotProcesses); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllProcesses, gotProcesses, wantProcesses)
+		t.Errorf("%q contained %v, want %v", base.AllServers, gotProcesses, wantProcesses)
 	}
 
 	// Check WorkersInfo was written correctly
-	wkey := base.WorkersKey(host, pid)
+	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
 	workerExist := r.client.Exists(wkey).Val()
 	if workerExist != 0 {
 		t.Errorf("%q key exists", wkey)
@@ -928,9 +929,8 @@ func TestWriteProcessState(t *testing.T) {
 	}
 }
 
-func TestWriteProcessStateWithWorkers(t *testing.T) {
+func TestWriteServerStateWithWorkers(t *testing.T) {
 	r := setup(t)
-	host, pid := "localhost", 98765
 	queues := map[string]int{"default": 2, "email": 5, "low": 1}
 	concurrency := 10
 
@@ -939,31 +939,33 @@ func TestWriteProcessStateWithWorkers(t *testing.T) {
 	w2Started := time.Now().Add(-time.Second)
 	msg1 := h.NewTaskMessage("send_email", map[string]interface{}{"user_id": "123"})
 	msg2 := h.NewTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/imgfile"})
-	ps := base.NewProcessState(host, pid, concurrency, queues, false)
-	ps.SetStarted(started)
-	ps.SetStatus(base.StatusRunning)
-	ps.AddWorkerStats(msg1, w1Started)
-	ps.AddWorkerStats(msg2, w2Started)
+	ss := base.NewServerState("127.0.01", 4242, concurrency, queues, false)
+	ss.SetStarted(started)
+	ss.SetStatus(base.StatusRunning)
+	ss.AddWorkerStats(msg1, w1Started)
+	ss.AddWorkerStats(msg2, w2Started)
 	ttl := 5 * time.Second
 
 	h.FlushDB(t, r.client)
 
-	err := r.WriteProcessState(ps, ttl)
+	err := r.WriteServerState(ss, ttl)
 	if err != nil {
-		t.Errorf("r.WriteProcessState returned an error: %v", err)
+		t.Errorf("r.WriteServerState returned an error: %v", err)
 	}
 
-	// Check ProcessInfo was written correctly
-	pkey := base.ProcessInfoKey(host, pid)
-	data := r.client.Get(pkey).Val()
-	var got base.ProcessInfo
+	// Check ServerInfo was written correctly
+	info := ss.GetInfo()
+	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
+	data := r.client.Get(skey).Val()
+	var got base.ServerInfo
 	err = json.Unmarshal([]byte(data), &got)
 	if err != nil {
 		t.Fatalf("could not decode json: %v", err)
 	}
-	want := base.ProcessInfo{
-		Host:              host,
-		PID:               pid,
+	want := base.ServerInfo{
+		Host:              info.Host,
+		PID:               info.PID,
+		ServerID:          info.ServerID,
 		Concurrency:       concurrency,
 		Queues:            queues,
 		StrictPriority:    false,
@@ -972,23 +974,23 @@ func TestWriteProcessStateWithWorkers(t *testing.T) {
 		ActiveWorkerCount: 2,
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("persisted ProcessInfo was %v, want %v; (-want,+got)\n%s",
+		t.Errorf("persisted ServerInfo was %v, want %v; (-want,+got)\n%s",
 			got, want, diff)
 	}
-	// Check ProcessInfo TTL was set correctly
-	gotTTL := r.client.TTL(pkey).Val()
+	// Check ServerInfo TTL was set correctly
+	gotTTL := r.client.TTL(skey).Val()
 	if !cmp.Equal(ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
-		t.Errorf("TTL of %q was %v, want %v", pkey, gotTTL, ttl)
+		t.Errorf("TTL of %q was %v, want %v", skey, gotTTL, ttl)
 	}
-	// Check ProcessInfo key was added to the set correctly
-	gotProcesses := r.client.ZRange(base.AllProcesses, 0, -1).Val()
-	wantProcesses := []string{pkey}
+	// Check ServerInfo key was added to the set correctly
+	gotProcesses := r.client.ZRange(base.AllServers, 0, -1).Val()
+	wantProcesses := []string{skey}
 	if diff := cmp.Diff(wantProcesses, gotProcesses); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllProcesses, gotProcesses, wantProcesses)
+		t.Errorf("%q contained %v, want %v", base.AllServers, gotProcesses, wantProcesses)
 	}
 
 	// Check WorkersInfo was written correctly
-	wkey := base.WorkersKey(host, pid)
+	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
 	wdata := r.client.HGetAll(wkey).Val()
 	if len(wdata) != 2 {
 		t.Fatalf("HGETALL %q returned a hash of size %d, want 2", wkey, len(wdata))
@@ -1003,8 +1005,8 @@ func TestWriteProcessStateWithWorkers(t *testing.T) {
 	}
 	wantWorkers := map[string]*base.WorkerInfo{
 		msg1.ID.String(): {
-			Host:    host,
-			PID:     pid,
+			Host:    info.Host,
+			PID:     info.PID,
 			ID:      msg1.ID,
 			Type:    msg1.Type,
 			Queue:   msg1.Queue,
@@ -1012,8 +1014,8 @@ func TestWriteProcessStateWithWorkers(t *testing.T) {
 			Started: w1Started,
 		},
 		msg2.ID.String(): {
-			Host:    host,
-			PID:     pid,
+			Host:    info.Host,
+			PID:     info.PID,
 			ID:      msg2.ID,
 			Type:    msg2.Type,
 			Queue:   msg2.Queue,
@@ -1039,27 +1041,28 @@ func TestWriteProcessStateWithWorkers(t *testing.T) {
 	}
 }
 
-func TestClearProcessState(t *testing.T) {
+func TestClearServerState(t *testing.T) {
 	r := setup(t)
-	host, pid := "127.0.0.1", 1234
+	ss := base.NewServerState("127.0.01", 4242, 10, map[string]int{"default": 1}, false)
+	info := ss.GetInfo()
 
 	h.FlushDB(t, r.client)
 
-	pkey := base.ProcessInfoKey(host, pid)
-	wkey := base.WorkersKey(host, pid)
-	otherPKey := base.ProcessInfoKey("otherhost", 12345)
-	otherWKey := base.WorkersKey("otherhost", 12345)
+	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
+	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
+	otherSKey := base.ServerInfoKey("otherhost", 12345, "server98")
+	otherWKey := base.WorkersKey("otherhost", 12345, "server98")
 	// Populate the keys.
-	if err := r.client.Set(pkey, "process-info", 0).Err(); err != nil {
+	if err := r.client.Set(skey, "process-info", 0).Err(); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.client.HSet(wkey, "worker-key", "worker-info").Err(); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.client.ZAdd(base.AllProcesses, &redis.Z{Member: pkey}).Err(); err != nil {
+	if err := r.client.ZAdd(base.AllServers, &redis.Z{Member: skey}).Err(); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.client.ZAdd(base.AllProcesses, &redis.Z{Member: otherPKey}).Err(); err != nil {
+	if err := r.client.ZAdd(base.AllServers, &redis.Z{Member: otherSKey}).Err(); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.client.ZAdd(base.AllWorkers, &redis.Z{Member: wkey}).Err(); err != nil {
@@ -1069,24 +1072,22 @@ func TestClearProcessState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ps := base.NewProcessState(host, pid, 10, map[string]int{"default": 1}, false)
-
-	err := r.ClearProcessState(ps)
+	err := r.ClearServerState(ss)
 	if err != nil {
-		t.Fatalf("(*RDB).ClearProcessState failed: %v", err)
+		t.Fatalf("(*RDB).ClearServerState failed: %v", err)
 	}
 
 	// Check all keys are cleared
-	if r.client.Exists(pkey).Val() != 0 {
-		t.Errorf("Redis key %q exists", pkey)
+	if r.client.Exists(skey).Val() != 0 {
+		t.Errorf("Redis key %q exists", skey)
 	}
 	if r.client.Exists(wkey).Val() != 0 {
 		t.Errorf("Redis key %q exists", wkey)
 	}
-	gotProcessKeys := r.client.ZRange(base.AllProcesses, 0, -1).Val()
-	wantProcessKeys := []string{otherPKey}
+	gotProcessKeys := r.client.ZRange(base.AllServers, 0, -1).Val()
+	wantProcessKeys := []string{otherSKey}
 	if diff := cmp.Diff(wantProcessKeys, gotProcessKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllProcesses, gotProcessKeys, wantProcessKeys)
+		t.Errorf("%q contained %v, want %v", base.AllServers, gotProcessKeys, wantProcessKeys)
 	}
 	gotWorkerKeys := r.client.ZRange(base.AllWorkers, 0, -1).Val()
 	wantWorkerKeys := []string{otherWKey}

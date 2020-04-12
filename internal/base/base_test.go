@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/rs/xid"
 )
 
@@ -67,20 +68,21 @@ func TestFailureKey(t *testing.T) {
 	}
 }
 
-func TestProcessInfoKey(t *testing.T) {
+func TestServerInfoKey(t *testing.T) {
 	tests := []struct {
 		hostname string
 		pid      int
+		sid      string
 		want     string
 	}{
-		{"localhost", 9876, "asynq:ps:localhost:9876"},
-		{"127.0.0.1", 1234, "asynq:ps:127.0.0.1:1234"},
+		{"localhost", 9876, "server123", "asynq:servers:localhost:9876:server123"},
+		{"127.0.0.1", 1234, "server987", "asynq:servers:127.0.0.1:1234:server987"},
 	}
 
 	for _, tc := range tests {
-		got := ProcessInfoKey(tc.hostname, tc.pid)
+		got := ServerInfoKey(tc.hostname, tc.pid, tc.sid)
 		if got != tc.want {
-			t.Errorf("ProcessInfoKey(%q, %d) = %q, want %q", tc.hostname, tc.pid, got, tc.want)
+			t.Errorf("ServerInfoKey(%q, %d) = %q, want %q", tc.hostname, tc.pid, got, tc.want)
 		}
 	}
 }
@@ -89,14 +91,15 @@ func TestWorkersKey(t *testing.T) {
 	tests := []struct {
 		hostname string
 		pid      int
+		sid      string
 		want     string
 	}{
-		{"localhost", 9876, "asynq:workers:localhost:9876"},
-		{"127.0.0.1", 1234, "asynq:workers:127.0.0.1:1234"},
+		{"localhost", 9876, "server1", "asynq:workers:localhost:9876:server1"},
+		{"127.0.0.1", 1234, "server2", "asynq:workers:127.0.0.1:1234:server2"},
 	}
 
 	for _, tc := range tests {
-		got := WorkersKey(tc.hostname, tc.pid)
+		got := WorkersKey(tc.hostname, tc.pid, tc.sid)
 		if got != tc.want {
 			t.Errorf("WorkersKey(%q, %d) = %q, want = %q", tc.hostname, tc.pid, got, tc.want)
 		}
@@ -106,7 +109,7 @@ func TestWorkersKey(t *testing.T) {
 // Test for process state being accessed by multiple goroutines.
 // Run with -race flag to check for data race.
 func TestProcessStateConcurrentAccess(t *testing.T) {
-	ps := NewProcessState("127.0.0.1", 1234, 10, map[string]int{"default": 1}, false)
+	ss := NewServerState("127.0.0.1", 1234, 10, map[string]int{"default": 1}, false)
 	var wg sync.WaitGroup
 	started := time.Now()
 	msgs := []*TaskMessage{
@@ -119,18 +122,18 @@ func TestProcessStateConcurrentAccess(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ps.SetStarted(started)
-		ps.SetStatus(StatusRunning)
+		ss.SetStarted(started)
+		ss.SetStatus(StatusRunning)
 	}()
 
 	// Simulate processor starting worker goroutines.
 	for _, msg := range msgs {
 		wg.Add(1)
-		ps.AddWorkerStats(msg, time.Now())
+		ss.AddWorkerStats(msg, time.Now())
 		go func(msg *TaskMessage) {
 			defer wg.Done()
 			time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
-			ps.DeleteWorkerStats(msg)
+			ss.DeleteWorkerStats(msg)
 		}(msg)
 	}
 
@@ -139,15 +142,15 @@ func TestProcessStateConcurrentAccess(t *testing.T) {
 	go func() {
 		wg.Done()
 		for i := 0; i < 5; i++ {
-			ps.Get()
-			ps.GetWorkers()
+			ss.GetInfo()
+			ss.GetWorkers()
 			time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
 		}
 	}()
 
 	wg.Wait()
 
-	want := &ProcessInfo{
+	want := &ServerInfo{
 		Host:              "127.0.0.1",
 		PID:               1234,
 		Concurrency:       10,
@@ -158,9 +161,9 @@ func TestProcessStateConcurrentAccess(t *testing.T) {
 		ActiveWorkerCount: 0,
 	}
 
-	got := ps.Get()
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("(*ProcessState).Get() = %+v, want %+v; (-want,+got)\n%s",
+	got := ss.GetInfo()
+	if diff := cmp.Diff(want, got, cmpopts.IgnoreFields(ServerInfo{}, "ServerID")); diff != "" {
+		t.Errorf("(*ServerState).GetInfo() = %+v, want %+v; (-want,+got)\n%s",
 			got, want, diff)
 	}
 }
