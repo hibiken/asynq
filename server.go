@@ -18,10 +18,10 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
-// Background is responsible for managing the background-task processing.
+// Server is responsible for managing the background-task processing.
 //
-// Background manages task queues to process tasks.
-// If the processing of a task is unsuccessful, background will
+// Server pulls tasks off queues and process them.
+// If the processing of a task is unsuccessful, server will
 // schedule it for a retry until either the task gets processed successfully
 // or it exhausts its max retry count.
 //
@@ -29,7 +29,7 @@ import (
 // will be kept in the queue for some time until a certain condition is met
 // (e.g., queue size reaches a certain limit, or the task has been in the
 // queue for a certain amount of time).
-type Background struct {
+type Server struct {
 	mu      sync.Mutex
 	running bool
 
@@ -48,11 +48,11 @@ type Background struct {
 	subscriber  *subscriber
 }
 
-// Config specifies the background-task processing behavior.
+// Config specifies the server's background-task processing behavior.
 type Config struct {
 	// Maximum number of concurrent processing of tasks.
 	//
-	// If set to a zero or negative value, NewBackground will overwrite the value to one.
+	// If set to a zero or negative value, NewServer will overwrite the value to one.
 	Concurrency int
 
 	// Function to calculate retry delay for a failed task.
@@ -67,7 +67,7 @@ type Config struct {
 	// List of queues to process with given priority value. Keys are the names of the
 	// queues and values are associated priority value.
 	//
-	// If set to nil or not specified, the background will process only the "default" queue.
+	// If set to nil or not specified, the server will process only the "default" queue.
 	//
 	// Priority is treated as follows to avoid starving low priority queues.
 	//
@@ -106,7 +106,7 @@ type Config struct {
 	// ErrorHandler: asynq.ErrorHandlerFunc(reportError)
 	ErrorHandler ErrorHandler
 
-	// Logger specifies the logger used by the background instance.
+	// Logger specifies the logger used by the server instance.
 	//
 	// If unset, default logger is used.
 	Logger Logger
@@ -156,9 +156,9 @@ var defaultQueueConfig = map[string]int{
 	base.DefaultQueueName: 1,
 }
 
-// NewBackground returns a new Background given a redis connection option
+// NewServer returns a new Server given a redis connection option
 // and background processing configuration.
-func NewBackground(r RedisConnOpt, cfg *Config) *Background {
+func NewServer(r RedisConnOpt, cfg Config) *Server {
 	n := cfg.Concurrency
 	if n < 1 {
 		n = 1
@@ -196,7 +196,7 @@ func NewBackground(r RedisConnOpt, cfg *Config) *Background {
 	scheduler := newScheduler(logger, rdb, 5*time.Second, queues)
 	processor := newProcessor(logger, rdb, ps, delayFunc, syncCh, cancels, cfg.ErrorHandler)
 	subscriber := newSubscriber(logger, rdb, cancels)
-	return &Background{
+	return &Server{
 		logger:      logger,
 		rdb:         rdb,
 		ps:          ps,
@@ -234,47 +234,47 @@ func (fn HandlerFunc) ProcessTask(ctx context.Context, task *Task) error {
 // an os signal to exit the program is received. Once it receives
 // a signal, it gracefully shuts down all pending workers and other
 // goroutines to process the tasks.
-func (bg *Background) Run(handler Handler) {
+func (srv *Server) Run(handler Handler) {
 	type prefixLogger interface {
 		SetPrefix(prefix string)
 	}
 	// If logger supports setting prefix, then set prefix for log output.
-	if l, ok := bg.logger.(prefixLogger); ok {
+	if l, ok := srv.logger.(prefixLogger); ok {
 		l.SetPrefix(fmt.Sprintf("asynq: pid=%d ", os.Getpid()))
 	}
-	bg.logger.Info("Starting processing")
+	srv.logger.Info("Starting processing")
 
-	bg.start(handler)
-	defer bg.stop()
+	srv.start(handler)
+	defer srv.stop()
 
-	bg.waitForSignals()
+	srv.waitForSignals()
 	fmt.Println()
-	bg.logger.Info("Starting graceful shutdown")
+	srv.logger.Info("Starting graceful shutdown")
 }
 
 // starts the background-task processing.
-func (bg *Background) start(handler Handler) {
-	bg.mu.Lock()
-	defer bg.mu.Unlock()
-	if bg.running {
+func (srv *Server) start(handler Handler) {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if srv.running {
 		return
 	}
 
-	bg.running = true
-	bg.processor.handler = handler
+	srv.running = true
+	srv.processor.handler = handler
 
-	bg.heartbeater.start(&bg.wg)
-	bg.subscriber.start(&bg.wg)
-	bg.syncer.start(&bg.wg)
-	bg.scheduler.start(&bg.wg)
-	bg.processor.start(&bg.wg)
+	srv.heartbeater.start(&srv.wg)
+	srv.subscriber.start(&srv.wg)
+	srv.syncer.start(&srv.wg)
+	srv.scheduler.start(&srv.wg)
+	srv.processor.start(&srv.wg)
 }
 
 // stops the background-task processing.
-func (bg *Background) stop() {
-	bg.mu.Lock()
-	defer bg.mu.Unlock()
-	if !bg.running {
+func (srv *Server) stop() {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if !srv.running {
 		return
 	}
 
@@ -282,16 +282,16 @@ func (bg *Background) stop() {
 	// Sender goroutines should be terminated before the receiver goroutines.
 	//
 	// processor -> syncer (via syncCh)
-	bg.scheduler.terminate()
-	bg.processor.terminate()
-	bg.syncer.terminate()
-	bg.subscriber.terminate()
-	bg.heartbeater.terminate()
+	srv.scheduler.terminate()
+	srv.processor.terminate()
+	srv.syncer.terminate()
+	srv.subscriber.terminate()
+	srv.heartbeater.terminate()
 
-	bg.wg.Wait()
+	srv.wg.Wait()
 
-	bg.rdb.Close()
-	bg.running = false
+	srv.rdb.Close()
+	srv.running = false
 
-	bg.logger.Info("Bye!")
+	srv.logger.Info("Bye!")
 }
