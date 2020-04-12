@@ -104,42 +104,46 @@ type TaskMessage struct {
 	UniqueKey string
 }
 
-// ProcessState holds process level information.
+// ServerState holds process level information.
 //
-// ProcessStates are safe for concurrent use by multiple goroutines.
-type ProcessState struct {
+// ServerStates are safe for concurrent use by multiple goroutines.
+type ServerState struct {
 	mu             sync.Mutex // guards all data fields
 	concurrency    int
 	queues         map[string]int
 	strictPriority bool
 	pid            int
 	host           string
-	status         PStatus
+	status         ServerStatus
 	started        time.Time
 	workers        map[string]*workerStats
 }
 
-// PStatus represents status of a process.
-type PStatus int
+// ServerStatus represents status of a server.
+type ServerStatus int
 
 const (
-	// StatusIdle indicates process is in idle state.
-	StatusIdle PStatus = iota
+	// StatusIdle indicates the server is in idle state.
+	StatusIdle ServerStatus = iota
 
-	// StatusRunning indicates process is up and processing tasks.
+	// StatusRunning indicates the servier is up and processing tasks.
 	StatusRunning
 
-	// StatusStopped indicates process is up but not processing new tasks.
+	// StatusQuiet indicates the server is up but not processing new tasks.
+	StatusQuiet
+
+	// StatusStopped indicates the server server has been stopped.
 	StatusStopped
 )
 
 var statuses = []string{
 	"idle",
 	"running",
+	"quiet",
 	"stopped",
 }
 
-func (s PStatus) String() string {
+func (s ServerStatus) String() string {
 	if StatusIdle <= s && s <= StatusStopped {
 		return statuses[s]
 	}
@@ -151,9 +155,9 @@ type workerStats struct {
 	started time.Time
 }
 
-// NewProcessState returns a new instance of ProcessState.
-func NewProcessState(host string, pid, concurrency int, queues map[string]int, strict bool) *ProcessState {
-	return &ProcessState{
+// NewServerState returns a new instance of ServerState.
+func NewServerState(host string, pid, concurrency int, queues map[string]int, strict bool) *ServerState {
+	return &ServerState{
 		host:           host,
 		pid:            pid,
 		concurrency:    concurrency,
@@ -164,59 +168,66 @@ func NewProcessState(host string, pid, concurrency int, queues map[string]int, s
 	}
 }
 
-// SetStatus updates the state of process.
-func (ps *ProcessState) SetStatus(status PStatus) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	ps.status = status
+// SetStatus updates the status of server.
+func (ss *ServerState) SetStatus(status ServerStatus) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	ss.status = status
+}
+
+// GetStatus returns the status of server.
+func (ss *ServerState) Status() ServerStatus {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	return ss.status
 }
 
 // SetStarted records when the process started processing.
-func (ps *ProcessState) SetStarted(t time.Time) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	ps.started = t
+func (ss *ServerState) SetStarted(t time.Time) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	ss.started = t
 }
 
 // AddWorkerStats records when a worker started and which task it's processing.
-func (ps *ProcessState) AddWorkerStats(msg *TaskMessage, started time.Time) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	ps.workers[msg.ID.String()] = &workerStats{msg, started}
+func (ss *ServerState) AddWorkerStats(msg *TaskMessage, started time.Time) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	ss.workers[msg.ID.String()] = &workerStats{msg, started}
 }
 
 // DeleteWorkerStats removes a worker's entry from the process state.
-func (ps *ProcessState) DeleteWorkerStats(msg *TaskMessage) {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
-	delete(ps.workers, msg.ID.String())
+func (ss *ServerState) DeleteWorkerStats(msg *TaskMessage) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	delete(ss.workers, msg.ID.String())
 }
 
 // Get returns current state of process as a ProcessInfo.
-func (ps *ProcessState) Get() *ProcessInfo {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
+func (ss *ServerState) Get() *ProcessInfo {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
 	return &ProcessInfo{
-		Host:              ps.host,
-		PID:               ps.pid,
-		Concurrency:       ps.concurrency,
-		Queues:            cloneQueueConfig(ps.queues),
-		StrictPriority:    ps.strictPriority,
-		Status:            ps.status.String(),
-		Started:           ps.started,
-		ActiveWorkerCount: len(ps.workers),
+		Host:              ss.host,
+		PID:               ss.pid,
+		Concurrency:       ss.concurrency,
+		Queues:            cloneQueueConfig(ss.queues),
+		StrictPriority:    ss.strictPriority,
+		Status:            ss.status.String(),
+		Started:           ss.started,
+		ActiveWorkerCount: len(ss.workers),
 	}
 }
 
 // GetWorkers returns a list of currently running workers' info.
-func (ps *ProcessState) GetWorkers() []*WorkerInfo {
-	ps.mu.Lock()
-	defer ps.mu.Unlock()
+func (ss *ServerState) GetWorkers() []*WorkerInfo {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
 	var res []*WorkerInfo
-	for _, w := range ps.workers {
+	for _, w := range ss.workers {
 		res = append(res, &WorkerInfo{
-			Host:    ps.host,
-			PID:     ps.pid,
+			Host:    ss.host,
+			PID:     ss.pid,
 			ID:      w.msg.ID,
 			Type:    w.msg.Type,
 			Queue:   w.msg.Queue,

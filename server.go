@@ -31,17 +31,14 @@ import (
 // (e.g., queue size reaches a certain limit, or the task has been in the
 // queue for a certain amount of time).
 type Server struct {
-	mu    sync.Mutex
-	state serverState
-
-	ps *base.ProcessState
-
-	// wait group to wait for all goroutines to finish.
-	wg sync.WaitGroup
+	ss *base.ServerState
 
 	logger Logger
 
-	rdb         *rdb.RDB
+	rdb *rdb.RDB
+
+	// wait group to wait for all goroutines to finish.
+	wg          sync.WaitGroup
 	scheduler   *scheduler
 	processor   *processor
 	syncer      *syncer
@@ -189,19 +186,18 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	pid := os.Getpid()
 
 	rdb := rdb.NewRDB(createRedisClient(r))
-	ps := base.NewProcessState(host, pid, n, queues, cfg.StrictPriority)
+	ss := base.NewServerState(host, pid, n, queues, cfg.StrictPriority)
 	syncCh := make(chan *syncRequest)
 	cancels := base.NewCancelations()
 	syncer := newSyncer(logger, syncCh, 5*time.Second)
-	heartbeater := newHeartbeater(logger, rdb, ps, 5*time.Second)
+	heartbeater := newHeartbeater(logger, rdb, ss, 5*time.Second)
 	scheduler := newScheduler(logger, rdb, 5*time.Second, queues)
-	processor := newProcessor(logger, rdb, ps, delayFunc, syncCh, cancels, cfg.ErrorHandler)
+	processor := newProcessor(logger, rdb, ss, delayFunc, syncCh, cancels, cfg.ErrorHandler)
 	subscriber := newSubscriber(logger, rdb, cancels)
 	return &Server{
-		state:       stateIdle,
+		ss:          ss,
 		logger:      logger,
 		rdb:         rdb,
-		ps:          ps,
 		scheduler:   scheduler,
 		processor:   processor,
 		syncer:      syncer,
@@ -235,14 +231,6 @@ func (fn HandlerFunc) ProcessTask(ctx context.Context, task *Task) error {
 // ErrServerStopped indicates that the operation is now illegal because of the server being stopped.
 var ErrServerStopped = errors.New("asynq: the server has been stopped")
 
-type serverState int
-
-const (
-	stateIdle serverState = iota
-	stateRunning
-	stateStopped
-)
-
 // Run starts the background-task processing and blocks until
 // an os signal to exit the program is received. Once it receives
 // a signal, it gracefully shuts down all pending workers and other
@@ -259,15 +247,13 @@ func (srv *Server) Run(handler Handler) error {
 // Starts the background-task processing.
 // TODO: doc
 func (srv *Server) Start(handler Handler) error {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	switch srv.state {
-	case stateRunning:
+	switch srv.ss.Status() {
+	case base.StatusRunning:
 		return fmt.Errorf("asynq: the server is already running")
-	case stateStopped:
+	case base.StatusStopped:
 		return ErrServerStopped
 	}
-	srv.state = stateRunning
+	srv.ss.SetStatus(base.StatusRunning)
 	srv.processor.handler = handler
 
 	type prefixLogger interface {
@@ -290,9 +276,7 @@ func (srv *Server) Start(handler Handler) error {
 // Stops the background-task processing.
 // TODO: do we need to return error?
 func (srv *Server) Stop() {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	if srv.state != stateRunning {
+	if srv.ss.Status() != base.StatusRunning {
 		// server is not running, do nothing and return.
 		return
 	}
@@ -301,7 +285,6 @@ func (srv *Server) Stop() {
 	srv.logger.Info("Starting graceful shutdown")
 	// Note: The order of termination is important.
 	// Sender goroutines should be terminated before the receiver goroutines.
-	//
 	// processor -> syncer (via syncCh)
 	srv.scheduler.terminate()
 	srv.processor.terminate()
@@ -312,7 +295,7 @@ func (srv *Server) Stop() {
 	srv.wg.Wait()
 
 	srv.rdb.Close()
-	srv.state = stateStopped
+	srv.ss.SetStatus(base.StatusStopped)
 
 	srv.logger.Info("Bye!")
 }
@@ -321,5 +304,5 @@ func (srv *Server) Stop() {
 // TODO: doc
 func (srv *Server) Quiet() {
 	srv.processor.stop()
-	srv.ps.SetStatus(base.StatusStopped) // TODO: rephrase this state, like StatusSilent?
+	srv.ss.SetStatus(base.StatusQuiet)
 }

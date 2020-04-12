@@ -484,16 +484,16 @@ redis.call("EXPIRE", KEYS[3], ARGV[2])
 redis.call("ZADD", KEYS[4], ARGV[1], KEYS[3])
 return redis.status_reply("OK")`)
 
-// WriteProcessState writes process state data to redis with expiration  set to the value ttl.
-func (r *RDB) WriteProcessState(ps *base.ProcessState, ttl time.Duration) error {
-	info := ps.Get()
+// WriteServerState writes server state data to redis with expiration  set to the value ttl.
+func (r *RDB) WriteServerState(ss *base.ServerState, ttl time.Duration) error {
+	info := ss.Get()
 	bytes, err := json.Marshal(info)
 	if err != nil {
 		return err
 	}
 	var args []interface{} // args to the lua script
 	exp := time.Now().Add(ttl).UTC()
-	workers := ps.GetWorkers()
+	workers := ss.GetWorkers()
 	args = append(args, float64(exp.Unix()), ttl.Seconds(), bytes)
 	for _, w := range workers {
 		bytes, err := json.Marshal(w)
@@ -520,9 +520,9 @@ redis.call("ZREM", KEYS[3], KEYS[4])
 redis.call("DEL", KEYS[4])
 return redis.status_reply("OK")`)
 
-// ClearProcessState deletes process state data from redis.
-func (r *RDB) ClearProcessState(ps *base.ProcessState) error {
-	info := ps.Get()
+// ClearServerState deletes server state data from redis.
+func (r *RDB) ClearServerState(ss *base.ServerState) error {
+	info := ss.Get()
 	host, pid := info.Host, info.PID
 	pkey := base.ProcessInfoKey(host, pid)
 	wkey := base.WorkersKey(host, pid)
