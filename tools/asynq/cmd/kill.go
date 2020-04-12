@@ -18,13 +18,13 @@ import (
 var killCmd = &cobra.Command{
 	Use:   "kill [task id]",
 	Short: "Kills a task given an identifier",
-	Long: `Kill (asynqmon kill) will put a task in dead state given an identifier.
+	Long: `Kill (asynq kill) will put a task in dead state given an identifier.
 
 The command takes one argument which specifies the task to kill.
 The task should be in either scheduled or retry state.
-Identifier for a task should be obtained by running "asynqmon ls" command.
+Identifier for a task should be obtained by running "asynq ls" command.
 
-Example: asynqmon kill r:1575732274:bnogo8gt6toe23vhef0g`,
+Example: asynq kill r:1575732274:bnogo8gt6toe23vhef0g`,
 	Args: cobra.ExactArgs(1),
 	Run:  kill,
 }

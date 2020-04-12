@@ -213,7 +213,7 @@ Here's an example of running the `stats` command.
 
 ![Gif](/docs/assets/demo.gif)
 
-For details on how to use the tool, refer to the tool's [README](/tools/asynqmon/README.md).
+For details on how to use the tool, refer to the tool's [README](/tools/asynq/README.md).
 
 ## Installation
 
@@ -226,7 +226,7 @@ go get -u github.com/hibiken/asynq
 To install the CLI tool, run the following command:
 
 ```sh
-go get -u github.com/hibiken/asynq/tools/asynqmon
+go get -u github.com/hibiken/asynq/tools/asynq
 ```
 
 ## Requirements
@@ -245,7 +245,7 @@ Please see the [Contribution Guide](/CONTRIBUTING.md) before contributing.
 
 - [Sidekiq](https://github.com/mperham/sidekiq) : Many of the design ideas are taken from sidekiq and its Web UI
 - [RQ](https://github.com/rq/rq) : Client APIs are inspired by rq library.
-- [Cobra](https://github.com/spf13/cobra) : Asynqmon CLI is built with cobra
+- [Cobra](https://github.com/spf13/cobra) : Asynq CLI is built with cobra
 
 ## License
 

@@ -18,13 +18,13 @@ import (
 var delCmd = &cobra.Command{
 	Use:   "del [task id]",
 	Short: "Deletes a task given an identifier",
-	Long: `Del (asynqmon del) will delete a task given an identifier.
+	Long: `Del (asynq del) will delete a task given an identifier.
 
 The command takes one argument which specifies the task to delete.
 The task should be in either scheduled, retry or dead state.
-Identifier for a task should be obtained by running "asynqmon ls" command.
+Identifier for a task should be obtained by running "asynq ls" command.
 
-Example: asynqmon enq d:1575732274:bnogo8gt6toe23vhef0g`,
+Example: asynq enq d:1575732274:bnogo8gt6toe23vhef0g`,
 	Args: cobra.ExactArgs(1),
 	Run:  del,
 }

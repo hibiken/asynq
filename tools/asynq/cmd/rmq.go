@@ -18,11 +18,11 @@ import (
 var rmqCmd = &cobra.Command{
 	Use:   "rmq [queue name]",
 	Short: "Removes the specified queue",
-	Long: `Rmq (asynqmon rmq) will remove the specified queue.
+	Long: `Rmq (asynq rmq) will remove the specified queue.
 By default, it will remove the queue only if it's empty.
 Use --force option to override this behavior.
 
-Example: asynqmon rmq low -> Removes "low" queue`,
+Example: asynq rmq low -> Removes "low" queue`,
 	Args: cobra.ExactValidArgs(1),
 	Run:  rmq,
 }
@@ -44,7 +44,7 @@ func rmq(cmd *cobra.Command, args []string) {
 	err := r.RemoveQueue(args[0], rmqForce)
 	if err != nil {
 		if _, ok := err.(*rdb.ErrQueueNotEmpty); ok {
-			fmt.Printf("error: %v\nIf you are sure you want to delete it, run 'asynqmon rmq --force %s'\n", err, args[0])
+			fmt.Printf("error: %v\nIf you are sure you want to delete it, run 'asynq rmq --force %s'\n", err, args[0])
 			os.Exit(1)
 		}
 		fmt.Printf("error: %v", err)

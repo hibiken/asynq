@@ -20,14 +20,14 @@ var enqallValidArgs = []string{"scheduled", "retry", "dead"}
 var enqallCmd = &cobra.Command{
 	Use:   "enqall [state]",
 	Short: "Enqueues all tasks in the specified state",
-	Long: `Enqall (asynqmon enqall) will enqueue all tasks in the specified state.
+	Long: `Enqall (asynq enqall) will enqueue all tasks in the specified state.
 
 The argument should be one of "scheduled", "retry", or "dead".
 
 The tasks enqueued by this command will be processed as soon as it
 gets dequeued by a processor.
 
-Example: asynqmon enqall dead -> Enqueues all dead tasks`,
+Example: asynq enqall dead -> Enqueues all dead tasks`,
 	ValidArgs: enqallValidArgs,
 	Args:      cobra.ExactValidArgs(1),
 	Run:       enqall,
@@ -64,7 +64,7 @@ func enqall(cmd *cobra.Command, args []string) {
 	case "dead":
 		n, err = r.EnqueueAllDeadTasks()
 	default:
-		fmt.Printf("error: `asynqmon enqall [state]` only accepts %v as the argument.\n", enqallValidArgs)
+		fmt.Printf("error: `asynq enqall [state]` only accepts %v as the argument.\n", enqallValidArgs)
 		os.Exit(1)
 	}
 	if err != nil {
