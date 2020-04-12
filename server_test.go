@@ -32,9 +32,12 @@ func TestServer(t *testing.T) {
 		return nil
 	}
 
-	srv.start(HandlerFunc(h))
+	err := srv.Start(HandlerFunc(h))
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	err := c.Enqueue(NewTask("send_email", map[string]interface{}{"recipient_id": 123}))
+	err = c.Enqueue(NewTask("send_email", map[string]interface{}{"recipient_id": 123}))
 	if err != nil {
 		t.Errorf("could not enqueue a task: %v", err)
 	}
@@ -44,7 +47,7 @@ func TestServer(t *testing.T) {
 		t.Errorf("could not enqueue a task: %v", err)
 	}
 
-	srv.stop()
+	srv.Stop()
 }
 
 func TestGCD(t *testing.T) {

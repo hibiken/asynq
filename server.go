@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -30,8 +31,8 @@ import (
 // (e.g., queue size reaches a certain limit, or the task has been in the
 // queue for a certain amount of time).
 type Server struct {
-	mu      sync.Mutex
-	running bool
+	mu    sync.Mutex
+	state serverState
 
 	ps *base.ProcessState
 
@@ -197,6 +198,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	processor := newProcessor(logger, rdb, ps, delayFunc, syncCh, cancels, cfg.ErrorHandler)
 	subscriber := newSubscriber(logger, rdb, cancels)
 	return &Server{
+		state:       stateIdle,
 		logger:      logger,
 		rdb:         rdb,
 		ps:          ps,
@@ -230,11 +232,44 @@ func (fn HandlerFunc) ProcessTask(ctx context.Context, task *Task) error {
 	return fn(ctx, task)
 }
 
+// ErrServerStopped indicates that the operation is now illegal because of the server being stopped.
+var ErrServerStopped = errors.New("asynq: the server has been stopped")
+
+type serverState int
+
+const (
+	stateIdle serverState = iota
+	stateRunning
+	stateStopped
+)
+
 // Run starts the background-task processing and blocks until
 // an os signal to exit the program is received. Once it receives
 // a signal, it gracefully shuts down all pending workers and other
 // goroutines to process the tasks.
-func (srv *Server) Run(handler Handler) {
+func (srv *Server) Run(handler Handler) error {
+	if err := srv.Start(handler); err != nil {
+		return err
+	}
+	srv.waitForSignals()
+	srv.Stop()
+	return nil
+}
+
+// Starts the background-task processing.
+// TODO: doc
+func (srv *Server) Start(handler Handler) error {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	switch srv.state {
+	case stateRunning:
+		return fmt.Errorf("asynq: the server is already running")
+	case stateStopped:
+		return ErrServerStopped
+	}
+	srv.state = stateRunning
+	srv.processor.handler = handler
+
 	type prefixLogger interface {
 		SetPrefix(prefix string)
 	}
@@ -244,40 +279,26 @@ func (srv *Server) Run(handler Handler) {
 	}
 	srv.logger.Info("Starting processing")
 
-	srv.start(handler)
-	defer srv.stop()
-
-	srv.waitForSignals()
-	fmt.Println()
-	srv.logger.Info("Starting graceful shutdown")
-}
-
-// starts the background-task processing.
-func (srv *Server) start(handler Handler) {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	if srv.running {
-		return
-	}
-
-	srv.running = true
-	srv.processor.handler = handler
-
 	srv.heartbeater.start(&srv.wg)
 	srv.subscriber.start(&srv.wg)
 	srv.syncer.start(&srv.wg)
 	srv.scheduler.start(&srv.wg)
 	srv.processor.start(&srv.wg)
+	return nil
 }
 
-// stops the background-task processing.
-func (srv *Server) stop() {
+// Stops the background-task processing.
+// TODO: do we need to return error?
+func (srv *Server) Stop() {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
-	if !srv.running {
+	if srv.state != stateRunning {
+		// server is not running, do nothing and return.
 		return
 	}
 
+	fmt.Println() // print newline for prettier log.
+	srv.logger.Info("Starting graceful shutdown")
 	// Note: The order of termination is important.
 	// Sender goroutines should be terminated before the receiver goroutines.
 	//
@@ -291,7 +312,14 @@ func (srv *Server) stop() {
 	srv.wg.Wait()
 
 	srv.rdb.Close()
-	srv.running = false
+	srv.state = stateStopped
 
 	srv.logger.Info("Bye!")
+}
+
+// Quiet signals server to stop processing new tasks.
+// TODO: doc
+func (srv *Server) Quiet() {
+	srv.processor.stop()
+	srv.ps.SetStatus(base.StatusStopped) // TODO: rephrase this state, like StatusSilent?
 }

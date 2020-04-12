@@ -46,11 +46,11 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 		}
 		b.StartTimer() // end setup
 
-		srv.start(HandlerFunc(handler))
+		srv.Start(HandlerFunc(handler))
 		wg.Wait()
 
 		b.StopTimer() // begin teardown
-		srv.stop()
+		srv.Stop()
 		b.StartTimer() // end teardown
 	}
 }
@@ -99,11 +99,11 @@ func BenchmarkEndToEnd(b *testing.B) {
 		}
 		b.StartTimer() // end setup
 
-		srv.start(HandlerFunc(handler))
+		srv.Start(HandlerFunc(handler))
 		wg.Wait()
 
 		b.StopTimer() // begin teardown
-		srv.stop()
+		srv.Stop()
 		b.StartTimer() // end teardown
 	}
 }
@@ -160,11 +160,11 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 		}
 		b.StartTimer() // end setup
 
-		srv.start(HandlerFunc(handler))
+		srv.Start(HandlerFunc(handler))
 		wg.Wait()
 
 		b.StopTimer() // begin teardown
-		srv.stop()
+		srv.Stop()
 		b.StartTimer() // end teardown
 	}
 }

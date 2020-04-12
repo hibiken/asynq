@@ -7,8 +7,6 @@ import (
 	"os/signal"
 
 	"golang.org/x/sys/unix"
-
-	"github.com/hibiken/asynq/internal/base"
 )
 
 // waitForSignals waits for signals and handles them.
@@ -24,8 +22,7 @@ func (srv *Server) waitForSignals() {
 	for {
 		sig := <-sigs
 		if sig == unix.SIGTSTP {
-			srv.processor.stop()
-			srv.ps.SetStatus(base.StatusStopped)
+			srv.Quiet()
 			continue
 		}
 		break
