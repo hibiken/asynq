@@ -2055,10 +2055,10 @@ func TestListProcesses(t *testing.T) {
 	r := setup(t)
 
 	started1 := time.Now().Add(-time.Hour)
-	ps1 := base.NewProcessState("do.droplet1", 1234, 10, map[string]int{"default": 1}, false)
-	ps1.SetStarted(started1)
-	ps1.SetStatus(base.StatusRunning)
-	info1 := &base.ProcessInfo{
+	ss1 := base.NewServerState("do.droplet1", 1234, 10, map[string]int{"default": 1}, false)
+	ss1.SetStarted(started1)
+	ss1.SetStatus(base.StatusRunning)
+	info1 := &base.ServerInfo{
 		Concurrency:       10,
 		Queues:            map[string]int{"default": 1},
 		Host:              "do.droplet1",
@@ -2069,11 +2069,11 @@ func TestListProcesses(t *testing.T) {
 	}
 
 	started2 := time.Now().Add(-2 * time.Hour)
-	ps2 := base.NewProcessState("do.droplet2", 9876, 20, map[string]int{"email": 1}, false)
-	ps2.SetStarted(started2)
-	ps2.SetStatus(base.StatusStopped)
-	ps2.AddWorkerStats(h.NewTaskMessage("send_email", nil), time.Now())
-	info2 := &base.ProcessInfo{
+	ss2 := base.NewServerState("do.droplet2", 9876, 20, map[string]int{"email": 1}, false)
+	ss2.SetStarted(started2)
+	ss2.SetStatus(base.StatusStopped)
+	ss2.AddWorkerStats(h.NewTaskMessage("send_email", nil), time.Now())
+	info2 := &base.ServerInfo{
 		Concurrency:       20,
 		Queues:            map[string]int{"email": 1},
 		Host:              "do.droplet2",
@@ -2084,30 +2084,31 @@ func TestListProcesses(t *testing.T) {
 	}
 
 	tests := []struct {
-		processes []*base.ProcessState
-		want      []*base.ProcessInfo
+		serverStates []*base.ServerState
+		want         []*base.ServerInfo
 	}{
 		{
-			processes: []*base.ProcessState{},
-			want:      []*base.ProcessInfo{},
+			serverStates: []*base.ServerState{},
+			want:         []*base.ServerInfo{},
 		},
 		{
-			processes: []*base.ProcessState{ps1},
-			want:      []*base.ProcessInfo{info1},
+			serverStates: []*base.ServerState{ss1},
+			want:         []*base.ServerInfo{info1},
 		},
 		{
-			processes: []*base.ProcessState{ps1, ps2},
-			want:      []*base.ProcessInfo{info1, info2},
+			serverStates: []*base.ServerState{ss1, ss2},
+			want:         []*base.ServerInfo{info1, info2},
 		},
 	}
 
-	ignoreOpt := cmpopts.IgnoreUnexported(base.ProcessInfo{})
+	ignoreOpt := cmpopts.IgnoreUnexported(base.ServerInfo{})
+	ignoreFieldOpt := cmpopts.IgnoreFields(base.ServerInfo{}, "ServerID")
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
-		for _, ps := range tc.processes {
-			if err := r.WriteProcessState(ps, 5*time.Second); err != nil {
+		for _, ss := range tc.serverStates {
+			if err := r.WriteServerState(ss, 5*time.Second); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -2116,9 +2117,9 @@ func TestListProcesses(t *testing.T) {
 		if err != nil {
 			t.Errorf("r.ListProcesses returned an error: %v", err)
 		}
-		if diff := cmp.Diff(tc.want, got, h.SortProcessInfoOpt, ignoreOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, h.SortServerInfoOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
 			t.Errorf("r.ListProcesses returned %v, want %v; (-want,+got)\n%s",
-				got, tc.processes, diff)
+				got, tc.serverStates, diff)
 		}
 	}
 }
@@ -2164,13 +2165,13 @@ func TestListWorkers(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
-		ps := base.NewProcessState(host, pid, 10, map[string]int{"default": 1}, false)
+		ss := base.NewServerState(host, pid, 10, map[string]int{"default": 1}, false)
 
 		for _, w := range tc.workers {
-			ps.AddWorkerStats(w.msg, w.started)
+			ss.AddWorkerStats(w.msg, w.started)
 		}
 
-		err := r.WriteProcessState(ps, time.Minute)
+		err := r.WriteServerState(ss, time.Minute)
 		if err != nil {
 			t.Errorf("could not write process state to redis: %v", err)
 			continue

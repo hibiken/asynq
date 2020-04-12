@@ -758,6 +758,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 	return nil
 }
 
+// TODO: Rename this to listServerInfo.
 // Note: Script also removes stale keys.
 var listProcessesCmd = redis.NewScript(`
 local res = {}
@@ -773,9 +774,9 @@ redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
 return res`)
 
 // ListProcesses returns the list of process statuses.
-func (r *RDB) ListProcesses() ([]*base.ProcessInfo, error) {
+func (r *RDB) ListProcesses() ([]*base.ServerInfo, error) {
 	res, err := listProcessesCmd.Run(r.client,
-		[]string{base.AllProcesses}, time.Now().UTC().Unix()).Result()
+		[]string{base.AllServers}, time.Now().UTC().Unix()).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -783,9 +784,9 @@ func (r *RDB) ListProcesses() ([]*base.ProcessInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	var processes []*base.ProcessInfo
+	var processes []*base.ServerInfo
 	for _, s := range data {
-		var ps base.ProcessInfo
+		var ps base.ServerInfo
 		err := json.Unmarshal([]byte(s), &ps)
 		if err != nil {
 			continue // skip bad data

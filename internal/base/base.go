@@ -20,10 +20,10 @@ const DefaultQueueName = "default"
 
 // Redis keys
 const (
-	AllProcesses    = "asynq:ps"                     // ZSET
-	psPrefix        = "asynq:ps:"                    // STRING - asynq:ps:<host>:<pid>
+	AllServers      = "asynq:servers"                // ZSET
+	serversPrefix   = "asynq:servers:"               // STRING - asynq:ps:<host>:<pid>:<serverid>
 	AllWorkers      = "asynq:workers"                // ZSET
-	workersPrefix   = "asynq:workers:"               // HASH   - asynq:workers:<host:<pid>
+	workersPrefix   = "asynq:workers:"               // HASH   - asynq:workers:<host:<pid>:<serverid>
 	processedPrefix = "asynq:processed:"             // STRING - asynq:processed:<yyyy-mm-dd>
 	failurePrefix   = "asynq:failure:"               // STRING - asynq:failure:<yyyy-mm-dd>
 	QueuePrefix     = "asynq:queues:"                // LIST   - asynq:queues:<qname>
@@ -51,14 +51,14 @@ func FailureKey(t time.Time) string {
 	return failurePrefix + t.UTC().Format("2006-01-02")
 }
 
-// ProcessInfoKey returns a redis key for process info.
-func ProcessInfoKey(hostname string, pid int) string {
-	return fmt.Sprintf("%s%s:%d", psPrefix, hostname, pid)
+// ServerInfoKey returns a redis key for process info.
+func ServerInfoKey(hostname string, pid int, sid string) string {
+	return fmt.Sprintf("%s%s:%d:%s", serversPrefix, hostname, pid, sid)
 }
 
-// WorkersKey returns a redis key for the workers given hostname and pid.
-func WorkersKey(hostname string, pid int) string {
-	return fmt.Sprintf("%s%s:%d", workersPrefix, hostname, pid)
+// WorkersKey returns a redis key for the workers given hostname, pid, and server ID.
+func WorkersKey(hostname string, pid int, sid string) string {
+	return fmt.Sprintf("%s%s:%d:%s", workersPrefix, hostname, pid, sid)
 }
 
 // TaskMessage is the internal representation of a task with additional metadata fields.
@@ -109,6 +109,7 @@ type TaskMessage struct {
 // ServerStates are safe for concurrent use by multiple goroutines.
 type ServerState struct {
 	mu             sync.Mutex // guards all data fields
+	id             xid.ID
 	concurrency    int
 	queues         map[string]int
 	strictPriority bool
@@ -160,6 +161,7 @@ func NewServerState(host string, pid, concurrency int, queues map[string]int, st
 	return &ServerState{
 		host:           host,
 		pid:            pid,
+		id:             xid.New(),
 		concurrency:    concurrency,
 		queues:         cloneQueueConfig(queues),
 		strictPriority: strict,
@@ -175,7 +177,7 @@ func (ss *ServerState) SetStatus(status ServerStatus) {
 	ss.status = status
 }
 
-// GetStatus returns the status of server.
+// Status returns the status of server.
 func (ss *ServerState) Status() ServerStatus {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
@@ -203,13 +205,14 @@ func (ss *ServerState) DeleteWorkerStats(msg *TaskMessage) {
 	delete(ss.workers, msg.ID.String())
 }
 
-// Get returns current state of process as a ProcessInfo.
-func (ss *ServerState) Get() *ProcessInfo {
+// GetInfo returns current state of server as a ServerInfo.
+func (ss *ServerState) GetInfo() *ServerInfo {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
-	return &ProcessInfo{
+	return &ServerInfo{
 		Host:              ss.host,
 		PID:               ss.pid,
+		ServerID:          ss.id.String(),
 		Concurrency:       ss.concurrency,
 		Queues:            cloneQueueConfig(ss.queues),
 		StrictPriority:    ss.strictPriority,
@@ -254,10 +257,11 @@ func clonePayload(payload map[string]interface{}) map[string]interface{} {
 	return res
 }
 
-// ProcessInfo holds information about a running background worker process.
-type ProcessInfo struct {
+// ServerInfo holds information about a running server.
+type ServerInfo struct {
 	Host              string
 	PID               int
+	ServerID          string
 	Concurrency       int
 	Queues            map[string]int
 	StrictPriority    bool

@@ -31,17 +31,18 @@ func TestHeartbeater(t *testing.T) {
 	}
 
 	timeCmpOpt := cmpopts.EquateApproxTime(10 * time.Millisecond)
-	ignoreOpt := cmpopts.IgnoreUnexported(base.ProcessInfo{})
+	ignoreOpt := cmpopts.IgnoreUnexported(base.ServerInfo{})
+	ignoreFieldOpt := cmpopts.IgnoreFields(base.ServerInfo{}, "ServerID")
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 
-		state := base.NewProcessState(tc.host, tc.pid, tc.concurrency, tc.queues, false)
+		state := base.NewServerState(tc.host, tc.pid, tc.concurrency, tc.queues, false)
 		hb := newHeartbeater(testLogger, rdbClient, state, tc.interval)
 
 		var wg sync.WaitGroup
 		hb.start(&wg)
 
-		want := &base.ProcessInfo{
+		want := &base.ServerInfo{
 			Host:        tc.host,
 			PID:         tc.pid,
 			Queues:      tc.queues,
@@ -66,7 +67,7 @@ func TestHeartbeater(t *testing.T) {
 			continue
 		}
 
-		if diff := cmp.Diff(want, ps[0], timeCmpOpt, ignoreOpt); diff != "" {
+		if diff := cmp.Diff(want, ps[0], timeCmpOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
 			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ps[0], want, diff)
 			hb.terminate()
 			continue
@@ -92,7 +93,7 @@ func TestHeartbeater(t *testing.T) {
 			continue
 		}
 
-		if diff := cmp.Diff(want, ps[0], timeCmpOpt, ignoreOpt); diff != "" {
+		if diff := cmp.Diff(want, ps[0], timeCmpOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
 			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ps[0], want, diff)
 			hb.terminate()
 			continue

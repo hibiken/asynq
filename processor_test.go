@@ -67,9 +67,9 @@ func TestProcessorSuccess(t *testing.T) {
 			processed = append(processed, task)
 			return nil
 		}
-		ps := base.NewProcessState("localhost", 1234, 10, defaultQueueConfig, false)
+		ss := base.NewServerState("localhost", 1234, 10, defaultQueueConfig, false)
 		cancelations := base.NewCancelations()
-		p := newProcessor(testLogger, rdbClient, ps, defaultDelayFunc, nil, cancelations, nil)
+		p := newProcessor(testLogger, rdbClient, ss, defaultDelayFunc, nil, cancelations, nil)
 		p.handler = HandlerFunc(handler)
 
 		var wg sync.WaitGroup
@@ -165,9 +165,9 @@ func TestProcessorRetry(t *testing.T) {
 			defer mu.Unlock()
 			n++
 		}
-		ps := base.NewProcessState("localhost", 1234, 10, defaultQueueConfig, false)
+		ss := base.NewServerState("localhost", 1234, 10, defaultQueueConfig, false)
 		cancelations := base.NewCancelations()
-		p := newProcessor(testLogger, rdbClient, ps, delayFunc, nil, cancelations, ErrorHandlerFunc(errHandler))
+		p := newProcessor(testLogger, rdbClient, ss, delayFunc, nil, cancelations, ErrorHandlerFunc(errHandler))
 		p.handler = tc.handler
 
 		var wg sync.WaitGroup
@@ -232,8 +232,8 @@ func TestProcessorQueues(t *testing.T) {
 
 	for _, tc := range tests {
 		cancelations := base.NewCancelations()
-		ps := base.NewProcessState("localhost", 1234, 10, tc.queueCfg, false)
-		p := newProcessor(testLogger, nil, ps, defaultDelayFunc, nil, cancelations, nil)
+		ss := base.NewServerState("localhost", 1234, 10, tc.queueCfg, false)
+		p := newProcessor(testLogger, nil, ss, defaultDelayFunc, nil, cancelations, nil)
 		got := p.queues()
 		if diff := cmp.Diff(tc.want, got, sortOpt); diff != "" {
 			t.Errorf("with queue config: %v\n(*processor).queues() = %v, want %v\n(-want,+got):\n%s",
@@ -300,8 +300,8 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		}
 		// Note: Set concurrency to 1 to make sure tasks are processed one at a time.
 		cancelations := base.NewCancelations()
-		ps := base.NewProcessState("localhost", 1234, 1 /* concurrency */, queueCfg, true /*strict*/)
-		p := newProcessor(testLogger, rdbClient, ps, defaultDelayFunc, nil, cancelations, nil)
+		ss := base.NewServerState("localhost", 1234, 1 /* concurrency */, queueCfg, true /*strict*/)
+		p := newProcessor(testLogger, rdbClient, ss, defaultDelayFunc, nil, cancelations, nil)
 		p.handler = HandlerFunc(handler)
 
 		var wg sync.WaitGroup

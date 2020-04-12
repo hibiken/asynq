@@ -41,9 +41,9 @@ var SortZSetEntryOpt = cmp.Transformer("SortZSetEntries", func(in []ZSetEntry) [
 	return out
 })
 
-// SortProcessInfoOpt is a cmp.Option to sort base.ProcessInfo for comparing slice of process info.
-var SortProcessInfoOpt = cmp.Transformer("SortProcessInfo", func(in []*base.ProcessInfo) []*base.ProcessInfo {
-	out := append([]*base.ProcessInfo(nil), in...) // Copy input to avoid mutating it
+// SortServerInfoOpt is a cmp.Option to sort base.ServerInfo for comparing slice of process info.
+var SortServerInfoOpt = cmp.Transformer("SortServerInfo", func(in []*base.ServerInfo) []*base.ServerInfo {
+	out := append([]*base.ServerInfo(nil), in...) // Copy input to avoid mutating it
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Host != out[j].Host {
 			return out[i].Host < out[j].Host
