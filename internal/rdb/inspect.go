@@ -758,24 +758,23 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 	return nil
 }
 
-// TODO: Rename this to listServerInfo.
 // Note: Script also removes stale keys.
-var listProcessesCmd = redis.NewScript(`
+var listServersCmd = redis.NewScript(`
 local res = {}
 local now = tonumber(ARGV[1])
 local keys = redis.call("ZRANGEBYSCORE", KEYS[1], now, "+inf")
 for _, key in ipairs(keys) do
-	local ps = redis.call("GET", key)
-	if ps then
-		table.insert(res, ps)
+	local s = redis.call("GET", key)
+	if s then
+		table.insert(res, s)
 	end  
 end
 redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
 return res`)
 
-// ListProcesses returns the list of process statuses.
-func (r *RDB) ListProcesses() ([]*base.ServerInfo, error) {
-	res, err := listProcessesCmd.Run(r.client,
+// ListServers returns the list of process statuses.
+func (r *RDB) ListServers() ([]*base.ServerInfo, error) {
+	res, err := listServersCmd.Run(r.client,
 		[]string{base.AllServers}, time.Now().UTC().Unix()).Result()
 	if err != nil {
 		return nil, err
@@ -784,16 +783,16 @@ func (r *RDB) ListProcesses() ([]*base.ServerInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	var processes []*base.ServerInfo
+	var servers []*base.ServerInfo
 	for _, s := range data {
-		var ps base.ServerInfo
-		err := json.Unmarshal([]byte(s), &ps)
+		var info base.ServerInfo
+		err := json.Unmarshal([]byte(s), &info)
 		if err != nil {
 			continue // skip bad data
 		}
-		processes = append(processes, &ps)
+		servers = append(servers, &info)
 	}
-	return processes, nil
+	return servers, nil
 }
 
 // Note: Script also removes stale keys.

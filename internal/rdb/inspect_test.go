@@ -2051,7 +2051,7 @@ func TestRemoveQueueError(t *testing.T) {
 	}
 }
 
-func TestListProcesses(t *testing.T) {
+func TestListServers(t *testing.T) {
 	r := setup(t)
 
 	started1 := time.Now().Add(-time.Hour)
@@ -2113,12 +2113,12 @@ func TestListProcesses(t *testing.T) {
 			}
 		}
 
-		got, err := r.ListProcesses()
+		got, err := r.ListServers()
 		if err != nil {
-			t.Errorf("r.ListProcesses returned an error: %v", err)
+			t.Errorf("r.ListServers returned an error: %v", err)
 		}
 		if diff := cmp.Diff(tc.want, got, h.SortServerInfoOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
-			t.Errorf("r.ListProcesses returned %v, want %v; (-want,+got)\n%s",
+			t.Errorf("r.ListServers returned %v, want %v; (-want,+got)\n%s",
 				got, tc.serverStates, diff)
 		}
 	}
@@ -2173,7 +2173,7 @@ func TestListWorkers(t *testing.T) {
 
 		err := r.WriteServerState(ss, time.Minute)
 		if err != nil {
-			t.Errorf("could not write process state to redis: %v", err)
+			t.Errorf("could not write server state to redis: %v", err)
 			continue
 		}
 
