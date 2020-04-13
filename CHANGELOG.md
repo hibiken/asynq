@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `Background` type is renamed to `Server`.
+  - To upgrade from the previous version, Update `NewBackground` to `NewServer` and pass `Config` by value.
+- New `Server` type exposes `Start`, `Stop`, and `Quiet` as well as `Run`.
+- CLI is renamed to `asynq`.
+  - To upgrade to the latest version run `go get -u github.com/hibiken/tools/asynq`
+- The `ps` command in CLI is renamed to `servers`
+
 ## [0.7.1] - 2020-04-05
 
 ### Fixed

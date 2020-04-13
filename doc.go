@@ -30,13 +30,13 @@ Task is created with two parameters: its type and payload.
     // Schedule the task to be processed in one minute.
     err = client.EnqueueIn(time.Minute, t)
 
-The Background is used to run the background task processing with a given
+The Server is used to run the background task processing with a given
 handler.
-    bg := asynq.NewBackground(redis, &asynq.Config{
+    srv := asynq.NewServer(redis, asynq.Config{
         Concurrency: 10,
     })
 
-    bg.Run(handler)
+    srv.Run(handler)
 
 Handler is an interface with one method ProcessTask which
 takes a task and returns an error. Handler should return nil if

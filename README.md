@@ -161,8 +161,8 @@ func main() {
 }
 ```
 
-Next, create a binary to process these tasks in the background.  
-To start the background workers, use [`Background`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Background) and provide your [`Handler`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Handler) to process the tasks.
+Next, create a work server binary to process these tasks in the background.  
+To start the background workers, use [`Server`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Server) and provide your [`Handler`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Handler) to process the tasks.
 
 You can optionally use [`ServeMux`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#ServeMux) to create a handler, just as you would with [`"net/http"`](https://golang.org/pkg/net/http/) Handler.
 
@@ -179,7 +179,7 @@ const redisAddr = "127.0.0.1:6379"
 func main() {
     r := &asynq.RedisClientOpt{Addr: redisAddr}
 
-    bg := asynq.NewBackground(r, &asynq.Config{
+    srv := asynq.NewServer(r, asynq.Config{
         // Specify how many concurrent workers to use
         Concurrency: 10,
         // Optionally specify multiple queues with different priority.
@@ -197,7 +197,7 @@ func main() {
     mux.HandleFunc(tasks.ImageProcessing, tasks.HandleImageProcessingTask)
     // ...register other handlers...
 
-    bg.Run(mux)
+    srv.Run(mux)
 }
 ```
 
