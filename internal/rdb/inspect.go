@@ -772,7 +772,7 @@ end
 redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
 return res`)
 
-// ListServers returns the list of process statuses.
+// ListServers returns the list of server info.
 func (r *RDB) ListServers() ([]*base.ServerInfo, error) {
 	res, err := listServersCmd.Run(r.client,
 		[]string{base.AllServers}, time.Now().UTC().Unix()).Result()

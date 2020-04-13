@@ -197,7 +197,9 @@ func main() {
     mux.HandleFunc(tasks.ImageProcessing, tasks.HandleImageProcessingTask)
     // ...register other handlers...
 
-    srv.Run(mux)
+    if err := srv.Run(mux); err != nil {
+        log.Fatalf("could not run server: %v", err)
+    }
 }
 ```
 
