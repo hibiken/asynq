@@ -18,64 +18,64 @@ import (
 	"github.com/spf13/viper"
 )
 
-// psCmd represents the ps command
-var psCmd = &cobra.Command{
-	Use:   "ps",
-	Short: "Shows all background worker processes",
-	Long: `Ps (asynq ps) will show all background worker processes
-backed by the specified redis instance.
+// serversCmd represents the servers command
+var serversCmd = &cobra.Command{
+	Use:   "servers",
+	Short: "Shows all running worker servers",
+	Long: `Servers (asynq servers) will show all running worker servers
+pulling tasks from the specified redis instance.
 
-The command shows the following for each process:
-* Host and PID of the process
+The command shows the following for each server:
+* Host and PID of the process in which the server is running
 * Number of active workers out of worker pool
 * Queue configuration
-* State of the worker process ("running" | "stopped")
-* Time the process was started
+* State of the worker server ("running" | "quiet")
+* Time the server was started
 
-A "running" process is processing tasks in queues.
-A "stopped" process is no longer processing new tasks.`,
+A "running" server is pulling tasks from queues and processing them.
+A "quiet" server is no longer pulling new tasks from queues`,
 	Args: cobra.NoArgs,
-	Run:  ps,
+	Run:  servers,
 }
 
 func init() {
-	rootCmd.AddCommand(psCmd)
+	rootCmd.AddCommand(serversCmd)
 }
 
-func ps(cmd *cobra.Command, args []string) {
+func servers(cmd *cobra.Command, args []string) {
 	r := rdb.NewRDB(redis.NewClient(&redis.Options{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),
 		Password: viper.GetString("password"),
 	}))
 
-	processes, err := r.ListProcesses()
+	servers, err := r.ListServers()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	if len(processes) == 0 {
-		fmt.Println("No processes")
+	if len(servers) == 0 {
+		fmt.Println("No running servers")
 		return
 	}
 
 	// sort by hostname and pid
-	sort.Slice(processes, func(i, j int) bool {
-		x, y := processes[i], processes[j]
+	sort.Slice(servers, func(i, j int) bool {
+		x, y := servers[i], servers[j]
 		if x.Host != y.Host {
 			return x.Host < y.Host
 		}
 		return x.PID < y.PID
 	})
 
-	// print processes
+	// print server info
 	cols := []string{"Host", "PID", "State", "Active Workers", "Queues", "Started"}
 	printRows := func(w io.Writer, tmpl string) {
-		for _, ps := range processes {
+		for _, info := range servers {
 			fmt.Fprintf(w, tmpl,
-				ps.Host, ps.PID, ps.Status,
-				fmt.Sprintf("%d/%d", ps.ActiveWorkerCount, ps.Concurrency),
-				formatQueues(ps.Queues), timeAgo(ps.Started))
+				info.Host, info.PID, info.Status,
+				fmt.Sprintf("%d/%d", info.ActiveWorkerCount, info.Concurrency),
+				formatQueues(info.Queues), timeAgo(info.Started))
 		}
 	}
 	printTable(cols, printRows)

@@ -54,21 +54,21 @@ func TestHeartbeater(t *testing.T) {
 		// allow for heartbeater to write to redis
 		time.Sleep(tc.interval * 2)
 
-		ps, err := rdbClient.ListProcesses()
+		ss, err := rdbClient.ListServers()
 		if err != nil {
-			t.Errorf("could not read process status from redis: %v", err)
+			t.Errorf("could not read server info from redis: %v", err)
 			hb.terminate()
 			continue
 		}
 
-		if len(ps) != 1 {
-			t.Errorf("(*RDB).ListProcesses returned %d process info, want 1", len(ps))
+		if len(ss) != 1 {
+			t.Errorf("(*RDB).ListServers returned %d process info, want 1", len(ss))
 			hb.terminate()
 			continue
 		}
 
-		if diff := cmp.Diff(want, ps[0], timeCmpOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
-			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ps[0], want, diff)
+		if diff := cmp.Diff(want, ss[0], timeCmpOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
+			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ss[0], want, diff)
 			hb.terminate()
 			continue
 		}
@@ -80,21 +80,21 @@ func TestHeartbeater(t *testing.T) {
 		time.Sleep(tc.interval * 2)
 
 		want.Status = "stopped"
-		ps, err = rdbClient.ListProcesses()
+		ss, err = rdbClient.ListServers()
 		if err != nil {
 			t.Errorf("could not read process status from redis: %v", err)
 			hb.terminate()
 			continue
 		}
 
-		if len(ps) != 1 {
-			t.Errorf("(*RDB).ListProcesses returned %d process info, want 1", len(ps))
+		if len(ss) != 1 {
+			t.Errorf("(*RDB).ListProcesses returned %d process info, want 1", len(ss))
 			hb.terminate()
 			continue
 		}
 
-		if diff := cmp.Diff(want, ps[0], timeCmpOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
-			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ps[0], want, diff)
+		if diff := cmp.Diff(want, ss[0], timeCmpOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
+			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ss[0], want, diff)
 			hb.terminate()
 			continue
 		}
