@@ -106,9 +106,9 @@ func TestWorkersKey(t *testing.T) {
 	}
 }
 
-// Test for process state being accessed by multiple goroutines.
+// Test for server state being accessed by multiple goroutines.
 // Run with -race flag to check for data race.
-func TestProcessStateConcurrentAccess(t *testing.T) {
+func TestServerStateConcurrentAccess(t *testing.T) {
 	ss := NewServerState("127.0.0.1", 1234, 10, map[string]int{"default": 1}, false)
 	var wg sync.WaitGroup
 	started := time.Now()
@@ -124,6 +124,9 @@ func TestProcessStateConcurrentAccess(t *testing.T) {
 		defer wg.Done()
 		ss.SetStarted(started)
 		ss.SetStatus(StatusRunning)
+		if status := ss.Status(); status != StatusRunning {
+			t.Errorf("(*ServerState).Status() = %v, want %v", status, StatusRunning)
+		}
 	}()
 
 	// Simulate processor starting worker goroutines.
