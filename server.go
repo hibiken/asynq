@@ -256,14 +256,15 @@ func (srv *Server) Run(handler Handler) error {
 // Start returns any error encountered during server boot time.
 // If the server has already been stopped, ErrServerStopped is returned.
 func (srv *Server) Start(handler Handler) error {
-	// TODO: Retrun error if handler is nil
+	if handler == nil {
+		return fmt.Errorf("asynq: server cannot run with nil handler")
+	}
 	switch srv.ss.Status() {
 	case base.StatusRunning:
 		return fmt.Errorf("asynq: the server is already running")
 	case base.StatusStopped:
 		return ErrServerStopped
 	}
-	// TODO: Return error if cannot connect to Redis
 	srv.ss.SetStatus(base.StatusRunning)
 	srv.processor.handler = handler
 

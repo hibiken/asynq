@@ -50,6 +50,41 @@ func TestServer(t *testing.T) {
 	srv.Stop()
 }
 
+func TestServerErrServerStopped(t *testing.T) {
+	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{})
+	handler := NewServeMux()
+	if err := srv.Start(handler); err != nil {
+		t.Fatal(err)
+	}
+	srv.Stop()
+	err := srv.Start(handler)
+	if err != ErrServerStopped {
+		t.Errorf("Restarting server: (*Server).Start(handler) = %v, want ErrServerStopped error", err)
+	}
+}
+
+func TestServerErrNilHandler(t *testing.T) {
+	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{})
+	err := srv.Start(nil)
+	if err == nil {
+		t.Error("Starting server with nil handler: (*Server).Start(nil) did not return error")
+		srv.Stop()
+	}
+}
+
+func TestServerErrServerRunning(t *testing.T) {
+	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{})
+	handler := NewServeMux()
+	if err := srv.Start(handler); err != nil {
+		t.Fatal(err)
+	}
+	err := srv.Start(handler)
+	if err == nil {
+		t.Error("Calling (*Server).Start(handler) on already running server did not return error")
+	}
+	srv.Stop()
+}
+
 func TestGCD(t *testing.T) {
 	tests := []struct {
 		input []int
