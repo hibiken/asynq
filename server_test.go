@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	"go.uber.org/goleak"
 )
 
@@ -83,84 +82,4 @@ func TestServerErrServerRunning(t *testing.T) {
 		t.Error("Calling (*Server).Start(handler) on already running server did not return error")
 	}
 	srv.Stop()
-}
-
-func TestGCD(t *testing.T) {
-	tests := []struct {
-		input []int
-		want  int
-	}{
-		{[]int{6, 2, 12}, 2},
-		{[]int{3, 3, 3}, 3},
-		{[]int{6, 3, 1}, 1},
-		{[]int{1}, 1},
-		{[]int{1, 0, 2}, 1},
-		{[]int{8, 0, 4}, 4},
-		{[]int{9, 12, 18, 30}, 3},
-	}
-
-	for _, tc := range tests {
-		got := gcd(tc.input...)
-		if got != tc.want {
-			t.Errorf("gcd(%v) = %d, want %d", tc.input, got, tc.want)
-		}
-	}
-}
-
-func TestNormalizeQueueCfg(t *testing.T) {
-	tests := []struct {
-		input map[string]int
-		want  map[string]int
-	}{
-		{
-			input: map[string]int{
-				"high":    100,
-				"default": 20,
-				"low":     5,
-			},
-			want: map[string]int{
-				"high":    20,
-				"default": 4,
-				"low":     1,
-			},
-		},
-		{
-			input: map[string]int{
-				"default": 10,
-			},
-			want: map[string]int{
-				"default": 1,
-			},
-		},
-		{
-			input: map[string]int{
-				"critical": 5,
-				"default":  1,
-			},
-			want: map[string]int{
-				"critical": 5,
-				"default":  1,
-			},
-		},
-		{
-			input: map[string]int{
-				"critical": 6,
-				"default":  3,
-				"low":      0,
-			},
-			want: map[string]int{
-				"critical": 2,
-				"default":  1,
-				"low":      0,
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		got := normalizeQueueCfg(tc.input)
-		if diff := cmp.Diff(tc.want, got); diff != "" {
-			t.Errorf("normalizeQueueCfg(%v) = %v, want %v; (-want, +got):\n%s",
-				tc.input, got, tc.want, diff)
-		}
-	}
 }
