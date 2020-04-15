@@ -258,7 +258,7 @@ var ErrServerStopped = errors.New("asynq: the server has been stopped")
 // a signal, it gracefully shuts down all active workers and other
 // goroutines to process the tasks.
 //
-// Run returns any error encountered during server boot time.
+// Run returns any error encountered during server startup time.
 // If the server has already been stopped, ErrServerStopped is returned.
 func (srv *Server) Run(handler Handler) error {
 	if err := srv.Start(handler); err != nil {
@@ -274,7 +274,7 @@ func (srv *Server) Run(handler Handler) error {
 // Tasks are processed concurrently by the workers  up to the number of
 // concurrency specified at the initialization time.
 //
-// Start returns any error encountered during server boot time.
+// Start returns any error encountered during server startup time.
 // If the server has already been stopped, ErrServerStopped is returned.
 func (srv *Server) Start(handler Handler) error {
 	if handler == nil {

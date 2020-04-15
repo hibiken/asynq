@@ -14,7 +14,7 @@ specify the options using one of RedisConnOpt types.
         DB:       3,
     }
 
-The Client is used to register a task to be processed at the specified time.
+The Client is used to enqueue a task to be processed at the specified time.
 
 Task is created with two parameters: its type and payload.
 
@@ -27,7 +27,7 @@ Task is created with two parameters: its type and payload.
     // Enqueue the task to be processed immediately.
     err := client.Enqueue(t)
 
-    // Schedule the task to be processed in one minute.
+    // Schedule the task to be processed after one minute.
     err = client.EnqueueIn(time.Minute, t)
 
 The Server is used to run the background task processing with a given
@@ -38,7 +38,7 @@ handler.
 
     srv.Run(handler)
 
-Handler is an interface with one method ProcessTask which
+Handler is an interface type with a method which
 takes a task and returns an error. Handler should return nil if
 the processing is successful, otherwise return a non-nil error.
 If handler panics or returns a non-nil error, the task will be retried in the future.
