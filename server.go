@@ -109,6 +109,12 @@ type Config struct {
 	//
 	// If unset, default logger is used.
 	Logger Logger
+
+	// ShutdownTimeout specifies the duration to wait to let workers finish their tasks
+	// before forcing them to abort when stopping the server.
+	//
+	// If unset or zero, default timeout of 8 seconds is used.
+	ShutdownTimeout time.Duration
 }
 
 // An ErrorHandler handles errors returned by the task handler.
@@ -155,6 +161,8 @@ var defaultQueueConfig = map[string]int{
 	base.DefaultQueueName: 1,
 }
 
+const defaultShutdownTimeout = 8 * time.Second
+
 // NewServer returns a new Server given a redis connection option
 // and background processing configuration.
 func NewServer(r RedisConnOpt, cfg Config) *Server {
@@ -179,6 +187,10 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	if logger == nil {
 		logger = log.NewLogger(os.Stderr)
 	}
+	shutdownTimeout := cfg.ShutdownTimeout
+	if shutdownTimeout == 0 {
+		shutdownTimeout = defaultShutdownTimeout
+	}
 
 	host, err := os.Hostname()
 	if err != nil {
@@ -193,8 +205,17 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	syncer := newSyncer(logger, syncCh, 5*time.Second)
 	heartbeater := newHeartbeater(logger, rdb, ss, 5*time.Second)
 	scheduler := newScheduler(logger, rdb, 5*time.Second, queues)
-	processor := newProcessor(logger, rdb, ss, delayFunc, syncCh, cancels, cfg.ErrorHandler)
 	subscriber := newSubscriber(logger, rdb, cancels)
+	processor := newProcessor(newProcessorParams{
+		logger:          logger,
+		rdb:             rdb,
+		ss:              ss,
+		retryDelayFunc:  delayFunc,
+		syncCh:          syncCh,
+		cancelations:    cancels,
+		errHandler:      cfg.ErrorHandler,
+		shutdownTimeout: shutdownTimeout,
+	})
 	return &Server{
 		ss:          ss,
 		logger:      logger,
@@ -287,9 +308,8 @@ func (srv *Server) Start(handler Handler) error {
 
 // Stop stops the worker server.
 // It gracefully closes all active workers. The server will wait for
-// active workers to finish processing task for 8 seconds(TODO: Add ShutdownTimeout to Config).
-// If worker didn't finish processing a task during the timeout, the
-// task will be pushed back to Redis.
+// active workers to finish processing tasks for duration specified in Config.ShutdownTimeout.
+// If worker didn't finish processing a task during the timeout, the task will be pushed back to Redis.
 func (srv *Server) Stop() {
 	switch srv.ss.Status() {
 	case base.StatusIdle, base.StatusStopped:

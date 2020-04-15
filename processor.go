@@ -34,6 +34,8 @@ type processor struct {
 
 	errHandler ErrorHandler
 
+	shutdownTimeout time.Duration
+
 	// channel via which to send sync requests to syncer.
 	syncRequestCh chan<- *syncRequest
 
@@ -61,30 +63,40 @@ type processor struct {
 
 type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
+type newProcessorParams struct {
+	logger          Logger
+	rdb             *rdb.RDB
+	ss              *base.ServerState
+	retryDelayFunc  retryDelayFunc
+	syncCh          chan<- *syncRequest
+	cancelations    *base.Cancelations
+	errHandler      ErrorHandler
+	shutdownTimeout time.Duration
+}
+
 // newProcessor constructs a new processor.
-func newProcessor(l Logger, r *rdb.RDB, ss *base.ServerState, fn retryDelayFunc,
-	syncCh chan<- *syncRequest, c *base.Cancelations, errHandler ErrorHandler) *processor {
-	info := ss.GetInfo()
+func newProcessor(params newProcessorParams) *processor {
+	info := params.ss.GetInfo()
 	qcfg := normalizeQueueCfg(info.Queues)
 	orderedQueues := []string(nil)
 	if info.StrictPriority {
 		orderedQueues = sortByPriority(qcfg)
 	}
 	return &processor{
-		logger:         l,
-		rdb:            r,
-		ss:             ss,
+		logger:         params.logger,
+		rdb:            params.rdb,
+		ss:             params.ss,
 		queueConfig:    qcfg,
 		orderedQueues:  orderedQueues,
-		retryDelayFunc: fn,
-		syncRequestCh:  syncCh,
-		cancelations:   c,
+		retryDelayFunc: params.retryDelayFunc,
+		syncRequestCh:  params.syncCh,
+		cancelations:   params.cancelations,
 		errLogLimiter:  rate.NewLimiter(rate.Every(3*time.Second), 1),
 		sema:           make(chan struct{}, info.Concurrency),
 		done:           make(chan struct{}),
 		abort:          make(chan struct{}),
 		quit:           make(chan struct{}),
-		errHandler:     errHandler,
+		errHandler:     params.errHandler,
 		handler:        HandlerFunc(func(ctx context.Context, t *Task) error { return fmt.Errorf("handler not set") }),
 	}
 }
@@ -106,9 +118,7 @@ func (p *processor) stop() {
 func (p *processor) terminate() {
 	p.stop()
 
-	// IDEA: Allow user to customize this timeout value.
-	const timeout = 8 * time.Second
-	time.AfterFunc(timeout, func() { close(p.quit) })
+	time.AfterFunc(p.shutdownTimeout, func() { close(p.quit) })
 	p.logger.Info("Waiting for all workers to finish...")
 
 	// send cancellation signal to all in-progress task handlers
