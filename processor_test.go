@@ -69,7 +69,16 @@ func TestProcessorSuccess(t *testing.T) {
 		}
 		ss := base.NewServerState("localhost", 1234, 10, defaultQueueConfig, false)
 		cancelations := base.NewCancelations()
-		p := newProcessor(testLogger, rdbClient, ss, defaultDelayFunc, nil, cancelations, nil)
+		p := newProcessor(newProcessorParams{
+			logger:          testLogger,
+			rdb:             rdbClient,
+			ss:              ss,
+			retryDelayFunc:  defaultDelayFunc,
+			syncCh:          nil,
+			cancelations:    cancelations,
+			errHandler:      nil,
+			shutdownTimeout: defaultShutdownTimeout,
+		})
 		p.handler = HandlerFunc(handler)
 
 		var wg sync.WaitGroup
@@ -167,7 +176,16 @@ func TestProcessorRetry(t *testing.T) {
 		}
 		ss := base.NewServerState("localhost", 1234, 10, defaultQueueConfig, false)
 		cancelations := base.NewCancelations()
-		p := newProcessor(testLogger, rdbClient, ss, delayFunc, nil, cancelations, ErrorHandlerFunc(errHandler))
+		p := newProcessor(newProcessorParams{
+			logger:          testLogger,
+			rdb:             rdbClient,
+			ss:              ss,
+			retryDelayFunc:  delayFunc,
+			syncCh:          nil,
+			cancelations:    cancelations,
+			errHandler:      ErrorHandlerFunc(errHandler),
+			shutdownTimeout: defaultShutdownTimeout,
+		})
 		p.handler = tc.handler
 
 		var wg sync.WaitGroup
@@ -233,7 +251,16 @@ func TestProcessorQueues(t *testing.T) {
 	for _, tc := range tests {
 		cancelations := base.NewCancelations()
 		ss := base.NewServerState("localhost", 1234, 10, tc.queueCfg, false)
-		p := newProcessor(testLogger, nil, ss, defaultDelayFunc, nil, cancelations, nil)
+		p := newProcessor(newProcessorParams{
+			logger:          testLogger,
+			rdb:             nil,
+			ss:              ss,
+			retryDelayFunc:  defaultDelayFunc,
+			syncCh:          nil,
+			cancelations:    cancelations,
+			errHandler:      nil,
+			shutdownTimeout: defaultShutdownTimeout,
+		})
 		got := p.queues()
 		if diff := cmp.Diff(tc.want, got, sortOpt); diff != "" {
 			t.Errorf("with queue config: %v\n(*processor).queues() = %v, want %v\n(-want,+got):\n%s",
@@ -301,7 +328,16 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		// Note: Set concurrency to 1 to make sure tasks are processed one at a time.
 		cancelations := base.NewCancelations()
 		ss := base.NewServerState("localhost", 1234, 1 /* concurrency */, queueCfg, true /*strict*/)
-		p := newProcessor(testLogger, rdbClient, ss, defaultDelayFunc, nil, cancelations, nil)
+		p := newProcessor(newProcessorParams{
+			logger:          testLogger,
+			rdb:             rdbClient,
+			ss:              ss,
+			retryDelayFunc:  defaultDelayFunc,
+			syncCh:          nil,
+			cancelations:    cancelations,
+			errHandler:      nil,
+			shutdownTimeout: defaultShutdownTimeout,
+		})
 		p.handler = HandlerFunc(handler)
 
 		var wg sync.WaitGroup
