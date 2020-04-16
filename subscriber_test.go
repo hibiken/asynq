@@ -41,12 +41,15 @@ func TestSubscriber(t *testing.T) {
 		var wg sync.WaitGroup
 		subscriber.start(&wg)
 
+		// wait for subscriber to establish connection to pubsub channel
+		time.Sleep(time.Second)
+
 		if err := rdbClient.PublishCancelation(tc.publishID); err != nil {
 			subscriber.terminate()
 			t.Fatalf("could not publish cancelation message: %v", err)
 		}
 
-		// allow for redis to publish message
+		// wait for redis to publish message
 		time.Sleep(time.Second)
 
 		mu.Lock()
