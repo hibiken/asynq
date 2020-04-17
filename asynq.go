@@ -7,8 +7,10 @@ package asynq
 import (
 	"crypto/tls"
 	"fmt"
+	"time"
 
 	"github.com/go-redis/redis/v7"
+	"github.com/hibiken/asynq/internal/base"
 )
 
 // Task represents a unit of work to be performed.
@@ -28,6 +30,28 @@ func NewTask(typename string, payload map[string]interface{}) *Task {
 		Type:    typename,
 		Payload: Payload{payload},
 	}
+}
+
+// broker is a message broker that supports operations to manage task queues.
+//
+// See rdb.RDB as a reference implementation.
+type broker interface {
+	Enqueue(msg *base.TaskMessage) error
+	EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error
+	Dequeue(qnames ...string) (*base.TaskMessage, error)
+	Done(msg *base.TaskMessage) error
+	Requeue(msg *base.TaskMessage) error
+	Schedule(msg *base.TaskMessage, processAt time.Time) error
+	ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl time.Duration) error
+	Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) error
+	Kill(msg *base.TaskMessage, errMsg string) error
+	RequeueAll() (int64, error)
+	CheckAndEnqueue(qnames ...string) error
+	WriteServerState(ss *base.ServerState, ttl time.Duration) error
+	ClearServerState(ss *base.ServerState) error
+	CancelationPubSub() (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers
+	PublishCancelation(id string) error
+	Close() error
 }
 
 // RedisConnOpt is a discriminated union of types that represent Redis connection configuration option.

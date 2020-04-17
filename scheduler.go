@@ -7,13 +7,11 @@ package asynq
 import (
 	"sync"
 	"time"
-
-	"github.com/hibiken/asynq/internal/rdb"
 )
 
 type scheduler struct {
 	logger Logger
-	rdb    *rdb.RDB
+	broker broker
 
 	// channel to communicate back to the long running "scheduler" goroutine.
 	done chan struct{}
@@ -25,14 +23,14 @@ type scheduler struct {
 	qnames []string
 }
 
-func newScheduler(l Logger, r *rdb.RDB, avgInterval time.Duration, qcfg map[string]int) *scheduler {
+func newScheduler(l Logger, b broker, avgInterval time.Duration, qcfg map[string]int) *scheduler {
 	var qnames []string
 	for q := range qcfg {
 		qnames = append(qnames, q)
 	}
 	return &scheduler{
 		logger:      l,
-		rdb:         r,
+		broker:      b,
 		done:        make(chan struct{}),
 		avgInterval: avgInterval,
 		qnames:      qnames,
@@ -63,7 +61,7 @@ func (s *scheduler) start(wg *sync.WaitGroup) {
 }
 
 func (s *scheduler) exec() {
-	if err := s.rdb.CheckAndEnqueue(s.qnames...); err != nil {
+	if err := s.broker.CheckAndEnqueue(s.qnames...); err != nil {
 		s.logger.Error("Could not enqueue scheduled tasks: %v", err)
 	}
 }

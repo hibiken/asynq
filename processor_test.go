@@ -71,7 +71,7 @@ func TestProcessorSuccess(t *testing.T) {
 		cancelations := base.NewCancelations()
 		p := newProcessor(newProcessorParams{
 			logger:          testLogger,
-			rdb:             rdbClient,
+			broker:          rdbClient,
 			ss:              ss,
 			retryDelayFunc:  defaultDelayFunc,
 			syncCh:          nil,
@@ -178,7 +178,7 @@ func TestProcessorRetry(t *testing.T) {
 		cancelations := base.NewCancelations()
 		p := newProcessor(newProcessorParams{
 			logger:          testLogger,
-			rdb:             rdbClient,
+			broker:          rdbClient,
 			ss:              ss,
 			retryDelayFunc:  delayFunc,
 			syncCh:          nil,
@@ -253,7 +253,7 @@ func TestProcessorQueues(t *testing.T) {
 		ss := base.NewServerState("localhost", 1234, 10, tc.queueCfg, false)
 		p := newProcessor(newProcessorParams{
 			logger:          testLogger,
-			rdb:             nil,
+			broker:          nil,
 			ss:              ss,
 			retryDelayFunc:  defaultDelayFunc,
 			syncCh:          nil,
@@ -330,7 +330,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		ss := base.NewServerState("localhost", 1234, 1 /* concurrency */, queueCfg, true /*strict*/)
 		p := newProcessor(newProcessorParams{
 			logger:          testLogger,
-			rdb:             rdbClient,
+			broker:          rdbClient,
 			ss:              ss,
 			retryDelayFunc:  defaultDelayFunc,
 			syncCh:          nil,
