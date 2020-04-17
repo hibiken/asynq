@@ -36,7 +36,7 @@ type Server struct {
 
 	logger Logger
 
-	rdb *rdb.RDB
+	broker broker
 
 	// wait group to wait for all goroutines to finish.
 	wg          sync.WaitGroup
@@ -208,7 +208,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	subscriber := newSubscriber(logger, rdb, cancels)
 	processor := newProcessor(newProcessorParams{
 		logger:          logger,
-		rdb:             rdb,
+		broker:          rdb,
 		ss:              ss,
 		retryDelayFunc:  delayFunc,
 		syncCh:          syncCh,
@@ -219,7 +219,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	return &Server{
 		ss:          ss,
 		logger:      logger,
-		rdb:         rdb,
+		broker:      rdb,
 		scheduler:   scheduler,
 		processor:   processor,
 		syncer:      syncer,
@@ -330,7 +330,7 @@ func (srv *Server) Stop() {
 
 	srv.wg.Wait()
 
-	srv.rdb.Close()
+	srv.broker.Close()
 	srv.ss.SetStatus(base.StatusStopped)
 
 	srv.logger.Info("Bye!")

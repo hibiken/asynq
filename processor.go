@@ -19,7 +19,7 @@ import (
 
 type processor struct {
 	logger Logger
-	rdb    *rdb.RDB
+	broker broker
 
 	ss *base.ServerState
 
@@ -65,7 +65,7 @@ type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
 type newProcessorParams struct {
 	logger          Logger
-	rdb             *rdb.RDB
+	broker          broker
 	ss              *base.ServerState
 	retryDelayFunc  retryDelayFunc
 	syncCh          chan<- *syncRequest
@@ -84,7 +84,7 @@ func newProcessor(params newProcessorParams) *processor {
 	}
 	return &processor{
 		logger:         params.logger,
-		rdb:            params.rdb,
+		broker:         params.broker,
 		ss:             params.ss,
 		queueConfig:    qcfg,
 		orderedQueues:  orderedQueues,
@@ -157,8 +157,8 @@ func (p *processor) start(wg *sync.WaitGroup) {
 // process the task.
 func (p *processor) exec() {
 	qnames := p.queues()
-	msg, err := p.rdb.Dequeue(qnames...)
-	if err == rdb.ErrNoProcessableTask {
+	msg, err := p.broker.Dequeue(qnames...)
+	if err == rdb.ErrNoProcessableTask { // TODO: Need to decouple this error from rdb to support other brokers
 		// queues are empty, this is a normal behavior.
 		if len(p.queueConfig) > 1 {
 			// sleep to avoid slamming redis and let scheduler move tasks into queues.
@@ -227,7 +227,7 @@ func (p *processor) exec() {
 // restore moves all tasks from "in-progress" back to queue
 // to restore all unfinished tasks.
 func (p *processor) restore() {
-	n, err := p.rdb.RequeueAll()
+	n, err := p.broker.RequeueAll()
 	if err != nil {
 		p.logger.Error("Could not restore unfinished tasks: %v", err)
 	}
@@ -237,20 +237,20 @@ func (p *processor) restore() {
 }
 
 func (p *processor) requeue(msg *base.TaskMessage) {
-	err := p.rdb.Requeue(msg)
+	err := p.broker.Requeue(msg)
 	if err != nil {
 		p.logger.Error("Could not push task id=%s back to queue: %v", msg.ID, err)
 	}
 }
 
 func (p *processor) markAsDone(msg *base.TaskMessage) {
-	err := p.rdb.Done(msg)
+	err := p.broker.Done(msg)
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not remove task id=%s from %q", msg.ID, base.InProgressQueue)
 		p.logger.Warn("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.rdb.Done(msg)
+				return p.broker.Done(msg)
 			},
 			errMsg: errMsg,
 		}
@@ -260,13 +260,13 @@ func (p *processor) markAsDone(msg *base.TaskMessage) {
 func (p *processor) retry(msg *base.TaskMessage, e error) {
 	d := p.retryDelayFunc(msg.Retried, e, NewTask(msg.Type, msg.Payload))
 	retryAt := time.Now().Add(d)
-	err := p.rdb.Retry(msg, retryAt, e.Error())
+	err := p.broker.Retry(msg, retryAt, e.Error())
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.InProgressQueue, base.RetryQueue)
 		p.logger.Warn("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.rdb.Retry(msg, retryAt, e.Error())
+				return p.broker.Retry(msg, retryAt, e.Error())
 			},
 			errMsg: errMsg,
 		}
@@ -275,13 +275,13 @@ func (p *processor) retry(msg *base.TaskMessage, e error) {
 
 func (p *processor) kill(msg *base.TaskMessage, e error) {
 	p.logger.Warn("Retry exhausted for task id=%s", msg.ID)
-	err := p.rdb.Kill(msg, e.Error())
+	err := p.broker.Kill(msg, e.Error())
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.InProgressQueue, base.DeadQueue)
 		p.logger.Warn("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.rdb.Kill(msg, e.Error())
+				return p.broker.Kill(msg, e.Error())
 			},
 			errMsg: errMsg,
 		}

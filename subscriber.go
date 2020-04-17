@@ -10,12 +10,11 @@ import (
 
 	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/rdb"
 )
 
 type subscriber struct {
 	logger Logger
-	rdb    *rdb.RDB
+	broker broker
 
 	// channel to communicate back to the long running "subscriber" goroutine.
 	done chan struct{}
@@ -24,10 +23,10 @@ type subscriber struct {
 	cancelations *base.Cancelations
 }
 
-func newSubscriber(l Logger, rdb *rdb.RDB, cancelations *base.Cancelations) *subscriber {
+func newSubscriber(l Logger, b broker, cancelations *base.Cancelations) *subscriber {
 	return &subscriber{
 		logger:       l,
-		rdb:          rdb,
+		broker:       b,
 		done:         make(chan struct{}),
 		cancelations: cancelations,
 	}
@@ -49,7 +48,7 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 		)
 		// Try until successfully connect to Redis.
 		for {
-			pubsub, err = s.rdb.CancelationPubSub()
+			pubsub, err = s.broker.CancelationPubSub()
 			if err != nil {
 				s.logger.Error("cannot subscribe to cancelation channel: %v", err)
 				select {
