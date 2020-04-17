@@ -21,6 +21,9 @@ type subscriber struct {
 
 	// cancelations hold cancel functions for all in-progress tasks.
 	cancelations *base.Cancelations
+
+	// time to wait before retrying to connect to redis.
+	retryTimeout time.Duration
 }
 
 func newSubscriber(l Logger, b broker, cancelations *base.Cancelations) *subscriber {
@@ -29,6 +32,7 @@ func newSubscriber(l Logger, b broker, cancelations *base.Cancelations) *subscri
 		broker:       b,
 		done:         make(chan struct{}),
 		cancelations: cancelations,
+		retryTimeout: 5 * time.Second,
 	}
 }
 
@@ -52,7 +56,7 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 			if err != nil {
 				s.logger.Error("cannot subscribe to cancelation channel: %v", err)
 				select {
-				case <-time.After(5 * time.Second): // retry in 5s
+				case <-time.After(s.retryTimeout):
 					continue
 				case <-s.done:
 					s.logger.Info("Subscriber done")
