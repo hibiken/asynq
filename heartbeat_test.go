@@ -14,6 +14,7 @@ import (
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq/internal/testbroker"
 )
 
 func TestHeartbeater(t *testing.T) {
@@ -101,4 +102,27 @@ func TestHeartbeater(t *testing.T) {
 
 		hb.terminate()
 	}
+}
+
+func TestHeartbeaterWithRedisDown(t *testing.T) {
+	// Make sure that heartbeater goroutine doesn't panic
+	// if it cannot connect to redis.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("panic occurred: %v", r)
+		}
+	}()
+	r := rdb.NewRDB(setup(t))
+	testBroker := testbroker.NewTestBroker(r)
+	ss := base.NewServerState("localhost", 1234, 10, map[string]int{"default": 1}, false)
+	hb := newHeartbeater(testLogger, testBroker, ss, time.Second)
+
+	testBroker.Sleep()
+	var wg sync.WaitGroup
+	hb.start(&wg)
+
+	// wait for heartbeater to try writing data to redis
+	time.Sleep(2 * time.Second)
+
+	hb.terminate()
 }
