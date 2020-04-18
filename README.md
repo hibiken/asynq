@@ -112,8 +112,8 @@ func HandleImageProcessingTask(ctx context.Context, t *asynq.Task) error {
 }
 ```
 
-In your web application code, import the above package and use [`Client`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Client) to enqueue tasks to the task queue.  
-A task will be processed by a background worker as soon as the task gets enqueued.  
+In your web application code, import the above package and use [`Client`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Client) to put tasks on the queue.  
+A task will be processed asynchronously by a background worker as soon as the task gets enqueued.  
 Scheduled tasks will be stored in Redis and will be enqueued at the specified time.
 
 ```go
@@ -129,7 +129,7 @@ import (
 const redisAddr = "127.0.0.1:6379"
 
 func main() {
-    r := &asynq.RedisClientOpt{Addr: redisAddr}
+    r := asynq.RedisClientOpt{Addr: redisAddr}
     c := asynq.NewClient(r)
 
     // Example 1: Enqueue task to be processed immediately.
@@ -151,7 +151,7 @@ func main() {
 
 
     // Example 3: Pass options to tune task processing behavior.
-    // Options include MaxRetry, Queue, Timeout, Deadline, etc.
+    // Options include MaxRetry, Queue, Timeout, Deadline, Unique etc.
 
     t = tasks.NewImageProcessingTask("some/blobstore/url", "other/blobstore/url")
     err = c.Enqueue(t, asynq.MaxRetry(10), asynq.Queue("critical"), asynq.Timeout(time.Minute))
@@ -177,7 +177,7 @@ import (
 const redisAddr = "127.0.0.1:6379"
 
 func main() {
-    r := &asynq.RedisClientOpt{Addr: redisAddr}
+    r := asynq.RedisClientOpt{Addr: redisAddr}
 
     srv := asynq.NewServer(r, asynq.Config{
         // Specify how many concurrent workers to use
