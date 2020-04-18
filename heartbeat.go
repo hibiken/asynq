@@ -15,7 +15,7 @@ import (
 // indicate that the background worker process is up.
 type heartbeater struct {
 	logger Logger
-	broker broker
+	broker base.Broker
 
 	ss *base.ServerState
 
@@ -26,7 +26,7 @@ type heartbeater struct {
 	interval time.Duration
 }
 
-func newHeartbeater(l Logger, b broker, ss *base.ServerState, interval time.Duration) *heartbeater {
+func newHeartbeater(l Logger, b base.Broker, ss *base.ServerState, interval time.Duration) *heartbeater {
 	return &heartbeater{
 		logger:   l,
 		broker:   b,

@@ -36,7 +36,7 @@ type Server struct {
 
 	logger Logger
 
-	broker broker
+	broker base.Broker
 
 	// wait group to wait for all goroutines to finish.
 	wg          sync.WaitGroup

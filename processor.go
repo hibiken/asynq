@@ -19,7 +19,7 @@ import (
 
 type processor struct {
 	logger Logger
-	broker broker
+	broker base.Broker
 
 	ss *base.ServerState
 
@@ -65,7 +65,7 @@ type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
 type newProcessorParams struct {
 	logger          Logger
-	broker          broker
+	broker          base.Broker
 	ss              *base.ServerState
 	retryDelayFunc  retryDelayFunc
 	syncCh          chan<- *syncRequest
