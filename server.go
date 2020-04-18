@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -51,7 +52,8 @@ type Server struct {
 type Config struct {
 	// Maximum number of concurrent processing of tasks.
 	//
-	// If set to a zero or negative value, NewServer will overwrite the value to one.
+	// If set to a zero or negative value, NewServer will overwrite the value
+	// to the number of CPUs usable by the currennt process.
 	Concurrency int
 
 	// Function to calculate retry delay for a failed task.
@@ -168,7 +170,7 @@ const defaultShutdownTimeout = 8 * time.Second
 func NewServer(r RedisConnOpt, cfg Config) *Server {
 	n := cfg.Concurrency
 	if n < 1 {
-		n = 1
+		n = runtime.NumCPU()
 	}
 	delayFunc := cfg.RetryDelayFunc
 	if delayFunc == nil {
