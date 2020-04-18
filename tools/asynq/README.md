@@ -8,7 +8,7 @@ Asynq CLI is a command line tool to monitor the tasks managed by `asynq` package
 - [Quick Start](#quick-start)
   - [Stats](#stats)
   - [History](#history)
-  - [Process Status](#process-status)
+  - [Servers](#servers)
   - [List](#list)
   - [Enqueue](#enqueue)
   - [Delete](#delete)
@@ -58,15 +58,13 @@ Example:
 
 ![Gif](/docs/assets/asynq_history.gif)
 
-### Process Status
+### Servers
 
-PS (ProcessStatus) command shows the list of running worker processes.
+Servers command shows the list of running worker servers pulling tasks from the given redis instance.
 
 Example:
 
-    asynq ps
-
-![Gif](/docs/assets/asynq_ps.gif)
+    asynq servers
 
 ### List
 
