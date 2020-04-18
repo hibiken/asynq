@@ -10,11 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `Background` type is renamed to `Server`.
-  - To upgrade from the previous version, Update `NewBackground` to `NewServer` and pass `Config` by value.
-- New `Server` type exposes `Start`, `Stop`, and `Quiet` as well as `Run`.
+- To upgrade from the previous version, Update `NewBackground` to `NewServer` and pass `Config` by value.
 - CLI is renamed to `asynq`.
-  - To upgrade to the latest version run `go get -u github.com/hibiken/tools/asynq`
+- To upgrade the CLI to the latest version run `go get -u github.com/hibiken/tools/asynq`
 - The `ps` command in CLI is renamed to `servers`
+
+### Added
+
+- `ShutdownTimeout` field is added to `Config` to speicfy timeout duration used during graceful shutdown.
+- New `Server` type exposes `Start`, `Stop`, and `Quiet` as well as `Run`.
 
 ## [0.7.1] - 2020-04-05
 
