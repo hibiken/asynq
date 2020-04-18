@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis/v7"
 	"github.com/rs/xid"
 )
 
@@ -327,4 +328,26 @@ func (c *Cancelations) GetAll() []context.CancelFunc {
 		res = append(res, fn)
 	}
 	return res
+}
+
+// Broker is a message broker that supports operations to manage task queues.
+//
+// See rdb.RDB as a reference implementation.
+type Broker interface {
+	Enqueue(msg *TaskMessage) error
+	EnqueueUnique(msg *TaskMessage, ttl time.Duration) error
+	Dequeue(qnames ...string) (*TaskMessage, error)
+	Done(msg *TaskMessage) error
+	Requeue(msg *TaskMessage) error
+	Schedule(msg *TaskMessage, processAt time.Time) error
+	ScheduleUnique(msg *TaskMessage, processAt time.Time, ttl time.Duration) error
+	Retry(msg *TaskMessage, processAt time.Time, errMsg string) error
+	Kill(msg *TaskMessage, errMsg string) error
+	RequeueAll() (int64, error)
+	CheckAndEnqueue(qnames ...string) error
+	WriteServerState(ss *ServerState, ttl time.Duration) error
+	ClearServerState(ss *ServerState) error
+	CancelationPubSub() (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers
+	PublishCancelation(id string) error
+	Close() error
 }

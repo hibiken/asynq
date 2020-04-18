@@ -7,11 +7,13 @@ package asynq
 import (
 	"sync"
 	"time"
+
+	"github.com/hibiken/asynq/internal/base"
 )
 
 type scheduler struct {
 	logger Logger
-	broker broker
+	broker base.Broker
 
 	// channel to communicate back to the long running "scheduler" goroutine.
 	done chan struct{}
@@ -23,7 +25,7 @@ type scheduler struct {
 	qnames []string
 }
 
-func newScheduler(l Logger, b broker, avgInterval time.Duration, qcfg map[string]int) *scheduler {
+func newScheduler(l Logger, b base.Broker, avgInterval time.Duration, qcfg map[string]int) *scheduler {
 	var qnames []string
 	for q := range qcfg {
 		qnames = append(qnames, q)

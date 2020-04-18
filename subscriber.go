@@ -14,7 +14,7 @@ import (
 
 type subscriber struct {
 	logger Logger
-	broker broker
+	broker base.Broker
 
 	// channel to communicate back to the long running "subscriber" goroutine.
 	done chan struct{}
@@ -26,7 +26,7 @@ type subscriber struct {
 	retryTimeout time.Duration
 }
 
-func newSubscriber(l Logger, b broker, cancelations *base.Cancelations) *subscriber {
+func newSubscriber(l Logger, b base.Broker, cancelations *base.Cancelations) *subscriber {
 	return &subscriber{
 		logger:       l,
 		broker:       b,
