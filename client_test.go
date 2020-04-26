@@ -15,6 +15,11 @@ import (
 	"github.com/hibiken/asynq/internal/base"
 )
 
+var (
+	noTimeout  = time.Duration(0).String()
+	noDeadline = time.Time{}.Format(time.RFC3339)
+)
+
 func TestClientEnqueueAt(t *testing.T) {
 	r := setup(t)
 	client := NewClient(RedisClientOpt{
@@ -27,9 +32,6 @@ func TestClientEnqueueAt(t *testing.T) {
 	var (
 		now          = time.Now()
 		oneHourLater = now.Add(time.Hour)
-
-		noTimeout  = time.Duration(0).String()
-		noDeadline = time.Time{}.Format(time.RFC3339)
 	)
 
 	tests := []struct {
@@ -112,11 +114,6 @@ func TestClientEnqueue(t *testing.T) {
 	})
 
 	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
-
-	var (
-		noTimeout  = time.Duration(0).String()
-		noDeadline = time.Time{}.Format(time.RFC3339)
-	)
 
 	tests := []struct {
 		desc         string
@@ -287,11 +284,6 @@ func TestClientEnqueueIn(t *testing.T) {
 
 	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
 
-	var (
-		noTimeout  = time.Duration(0).String()
-		noDeadline = time.Time{}.Format(time.RFC3339)
-	)
-
 	tests := []struct {
 		desc          string
 		task          *Task
@@ -360,6 +352,86 @@ func TestClientEnqueueIn(t *testing.T) {
 		gotScheduled := h.GetScheduledEntries(t, r)
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, h.IgnoreIDOpt); diff != "" {
 			t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledQueue, diff)
+		}
+	}
+}
+
+func TestClientDefaultOptions(t *testing.T) {
+	r := setup(t)
+
+	tests := []struct {
+		desc        string
+		defaultOpts []Option // options set at the client level.
+		opts        []Option // options used at enqueue time.
+		task        *Task
+		queue       string // queue that the message should go into.
+		want        *base.TaskMessage
+	}{
+		{
+			desc:        "With queue routing option",
+			defaultOpts: []Option{Queue("feed")},
+			opts:        []Option{},
+			task:        NewTask("feed:import", nil),
+			queue:       "feed",
+			want: &base.TaskMessage{
+				Type:     "feed:import",
+				Payload:  nil,
+				Retry:    defaultMaxRetry,
+				Queue:    "feed",
+				Timeout:  noTimeout,
+				Deadline: noDeadline,
+			},
+		},
+		{
+			desc:        "With multiple options",
+			defaultOpts: []Option{Queue("feed"), MaxRetry(5)},
+			opts:        []Option{},
+			task:        NewTask("feed:import", nil),
+			queue:       "feed",
+			want: &base.TaskMessage{
+				Type:     "feed:import",
+				Payload:  nil,
+				Retry:    5,
+				Queue:    "feed",
+				Timeout:  noTimeout,
+				Deadline: noDeadline,
+			},
+		},
+		{
+			desc:        "With overriding options at enqueue time",
+			defaultOpts: []Option{Queue("feed"), MaxRetry(5)},
+			opts:        []Option{Queue("critical")},
+			task:        NewTask("feed:import", nil),
+			queue:       "critical",
+			want: &base.TaskMessage{
+				Type:     "feed:import",
+				Payload:  nil,
+				Retry:    5,
+				Queue:    "critical",
+				Timeout:  noTimeout,
+				Deadline: noDeadline,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		c := NewClient(RedisClientOpt{Addr: redisAddr, DB: redisDB})
+		c.SetDefaultOptions(tc.task.Type, tc.defaultOpts...)
+		err := c.Enqueue(tc.task, tc.opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		enqueued := h.GetEnqueuedMessages(t, r, tc.queue)
+		if len(enqueued) != 1 {
+			t.Errorf("%s;\nexpected queue %q to have one message; got %d messages in the queue.",
+				tc.desc, tc.queue, len(enqueued))
+			continue
+		}
+		got := enqueued[0]
+		if diff := cmp.Diff(tc.want, got, h.IgnoreIDOpt); diff != "" {
+			t.Errorf("%s;\nmismatch found in enqueued task message; (-want,+got)\n%s",
+				tc.desc, diff)
 		}
 	}
 }

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `ParseRedisURI` helper function is added to create a `RedisConnOpt` from a URI string.
+- `SetDefaultOptions` method is added to `Client`.
 
 ## [0.8.0] - 2020-04-19
 
