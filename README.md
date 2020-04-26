@@ -173,12 +173,25 @@ func main() {
 
 
     // --------------------------------------------------------------------------
-    // Example 3: Pass options to tune task processing behavior.
+    // Example 3: Set options to tune task processing behavior.
     //            Options include MaxRetry, Queue, Timeout, Deadline, Unique etc.
     // --------------------------------------------------------------------------
 
+    c.SetDefaultOptions(tasks.ImageProcessing, asynq.MaxRetry(10), asynq.Timeout(time.Minute))
+
     t = tasks.NewImageProcessingTask("some/blobstore/url", "other/blobstore/url")
-    err = c.Enqueue(t, asynq.MaxRetry(10), asynq.Queue("critical"), asynq.Timeout(time.Minute))
+    err = c.Enqueue(t)
+    if err != nil {
+        log.Fatal("could not enqueue task: %v", err)
+    }
+
+    // --------------------------------------------------------------------------
+    // Example 4: Pass options to tune task processing behavior at enqueue time.
+    //            Options passed at enqueue time override default ones, if any.
+    // --------------------------------------------------------------------------
+
+    t = tasks.NewImageProcessingTask("some/blobstore/url", "other/blobstore/url")
+    err = c.Enqueue(t, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
     }
@@ -194,6 +207,8 @@ You can optionally use [`ServeMux`](https://pkg.go.dev/github.com/hibiken/asynq?
 package main
 
 import (
+    "log"
+
     "github.com/hibiken/asynq"
     "your/app/package/tasks"
 )
