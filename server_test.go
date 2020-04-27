@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"context"
+	"syscall"
 	"testing"
 	"time"
 
@@ -47,6 +48,35 @@ func TestServer(t *testing.T) {
 	}
 
 	srv.Stop()
+}
+
+func TestServerRun(t *testing.T) {
+	// https://github.com/go-redis/redis/issues/1029
+	ignoreOpt := goleak.IgnoreTopFunction("github.com/go-redis/redis/v7/internal/pool.(*ConnPool).reaper")
+	defer goleak.VerifyNoLeaks(t, ignoreOpt)
+
+	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{})
+
+	done := make(chan struct{})
+	// Make sure server exits when receiving TERM signal.
+	go func() {
+		time.Sleep(2 * time.Second)
+		syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+		done <- struct{}{}
+	}()
+
+	go func() {
+		select {
+		case <-time.After(10 * time.Second):
+			t.Fatal("server did not stop after receiving TERM signal")
+		case <-done:
+		}
+	}()
+
+	mux := NewServeMux()
+	if err := srv.Run(mux); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestServerErrServerStopped(t *testing.T) {
