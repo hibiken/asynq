@@ -82,7 +82,8 @@ func TestServerInfoKey(t *testing.T) {
 	for _, tc := range tests {
 		got := ServerInfoKey(tc.hostname, tc.pid, tc.sid)
 		if got != tc.want {
-			t.Errorf("ServerInfoKey(%q, %d) = %q, want %q", tc.hostname, tc.pid, got, tc.want)
+			t.Errorf("ServerInfoKey(%q, %d, %q) = %q, want %q",
+				tc.hostname, tc.pid, tc.sid, got, tc.want)
 		}
 	}
 }
@@ -101,7 +102,8 @@ func TestWorkersKey(t *testing.T) {
 	for _, tc := range tests {
 		got := WorkersKey(tc.hostname, tc.pid, tc.sid)
 		if got != tc.want {
-			t.Errorf("WorkersKey(%q, %d) = %q, want = %q", tc.hostname, tc.pid, got, tc.want)
+			t.Errorf("WorkersKey(%q, %d, %q) = %q, want = %q",
+				tc.hostname, tc.pid, tc.sid, got, tc.want)
 		}
 	}
 }
