@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- [Fixed cancelfunc leak](https://github.com/hibiken/asynq/pull/145)
+
 ## [0.8.1] - 2020-04-27
 
 ### Added
