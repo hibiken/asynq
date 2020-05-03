@@ -38,8 +38,8 @@ A system can consist of multiple worker servers and brokers, giving way to high 
 - [Strict priority queues](https://github.com/hibiken/asynq/wiki/Priority-Queues#strict-priority-queues)
 - Low latency to add a task since writes are fast in Redis
 - De-duplication of tasks using [unique option](https://github.com/hibiken/asynq/wiki/Unique-Tasks)
-- Allow timeout and deadline per task
-- Flexible handler interface with support for middlewares
+- Allow [timeout and deadline per task](https://github.com/hibiken/asynq/wiki/Task-Timeout-and-Cancelation)
+- [Flexible handler interface with support for middlewares](https://github.com/hibiken/asynq/wiki/Handler-Deep-Dive)
 - [Support Redis Sentinels](https://github.com/hibiken/asynq/wiki/Automatic-Failover) for HA
 - [CLI](#command-line-tool) to inspect and remote-control queues and tasks
 
