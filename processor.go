@@ -188,14 +188,16 @@ func (p *processor) exec() {
 				<-p.sema /* release token */
 			}()
 
-			resCh := make(chan error, 1)
-			task := NewTask(msg.Type, msg.Payload)
 			ctx, cancel := createContext(msg)
 			p.cancelations.Add(msg.ID.String(), cancel)
-			go func() {
-				resCh <- perform(ctx, task, p.handler)
+			defer func() {
+				cancel()
 				p.cancelations.Delete(msg.ID.String())
 			}()
+
+			resCh := make(chan error, 1)
+			task := NewTask(msg.Type, msg.Payload)
+			go func() { resCh <- perform(ctx, task, p.handler) }()
 
 			select {
 			case <-p.quit:
