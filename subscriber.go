@@ -10,10 +10,11 @@ import (
 
 	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/log"
 )
 
 type subscriber struct {
-	logger Logger
+	logger *log.Logger
 	broker base.Broker
 
 	// channel to communicate back to the long running "subscriber" goroutine.
@@ -26,7 +27,7 @@ type subscriber struct {
 	retryTimeout time.Duration
 }
 
-func newSubscriber(l Logger, b base.Broker, cancelations *base.Cancelations) *subscriber {
+func newSubscriber(l *log.Logger, b base.Broker, cancelations *base.Cancelations) *subscriber {
 	return &subscriber{
 		logger:       l,
 		broker:       b,
@@ -54,7 +55,7 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 		for {
 			pubsub, err = s.broker.CancelationPubSub()
 			if err != nil {
-				s.logger.Error("cannot subscribe to cancelation channel: %v", err)
+				s.logger.Errorf("cannot subscribe to cancelation channel: %v", err)
 				select {
 				case <-time.After(s.retryTimeout):
 					continue
