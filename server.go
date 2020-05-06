@@ -35,7 +35,7 @@ import (
 type Server struct {
 	ss *base.ServerState
 
-	logger Logger
+	logger *log.Logger
 
 	broker base.Broker
 
@@ -133,23 +133,23 @@ func (fn ErrorHandlerFunc) HandleError(task *Task, err error, retried, maxRetry 
 	fn(task, err, retried, maxRetry)
 }
 
-// Logger implements logging with various log levels.
+// Logger supports logging with various log levels.
 type Logger interface {
 	// Debug logs a message at Debug level.
-	Debug(format string, args ...interface{})
+	Debug(args ...interface{})
 
 	// Info logs a message at Info level.
-	Info(format string, args ...interface{})
+	Info(args ...interface{})
 
 	// Warn logs a message at Warning level.
-	Warn(format string, args ...interface{})
+	Warn(args ...interface{})
 
 	// Error logs a message at Error level.
-	Error(format string, args ...interface{})
+	Error(args ...interface{})
 
 	// Fatal logs a message at Fatal level
 	// and process will exit with status set to 1.
-	Fatal(format string, args ...interface{})
+	Fatal(args ...interface{})
 }
 
 // Formula taken from https://github.com/mperham/sidekiq.
@@ -185,10 +185,6 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	if len(queues) == 0 {
 		queues = defaultQueueConfig
 	}
-	logger := cfg.Logger
-	if logger == nil {
-		logger = log.NewLogger(os.Stderr)
-	}
 	shutdownTimeout := cfg.ShutdownTimeout
 	if shutdownTimeout == 0 {
 		shutdownTimeout = defaultShutdownTimeout
@@ -201,6 +197,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	pid := os.Getpid()
 
 	rdb := rdb.NewRDB(createRedisClient(r))
+	logger := log.NewLogger(cfg.Logger)
 	ss := base.NewServerState(host, pid, n, queues, cfg.StrictPriority)
 	syncCh := make(chan *syncRequest)
 	cancels := base.NewCancelations()
@@ -291,13 +288,6 @@ func (srv *Server) Start(handler Handler) error {
 	srv.ss.SetStatus(base.StatusRunning)
 	srv.processor.handler = handler
 
-	type prefixLogger interface {
-		SetPrefix(prefix string)
-	}
-	// If logger supports setting prefix, then set prefix for log output.
-	if l, ok := srv.logger.(prefixLogger); ok {
-		l.SetPrefix(fmt.Sprintf("asynq: pid=%d ", os.Getpid()))
-	}
 	srv.logger.Info("Starting processing")
 
 	srv.heartbeater.start(&srv.wg)
