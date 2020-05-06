@@ -5,7 +5,6 @@
 package asynq
 
 import (
-	"os"
 	"sort"
 	"testing"
 
@@ -24,7 +23,7 @@ const (
 	redisDB   = 14
 )
 
-var testLogger = log.NewLogger(os.Stderr)
+var testLogger = log.NewLogger(nil)
 
 func setup(tb testing.TB) *redis.Client {
 	tb.Helper()

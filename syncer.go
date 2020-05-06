@@ -7,12 +7,14 @@ package asynq
 import (
 	"sync"
 	"time"
+
+	"github.com/hibiken/asynq/internal/log"
 )
 
 // syncer is responsible for queuing up failed requests to redis and retry
 // those requests to sync state between the background process and redis.
 type syncer struct {
-	logger Logger
+	logger *log.Logger
 
 	requestsCh <-chan *syncRequest
 
@@ -28,7 +30,7 @@ type syncRequest struct {
 	errMsg string       // error message
 }
 
-func newSyncer(l Logger, requestsCh <-chan *syncRequest, interval time.Duration) *syncer {
+func newSyncer(l *log.Logger, requestsCh <-chan *syncRequest, interval time.Duration) *syncer {
 	return &syncer{
 		logger:     l,
 		requestsCh: requestsCh,

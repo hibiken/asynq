@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/log"
 )
 
 type scheduler struct {
-	logger Logger
+	logger *log.Logger
 	broker base.Broker
 
 	// channel to communicate back to the long running "scheduler" goroutine.
@@ -25,7 +26,7 @@ type scheduler struct {
 	qnames []string
 }
 
-func newScheduler(l Logger, b base.Broker, avgInterval time.Duration, qcfg map[string]int) *scheduler {
+func newScheduler(l *log.Logger, b base.Broker, avgInterval time.Duration, qcfg map[string]int) *scheduler {
 	var qnames []string
 	for q := range qcfg {
 		qnames = append(qnames, q)
@@ -64,6 +65,6 @@ func (s *scheduler) start(wg *sync.WaitGroup) {
 
 func (s *scheduler) exec() {
 	if err := s.broker.CheckAndEnqueue(s.qnames...); err != nil {
-		s.logger.Error("Could not enqueue scheduled tasks: %v", err)
+		s.logger.Errorf("Could not enqueue scheduled tasks: %v", err)
 	}
 }
