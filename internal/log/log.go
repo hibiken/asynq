@@ -10,6 +10,7 @@ import (
 	"io"
 	stdlog "log"
 	"os"
+	"sync"
 )
 
 // Base supports logging with various log levels.
@@ -78,16 +79,105 @@ func newBase(out io.Writer) *baseLogger {
 }
 
 // NewLogger creates and returns a new instance of Logger.
+// Log level is set to DebugLevel by default.
 func NewLogger(base Base) *Logger {
 	if base == nil {
 		base = newBase(os.Stderr)
 	}
-	return &Logger{base}
+	return &Logger{base: base, level: DebugLevel}
 }
 
 // Logger logs message to io.Writer with various log levels.
 type Logger struct {
-	Base
+	base Base
+
+	mu sync.Mutex
+	// Minimum log level for this logger.
+	// Message with level lower than this level won't be outputted.
+	level Level
+}
+
+// Level represents a log level.
+type Level int32
+
+const (
+	// DebugLevel is the lowest level of logging.
+	// Debug logs are intended for debugging and development purposes.
+	DebugLevel Level = iota
+
+	// InfoLevel is used for general informational log messages.
+	InfoLevel
+
+	// WarnLevel is used for undesired but relatively expected events,
+	// which may indicate a problem.
+	WarnLevel
+
+	// ErrorLevel is used for undesired and unexpected events that
+	// the program can recover from.
+	ErrorLevel
+
+	// FatalLevel is used for undesired and unexpected events that
+	// the program cannot recover from.
+	FatalLevel
+)
+
+func (l Level) String() string {
+	switch l {
+	case DebugLevel:
+		return "debug"
+	case InfoLevel:
+		return "info"
+	case WarnLevel:
+		return "warning"
+	case ErrorLevel:
+		return "error"
+	case FatalLevel:
+		return "fatal"
+	default:
+		return "unknown"
+	}
+}
+
+// canLogAt reports whether logger can log at level v.
+func (l *Logger) canLogAt(v Level) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return v >= l.level
+}
+
+func (l *Logger) Debug(args ...interface{}) {
+	if !l.canLogAt(DebugLevel) {
+		return
+	}
+	l.base.Debug(args...)
+}
+
+func (l *Logger) Info(args ...interface{}) {
+	if !l.canLogAt(InfoLevel) {
+		return
+	}
+	l.base.Info(args...)
+}
+
+func (l *Logger) Warn(args ...interface{}) {
+	if !l.canLogAt(WarnLevel) {
+		return
+	}
+	l.base.Warn(args...)
+}
+
+func (l *Logger) Error(args ...interface{}) {
+	if !l.canLogAt(WarnLevel) {
+		return
+	}
+	l.base.Error(args...)
+}
+
+func (l *Logger) Fatal(args ...interface{}) {
+	if !l.canLogAt(WarnLevel) {
+		return
+	}
+	l.base.Fatal(args...)
 }
 
 func (l *Logger) Debugf(format string, args ...interface{}) {
@@ -108,4 +198,15 @@ func (l *Logger) Errorf(format string, args ...interface{}) {
 
 func (l *Logger) Fatalf(format string, args ...interface{}) {
 	l.Fatal(fmt.Sprintf(format, args...))
+}
+
+// SetLevel sets the logger level.
+// It panics if v is less than DebugLevel or greater than FatalLevel.
+func (l *Logger) SetLevel(v Level) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if v < DebugLevel || v > FatalLevel {
+		panic("log: invalid log level")
+	}
+	l.level = v
 }
