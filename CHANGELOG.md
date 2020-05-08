@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] - 2020-05-08
+
+### Added
+
+- `Close` method is added to `Client`.
+
 ## [0.8.2] - 2020-05-03
 
 ### Fixed

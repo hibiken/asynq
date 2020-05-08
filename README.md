@@ -147,6 +147,7 @@ const redisAddr = "127.0.0.1:6379"
 func main() {
     r := asynq.RedisClientOpt{Addr: redisAddr}
     c := asynq.NewClient(r)
+    defer c.Close()
 
     // ----------------------------------------------------
     // Example 1: Enqueue task to be processed immediately.
