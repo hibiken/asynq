@@ -112,6 +112,11 @@ type Config struct {
 	// If unset, default logger is used.
 	Logger Logger
 
+	// LogLevel specifies the minimum log level to enable.
+	//
+	// If unset, DebugLevel is used by default.
+	LogLevel LogLevel
+
 	// ShutdownTimeout specifies the duration to wait to let workers finish their tasks
 	// before forcing them to abort when stopping the server.
 	//
@@ -152,6 +157,30 @@ type Logger interface {
 	Fatal(args ...interface{})
 }
 
+// LogLevel represents logging level.
+type LogLevel int32
+
+const (
+	// DebugLevel is the lowest level of logging.
+	// Debug logs are intended for debugging and development purposes.
+	DebugLevel LogLevel = iota
+
+	// InfoLevel is used for general informational log messages.
+	InfoLevel
+
+	// WarnLevel is used for undesired but relatively expected events,
+	// which may indicate a problem.
+	WarnLevel
+
+	// ErrorLevel is used for undesired and unexpected events that
+	// the program can recover from.
+	ErrorLevel
+
+	// FatalLevel is used for undesired and unexpected events that
+	// the program cannot recover from.
+	FatalLevel
+)
+
 // Formula taken from https://github.com/mperham/sidekiq.
 func defaultDelayFunc(n int, e error, t *Task) time.Duration {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -189,6 +218,8 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	if shutdownTimeout == 0 {
 		shutdownTimeout = defaultShutdownTimeout
 	}
+	logger := log.NewLogger(cfg.Logger)
+	logger.SetLevel(log.Level(cfg.LogLevel))
 
 	host, err := os.Hostname()
 	if err != nil {
@@ -197,7 +228,6 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	pid := os.Getpid()
 
 	rdb := rdb.NewRDB(createRedisClient(r))
-	logger := log.NewLogger(cfg.Logger)
 	ss := base.NewServerState(host, pid, n, queues, cfg.StrictPriority)
 	syncCh := make(chan *syncRequest)
 	cancels := base.NewCancelations()
