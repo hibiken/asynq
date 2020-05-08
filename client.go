@@ -209,6 +209,11 @@ func (c *Client) EnqueueIn(d time.Duration, task *Task, opts ...Option) error {
 	return c.enqueueAt(time.Now().Add(d), task, opts...)
 }
 
+// Close closes the connection with redis server.
+func (c *Client) Close() error {
+	return c.rdb.Close()
+}
+
 func (c *Client) enqueueAt(t time.Time, task *Task, opts ...Option) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
