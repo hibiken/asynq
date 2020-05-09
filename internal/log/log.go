@@ -13,7 +13,7 @@ import (
 	"sync"
 )
 
-// Base supports logging with various log levels.
+// Base supports logging at various log levels.
 type Base interface {
 	// Debug logs a message at Debug level.
 	Debug(args ...interface{})
@@ -87,7 +87,7 @@ func NewLogger(base Base) *Logger {
 	return &Logger{base: base, level: DebugLevel}
 }
 
-// Logger logs message to io.Writer with various log levels.
+// Logger logs message to io.Writer at various log levels.
 type Logger struct {
 	base Base
 
@@ -121,6 +121,9 @@ const (
 	FatalLevel
 )
 
+// String is part of the fmt.Stringer interface.
+//
+// Used for testing and debugging purposes.
 func (l Level) String() string {
 	switch l {
 	case DebugLevel:
@@ -167,14 +170,14 @@ func (l *Logger) Warn(args ...interface{}) {
 }
 
 func (l *Logger) Error(args ...interface{}) {
-	if !l.canLogAt(WarnLevel) {
+	if !l.canLogAt(ErrorLevel) {
 		return
 	}
 	l.base.Error(args...)
 }
 
 func (l *Logger) Fatal(args ...interface{}) {
-	if !l.canLogAt(WarnLevel) {
+	if !l.canLogAt(FatalLevel) {
 		return
 	}
 	l.base.Fatal(args...)
