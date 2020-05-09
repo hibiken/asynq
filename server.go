@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -138,7 +139,7 @@ func (fn ErrorHandlerFunc) HandleError(task *Task, err error, retried, maxRetry 
 	fn(task, err, retried, maxRetry)
 }
 
-// Logger supports logging with various log levels.
+// Logger supports logging at various log levels.
 type Logger interface {
 	// Debug logs a message at Debug level.
 	Debug(args ...interface{})
@@ -158,6 +159,8 @@ type Logger interface {
 }
 
 // LogLevel represents logging level.
+//
+// It satisfies flag.Value interface.
 type LogLevel int32
 
 const (
@@ -180,6 +183,42 @@ const (
 	// the program cannot recover from.
 	FatalLevel
 )
+
+// String is part of the flag.Value interface.
+func (l *LogLevel) String() string {
+	switch *l {
+	case DebugLevel:
+		return "debug"
+	case InfoLevel:
+		return "info"
+	case WarnLevel:
+		return "warn"
+	case ErrorLevel:
+		return "error"
+	case FatalLevel:
+		return "fatal"
+	}
+	panic(fmt.Sprintf("asynq: unexpected log level: %v", *l))
+}
+
+// Set is part of the flag.Value interface.
+func (l *LogLevel) Set(val string) error {
+	switch strings.ToLower(val) {
+	case "debug":
+		*l = DebugLevel
+	case "info":
+		*l = InfoLevel
+	case "warn", "warning":
+		*l = WarnLevel
+	case "error":
+		*l = ErrorLevel
+	case "fatal":
+		*l = FatalLevel
+	default:
+		return fmt.Errorf("asynq: unsupported log level %q", val)
+	}
+	return nil
+}
 
 // Formula taken from https://github.com/mperham/sidekiq.
 func defaultDelayFunc(n int, e error, t *Task) time.Duration {
