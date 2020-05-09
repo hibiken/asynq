@@ -284,7 +284,9 @@ func TestLoggerErrorf(t *testing.T) {
 	}
 }
 
-func TestLoggerWithMinLevels(t *testing.T) {
+func TestLoggerWithLowerLevels(t *testing.T) {
+	// Logger should not log messages at a level
+	// lower than the specified level.
 	tests := []struct {
 		level Level
 		op    string
@@ -331,6 +333,56 @@ func TestLoggerWithMinLevels(t *testing.T) {
 
 		if buf.String() != "" {
 			t.Errorf("logger.%s outputted log message when level is set to %v", tc.op, tc.level)
+		}
+	}
+}
+
+func TestLoggerWithSameOrHigherLevels(t *testing.T) {
+	// Logger should log messages at a level
+	// same as or higher than the specified level.
+	tests := []struct {
+		level Level
+		op    string
+	}{
+		// same level
+		{DebugLevel, "Debug"},
+		{InfoLevel, "Infof"},
+		{WarnLevel, "Warn"},
+		{ErrorLevel, "Errorf"},
+		// higher level
+		{DebugLevel, "Info"},
+		{InfoLevel, "Warnf"},
+		{WarnLevel, "Error"},
+	}
+
+	for _, tc := range tests {
+		var buf bytes.Buffer
+		logger := NewLogger(newBase(&buf))
+		logger.SetLevel(tc.level)
+
+		switch tc.op {
+		case "Debug":
+			logger.Debug("hello")
+		case "Debugf":
+			logger.Debugf("hello, %s", "world")
+		case "Info":
+			logger.Info("hello")
+		case "Infof":
+			logger.Infof("hello, %s", "world")
+		case "Warn":
+			logger.Warn("hello")
+		case "Warnf":
+			logger.Warnf("hello, %s", "world")
+		case "Error":
+			logger.Error("hello")
+		case "Errorf":
+			logger.Errorf("hello, %s", "world")
+		default:
+			t.Fatalf("unexpected op: %q", tc.op)
+		}
+
+		if buf.String() == "" {
+			t.Errorf("logger.%s did not output log message when level is set to %v", tc.op, tc.level)
 		}
 	}
 }

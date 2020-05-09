@@ -208,3 +208,32 @@ func TestServerWithFlakyBroker(t *testing.T) {
 
 	srv.Stop()
 }
+
+func TestLogLevel(t *testing.T) {
+	tests := []struct {
+		flagVal string
+		want    LogLevel
+		wantStr string
+	}{
+		{"debug", DebugLevel, "debug"},
+		{"Info", InfoLevel, "info"},
+		{"WARN", WarnLevel, "warn"},
+		{"warning", WarnLevel, "warn"},
+		{"Error", ErrorLevel, "error"},
+		{"fatal", FatalLevel, "fatal"},
+	}
+
+	for _, tc := range tests {
+		level := new(LogLevel)
+		if err := level.Set(tc.flagVal); err != nil {
+			t.Fatal(err)
+		}
+		if *level != tc.want {
+			t.Errorf("Set(%q): got %v, want %v", tc.flagVal, level, &tc.want)
+			continue
+		}
+		if got := level.String(); got != tc.wantStr {
+			t.Errorf("String() returned %q, want %q", got, tc.wantStr)
+		}
+	}
+}
