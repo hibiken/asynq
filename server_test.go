@@ -28,6 +28,7 @@ func TestServer(t *testing.T) {
 	c := NewClient(r)
 	srv := NewServer(r, Config{
 		Concurrency: 10,
+		LogLevel:    testLogLevel,
 	})
 
 	// no-op handler
@@ -58,7 +59,7 @@ func TestServerRun(t *testing.T) {
 	ignoreOpt := goleak.IgnoreTopFunction("github.com/go-redis/redis/v7/internal/pool.(*ConnPool).reaper")
 	defer goleak.VerifyNoLeaks(t, ignoreOpt)
 
-	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{})
+	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
 
 	done := make(chan struct{})
 	// Make sure server exits when receiving TERM signal.
@@ -83,7 +84,7 @@ func TestServerRun(t *testing.T) {
 }
 
 func TestServerErrServerStopped(t *testing.T) {
-	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{})
+	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
 	handler := NewServeMux()
 	if err := srv.Start(handler); err != nil {
 		t.Fatal(err)
@@ -96,7 +97,7 @@ func TestServerErrServerStopped(t *testing.T) {
 }
 
 func TestServerErrNilHandler(t *testing.T) {
-	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{})
+	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
 	err := srv.Start(nil)
 	if err == nil {
 		t.Error("Starting server with nil handler: (*Server).Start(nil) did not return error")
@@ -105,7 +106,7 @@ func TestServerErrNilHandler(t *testing.T) {
 }
 
 func TestServerErrServerRunning(t *testing.T) {
-	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{})
+	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
 	handler := NewServeMux()
 	if err := srv.Start(handler); err != nil {
 		t.Fatal(err)
@@ -126,7 +127,7 @@ func TestServerWithRedisDown(t *testing.T) {
 	}()
 	r := rdb.NewRDB(setup(t))
 	testBroker := testbroker.NewTestBroker(r)
-	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{})
+	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
 	srv.broker = testBroker
 	srv.scheduler.broker = testBroker
 	srv.heartbeater.broker = testBroker
@@ -158,7 +159,7 @@ func TestServerWithFlakyBroker(t *testing.T) {
 	}()
 	r := rdb.NewRDB(setup(t))
 	testBroker := testbroker.NewTestBroker(r)
-	srv := NewServer(RedisClientOpt{Addr: redisAddr, DB: redisDB}, Config{})
+	srv := NewServer(RedisClientOpt{Addr: redisAddr, DB: redisDB}, Config{LogLevel: testLogLevel})
 	srv.broker = testBroker
 	srv.scheduler.broker = testBroker
 	srv.heartbeater.broker = testBroker

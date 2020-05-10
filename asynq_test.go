@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"flag"
 	"sort"
 	"testing"
 
@@ -14,16 +15,28 @@ import (
 	"github.com/hibiken/asynq/internal/log"
 )
 
-// This file defines test helper functions used by
-// other test files.
+//============================================================================
+// This file defines helper functions and variables used in other test files.
+//============================================================================
 
-// redis used for package testing.
-const (
-	redisAddr = "localhost:6379"
-	redisDB   = 14
+// variables used for package testing.
+var (
+	redisAddr string
+	redisDB   int
+
+	testLogLevel = FatalLevel
 )
 
-var testLogger = log.NewLogger(nil)
+var testLogger *log.Logger
+
+func init() {
+	flag.StringVar(&redisAddr, "redis_addr", "localhost:6379", "redis address to use in testing")
+	flag.IntVar(&redisDB, "redis_db", 14, "redis db number to use in testing")
+	flag.Var(&testLogLevel, "loglevel", "log level to use in testing")
+
+	testLogger = log.NewLogger(nil)
+	testLogger.SetLevel(log.Level(testLogLevel))
+}
 
 func setup(tb testing.TB) *redis.Client {
 	tb.Helper()
