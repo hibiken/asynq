@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `Logger` interface has changed. Please see the godoc for the new interface.
+
+### Added
+
+- `LogLevel` type is added. Server's log level can be specified through `LogLevel` field in `Config`.
+
 ## [0.8.3] - 2020-05-08
 
 ### Added
