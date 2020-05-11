@@ -115,7 +115,7 @@ type Config struct {
 
 	// LogLevel specifies the minimum log level to enable.
 	//
-	// If unset, DebugLevel is used by default.
+	// If unset, InfoLevel is used by default.
 	LogLevel LogLevel
 
 	// ShutdownTimeout specifies the duration to wait to let workers finish their tasks
@@ -164,9 +164,12 @@ type Logger interface {
 type LogLevel int32
 
 const (
+	// Note: reserving value zero to differentiate unspecified case.
+	level_unspecified LogLevel = iota
+
 	// DebugLevel is the lowest level of logging.
 	// Debug logs are intended for debugging and development purposes.
-	DebugLevel LogLevel = iota
+	DebugLevel
 
 	// InfoLevel is used for general informational log messages.
 	InfoLevel
@@ -220,6 +223,22 @@ func (l *LogLevel) Set(val string) error {
 	return nil
 }
 
+func toInternalLogLevel(l LogLevel) log.Level {
+	switch l {
+	case DebugLevel:
+		return log.DebugLevel
+	case InfoLevel:
+		return log.InfoLevel
+	case WarnLevel:
+		return log.WarnLevel
+	case ErrorLevel:
+		return log.ErrorLevel
+	case FatalLevel:
+		return log.FatalLevel
+	}
+	panic(fmt.Sprintf("asynq: unexpected log level: %v", l))
+}
+
 // Formula taken from https://github.com/mperham/sidekiq.
 func defaultDelayFunc(n int, e error, t *Task) time.Duration {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -258,7 +277,11 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		shutdownTimeout = defaultShutdownTimeout
 	}
 	logger := log.NewLogger(cfg.Logger)
-	logger.SetLevel(log.Level(cfg.LogLevel))
+	loglevel := cfg.LogLevel
+	if loglevel == level_unspecified {
+		loglevel = InfoLevel
+	}
+	logger.SetLevel(toInternalLogLevel(loglevel))
 
 	host, err := os.Hostname()
 	if err != nil {
