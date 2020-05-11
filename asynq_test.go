@@ -35,7 +35,7 @@ func init() {
 	flag.Var(&testLogLevel, "loglevel", "log level to use in testing")
 
 	testLogger = log.NewLogger(nil)
-	testLogger.SetLevel(log.Level(testLogLevel))
+	testLogger.SetLevel(toInternalLogLevel(testLogLevel))
 }
 
 func setup(tb testing.TB) *redis.Client {

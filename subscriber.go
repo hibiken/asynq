@@ -38,7 +38,7 @@ func newSubscriber(l *log.Logger, b base.Broker, cancelations *base.Cancelations
 }
 
 func (s *subscriber) terminate() {
-	s.logger.Info("Subscriber shutting down...")
+	s.logger.Debug("Subscriber shutting down...")
 	// Signal the subscriber goroutine to stop.
 	s.done <- struct{}{}
 }
@@ -60,7 +60,7 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 				case <-time.After(s.retryTimeout):
 					continue
 				case <-s.done:
-					s.logger.Info("Subscriber done")
+					s.logger.Debug("Subscriber done")
 					return
 				}
 			}
@@ -71,7 +71,7 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 			select {
 			case <-s.done:
 				pubsub.Close()
-				s.logger.Info("Subscriber done")
+				s.logger.Debug("Subscriber done")
 				return
 			case msg := <-cancelCh:
 				cancel, ok := s.cancelations.Get(msg.Payload)

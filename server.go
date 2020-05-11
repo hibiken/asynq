@@ -401,7 +401,6 @@ func (srv *Server) Stop() {
 		return
 	}
 
-	fmt.Println() // print newline for prettier log.
 	srv.logger.Info("Starting graceful shutdown")
 	// Note: The order of termination is important.
 	// Sender goroutines should be terminated before the receiver goroutines.
@@ -417,7 +416,7 @@ func (srv *Server) Stop() {
 	srv.broker.Close()
 	srv.ss.SetStatus(base.StatusStopped)
 
-	srv.logger.Info("Bye!")
+	srv.logger.Info("Exiting")
 }
 
 // Quiet signals the server to stop pulling new tasks off queues.
