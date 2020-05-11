@@ -38,7 +38,7 @@ func newHeartbeater(l *log.Logger, b base.Broker, ss *base.ServerState, interval
 }
 
 func (h *heartbeater) terminate() {
-	h.logger.Info("Heartbeater shutting down...")
+	h.logger.Debug("Heartbeater shutting down...")
 	// Signal the heartbeater goroutine to stop.
 	h.done <- struct{}{}
 }
@@ -54,7 +54,7 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 			select {
 			case <-h.done:
 				h.broker.ClearServerState(h.ss)
-				h.logger.Info("Heartbeater done")
+				h.logger.Debug("Heartbeater done")
 				return
 			case <-time.After(h.interval):
 				h.beat()
