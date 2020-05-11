@@ -106,7 +106,7 @@ func newProcessor(params newProcessorParams) *processor {
 // It's safe to call this method multiple times.
 func (p *processor) stop() {
 	p.once.Do(func() {
-		p.logger.Info("Processor shutting down...")
+		p.logger.Debug("Processor shutting down...")
 		// Unblock if processor is waiting for sema token.
 		close(p.abort)
 		// Signal the processor goroutine to stop processing tasks
@@ -145,7 +145,7 @@ func (p *processor) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-p.done:
-				p.logger.Info("Processor done")
+				p.logger.Debug("Processor done")
 				return
 			default:
 				p.exec()

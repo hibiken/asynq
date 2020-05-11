@@ -40,7 +40,7 @@ func newSyncer(l *log.Logger, requestsCh <-chan *syncRequest, interval time.Dura
 }
 
 func (s *syncer) terminate() {
-	s.logger.Info("Syncer shutting down...")
+	s.logger.Debug("Syncer shutting down...")
 	// Signal the syncer goroutine to stop.
 	s.done <- struct{}{}
 }
@@ -59,7 +59,7 @@ func (s *syncer) start(wg *sync.WaitGroup) {
 						s.logger.Error(req.errMsg)
 					}
 				}
-				s.logger.Info("Syncer done")
+				s.logger.Debug("Syncer done")
 				return
 			case req := <-s.requestsCh:
 				requests = append(requests, req)

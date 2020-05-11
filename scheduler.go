@@ -41,7 +41,7 @@ func newScheduler(l *log.Logger, b base.Broker, avgInterval time.Duration, qcfg 
 }
 
 func (s *scheduler) terminate() {
-	s.logger.Info("Scheduler shutting down...")
+	s.logger.Debug("Scheduler shutting down...")
 	// Signal the scheduler goroutine to stop polling.
 	s.done <- struct{}{}
 }
@@ -54,7 +54,7 @@ func (s *scheduler) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-s.done:
-				s.logger.Info("Scheduler done")
+				s.logger.Debug("Scheduler done")
 				return
 			case <-time.After(s.avgInterval):
 				s.exec()
