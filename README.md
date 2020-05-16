@@ -68,9 +68,10 @@ const (
     ImageProcessing = "image:process"
 )
 
-//--------------------------------------------
-// Write function NewXXXTask to create a task.
-//--------------------------------------------
+//----------------------------------------------
+// Write a function NewXXXTask to create a task.
+// A task consists of a type and a payload.
+//----------------------------------------------
 
 func NewEmailDeliveryTask(userID int, tmplID string) *asynq.Task {
     payload := map[string]interface{}{"user_id": userID, "template_id": tmplID}
@@ -82,13 +83,13 @@ func NewImageProcessingTask(src, dst string) *asynq.Task {
     return asynq.NewTask(ImageProcessing, payload)
 }
 
-//-------------------------------------------------------------
-// Write function HandleXXXTask to handle the given task.
-// NOTE: It satisfies the asynq.HandlerFunc interface.
+//---------------------------------------------------------------
+// Write a function HandleXXXTask to handle the input task.
+// Note that it satisfies the asynq.HandlerFunc interface.
 // 
 // Handler doesn't need to be a function. You can define a type 
-// that satisfies asynq.Handler interface. See example below.
-//-------------------------------------------------------------
+// that satisfies asynq.Handler interface. See examples below.
+//---------------------------------------------------------------
 
 func HandleEmailDeliveryTask(ctx context.Context, t *asynq.Task) error {
     userID, err := t.Payload.GetInt("user_id")
@@ -104,11 +105,11 @@ func HandleEmailDeliveryTask(ctx context.Context, t *asynq.Task) error {
     return nil
 }
 
+// ImageProcessor implements asynq.Handler interface.
 type ImageProcesser struct {
     // ... fields for struct
 }
 
-// ImageProcessor implements asynq.Handler.
 func (p *ImageProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
     src, err := t.Payload.GetString("src")
     if err != nil {
@@ -149,10 +150,10 @@ func main() {
     c := asynq.NewClient(r)
     defer c.Close()
 
-    // ----------------------------------------------------
+    // ------------------------------------------------------
     // Example 1: Enqueue task to be processed immediately.
     //            Use (*Client).Enqueue method.
-    // ---------------------------------------------------- 
+    // ------------------------------------------------------
 
     t := tasks.NewEmailDeliveryTask(42, "some:template:id")
     err := c.Enqueue(t)
@@ -161,10 +162,10 @@ func main() {
     }
 
 
-    // ----------------------------------------------------------
+    // ------------------------------------------------------------
     // Example 2: Schedule task to be processed in the future.
     //            Use (*Client).EnqueueIn or (*Client).EnqueueAt.
-    // ----------------------------------------------------------
+    // ------------------------------------------------------------
 
     t = tasks.NewEmailDeliveryTask(42, "other:template:id")
     err = c.EnqueueIn(24*time.Hour, t)
@@ -173,10 +174,10 @@ func main() {
     }
 
 
-    // --------------------------------------------------------------------------
+    // ----------------------------------------------------------------------------
     // Example 3: Set options to tune task processing behavior.
     //            Options include MaxRetry, Queue, Timeout, Deadline, Unique etc.
-    // --------------------------------------------------------------------------
+    // ----------------------------------------------------------------------------
 
     c.SetDefaultOptions(tasks.ImageProcessing, asynq.MaxRetry(10), asynq.Timeout(time.Minute))
 
@@ -186,10 +187,10 @@ func main() {
         log.Fatal("could not enqueue task: %v", err)
     }
 
-    // --------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------
     // Example 4: Pass options to tune task processing behavior at enqueue time.
     //            Options passed at enqueue time override default ones, if any.
-    // --------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------
 
     t = tasks.NewImageProcessingTask("some/blobstore/url", "other/blobstore/url")
     err = c.Enqueue(t, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
