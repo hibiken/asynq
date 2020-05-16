@@ -422,6 +422,8 @@ func (srv *Server) Stop() {
 // Quiet signals the server to stop pulling new tasks off queues.
 // Quiet should be used before stopping the server.
 func (srv *Server) Quiet() {
+	srv.logger.Info("Stopping processor")
 	srv.processor.stop()
 	srv.ss.SetStatus(base.StatusQuiet)
+	srv.logger.Info("Processor stopped")
 }
