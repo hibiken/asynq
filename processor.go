@@ -64,7 +64,7 @@ type processor struct {
 
 type retryDelayFunc func(n int, err error, task *Task) time.Duration
 
-type newProcessorParams struct {
+type processorParams struct {
 	logger          *log.Logger
 	broker          base.Broker
 	ss              *base.ServerState
@@ -76,7 +76,7 @@ type newProcessorParams struct {
 }
 
 // newProcessor constructs a new processor.
-func newProcessor(params newProcessorParams) *processor {
+func newProcessor(params processorParams) *processor {
 	info := params.ss.GetInfo()
 	qcfg := normalizeQueueCfg(info.Queues)
 	orderedQueues := []string(nil)

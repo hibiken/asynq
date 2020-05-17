@@ -293,11 +293,30 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	ss := base.NewServerState(host, pid, n, queues, cfg.StrictPriority)
 	syncCh := make(chan *syncRequest)
 	cancels := base.NewCancelations()
-	syncer := newSyncer(logger, syncCh, 5*time.Second)
-	heartbeater := newHeartbeater(logger, rdb, ss, 5*time.Second)
-	scheduler := newScheduler(logger, rdb, 5*time.Second, queues)
-	subscriber := newSubscriber(logger, rdb, cancels)
-	processor := newProcessor(newProcessorParams{
+
+	syncer := newSyncer(syncerParams{
+		logger:     logger,
+		requestsCh: syncCh,
+		interval:   5 * time.Second,
+	})
+	heartbeater := newHeartbeater(heartbeaterParams{
+		logger:      logger,
+		broker:      rdb,
+		serverState: ss,
+		interval:    5 * time.Second,
+	})
+	scheduler := newScheduler(schedulerParams{
+		logger:   logger,
+		broker:   rdb,
+		interval: 5 * time.Second,
+		queues:   queues,
+	})
+	subscriber := newSubscriber(subscriberParams{
+		logger:       logger,
+		broker:       rdb,
+		cancelations: cancels,
+	})
+	processor := newProcessor(processorParams{
 		logger:          logger,
 		broker:          rdb,
 		ss:              ss,

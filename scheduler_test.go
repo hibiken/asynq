@@ -19,7 +19,12 @@ func TestScheduler(t *testing.T) {
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
 	const pollInterval = time.Second
-	s := newScheduler(testLogger, rdbClient, pollInterval, defaultQueueConfig)
+	s := newScheduler(schedulerParams{
+		logger:   testLogger,
+		broker:   rdbClient,
+		interval: pollInterval,
+		queues:   defaultQueueConfig,
+	})
 	t1 := h.NewTaskMessage("gen_thumbnail", nil)
 	t2 := h.NewTaskMessage("send_email", nil)
 	t3 := h.NewTaskMessage("reindex", nil)

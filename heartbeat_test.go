@@ -38,7 +38,12 @@ func TestHeartbeater(t *testing.T) {
 		h.FlushDB(t, r)
 
 		state := base.NewServerState(tc.host, tc.pid, tc.concurrency, tc.queues, false)
-		hb := newHeartbeater(testLogger, rdbClient, state, tc.interval)
+		hb := newHeartbeater(heartbeaterParams{
+			logger:      testLogger,
+			broker:      rdbClient,
+			serverState: state,
+			interval:    tc.interval,
+		})
 
 		var wg sync.WaitGroup
 		hb.start(&wg)
@@ -115,7 +120,12 @@ func TestHeartbeaterWithRedisDown(t *testing.T) {
 	r := rdb.NewRDB(setup(t))
 	testBroker := testbroker.NewTestBroker(r)
 	ss := base.NewServerState("localhost", 1234, 10, map[string]int{"default": 1}, false)
-	hb := newHeartbeater(testLogger, testBroker, ss, time.Second)
+	hb := newHeartbeater(heartbeaterParams{
+		logger:      testLogger,
+		broker:      testBroker,
+		serverState: ss,
+		interval:    time.Second,
+	})
 
 	testBroker.Sleep()
 	var wg sync.WaitGroup

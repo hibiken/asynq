@@ -27,12 +27,18 @@ type subscriber struct {
 	retryTimeout time.Duration
 }
 
-func newSubscriber(l *log.Logger, b base.Broker, cancelations *base.Cancelations) *subscriber {
+type subscriberParams struct {
+	logger       *log.Logger
+	broker       base.Broker
+	cancelations *base.Cancelations
+}
+
+func newSubscriber(params subscriberParams) *subscriber {
 	return &subscriber{
-		logger:       l,
-		broker:       b,
+		logger:       params.logger,
+		broker:       params.broker,
 		done:         make(chan struct{}),
-		cancelations: cancelations,
+		cancelations: params.cancelations,
 		retryTimeout: 5 * time.Second,
 	}
 }
