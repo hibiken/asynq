@@ -65,7 +65,7 @@ func TestProcessorSuccess(t *testing.T) {
 			return nil
 		}
 		ss := base.NewServerState("localhost", 1234, 10, defaultQueueConfig, false)
-		p := newProcessor(newProcessorParams{
+		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
 			ss:              ss,
@@ -170,7 +170,7 @@ func TestProcessorRetry(t *testing.T) {
 			n++
 		}
 		ss := base.NewServerState("localhost", 1234, 10, defaultQueueConfig, false)
-		p := newProcessor(newProcessorParams{
+		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
 			ss:              ss,
@@ -243,7 +243,7 @@ func TestProcessorQueues(t *testing.T) {
 
 	for _, tc := range tests {
 		ss := base.NewServerState("localhost", 1234, 10, tc.queueCfg, false)
-		p := newProcessor(newProcessorParams{
+		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          nil,
 			ss:              ss,
@@ -319,7 +319,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		}
 		// Note: Set concurrency to 1 to make sure tasks are processed one at a time.
 		ss := base.NewServerState("localhost", 1234, 1 /* concurrency */, queueCfg, true /*strict*/)
-		p := newProcessor(newProcessorParams{
+		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
 			ss:              ss,

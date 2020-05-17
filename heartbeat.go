@@ -27,13 +27,20 @@ type heartbeater struct {
 	interval time.Duration
 }
 
-func newHeartbeater(l *log.Logger, b base.Broker, ss *base.ServerState, interval time.Duration) *heartbeater {
+type heartbeaterParams struct {
+	logger      *log.Logger
+	broker      base.Broker
+	serverState *base.ServerState
+	interval    time.Duration
+}
+
+func newHeartbeater(params heartbeaterParams) *heartbeater {
 	return &heartbeater{
-		logger:   l,
-		broker:   b,
-		ss:       ss,
+		logger:   params.logger,
+		broker:   params.broker,
+		ss:       params.serverState,
 		done:     make(chan struct{}),
-		interval: interval,
+		interval: params.interval,
 	}
 }
 

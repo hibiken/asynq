@@ -27,7 +27,11 @@ func TestSyncer(t *testing.T) {
 
 	const interval = time.Second
 	syncRequestCh := make(chan *syncRequest)
-	syncer := newSyncer(testLogger, syncRequestCh, interval)
+	syncer := newSyncer(syncerParams{
+		logger:     testLogger,
+		requestsCh: syncRequestCh,
+		interval:   interval,
+	})
 	var wg sync.WaitGroup
 	syncer.start(&wg)
 	defer syncer.terminate()
@@ -52,7 +56,11 @@ func TestSyncer(t *testing.T) {
 func TestSyncerRetry(t *testing.T) {
 	const interval = time.Second
 	syncRequestCh := make(chan *syncRequest)
-	syncer := newSyncer(testLogger, syncRequestCh, interval)
+	syncer := newSyncer(syncerParams{
+		logger:     testLogger,
+		requestsCh: syncRequestCh,
+		interval:   interval,
+	})
 
 	var wg sync.WaitGroup
 	syncer.start(&wg)

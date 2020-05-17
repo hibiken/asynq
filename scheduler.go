@@ -26,16 +26,23 @@ type scheduler struct {
 	qnames []string
 }
 
-func newScheduler(l *log.Logger, b base.Broker, avgInterval time.Duration, qcfg map[string]int) *scheduler {
+type schedulerParams struct {
+	logger   *log.Logger
+	broker   base.Broker
+	interval time.Duration
+	queues   map[string]int
+}
+
+func newScheduler(params schedulerParams) *scheduler {
 	var qnames []string
-	for q := range qcfg {
+	for q := range params.queues {
 		qnames = append(qnames, q)
 	}
 	return &scheduler{
-		logger:      l,
-		broker:      b,
+		logger:      params.logger,
+		broker:      params.broker,
 		done:        make(chan struct{}),
-		avgInterval: avgInterval,
+		avgInterval: params.interval,
 		qnames:      qnames,
 	}
 }

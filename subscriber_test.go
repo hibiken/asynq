@@ -38,7 +38,11 @@ func TestSubscriber(t *testing.T) {
 		cancelations := base.NewCancelations()
 		cancelations.Add(tc.registeredID, fakeCancelFunc)
 
-		subscriber := newSubscriber(testLogger, rdbClient, cancelations)
+		subscriber := newSubscriber(subscriberParams{
+			logger:       testLogger,
+			broker:       rdbClient,
+			cancelations: cancelations,
+		})
 		var wg sync.WaitGroup
 		subscriber.start(&wg)
 		defer subscriber.terminate()
@@ -75,7 +79,11 @@ func TestSubscriberWithRedisDown(t *testing.T) {
 	testBroker := testbroker.NewTestBroker(r)
 
 	cancelations := base.NewCancelations()
-	subscriber := newSubscriber(testLogger, testBroker, cancelations)
+	subscriber := newSubscriber(subscriberParams{
+		logger:       testLogger,
+		broker:       testBroker,
+		cancelations: cancelations,
+	})
 	subscriber.retryTimeout = 1 * time.Second // set shorter retry timeout for testing purpose.
 
 	testBroker.Sleep() // simulate a situation where subscriber cannot connect to redis.

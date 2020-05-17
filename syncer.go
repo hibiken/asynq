@@ -30,12 +30,18 @@ type syncRequest struct {
 	errMsg string       // error message
 }
 
-func newSyncer(l *log.Logger, requestsCh <-chan *syncRequest, interval time.Duration) *syncer {
+type syncerParams struct {
+	logger     *log.Logger
+	requestsCh <-chan *syncRequest
+	interval   time.Duration
+}
+
+func newSyncer(params syncerParams) *syncer {
 	return &syncer{
-		logger:     l,
-		requestsCh: requestsCh,
+		logger:     params.logger,
+		requestsCh: params.requestsCh,
 		done:       make(chan struct{}),
-		interval:   interval,
+		interval:   params.interval,
 	}
 }
 
