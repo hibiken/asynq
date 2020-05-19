@@ -466,14 +466,14 @@ func (r *RDB) forwardSingle(src, dst string) error {
 // KEYS[1]  -> asynq:servers:<host:pid:sid>
 // KEYS[2]  -> asynq:servers
 // KEYS[3]  -> asynq:workers<host:pid:sid>
-// keys[4]  -> asynq:workers
+// KEYS[4]  -> asynq:workers
 // ARGV[1]  -> expiration time
 // ARGV[2]  -> TTL in seconds
-// ARGV[3]  -> process info
+// ARGV[3]  -> server info
 // ARGV[4:] -> alternate key-value pair of (worker id, worker data)
 // Note: Add key to ZSET with expiration time as score.
 // ref: https://github.com/antirez/redis/issues/135#issuecomment-2361996
-var writeProcessInfoCmd = redis.NewScript(`
+var writeServerStateCmd = redis.NewScript(`
 redis.call("SETEX", KEYS[1], ARGV[2], ARGV[3])
 redis.call("ZADD", KEYS[2], ARGV[1], KEYS[1])
 redis.call("DEL", KEYS[3])
@@ -484,27 +484,24 @@ redis.call("EXPIRE", KEYS[3], ARGV[2])
 redis.call("ZADD", KEYS[4], ARGV[1], KEYS[3])
 return redis.status_reply("OK")`)
 
-// WriteServerState writes server state data to redis with expiration  set to the value ttl.
-func (r *RDB) WriteServerState(ss *base.ServerState, ttl time.Duration) error {
-	info := ss.GetInfo()
+// WriteServerState writes server state data to redis with expiration set to the value ttl.
+func (r *RDB) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo, ttl time.Duration) error {
 	bytes, err := json.Marshal(info)
 	if err != nil {
 		return err
 	}
-	var args []interface{} // args to the lua script
 	exp := time.Now().Add(ttl).UTC()
-	workers := ss.GetWorkers()
-	args = append(args, float64(exp.Unix()), ttl.Seconds(), bytes)
+	args := []interface{}{float64(exp.Unix()), ttl.Seconds(), bytes} // args to the lua script
 	for _, w := range workers {
 		bytes, err := json.Marshal(w)
 		if err != nil {
 			continue // skip bad data
 		}
-		args = append(args, w.ID.String(), bytes)
+		args = append(args, w.ID, bytes)
 	}
 	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
 	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
-	return writeProcessInfoCmd.Run(r.client,
+	return writeServerStateCmd.Run(r.client,
 		[]string{skey, base.AllServers, wkey, base.AllWorkers},
 		args...).Err()
 }
@@ -521,11 +518,9 @@ redis.call("DEL", KEYS[4])
 return redis.status_reply("OK")`)
 
 // ClearServerState deletes server state data from redis.
-func (r *RDB) ClearServerState(ss *base.ServerState) error {
-	info := ss.GetInfo()
-	host, pid, id := info.Host, info.PID, info.ServerID
-	skey := base.ServerInfoKey(host, pid, id)
-	wkey := base.WorkersKey(host, pid, id)
+func (r *RDB) ClearServerState(host string, pid int, serverID string) error {
+	skey := base.ServerInfoKey(host, pid, serverID)
+	wkey := base.WorkersKey(host, pid, serverID)
 	return clearProcessInfoCmd.Run(r.client,
 		[]string{base.AllServers, skey, base.AllWorkers, wkey}).Err()
 }

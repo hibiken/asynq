@@ -2055,60 +2055,48 @@ func TestListServers(t *testing.T) {
 	r := setup(t)
 
 	started1 := time.Now().Add(-time.Hour)
-	ss1 := base.NewServerState("do.droplet1", 1234, 10, map[string]int{"default": 1}, false)
-	ss1.SetStarted(started1)
-	ss1.SetStatus(base.StatusRunning)
 	info1 := &base.ServerInfo{
-		Concurrency:       10,
-		Queues:            map[string]int{"default": 1},
 		Host:              "do.droplet1",
 		PID:               1234,
+		ServerID:          "server123",
+		Concurrency:       10,
+		Queues:            map[string]int{"default": 1},
 		Status:            "running",
 		Started:           started1,
 		ActiveWorkerCount: 0,
 	}
 
 	started2 := time.Now().Add(-2 * time.Hour)
-	ss2 := base.NewServerState("do.droplet2", 9876, 20, map[string]int{"email": 1}, false)
-	ss2.SetStarted(started2)
-	ss2.SetStatus(base.StatusStopped)
-	ss2.AddWorkerStats(h.NewTaskMessage("send_email", nil), time.Now())
 	info2 := &base.ServerInfo{
-		Concurrency:       20,
-		Queues:            map[string]int{"email": 1},
 		Host:              "do.droplet2",
 		PID:               9876,
+		ServerID:          "server456",
+		Concurrency:       20,
+		Queues:            map[string]int{"email": 1},
 		Status:            "stopped",
 		Started:           started2,
 		ActiveWorkerCount: 1,
 	}
 
 	tests := []struct {
-		serverStates []*base.ServerState
-		want         []*base.ServerInfo
+		data []*base.ServerInfo
 	}{
 		{
-			serverStates: []*base.ServerState{},
-			want:         []*base.ServerInfo{},
+			data: []*base.ServerInfo{},
 		},
 		{
-			serverStates: []*base.ServerState{ss1},
-			want:         []*base.ServerInfo{info1},
+			data: []*base.ServerInfo{info1},
 		},
 		{
-			serverStates: []*base.ServerState{ss1, ss2},
-			want:         []*base.ServerInfo{info1, info2},
+			data: []*base.ServerInfo{info1, info2},
 		},
 	}
-
-	ignoreOpt := cmpopts.IgnoreUnexported(base.ServerInfo{})
-	ignoreFieldOpt := cmpopts.IgnoreFields(base.ServerInfo{}, "ServerID")
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
-		for _, ss := range tc.serverStates {
-			if err := r.WriteServerState(ss, 5*time.Second); err != nil {
+		for _, info := range tc.data {
+			if err := r.WriteServerState(info, []*base.WorkerInfo{}, 5*time.Second); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -2117,9 +2105,9 @@ func TestListServers(t *testing.T) {
 		if err != nil {
 			t.Errorf("r.ListServers returned an error: %v", err)
 		}
-		if diff := cmp.Diff(tc.want, got, h.SortServerInfoOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
+		if diff := cmp.Diff(tc.data, got, h.SortServerInfoOpt); diff != "" {
 			t.Errorf("r.ListServers returned %v, want %v; (-want,+got)\n%s",
-				got, tc.serverStates, diff)
+				got, tc.data, diff)
 		}
 	}
 }
@@ -2127,37 +2115,23 @@ func TestListServers(t *testing.T) {
 func TestListWorkers(t *testing.T) {
 	r := setup(t)
 
-	const (
+	var (
 		host = "127.0.0.1"
 		pid  = 4567
+
+		m1 = h.NewTaskMessage("send_email", map[string]interface{}{"user_id": "abc123"})
+		m2 = h.NewTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/image/file"})
+		m3 = h.NewTaskMessage("reindex", map[string]interface{}{})
 	)
 
-	m1 := h.NewTaskMessage("send_email", map[string]interface{}{"user_id": "abc123"})
-	m2 := h.NewTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/image/file"})
-	m3 := h.NewTaskMessage("reindex", map[string]interface{}{})
-	t1 := time.Now().Add(-time.Second)
-	t2 := time.Now().Add(-10 * time.Second)
-	t3 := time.Now().Add(-time.Minute)
-
-	type workerStats struct {
-		msg     *base.TaskMessage
-		started time.Time
-	}
-
 	tests := []struct {
-		workers []*workerStats
-		want    []*base.WorkerInfo
+		data []*base.WorkerInfo
 	}{
 		{
-			workers: []*workerStats{
-				{m1, t1},
-				{m2, t2},
-				{m3, t3},
-			},
-			want: []*base.WorkerInfo{
-				{Host: host, PID: pid, ID: m1.ID, Type: m1.Type, Queue: m1.Queue, Payload: m1.Payload, Started: t1},
-				{Host: host, PID: pid, ID: m2.ID, Type: m2.Type, Queue: m2.Queue, Payload: m2.Payload, Started: t2},
-				{Host: host, PID: pid, ID: m3.ID, Type: m3.Type, Queue: m3.Queue, Payload: m3.Payload, Started: t3},
+			data: []*base.WorkerInfo{
+				{Host: host, PID: pid, ID: m1.ID.String(), Type: m1.Type, Queue: m1.Queue, Payload: m1.Payload, Started: time.Now().Add(-1 * time.Second)},
+				{Host: host, PID: pid, ID: m2.ID.String(), Type: m2.Type, Queue: m2.Queue, Payload: m2.Payload, Started: time.Now().Add(-5 * time.Second)},
+				{Host: host, PID: pid, ID: m3.ID.String(), Type: m3.Type, Queue: m3.Queue, Payload: m3.Payload, Started: time.Now().Add(-30 * time.Second)},
 			},
 		},
 	}
@@ -2165,13 +2139,7 @@ func TestListWorkers(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
-		ss := base.NewServerState(host, pid, 10, map[string]int{"default": 1}, false)
-
-		for _, w := range tc.workers {
-			ss.AddWorkerStats(w.msg, w.started)
-		}
-
-		err := r.WriteServerState(ss, time.Minute)
+		err := r.WriteServerState(&base.ServerInfo{}, tc.data, time.Minute)
 		if err != nil {
 			t.Errorf("could not write server state to redis: %v", err)
 			continue
@@ -2183,8 +2151,8 @@ func TestListWorkers(t *testing.T) {
 			continue
 		}
 
-		if diff := cmp.Diff(tc.want, got, h.SortWorkerInfoOpt); diff != "" {
-			t.Errorf("(*RDB).ListWorkers() = %v, want = %v; (-want,+got)\n%s", got, tc.want, diff)
+		if diff := cmp.Diff(tc.data, got, h.SortWorkerInfoOpt); diff != "" {
+			t.Errorf("(*RDB).ListWorkers() = %v, want = %v; (-want,+got)\n%s", got, tc.data, diff)
 		}
 	}
 }

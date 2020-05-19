@@ -6,14 +6,9 @@ package base
 
 import (
 	"context"
-	"math/rand"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/rs/xid"
 )
 
 func TestQueueKey(t *testing.T) {
@@ -108,69 +103,28 @@ func TestWorkersKey(t *testing.T) {
 	}
 }
 
-// Test for server state being accessed by multiple goroutines.
+// Test for status being accessed by multiple goroutines.
 // Run with -race flag to check for data race.
-func TestServerStateConcurrentAccess(t *testing.T) {
-	ss := NewServerState("127.0.0.1", 1234, 10, map[string]int{"default": 1}, false)
-	var wg sync.WaitGroup
-	started := time.Now()
-	msgs := []*TaskMessage{
-		{ID: xid.New(), Type: "type1", Payload: map[string]interface{}{"user_id": 42}},
-		{ID: xid.New(), Type: "type2"},
-		{ID: xid.New(), Type: "type3"},
-	}
+func TestStatusConcurrentAccess(t *testing.T) {
+	status := NewServerStatus(StatusIdle)
 
-	// Simulate hearbeater calling SetStatus and SetStarted.
+	var wg sync.WaitGroup
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ss.SetStarted(started)
-		ss.SetStatus(StatusRunning)
-		if status := ss.Status(); status != StatusRunning {
-			t.Errorf("(*ServerState).Status() = %v, want %v", status, StatusRunning)
-		}
+		status.Get()
+		status.String()
 	}()
 
-	// Simulate processor starting worker goroutines.
-	for _, msg := range msgs {
-		wg.Add(1)
-		ss.AddWorkerStats(msg, time.Now())
-		go func(msg *TaskMessage) {
-			defer wg.Done()
-			time.Sleep(time.Duration(rand.Intn(500)) * time.Millisecond)
-			ss.DeleteWorkerStats(msg)
-		}(msg)
-	}
-
-	// Simulate hearbeater calling Get and GetWorkers
 	wg.Add(1)
 	go func() {
-		wg.Done()
-		for i := 0; i < 5; i++ {
-			ss.GetInfo()
-			ss.GetWorkers()
-			time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
-		}
+		defer wg.Done()
+		status.Set(StatusStopped)
+		status.String()
 	}()
 
 	wg.Wait()
-
-	want := &ServerInfo{
-		Host:              "127.0.0.1",
-		PID:               1234,
-		Concurrency:       10,
-		Queues:            map[string]int{"default": 1},
-		StrictPriority:    false,
-		Status:            "running",
-		Started:           started,
-		ActiveWorkerCount: 0,
-	}
-
-	got := ss.GetInfo()
-	if diff := cmp.Diff(want, got, cmpopts.IgnoreFields(ServerInfo{}, "ServerID")); diff != "" {
-		t.Errorf("(*ServerState).GetInfo() = %+v, want %+v; (-want,+got)\n%s",
-			got, want, diff)
-	}
 }
 
 // Test for cancelations being accessed by multiple goroutines.

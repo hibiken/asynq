@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -34,11 +33,11 @@ import (
 // (e.g., queue size reaches a certain limit, or the task has been in the
 // queue for a certain amount of time).
 type Server struct {
-	ss *base.ServerState
-
 	logger *log.Logger
 
 	broker base.Broker
+
+	status *base.ServerStatus
 
 	// wait group to wait for all goroutines to finish.
 	wg          sync.WaitGroup
@@ -283,15 +282,11 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	}
 	logger.SetLevel(toInternalLogLevel(loglevel))
 
-	host, err := os.Hostname()
-	if err != nil {
-		host = "unknown-host"
-	}
-	pid := os.Getpid()
-
 	rdb := rdb.NewRDB(createRedisClient(r))
-	ss := base.NewServerState(host, pid, n, queues, cfg.StrictPriority)
+	starting := make(chan *base.TaskMessage, n)
+	finished := make(chan *base.TaskMessage, n)
 	syncCh := make(chan *syncRequest)
+	status := base.NewServerStatus(base.StatusIdle)
 	cancels := base.NewCancelations()
 
 	syncer := newSyncer(syncerParams{
@@ -300,10 +295,15 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		interval:   5 * time.Second,
 	})
 	heartbeater := newHeartbeater(heartbeaterParams{
-		logger:      logger,
-		broker:      rdb,
-		serverState: ss,
-		interval:    5 * time.Second,
+		logger:         logger,
+		broker:         rdb,
+		interval:       5 * time.Second,
+		concurrency:    n,
+		queues:         queues,
+		strictPriority: cfg.StrictPriority,
+		status:         status,
+		starting:       starting,
+		finished:       finished,
 	})
 	scheduler := newScheduler(schedulerParams{
 		logger:   logger,
@@ -319,17 +319,21 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	processor := newProcessor(processorParams{
 		logger:          logger,
 		broker:          rdb,
-		ss:              ss,
 		retryDelayFunc:  delayFunc,
 		syncCh:          syncCh,
 		cancelations:    cancels,
+		concurrency:     n,
+		queues:          queues,
+		strictPriority:  cfg.StrictPriority,
 		errHandler:      cfg.ErrorHandler,
 		shutdownTimeout: shutdownTimeout,
+		starting:        starting,
+		finished:        finished,
 	})
 	return &Server{
-		ss:          ss,
 		logger:      logger,
 		broker:      rdb,
+		status:      status,
 		scheduler:   scheduler,
 		processor:   processor,
 		syncer:      syncer,
@@ -390,13 +394,13 @@ func (srv *Server) Start(handler Handler) error {
 	if handler == nil {
 		return fmt.Errorf("asynq: server cannot run with nil handler")
 	}
-	switch srv.ss.Status() {
+	switch srv.status.Get() {
 	case base.StatusRunning:
 		return fmt.Errorf("asynq: the server is already running")
 	case base.StatusStopped:
 		return ErrServerStopped
 	}
-	srv.ss.SetStatus(base.StatusRunning)
+	srv.status.Set(base.StatusRunning)
 	srv.processor.handler = handler
 
 	srv.logger.Info("Starting processing")
@@ -414,7 +418,7 @@ func (srv *Server) Start(handler Handler) error {
 // active workers to finish processing tasks for duration specified in Config.ShutdownTimeout.
 // If worker didn't finish processing a task during the timeout, the task will be pushed back to Redis.
 func (srv *Server) Stop() {
-	switch srv.ss.Status() {
+	switch srv.status.Get() {
 	case base.StatusIdle, base.StatusStopped:
 		// server is not running, do nothing and return.
 		return
@@ -424,6 +428,7 @@ func (srv *Server) Stop() {
 	// Note: The order of termination is important.
 	// Sender goroutines should be terminated before the receiver goroutines.
 	// processor -> syncer (via syncCh)
+	// processor -> heartbeater (via starting, finished channels)
 	srv.scheduler.terminate()
 	srv.processor.terminate()
 	srv.syncer.terminate()
@@ -433,7 +438,7 @@ func (srv *Server) Stop() {
 	srv.wg.Wait()
 
 	srv.broker.Close()
-	srv.ss.SetStatus(base.StatusStopped)
+	srv.status.Set(base.StatusStopped)
 
 	srv.logger.Info("Exiting")
 }
@@ -443,6 +448,6 @@ func (srv *Server) Stop() {
 func (srv *Server) Quiet() {
 	srv.logger.Info("Stopping processor")
 	srv.processor.stop()
-	srv.ss.SetStatus(base.StatusQuiet)
+	srv.status.Set(base.StatusQuiet)
 	srv.logger.Info("Processor stopped")
 }

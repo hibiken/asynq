@@ -37,14 +37,24 @@ func TestHeartbeater(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 
-		state := base.NewServerState(tc.host, tc.pid, tc.concurrency, tc.queues, false)
+		status := base.NewServerStatus(base.StatusIdle)
 		hb := newHeartbeater(heartbeaterParams{
-			logger:      testLogger,
-			broker:      rdbClient,
-			serverState: state,
-			interval:    tc.interval,
+			logger:         testLogger,
+			broker:         rdbClient,
+			interval:       tc.interval,
+			concurrency:    tc.concurrency,
+			queues:         tc.queues,
+			strictPriority: false,
+			status:         status,
+			starting:       make(chan *base.TaskMessage),
+			finished:       make(chan *base.TaskMessage),
 		})
 
+		// Change host and pid fields for testing purpose.
+		hb.host = tc.host
+		hb.pid = tc.pid
+
+		status.Set(base.StatusRunning)
 		var wg sync.WaitGroup
 		hb.start(&wg)
 
@@ -80,7 +90,7 @@ func TestHeartbeater(t *testing.T) {
 		}
 
 		// status change
-		state.SetStatus(base.StatusStopped)
+		status.Set(base.StatusStopped)
 
 		// allow for heartbeater to write to redis
 		time.Sleep(tc.interval * 2)
@@ -119,12 +129,16 @@ func TestHeartbeaterWithRedisDown(t *testing.T) {
 	}()
 	r := rdb.NewRDB(setup(t))
 	testBroker := testbroker.NewTestBroker(r)
-	ss := base.NewServerState("localhost", 1234, 10, map[string]int{"default": 1}, false)
 	hb := newHeartbeater(heartbeaterParams{
-		logger:      testLogger,
-		broker:      testBroker,
-		serverState: ss,
-		interval:    time.Second,
+		logger:         testLogger,
+		broker:         testBroker,
+		interval:       time.Second,
+		concurrency:    10,
+		queues:         map[string]int{"default": 1},
+		strictPriority: false,
+		status:         base.NewServerStatus(base.StatusRunning),
+		starting:       make(chan *base.TaskMessage),
+		finished:       make(chan *base.TaskMessage),
 	})
 
 	testBroker.Sleep()

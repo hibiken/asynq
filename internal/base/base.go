@@ -105,28 +105,23 @@ type TaskMessage struct {
 	UniqueKey string
 }
 
-// ServerState holds process level information.
-//
-// ServerStates are safe for concurrent use by multiple goroutines.
-type ServerState struct {
-	mu             sync.Mutex // guards all data fields
-	id             xid.ID
-	concurrency    int
-	queues         map[string]int
-	strictPriority bool
-	pid            int
-	host           string
-	status         ServerStatus
-	started        time.Time
-	workers        map[string]*workerStats
+// ServerStatus represents status of a server.
+// ServerStatus methods are concurrency safe.
+type ServerStatus struct {
+	mu  sync.Mutex
+	val ServerStatusValue
 }
 
-// ServerStatus represents status of a server.
-type ServerStatus int
+// NewServerStatus returns a new status instance given an initial value.
+func NewServerStatus(v ServerStatusValue) *ServerStatus {
+	return &ServerStatus{val: v}
+}
+
+type ServerStatusValue int
 
 const (
 	// StatusIdle indicates the server is in idle state.
-	StatusIdle ServerStatus = iota
+	StatusIdle ServerStatusValue = iota
 
 	// StatusRunning indicates the servier is up and processing tasks.
 	StatusRunning
@@ -145,117 +140,28 @@ var statuses = []string{
 	"stopped",
 }
 
-func (s ServerStatus) String() string {
-	if StatusIdle <= s && s <= StatusStopped {
-		return statuses[s]
+func (s *ServerStatus) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if StatusIdle <= s.val && s.val <= StatusStopped {
+		return statuses[s.val]
 	}
 	return "unknown status"
 }
 
-type workerStats struct {
-	msg     *TaskMessage
-	started time.Time
+// Get returns the status value.
+func (s *ServerStatus) Get() ServerStatusValue {
+	s.mu.Lock()
+	v := s.val
+	s.mu.Unlock()
+	return v
 }
 
-// NewServerState returns a new instance of ServerState.
-func NewServerState(host string, pid, concurrency int, queues map[string]int, strict bool) *ServerState {
-	return &ServerState{
-		host:           host,
-		pid:            pid,
-		id:             xid.New(),
-		concurrency:    concurrency,
-		queues:         cloneQueueConfig(queues),
-		strictPriority: strict,
-		status:         StatusIdle,
-		workers:        make(map[string]*workerStats),
-	}
-}
-
-// SetStatus updates the status of server.
-func (ss *ServerState) SetStatus(status ServerStatus) {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-	ss.status = status
-}
-
-// Status returns the status of server.
-func (ss *ServerState) Status() ServerStatus {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-	return ss.status
-}
-
-// SetStarted records when the process started processing.
-func (ss *ServerState) SetStarted(t time.Time) {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-	ss.started = t
-}
-
-// AddWorkerStats records when a worker started and which task it's processing.
-func (ss *ServerState) AddWorkerStats(msg *TaskMessage, started time.Time) {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-	ss.workers[msg.ID.String()] = &workerStats{msg, started}
-}
-
-// DeleteWorkerStats removes a worker's entry from the process state.
-func (ss *ServerState) DeleteWorkerStats(msg *TaskMessage) {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-	delete(ss.workers, msg.ID.String())
-}
-
-// GetInfo returns current state of server as a ServerInfo.
-func (ss *ServerState) GetInfo() *ServerInfo {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-	return &ServerInfo{
-		Host:              ss.host,
-		PID:               ss.pid,
-		ServerID:          ss.id.String(),
-		Concurrency:       ss.concurrency,
-		Queues:            cloneQueueConfig(ss.queues),
-		StrictPriority:    ss.strictPriority,
-		Status:            ss.status.String(),
-		Started:           ss.started,
-		ActiveWorkerCount: len(ss.workers),
-	}
-}
-
-// GetWorkers returns a list of currently running workers' info.
-func (ss *ServerState) GetWorkers() []*WorkerInfo {
-	ss.mu.Lock()
-	defer ss.mu.Unlock()
-	var res []*WorkerInfo
-	for _, w := range ss.workers {
-		res = append(res, &WorkerInfo{
-			Host:    ss.host,
-			PID:     ss.pid,
-			ID:      w.msg.ID,
-			Type:    w.msg.Type,
-			Queue:   w.msg.Queue,
-			Payload: clonePayload(w.msg.Payload),
-			Started: w.started,
-		})
-	}
-	return res
-}
-
-func cloneQueueConfig(qcfg map[string]int) map[string]int {
-	res := make(map[string]int)
-	for qname, n := range qcfg {
-		res[qname] = n
-	}
-	return res
-}
-
-func clonePayload(payload map[string]interface{}) map[string]interface{} {
-	res := make(map[string]interface{})
-	for k, v := range payload {
-		res[k] = v
-	}
-	return res
+// Set sets the status value.
+func (s *ServerStatus) Set(v ServerStatusValue) {
+	s.mu.Lock()
+	s.val = v
+	s.mu.Unlock()
 }
 
 // ServerInfo holds information about a running server.
@@ -275,7 +181,7 @@ type ServerInfo struct {
 type WorkerInfo struct {
 	Host    string
 	PID     int
-	ID      xid.ID
+	ID      string
 	Type    string
 	Queue   string
 	Payload map[string]interface{}
@@ -345,8 +251,8 @@ type Broker interface {
 	Kill(msg *TaskMessage, errMsg string) error
 	RequeueAll() (int64, error)
 	CheckAndEnqueue(qnames ...string) error
-	WriteServerState(ss *ServerState, ttl time.Duration) error
-	ClearServerState(ss *ServerState) error
+	WriteServerState(info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error
+	ClearServerState(host string, pid int, serverID string) error
 	CancelationPubSub() (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers
 	PublishCancelation(id string) error
 	Close() error

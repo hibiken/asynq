@@ -57,7 +57,7 @@ var SortServerInfoOpt = cmp.Transformer("SortServerInfo", func(in []*base.Server
 var SortWorkerInfoOpt = cmp.Transformer("SortWorkerInfo", func(in []*base.WorkerInfo) []*base.WorkerInfo {
 	out := append([]*base.WorkerInfo(nil), in...) // Copy input to avoid mutating it
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].ID.String() < out[j].ID.String()
+		return out[i].ID < out[j].ID
 	})
 	return out
 })

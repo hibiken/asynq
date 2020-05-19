@@ -864,64 +864,63 @@ func TestCheckAndEnqueue(t *testing.T) {
 
 func TestWriteServerState(t *testing.T) {
 	r := setup(t)
-	queues := map[string]int{"default": 2, "email": 5, "low": 1}
 
-	started := time.Now()
-	ss := base.NewServerState("localhost", 4242, 10, queues, false)
-	ss.SetStarted(started)
-	ss.SetStatus(base.StatusRunning)
-	ttl := 5 * time.Second
+	var (
+		host     = "localhost"
+		pid      = 4242
+		serverID = "server123"
 
-	h.FlushDB(t, r.client)
+		ttl = 5 * time.Second
+	)
 
-	err := r.WriteServerState(ss, ttl)
+	info := base.ServerInfo{
+		Host:              host,
+		PID:               pid,
+		ServerID:          serverID,
+		Concurrency:       10,
+		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
+		StrictPriority:    false,
+		Started:           time.Now(),
+		Status:            "running",
+		ActiveWorkerCount: 0,
+	}
+
+	err := r.WriteServerState(&info, nil /* workers */, ttl)
 	if err != nil {
 		t.Errorf("r.WriteServerState returned an error: %v", err)
 	}
 
-	// Check ServerInfo was written correctly
-	info := ss.GetInfo()
-	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
+	// Check ServerInfo was written correctly.
+	skey := base.ServerInfoKey(host, pid, serverID)
 	data := r.client.Get(skey).Val()
 	var got base.ServerInfo
 	err = json.Unmarshal([]byte(data), &got)
 	if err != nil {
 		t.Fatalf("could not decode json: %v", err)
 	}
-	want := base.ServerInfo{
-		Host:              info.Host,
-		PID:               info.PID,
-		Concurrency:       info.Concurrency,
-		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
-		StrictPriority:    false,
-		Status:            "running",
-		Started:           started,
-		ActiveWorkerCount: 0,
-	}
-	ignoreOpt := cmpopts.IgnoreFields(base.ServerInfo{}, "ServerID")
-	if diff := cmp.Diff(want, got, ignoreOpt); diff != "" {
+	if diff := cmp.Diff(info, got); diff != "" {
 		t.Errorf("persisted ServerInfo was %v, want %v; (-want,+got)\n%s",
-			got, want, diff)
+			got, info, diff)
 	}
-	// Check ServerInfo TTL was set correctly
+	// Check ServerInfo TTL was set correctly.
 	gotTTL := r.client.TTL(skey).Val()
 	if !cmp.Equal(ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 		t.Errorf("TTL of %q was %v, want %v", skey, gotTTL, ttl)
 	}
-	// Check ServerInfo key was added to the set correctly
-	gotProcesses := r.client.ZRange(base.AllServers, 0, -1).Val()
-	wantProcesses := []string{skey}
-	if diff := cmp.Diff(wantProcesses, gotProcesses); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllServers, gotProcesses, wantProcesses)
+	// Check ServerInfo key was added to the set all server keys correctly.
+	gotServerKeys := r.client.ZRange(base.AllServers, 0, -1).Val()
+	wantServerKeys := []string{skey}
+	if diff := cmp.Diff(wantServerKeys, gotServerKeys); diff != "" {
+		t.Errorf("%q contained %v, want %v", base.AllServers, gotServerKeys, wantServerKeys)
 	}
 
-	// Check WorkersInfo was written correctly
-	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
+	// Check WorkersInfo was written correctly.
+	wkey := base.WorkersKey(host, pid, serverID)
 	workerExist := r.client.Exists(wkey).Val()
 	if workerExist != 0 {
 		t.Errorf("%q key exists", wkey)
 	}
-	// Check WorkersInfo key was added to the set correctly
+	// Check WorkersInfo key was added to the set correctly.
 	gotWorkerKeys := r.client.ZRange(base.AllWorkers, 0, -1).Val()
 	wantWorkerKeys := []string{wkey}
 	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
@@ -931,109 +930,105 @@ func TestWriteServerState(t *testing.T) {
 
 func TestWriteServerStateWithWorkers(t *testing.T) {
 	r := setup(t)
-	queues := map[string]int{"default": 2, "email": 5, "low": 1}
-	concurrency := 10
 
-	started := time.Now().Add(-10 * time.Minute)
-	w1Started := time.Now().Add(-time.Minute)
-	w2Started := time.Now().Add(-time.Second)
-	msg1 := h.NewTaskMessage("send_email", map[string]interface{}{"user_id": "123"})
-	msg2 := h.NewTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/imgfile"})
-	ss := base.NewServerState("127.0.01", 4242, concurrency, queues, false)
-	ss.SetStarted(started)
-	ss.SetStatus(base.StatusRunning)
-	ss.AddWorkerStats(msg1, w1Started)
-	ss.AddWorkerStats(msg2, w2Started)
-	ttl := 5 * time.Second
+	var (
+		host     = "127.0.0.1"
+		pid      = 4242
+		serverID = "server123"
 
-	h.FlushDB(t, r.client)
+		msg1 = h.NewTaskMessage("send_email", map[string]interface{}{"user_id": "123"})
+		msg2 = h.NewTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/imgfile"})
 
-	err := r.WriteServerState(ss, ttl)
-	if err != nil {
-		t.Errorf("r.WriteServerState returned an error: %v", err)
+		ttl = 5 * time.Second
+	)
+
+	workers := []*base.WorkerInfo{
+		{
+			Host:    host,
+			PID:     pid,
+			ID:      msg1.ID.String(),
+			Type:    msg1.Type,
+			Queue:   msg1.Queue,
+			Payload: msg1.Payload,
+			Started: time.Now().Add(-10 * time.Second),
+		},
+		{
+			Host:    host,
+			PID:     pid,
+			ID:      msg2.ID.String(),
+			Type:    msg2.Type,
+			Queue:   msg2.Queue,
+			Payload: msg2.Payload,
+			Started: time.Now().Add(-2 * time.Minute),
+		},
 	}
 
-	// Check ServerInfo was written correctly
-	info := ss.GetInfo()
-	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
+	serverInfo := base.ServerInfo{
+		Host:              host,
+		PID:               pid,
+		ServerID:          serverID,
+		Concurrency:       10,
+		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
+		StrictPriority:    false,
+		Started:           time.Now().Add(-10 * time.Minute),
+		Status:            "running",
+		ActiveWorkerCount: len(workers),
+	}
+
+	err := r.WriteServerState(&serverInfo, workers, ttl)
+	if err != nil {
+		t.Fatalf("r.WriteServerState returned an error: %v", err)
+	}
+
+	// Check ServerInfo was written correctly.
+	skey := base.ServerInfoKey(host, pid, serverID)
 	data := r.client.Get(skey).Val()
 	var got base.ServerInfo
 	err = json.Unmarshal([]byte(data), &got)
 	if err != nil {
 		t.Fatalf("could not decode json: %v", err)
 	}
-	want := base.ServerInfo{
-		Host:              info.Host,
-		PID:               info.PID,
-		ServerID:          info.ServerID,
-		Concurrency:       concurrency,
-		Queues:            queues,
-		StrictPriority:    false,
-		Status:            "running",
-		Started:           started,
-		ActiveWorkerCount: 2,
-	}
-	if diff := cmp.Diff(want, got); diff != "" {
+	if diff := cmp.Diff(serverInfo, got); diff != "" {
 		t.Errorf("persisted ServerInfo was %v, want %v; (-want,+got)\n%s",
-			got, want, diff)
+			got, serverInfo, diff)
 	}
-	// Check ServerInfo TTL was set correctly
+	// Check ServerInfo TTL was set correctly.
 	gotTTL := r.client.TTL(skey).Val()
 	if !cmp.Equal(ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 		t.Errorf("TTL of %q was %v, want %v", skey, gotTTL, ttl)
 	}
-	// Check ServerInfo key was added to the set correctly
-	gotProcesses := r.client.ZRange(base.AllServers, 0, -1).Val()
-	wantProcesses := []string{skey}
-	if diff := cmp.Diff(wantProcesses, gotProcesses); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllServers, gotProcesses, wantProcesses)
+	// Check ServerInfo key was added to the set correctly.
+	gotServerKeys := r.client.ZRange(base.AllServers, 0, -1).Val()
+	wantServerKeys := []string{skey}
+	if diff := cmp.Diff(wantServerKeys, gotServerKeys); diff != "" {
+		t.Errorf("%q contained %v, want %v", base.AllServers, gotServerKeys, wantServerKeys)
 	}
 
-	// Check WorkersInfo was written correctly
-	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
+	// Check WorkersInfo was written correctly.
+	wkey := base.WorkersKey(host, pid, serverID)
 	wdata := r.client.HGetAll(wkey).Val()
 	if len(wdata) != 2 {
 		t.Fatalf("HGETALL %q returned a hash of size %d, want 2", wkey, len(wdata))
 	}
-	gotWorkers := make(map[string]*base.WorkerInfo)
-	for key, val := range wdata {
+	var gotWorkers []*base.WorkerInfo
+	for _, val := range wdata {
 		var w base.WorkerInfo
 		if err := json.Unmarshal([]byte(val), &w); err != nil {
 			t.Fatalf("could not unmarshal worker's data: %v", err)
 		}
-		gotWorkers[key] = &w
+		gotWorkers = append(gotWorkers, &w)
 	}
-	wantWorkers := map[string]*base.WorkerInfo{
-		msg1.ID.String(): {
-			Host:    info.Host,
-			PID:     info.PID,
-			ID:      msg1.ID,
-			Type:    msg1.Type,
-			Queue:   msg1.Queue,
-			Payload: msg1.Payload,
-			Started: w1Started,
-		},
-		msg2.ID.String(): {
-			Host:    info.Host,
-			PID:     info.PID,
-			ID:      msg2.ID,
-			Type:    msg2.Type,
-			Queue:   msg2.Queue,
-			Payload: msg2.Payload,
-			Started: w2Started,
-		},
-	}
-	if diff := cmp.Diff(wantWorkers, gotWorkers); diff != "" {
+	if diff := cmp.Diff(workers, gotWorkers, h.SortWorkerInfoOpt); diff != "" {
 		t.Errorf("persisted workers info was %v, want %v; (-want,+got)\n%s",
-			gotWorkers, wantWorkers, diff)
+			gotWorkers, workers, diff)
 	}
 
-	// Check WorkersInfo TTL was set correctly
+	// Check WorkersInfo TTL was set correctly.
 	gotTTL = r.client.TTL(wkey).Val()
-	if !cmp.Equal(ttl, gotTTL, timeCmpOpt) {
+	if !cmp.Equal(ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 		t.Errorf("TTL of %q was %v, want %v", wkey, gotTTL, ttl)
 	}
-	// Check WorkersInfo key was added to the set correctly
+	// Check WorkersInfo key was added to the set correctly.
 	gotWorkerKeys := r.client.ZRange(base.AllWorkers, 0, -1).Val()
 	wantWorkerKeys := []string{wkey}
 	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
@@ -1043,51 +1038,96 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 
 func TestClearServerState(t *testing.T) {
 	r := setup(t)
-	ss := base.NewServerState("127.0.01", 4242, 10, map[string]int{"default": 1}, false)
-	info := ss.GetInfo()
 
-	h.FlushDB(t, r.client)
+	var (
+		host     = "127.0.0.1"
+		pid      = 1234
+		serverID = "server123"
 
-	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
-	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
-	otherSKey := base.ServerInfoKey("otherhost", 12345, "server98")
-	otherWKey := base.WorkersKey("otherhost", 12345, "server98")
-	// Populate the keys.
-	if err := r.client.Set(skey, "process-info", 0).Err(); err != nil {
-		t.Fatal(err)
+		otherHost     = "127.0.0.2"
+		otherPID      = 9876
+		otherServerID = "server987"
+
+		msg1 = h.NewTaskMessage("send_email", map[string]interface{}{"user_id": "123"})
+		msg2 = h.NewTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/imgfile"})
+
+		ttl = 5 * time.Second
+	)
+
+	workers1 := []*base.WorkerInfo{
+		{
+			Host:    host,
+			PID:     pid,
+			ID:      msg1.ID.String(),
+			Type:    msg1.Type,
+			Queue:   msg1.Queue,
+			Payload: msg1.Payload,
+			Started: time.Now().Add(-10 * time.Second),
+		},
 	}
-	if err := r.client.HSet(wkey, "worker-key", "worker-info").Err(); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.client.ZAdd(base.AllServers, &redis.Z{Member: skey}).Err(); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.client.ZAdd(base.AllServers, &redis.Z{Member: otherSKey}).Err(); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.client.ZAdd(base.AllWorkers, &redis.Z{Member: wkey}).Err(); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.client.ZAdd(base.AllWorkers, &redis.Z{Member: otherWKey}).Err(); err != nil {
-		t.Fatal(err)
+	serverInfo1 := base.ServerInfo{
+		Host:              host,
+		PID:               pid,
+		ServerID:          serverID,
+		Concurrency:       10,
+		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
+		StrictPriority:    false,
+		Started:           time.Now().Add(-10 * time.Minute),
+		Status:            "running",
+		ActiveWorkerCount: len(workers1),
 	}
 
-	err := r.ClearServerState(ss)
+	workers2 := []*base.WorkerInfo{
+		{
+			Host:    otherHost,
+			PID:     otherPID,
+			ID:      msg2.ID.String(),
+			Type:    msg2.Type,
+			Queue:   msg2.Queue,
+			Payload: msg2.Payload,
+			Started: time.Now().Add(-30 * time.Second),
+		},
+	}
+	serverInfo2 := base.ServerInfo{
+		Host:              otherHost,
+		PID:               otherPID,
+		ServerID:          otherServerID,
+		Concurrency:       10,
+		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
+		StrictPriority:    false,
+		Started:           time.Now().Add(-15 * time.Minute),
+		Status:            "running",
+		ActiveWorkerCount: len(workers2),
+	}
+
+	// Write server and workers data.
+	if err := r.WriteServerState(&serverInfo1, workers1, ttl); err != nil {
+		t.Fatalf("could not write server state: %v", err)
+	}
+	if err := r.WriteServerState(&serverInfo2, workers2, ttl); err != nil {
+		t.Fatalf("could not write server state: %v", err)
+	}
+
+	err := r.ClearServerState(host, pid, serverID)
 	if err != nil {
 		t.Fatalf("(*RDB).ClearServerState failed: %v", err)
 	}
 
-	// Check all keys are cleared
+	skey := base.ServerInfoKey(host, pid, serverID)
+	wkey := base.WorkersKey(host, pid, serverID)
+	otherSKey := base.ServerInfoKey(otherHost, otherPID, otherServerID)
+	otherWKey := base.WorkersKey(otherHost, otherPID, otherServerID)
+	// Check all keys are cleared.
 	if r.client.Exists(skey).Val() != 0 {
 		t.Errorf("Redis key %q exists", skey)
 	}
 	if r.client.Exists(wkey).Val() != 0 {
 		t.Errorf("Redis key %q exists", wkey)
 	}
-	gotProcessKeys := r.client.ZRange(base.AllServers, 0, -1).Val()
-	wantProcessKeys := []string{otherSKey}
-	if diff := cmp.Diff(wantProcessKeys, gotProcessKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllServers, gotProcessKeys, wantProcessKeys)
+	gotServerKeys := r.client.ZRange(base.AllServers, 0, -1).Val()
+	wantServerKeys := []string{otherSKey}
+	if diff := cmp.Diff(wantServerKeys, gotServerKeys); diff != "" {
+		t.Errorf("%q contained %v, want %v", base.AllServers, gotServerKeys, wantServerKeys)
 	}
 	gotWorkerKeys := r.client.ZRange(base.AllWorkers, 0, -1).Val()
 	wantWorkerKeys := []string{otherWKey}
