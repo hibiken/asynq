@@ -19,6 +19,18 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
+// fakeHeartbeater receives from starting and finished channels and do nothing.
+func fakeHeartbeater(starting, finished <-chan *base.TaskMessage, done <-chan struct{}) {
+	for {
+		select {
+		case <-starting:
+		case <-finished:
+		case <-done:
+			return
+		}
+	}
+}
+
 func TestProcessorSuccess(t *testing.T) {
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
@@ -63,16 +75,24 @@ func TestProcessorSuccess(t *testing.T) {
 			processed = append(processed, task)
 			return nil
 		}
-		ss := base.NewServerState("localhost", 1234, 10, defaultQueueConfig, false)
+		starting := make(chan *base.TaskMessage)
+		finished := make(chan *base.TaskMessage)
+		done := make(chan struct{})
+		defer func() { close(done) }()
+		go fakeHeartbeater(starting, finished, done)
 		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
-			ss:              ss,
 			retryDelayFunc:  defaultDelayFunc,
 			syncCh:          nil,
 			cancelations:    base.NewCancelations(),
+			concurrency:     10,
+			queues:          defaultQueueConfig,
+			strictPriority:  false,
 			errHandler:      nil,
 			shutdownTimeout: defaultShutdownTimeout,
+			starting:        starting,
+			finished:        finished,
 		})
 		p.handler = HandlerFunc(handler)
 
@@ -168,16 +188,24 @@ func TestProcessorRetry(t *testing.T) {
 			defer mu.Unlock()
 			n++
 		}
-		ss := base.NewServerState("localhost", 1234, 10, defaultQueueConfig, false)
+		starting := make(chan *base.TaskMessage)
+		finished := make(chan *base.TaskMessage)
+		done := make(chan struct{})
+		defer func() { close(done) }()
+		go fakeHeartbeater(starting, finished, done)
 		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
-			ss:              ss,
 			retryDelayFunc:  delayFunc,
 			syncCh:          nil,
 			cancelations:    base.NewCancelations(),
+			concurrency:     10,
+			queues:          defaultQueueConfig,
+			strictPriority:  false,
 			errHandler:      ErrorHandlerFunc(errHandler),
 			shutdownTimeout: defaultShutdownTimeout,
+			starting:        starting,
+			finished:        finished,
 		})
 		p.handler = tc.handler
 
@@ -241,16 +269,24 @@ func TestProcessorQueues(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		ss := base.NewServerState("localhost", 1234, 10, tc.queueCfg, false)
+		starting := make(chan *base.TaskMessage)
+		finished := make(chan *base.TaskMessage)
+		done := make(chan struct{})
+		defer func() { close(done) }()
+		go fakeHeartbeater(starting, finished, done)
 		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          nil,
-			ss:              ss,
 			retryDelayFunc:  defaultDelayFunc,
 			syncCh:          nil,
 			cancelations:    base.NewCancelations(),
+			concurrency:     10,
+			queues:          tc.queueCfg,
+			strictPriority:  false,
 			errHandler:      nil,
 			shutdownTimeout: defaultShutdownTimeout,
+			starting:        starting,
+			finished:        finished,
 		})
 		got := p.queues()
 		if diff := cmp.Diff(tc.want, got, sortOpt); diff != "" {
@@ -316,17 +352,24 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 			base.DefaultQueueName: 2,
 			"low":                 1,
 		}
-		// Note: Set concurrency to 1 to make sure tasks are processed one at a time.
-		ss := base.NewServerState("localhost", 1234, 1 /* concurrency */, queueCfg, true /*strict*/)
+		starting := make(chan *base.TaskMessage)
+		finished := make(chan *base.TaskMessage)
+		done := make(chan struct{})
+		defer func() { close(done) }()
+		go fakeHeartbeater(starting, finished, done)
 		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
-			ss:              ss,
 			retryDelayFunc:  defaultDelayFunc,
 			syncCh:          nil,
 			cancelations:    base.NewCancelations(),
+			concurrency:     1, // Set concurrency to 1 to make sure tasks are processed one at a time.
+			queues:          queueCfg,
+			strictPriority:  true,
 			errHandler:      nil,
 			shutdownTimeout: defaultShutdownTimeout,
+			starting:        starting,
+			finished:        finished,
 		})
 		p.handler = HandlerFunc(handler)
 
@@ -412,7 +455,7 @@ func TestGCD(t *testing.T) {
 	}
 }
 
-func TestNormalizeQueueCfg(t *testing.T) {
+func TestNormalizeQueues(t *testing.T) {
 	tests := []struct {
 		input map[string]int
 		want  map[string]int
@@ -462,9 +505,9 @@ func TestNormalizeQueueCfg(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := normalizeQueueCfg(tc.input)
+		got := normalizeQueues(tc.input)
 		if diff := cmp.Diff(tc.want, got); diff != "" {
-			t.Errorf("normalizeQueueCfg(%v) = %v, want %v; (-want, +got):\n%s",
+			t.Errorf("normalizeQueues(%v) = %v, want %v; (-want, +got):\n%s",
 				tc.input, got, tc.want, diff)
 		}
 	}

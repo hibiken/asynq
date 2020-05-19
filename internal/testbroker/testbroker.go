@@ -141,22 +141,22 @@ func (tb *TestBroker) CheckAndEnqueue(qnames ...string) error {
 	return tb.real.CheckAndEnqueue()
 }
 
-func (tb *TestBroker) WriteServerState(ss *base.ServerState, ttl time.Duration) error {
+func (tb *TestBroker) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo, ttl time.Duration) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return errRedisDown
 	}
-	return tb.real.WriteServerState(ss, ttl)
+	return tb.real.WriteServerState(info, workers, ttl)
 }
 
-func (tb *TestBroker) ClearServerState(ss *base.ServerState) error {
+func (tb *TestBroker) ClearServerState(host string, pid int, serverID string) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return errRedisDown
 	}
-	return tb.real.ClearServerState(ss)
+	return tb.real.ClearServerState(host, pid, serverID)
 }
 
 func (tb *TestBroker) CancelationPubSub() (*redis.PubSub, error) {
