@@ -310,7 +310,7 @@ func (p *processor) queues() []string {
 	}
 	var names []string
 	for qname, priority := range p.queueConfig {
-		for i := 0; i < int(priority); i++ {
+		for i := 0; i < priority; i++ {
 			names = append(names, qname)
 		}
 	}

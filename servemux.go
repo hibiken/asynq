@@ -15,7 +15,7 @@ import (
 // ServeMux is a multiplexer for asynchronous tasks.
 // It matches the type of each task against a list of registered patterns
 // and calls the handler for the pattern that most closely matches the
-// taks's type name.
+// task's type name.
 //
 // Longer patterns take precedence over shorter ones, so that if there are
 // handlers registered for both "images" and "images:thumbnails",
