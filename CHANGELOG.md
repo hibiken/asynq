@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `GetTaskID`, `GetRetryCount`, and `GetMaxRetry` functions were added to extract task metadata from context.
+
 ## [0.9.0] - 2020-05-16
 
 ### Changed

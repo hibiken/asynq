@@ -405,20 +405,3 @@ func gcd(xs ...int) int {
 	}
 	return res
 }
-
-// createContext returns a context and cancel function for a given task message.
-func createContext(msg *base.TaskMessage) (ctx context.Context, cancel context.CancelFunc) {
-	ctx = context.Background()
-	timeout, err := time.ParseDuration(msg.Timeout)
-	if err == nil && timeout != 0 {
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-	}
-	deadline, err := time.Parse(time.RFC3339, msg.Deadline)
-	if err == nil && !deadline.IsZero() {
-		ctx, cancel = context.WithDeadline(ctx, deadline)
-	}
-	if cancel == nil {
-		ctx, cancel = context.WithCancel(ctx)
-	}
-	return ctx, cancel
-}
