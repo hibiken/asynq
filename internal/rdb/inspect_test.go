@@ -2156,3 +2156,164 @@ func TestListWorkers(t *testing.T) {
 		}
 	}
 }
+
+func TestPause(t *testing.T) {
+	r := setup(t)
+
+	tests := []struct {
+		initial []string // initial queue keys in the set
+		qname   string   // queue name to pause
+		want    []string // expected queue keys in the set
+	}{
+		{[]string{}, "default", []string{"asynq:queues:default"}},
+		{[]string{"asynq:queues:default"}, "critical", []string{"asynq:queues:default", "asynq:queues:critical"}},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+
+		// Set up initial state.
+		for _, qkey := range tc.initial {
+			if err := r.client.SAdd(base.PausedQueues, qkey).Err(); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := r.Pause(tc.qname)
+		if err != nil {
+			t.Errorf("Pause(%q) returned error: %v", tc.qname, err)
+			continue
+		}
+
+		got, err := r.client.SMembers(base.PausedQueues).Result()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff(tc.want, got, h.SortStringSliceOpt); diff != "" {
+			t.Errorf("%q has members %v, want %v; (-want,+got)\n%s",
+				base.PausedQueues, got, tc.want, diff)
+		}
+	}
+}
+
+func TestPauseError(t *testing.T) {
+	r := setup(t)
+
+	tests := []struct {
+		desc    string   // test case description
+		initial []string // initial queue keys in the set
+		qname   string   // queue name to pause
+		want    []string // expected queue keys in the set
+	}{
+		{"queue already paused", []string{"asynq:queues:default"}, "default", []string{"asynq:queues:default"}},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+
+		// Set up initial state.
+		for _, qkey := range tc.initial {
+			if err := r.client.SAdd(base.PausedQueues, qkey).Err(); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := r.Pause(tc.qname)
+		if err == nil {
+			t.Errorf("%s; Pause(%q) returned nil: want error", tc.desc, tc.qname)
+			continue
+		}
+
+		got, err := r.client.SMembers(base.PausedQueues).Result()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff(tc.want, got, h.SortStringSliceOpt); diff != "" {
+			t.Errorf("%s; %q has members %v, want %v; (-want,+got)\n%s",
+				tc.desc, base.PausedQueues, got, tc.want, diff)
+		}
+	}
+}
+
+func TestUnpause(t *testing.T) {
+	r := setup(t)
+
+	tests := []struct {
+		initial []string // initial queue keys in the set
+		qname   string   // queue name to unpause
+		want    []string // expected queue keys in the set
+	}{
+		{[]string{"asynq:queues:default"}, "default", []string{}},
+		{[]string{"asynq:queues:default", "asynq:queues:low"}, "low", []string{"asynq:queues:default"}},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+
+		// Set up initial state.
+		for _, qkey := range tc.initial {
+			if err := r.client.SAdd(base.PausedQueues, qkey).Err(); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := r.Unpause(tc.qname)
+		if err != nil {
+			t.Errorf("Unpause(%q) returned error: %v", tc.qname, err)
+			continue
+		}
+
+		got, err := r.client.SMembers(base.PausedQueues).Result()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff(tc.want, got, h.SortStringSliceOpt); diff != "" {
+			t.Errorf("%q has members %v, want %v; (-want,+got)\n%s",
+				base.PausedQueues, got, tc.want, diff)
+		}
+	}
+}
+
+func TestUnpauseError(t *testing.T) {
+	r := setup(t)
+
+	tests := []struct {
+		desc    string   // test case description
+		initial []string // initial queue keys in the set
+		qname   string   // queue name to unpause
+		want    []string // expected queue keys in the set
+	}{
+		{"set is empty", []string{}, "default", []string{}},
+		{"queue is not in the set", []string{"asynq:queues:default"}, "low", []string{"asynq:queues:default"}},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+
+		// Set up initial state.
+		for _, qkey := range tc.initial {
+			if err := r.client.SAdd(base.PausedQueues, qkey).Err(); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := r.Unpause(tc.qname)
+		if err == nil {
+			t.Errorf("%s; Unpause(%q) returned nil: want error", tc.desc, tc.qname)
+			continue
+		}
+
+		got, err := r.client.SMembers(base.PausedQueues).Result()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff(tc.want, got, h.SortStringSliceOpt); diff != "" {
+			t.Errorf("%s; %q has members %v, want %v; (-want,+got)\n%s",
+				tc.desc, base.PausedQueues, got, tc.want, diff)
+		}
+	}
+}
