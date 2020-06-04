@@ -61,7 +61,7 @@ func workers(cmd *cobra.Command, args []string) {
 		if x.Started != y.Started {
 			return x.Started.Before(y.Started)
 		}
-		return x.ID.String() < y.ID.String()
+		return x.ID < y.ID
 	})
 
 	cols := []string{"Process", "ID", "Type", "Payload", "Queue", "Started"}
