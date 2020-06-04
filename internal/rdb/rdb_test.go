@@ -227,6 +227,97 @@ func TestDequeue(t *testing.T) {
 	}
 }
 
+func TestDequeueIgnoresPausedQueues(t *testing.T) {
+	r := setup(t)
+	t1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello!"})
+	t2 := h.NewTaskMessage("export_csv", nil)
+
+	tests := []struct {
+		paused         []string // list of paused queues
+		enqueued       map[string][]*base.TaskMessage
+		args           []string // list of queues to query
+		want           *base.TaskMessage
+		err            error
+		wantEnqueued   map[string][]*base.TaskMessage
+		wantInProgress []*base.TaskMessage
+	}{
+		{
+			paused: []string{"default"},
+			enqueued: map[string][]*base.TaskMessage{
+				"default":  {t1},
+				"critical": {t2},
+			},
+			args: []string{"default", "critical"},
+			want: t2,
+			err:  nil,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default":  {t1},
+				"critical": {},
+			},
+			wantInProgress: []*base.TaskMessage{t2},
+		},
+		{
+			paused: []string{"default"},
+			enqueued: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			args: []string{"default"},
+			want: nil,
+			err:  ErrNoProcessableTask,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			wantInProgress: []*base.TaskMessage{},
+		},
+		{
+			paused: []string{"critical", "default"},
+			enqueued: map[string][]*base.TaskMessage{
+				"default":  {t1},
+				"critical": {t2},
+			},
+			args: []string{"default", "critical"},
+			want: nil,
+			err:  ErrNoProcessableTask,
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default":  {t1},
+				"critical": {t2},
+			},
+			wantInProgress: []*base.TaskMessage{},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		for _, qname := range tc.paused {
+			if err := r.Pause(qname); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for queue, msgs := range tc.enqueued {
+			h.SeedEnqueuedQueue(t, r.client, msgs, queue)
+		}
+
+		got, err := r.Dequeue(tc.args...)
+		if !cmp.Equal(got, tc.want) || err != tc.err {
+			t.Errorf("Dequeue(%v) = %v, %v; want %v, %v",
+				tc.args, got, err, tc.want, tc.err)
+			continue
+		}
+
+		for queue, want := range tc.wantEnqueued {
+			gotEnqueued := h.GetEnqueuedMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.QueueKey(queue), diff)
+			}
+		}
+
+		gotInProgress := h.GetInProgressMessages(t, r.client)
+		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, h.SortMsgOpt); diff != "" {
+			t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.InProgressQueue, diff)
+		}
+	}
+}
+
 func TestDone(t *testing.T) {
 	r := setup(t)
 	t1 := h.NewTaskMessage("send_email", nil)

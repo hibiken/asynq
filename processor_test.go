@@ -104,7 +104,7 @@ func TestProcessorSuccess(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		time.Sleep(time.Second) // wait for one second to allow all enqueued tasks to be processed.
+		time.Sleep(2 * time.Second) // wait for one second to allow all enqueued tasks to be processed.
 		p.terminate()
 
 		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Payload{})); diff != "" {
@@ -160,7 +160,7 @@ func TestProcessorRetry(t *testing.T) {
 			handler: HandlerFunc(func(ctx context.Context, task *Task) error {
 				return fmt.Errorf(errMsg)
 			}),
-			wait: time.Second,
+			wait: 2 * time.Second,
 			wantRetry: []h.ZSetEntry{
 				{Msg: &r2, Score: float64(now.Add(time.Minute).Unix())},
 				{Msg: &r3, Score: float64(now.Add(time.Minute).Unix())},

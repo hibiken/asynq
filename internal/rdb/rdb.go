@@ -103,19 +103,14 @@ func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
 }
 
 // Dequeue queries given queues in order and pops a task message if there is one and returns it.
+// Dequeue skips a queue if the queue is paused.
 // If all queues are empty, ErrNoProcessableTask error is returned.
 func (r *RDB) Dequeue(qnames ...string) (*base.TaskMessage, error) {
-	var data string
-	var err error
-	if len(qnames) == 1 {
-		data, err = r.dequeueSingle(base.QueueKey(qnames[0]))
-	} else {
-		var keys []string
-		for _, q := range qnames {
-			keys = append(keys, base.QueueKey(q))
-		}
-		data, err = r.dequeue(keys...)
+	var keys []string
+	for _, q := range qnames {
+		keys = append(keys, base.QueueKey(q))
 	}
+	data, err := r.dequeue(keys...)
 	if err == redis.Nil {
 		return nil, ErrNoProcessableTask
 	}
@@ -130,29 +125,30 @@ func (r *RDB) Dequeue(qnames ...string) (*base.TaskMessage, error) {
 	return &msg, nil
 }
 
-func (r *RDB) dequeueSingle(queue string) (data string, err error) {
-	// timeout needed to avoid blocking forever
-	return r.client.BRPopLPush(queue, base.InProgressQueue, time.Second).Result()
-}
-
 // KEYS[1] -> asynq:in_progress
+// KEYS[2] -> asynq:paused
 // ARGV    -> List of queues to query in order
+//
+// dequeueCmd checks whether a queue is paused first, before
+// calling RPOPLPUSH to pop a task from the queue.
 var dequeueCmd = redis.NewScript(`
-local res
 for _, qkey in ipairs(ARGV) do
-	res = redis.call("RPOPLPUSH", qkey, KEYS[1])
-	if res then
-		return res
+	if redis.call("SISMEMBER", KEYS[2], qkey) == 0 then
+		local res = redis.call("RPOPLPUSH", qkey, KEYS[1])
+		if res then
+			return res
+		end
 	end
 end
-return res`)
+return nil`)
 
 func (r *RDB) dequeue(queues ...string) (data string, err error) {
 	var args []interface{}
 	for _, qkey := range queues {
 		args = append(args, qkey)
 	}
-	res, err := dequeueCmd.Run(r.client, []string{base.InProgressQueue}, args...).Result()
+	res, err := dequeueCmd.Run(r.client,
+		[]string{base.InProgressQueue, base.PausedQueues}, args...).Result()
 	if err != nil {
 		return "", err
 	}

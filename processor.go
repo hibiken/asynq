@@ -166,14 +166,12 @@ func (p *processor) exec() {
 	msg, err := p.broker.Dequeue(qnames...)
 	switch {
 	case err == rdb.ErrNoProcessableTask:
-		// queues are empty, this is a normal behavior.
-		if len(qnames) > 1 {
-			// sleep to avoid slamming redis and let scheduler move tasks into queues.
-			// Note: With multiple queues, we are not using blocking pop operation and
-			// polling queues instead. This adds significant load to redis.
-			time.Sleep(time.Second)
-		}
 		p.logger.Debug("All queues are empty")
+		// Queues are empty, this is a normal behavior.
+		// Sleep to avoid slamming redis and let scheduler move tasks into queues.
+		// Note: We are not using blocking pop operation and polling queues instead.
+		// This adds significant load to redis.
+		time.Sleep(time.Second)
 		return
 	case err != nil:
 		if p.errLogLimiter.Allow() {
