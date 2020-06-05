@@ -7,7 +7,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -96,22 +95,29 @@ func printStates(s *rdb.Stats) {
 	tw.Flush()
 }
 
-func printQueues(queues map[string]int) {
-	var qnames, seps, counts []string
-	for q := range queues {
-		qnames = append(qnames, strings.Title(q))
+func printQueues(queues []*rdb.Queue) {
+	var headers, seps, counts []string
+	for _, q := range queues {
+		title := queueTitle(q)
+		headers = append(headers, title)
+		seps = append(seps, strings.Repeat("-", len(title)))
+		counts = append(counts, strconv.Itoa(q.Size))
 	}
-	sort.Strings(qnames) // sort for stable order
-	for _, q := range qnames {
-		seps = append(seps, strings.Repeat("-", len(q)))
-		counts = append(counts, strconv.Itoa(queues[strings.ToLower(q)]))
-	}
-	format := strings.Repeat("%v\t", len(qnames)) + "\n"
+	format := strings.Repeat("%v\t", len(headers)) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	fmt.Fprintf(tw, format, toInterfaceSlice(qnames)...)
+	fmt.Fprintf(tw, format, toInterfaceSlice(headers)...)
 	fmt.Fprintf(tw, format, toInterfaceSlice(seps)...)
 	fmt.Fprintf(tw, format, toInterfaceSlice(counts)...)
 	tw.Flush()
+}
+
+func queueTitle(q *rdb.Queue) string {
+	var b strings.Builder
+	b.WriteString(strings.Title(q.Name))
+	if q.Paused {
+		b.WriteString(" (Paused)")
+	}
+	return b.String()
 }
 
 func printStats(s *rdb.Stats) {
