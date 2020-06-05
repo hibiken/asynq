@@ -7,6 +7,7 @@ package rdb
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -25,8 +26,15 @@ type Stats struct {
 	Dead       int
 	Processed  int
 	Failed     int
-	Queues     map[string]int // map of queue name to number of tasks in the queue (e.g., "default": 100, "critical": 20)
+	Queues     []*Queue
 	Timestamp  time.Time
+}
+
+// Queue represents a task queue.
+type Queue struct {
+	Name   string
+	Paused bool
+	Size   int // number of tasks in the queue
 }
 
 // DailyStats holds aggregate data for a given day.
@@ -143,8 +151,12 @@ func (r *RDB) CurrentStats() (*Stats, error) {
 	if err != nil {
 		return nil, err
 	}
+	paused, err := r.client.SMembersMap(base.PausedQueues).Result()
+	if err != nil {
+		return nil, err
+	}
 	stats := &Stats{
-		Queues:    make(map[string]int),
+		Queues:    make([]*Queue, 0),
 		Timestamp: now,
 	}
 	for i := 0; i < len(data); i += 2 {
@@ -154,7 +166,14 @@ func (r *RDB) CurrentStats() (*Stats, error) {
 		switch {
 		case strings.HasPrefix(key, base.QueuePrefix):
 			stats.Enqueued += val
-			stats.Queues[strings.TrimPrefix(key, base.QueuePrefix)] = val
+			q := Queue{
+				Name: strings.TrimPrefix(key, base.QueuePrefix),
+				Size: val,
+			}
+			if _, exist := paused[key]; exist {
+				q.Paused = true
+			}
+			stats.Queues = append(stats.Queues, &q)
 		case key == base.InProgressQueue:
 			stats.InProgress = val
 		case key == base.ScheduledQueue:
@@ -169,6 +188,9 @@ func (r *RDB) CurrentStats() (*Stats, error) {
 			stats.Failed = val
 		}
 	}
+	sort.Slice(stats.Queues, func(i, j int) bool {
+		return stats.Queues[i].Name < stats.Queues[j].Name
+	})
 	return stats, nil
 }
 

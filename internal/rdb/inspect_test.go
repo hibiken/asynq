@@ -38,6 +38,7 @@ func TestCurrentStats(t *testing.T) {
 		processed  int
 		failed     int
 		allQueues  []interface{}
+		paused     []string
 		want       *Stats
 	}{
 		{
@@ -55,6 +56,7 @@ func TestCurrentStats(t *testing.T) {
 			processed: 120,
 			failed:    2,
 			allQueues: []interface{}{base.DefaultQueue, base.QueueKey("critical"), base.QueueKey("low")},
+			paused:    []string{},
 			want: &Stats{
 				Enqueued:   3,
 				InProgress: 1,
@@ -64,7 +66,12 @@ func TestCurrentStats(t *testing.T) {
 				Processed:  120,
 				Failed:     2,
 				Timestamp:  now,
-				Queues:     map[string]int{base.DefaultQueueName: 1, "critical": 1, "low": 1},
+				// Queues should be sorted by name.
+				Queues: []*Queue{
+					{Name: "critical", Paused: false, Size: 1},
+					{Name: "default", Paused: false, Size: 1},
+					{Name: "low", Paused: false, Size: 1},
+				},
 			},
 		},
 		{
@@ -82,6 +89,7 @@ func TestCurrentStats(t *testing.T) {
 			processed: 90,
 			failed:    10,
 			allQueues: []interface{}{base.DefaultQueue},
+			paused:    []string{},
 			want: &Stats{
 				Enqueued:   0,
 				InProgress: 0,
@@ -91,13 +99,56 @@ func TestCurrentStats(t *testing.T) {
 				Processed:  90,
 				Failed:     10,
 				Timestamp:  now,
-				Queues:     map[string]int{base.DefaultQueueName: 0},
+				Queues: []*Queue{
+					{
+						Name:   base.DefaultQueueName,
+						Paused: false,
+						Size:   0,
+					},
+				},
+			},
+		},
+		{
+			enqueued: map[string][]*base.TaskMessage{
+				base.DefaultQueueName: {m1},
+				"critical":            {m5},
+				"low":                 {m6},
+			},
+			inProgress: []*base.TaskMessage{m2},
+			scheduled: []h.ZSetEntry{
+				{Msg: m3, Score: float64(now.Add(time.Hour).Unix())},
+				{Msg: m4, Score: float64(now.Unix())}},
+			retry:     []h.ZSetEntry{},
+			dead:      []h.ZSetEntry{},
+			processed: 120,
+			failed:    2,
+			allQueues: []interface{}{base.DefaultQueue, base.QueueKey("critical"), base.QueueKey("low")},
+			paused:    []string{"critical", "low"},
+			want: &Stats{
+				Enqueued:   3,
+				InProgress: 1,
+				Scheduled:  2,
+				Retry:      0,
+				Dead:       0,
+				Processed:  120,
+				Failed:     2,
+				Timestamp:  now,
+				Queues: []*Queue{
+					{Name: "critical", Paused: true, Size: 1},
+					{Name: "default", Paused: false, Size: 1},
+					{Name: "low", Paused: true, Size: 1},
+				},
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
+		for _, qname := range tc.paused {
+			if err := r.Pause(qname); err != nil {
+				t.Fatal(err)
+			}
+		}
 		for qname, msgs := range tc.enqueued {
 			h.SeedEnqueuedQueue(t, r.client, msgs, qname)
 		}
@@ -136,7 +187,7 @@ func TestCurrentStatsWithoutData(t *testing.T) {
 		Processed:  0,
 		Failed:     0,
 		Timestamp:  time.Now(),
-		Queues:     map[string]int{},
+		Queues:     make([]*Queue, 0),
 	}
 
 	got, err := r.CurrentStats()
