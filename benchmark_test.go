@@ -29,6 +29,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
 				return time.Second
 			},
+			LogLevel: testLogLevel,
 		})
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
@@ -72,6 +73,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
 				return time.Second
 			},
+			LogLevel: testLogLevel,
 		})
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
@@ -90,8 +92,16 @@ func BenchmarkEndToEnd(b *testing.B) {
 		var wg sync.WaitGroup
 		wg.Add(count * 2)
 		handler := func(ctx context.Context, t *Task) error {
-			// randomly fail 1% of tasks
-			if rand.Intn(100) == 1 {
+			n, err := t.Payload.GetInt("data")
+			if err != nil {
+				b.Logf("internal error: %v", err)
+			}
+			retried, ok := GetRetryCount(ctx)
+			if !ok {
+				b.Logf("internal error: %v", err)
+			}
+			// Return error from 1% of the tasks for the first attempt.
+			if retried == 0 && n%100 == 0 {
 				return fmt.Errorf(":(")
 			}
 			wg.Done()
@@ -131,6 +141,7 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 				"default": 3,
 				"low":     1,
 			},
+			LogLevel: testLogLevel,
 		})
 		// Create a bunch of tasks
 		for i := 0; i < highCount; i++ {
