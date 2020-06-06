@@ -29,6 +29,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
 				return time.Second
 			},
+			LogLevel: testLogLevel,
 		})
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
@@ -72,6 +73,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
 				return time.Second
 			},
+			LogLevel: testLogLevel,
 		})
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
@@ -131,6 +133,7 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 				"default": 3,
 				"low":     1,
 			},
+			LogLevel: testLogLevel,
 		})
 		// Create a bunch of tasks
 		for i := 0; i < highCount; i++ {
