@@ -11,6 +11,7 @@ import (
 
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
+	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/rs/xid"
 )
 
@@ -161,5 +162,17 @@ func (h *heartbeater) beat() {
 	// and short enough to expire quickly once the process is shut down or killed.
 	if err := h.broker.WriteServerState(&info, ws, h.interval*2); err != nil {
 		h.logger.Errorf("could not write server state data: %v", err)
+	}
+
+	// Debug purpose
+	rdb, ok := h.broker.(*rdb.RDB)
+	if !ok {
+		return
+	}
+	stats, err := rdb.CurrentStats()
+	if err != nil {
+		h.logger.Errorf("could not get current stat: %v", err)
+	} else {
+		h.logger.Debugf("current stats: %+v", stats)
 	}
 }

@@ -6,11 +6,11 @@ if [ "${TRAVIS_PULL_REQUEST_BRANCH:-$TRAVIS_BRANCH}" != "master" ]; then
     # Benchmark master
     echo "Running benchmark tests on master branch"
     git checkout master && \
-    go test -run=XXX -bench=. -loglevel=debug ./... > master.txt && \
+    go test -run=XXX -bench=. -loglevel=debug -v ./... > master.txt && \
     # Benchmark feature branch
     echo "Running benchmark tests on feature branch"
     git checkout ${TRAVIS_COMMIT} && \
-    go test -run=XXX -bench=. -loglevel=debug ./... > feature.txt && \
+    go test -run=XXX -bench=. -loglevel=debug -v ./... > feature.txt && \
     go get -u golang.org/x/tools/cmd/benchcmp && \
     # compare two benchmarks
     benchcmp master.txt feature.txt;

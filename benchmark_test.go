@@ -92,8 +92,16 @@ func BenchmarkEndToEnd(b *testing.B) {
 		var wg sync.WaitGroup
 		wg.Add(count * 2)
 		handler := func(ctx context.Context, t *Task) error {
-			// randomly fail 1% of tasks
-			if rand.Intn(100) == 1 {
+			n, err := t.Payload.GetInt("data")
+			if err != nil {
+				b.Logf("internal error: %v", err)
+			}
+			retried, ok := GetRetryCount(ctx)
+			if !ok {
+				b.Logf("internal error: %v", err)
+			}
+			// Fail 1% of tasks for the first attempt.
+			if retried == 0 && n%100 == 0 {
 				return fmt.Errorf(":(")
 			}
 			wg.Done()
