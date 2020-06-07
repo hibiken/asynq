@@ -251,7 +251,7 @@ type Broker interface {
 	Retry(msg *TaskMessage, processAt time.Time, errMsg string) error
 	Kill(msg *TaskMessage, errMsg string) error
 	RequeueAll() (int64, error)
-	CheckAndEnqueue(qnames ...string) error
+	CheckAndEnqueue() error
 	WriteServerState(info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error
 	ClearServerState(host string, pid int, serverID string) error
 	CancelationPubSub() (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers

@@ -283,8 +283,8 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	logger.SetLevel(toInternalLogLevel(loglevel))
 
 	rdb := rdb.NewRDB(createRedisClient(r))
-	starting := make(chan *base.TaskMessage, n)
-	finished := make(chan *base.TaskMessage, n)
+	starting := make(chan *base.TaskMessage)
+	finished := make(chan *base.TaskMessage)
 	syncCh := make(chan *syncRequest)
 	status := base.NewServerStatus(base.StatusIdle)
 	cancels := base.NewCancelations()
@@ -309,7 +309,6 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		logger:   logger,
 		broker:   rdb,
 		interval: 5 * time.Second,
-		queues:   queues,
 	})
 	subscriber := newSubscriber(subscriberParams{
 		logger:       logger,

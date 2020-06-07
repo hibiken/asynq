@@ -100,11 +100,7 @@ func TestCurrentStats(t *testing.T) {
 				Failed:     10,
 				Timestamp:  now,
 				Queues: []*Queue{
-					{
-						Name:   base.DefaultQueueName,
-						Paused: false,
-						Size:   0,
-					},
+					{Name: base.DefaultQueueName, Paused: false, Size: 0},
 				},
 			},
 		},
@@ -709,12 +705,14 @@ func TestListRetry(t *testing.T) {
 func TestListRetryPagination(t *testing.T) {
 	r := setup(t)
 	// create 100 tasks with an increasing number of wait time.
+	now := time.Now()
+	var seed []h.ZSetEntry
 	for i := 0; i < 100; i++ {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
-		if err := r.Retry(msg, time.Now().Add(time.Duration(i)*time.Second), "error"); err != nil {
-			t.Fatal(err)
-		}
+		processAt := now.Add(time.Duration(i) * time.Second)
+		seed = append(seed, h.ZSetEntry{Msg: msg, Score: float64(processAt.Unix())})
 	}
+	h.SeedRetryQueue(t, r.client, seed)
 
 	tests := []struct {
 		desc      string
@@ -2212,9 +2210,9 @@ func TestPause(t *testing.T) {
 	r := setup(t)
 
 	tests := []struct {
-		initial []string // initial queue keys in the set
-		qname   string   // queue name to pause
-		want    []string // expected queue keys in the set
+		initial []string // initial keys in the paused set
+		qname   string   // name of the queue to pause
+		want    []string // expected keys in the paused set
 	}{
 		{[]string{}, "default", []string{"asynq:queues:default"}},
 		{[]string{"asynq:queues:default"}, "critical", []string{"asynq:queues:default", "asynq:queues:critical"}},
@@ -2233,7 +2231,6 @@ func TestPause(t *testing.T) {
 		err := r.Pause(tc.qname)
 		if err != nil {
 			t.Errorf("Pause(%q) returned error: %v", tc.qname, err)
-			continue
 		}
 
 		got, err := r.client.SMembers(base.PausedQueues).Result()
@@ -2253,9 +2250,9 @@ func TestPauseError(t *testing.T) {
 
 	tests := []struct {
 		desc    string   // test case description
-		initial []string // initial queue keys in the set
-		qname   string   // queue name to pause
-		want    []string // expected queue keys in the set
+		initial []string // initial keys in the paused set
+		qname   string   // name of the queue to pause
+		want    []string // expected keys in the paused set
 	}{
 		{"queue already paused", []string{"asynq:queues:default"}, "default", []string{"asynq:queues:default"}},
 	}
@@ -2273,7 +2270,6 @@ func TestPauseError(t *testing.T) {
 		err := r.Pause(tc.qname)
 		if err == nil {
 			t.Errorf("%s; Pause(%q) returned nil: want error", tc.desc, tc.qname)
-			continue
 		}
 
 		got, err := r.client.SMembers(base.PausedQueues).Result()
@@ -2292,9 +2288,9 @@ func TestUnpause(t *testing.T) {
 	r := setup(t)
 
 	tests := []struct {
-		initial []string // initial queue keys in the set
-		qname   string   // queue name to unpause
-		want    []string // expected queue keys in the set
+		initial []string // initial keys in the paused set
+		qname   string   // name of the queue to unpause
+		want    []string // expected keys in the paused set
 	}{
 		{[]string{"asynq:queues:default"}, "default", []string{}},
 		{[]string{"asynq:queues:default", "asynq:queues:low"}, "low", []string{"asynq:queues:default"}},
@@ -2313,7 +2309,6 @@ func TestUnpause(t *testing.T) {
 		err := r.Unpause(tc.qname)
 		if err != nil {
 			t.Errorf("Unpause(%q) returned error: %v", tc.qname, err)
-			continue
 		}
 
 		got, err := r.client.SMembers(base.PausedQueues).Result()
@@ -2333,9 +2328,9 @@ func TestUnpauseError(t *testing.T) {
 
 	tests := []struct {
 		desc    string   // test case description
-		initial []string // initial queue keys in the set
-		qname   string   // queue name to unpause
-		want    []string // expected queue keys in the set
+		initial []string // initial keys in the paused set
+		qname   string   // name of the queue to unpause
+		want    []string // expected keys in the paused set
 	}{
 		{"set is empty", []string{}, "default", []string{}},
 		{"queue is not in the set", []string{"asynq:queues:default"}, "low", []string{"asynq:queues:default"}},
@@ -2354,7 +2349,6 @@ func TestUnpauseError(t *testing.T) {
 		err := r.Unpause(tc.qname)
 		if err == nil {
 			t.Errorf("%s; Unpause(%q) returned nil: want error", tc.desc, tc.qname)
-			continue
 		}
 
 		got, err := r.client.SMembers(base.PausedQueues).Result()

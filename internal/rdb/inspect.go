@@ -32,9 +32,16 @@ type Stats struct {
 
 // Queue represents a task queue.
 type Queue struct {
-	Name   string
+	// Name of the queue (e.g. "default", "critical").
+	// Note: It doesn't include the prefix "asynq:queues:".
+	Name string
+
+	// Paused indicates whether the queue is paused.
+	// If true, tasks in the queue should not be processed.
 	Paused bool
-	Size   int // number of tasks in the queue
+
+	// Size is the number of tasks in the queue.
+	Size int
 }
 
 // DailyStats holds aggregate data for a given day.

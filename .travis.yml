@@ -5,6 +5,7 @@ git:
 go: [1.13.x, 1.14.x]
 script:
   - go test -race -v -coverprofile=coverage.txt -covermode=atomic ./...
+  - go test -run=XXX -bench=. -loglevel=debug ./...
 services:
   - redis-server
 after_success:

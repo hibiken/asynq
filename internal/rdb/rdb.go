@@ -106,11 +106,11 @@ func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
 // Dequeue skips a queue if the queue is paused.
 // If all queues are empty, ErrNoProcessableTask error is returned.
 func (r *RDB) Dequeue(qnames ...string) (*base.TaskMessage, error) {
-	var keys []string
+	var qkeys []interface{}
 	for _, q := range qnames {
-		keys = append(keys, base.QueueKey(q))
+		qkeys = append(qkeys, base.QueueKey(q))
 	}
-	data, err := r.dequeue(keys...)
+	data, err := r.dequeue(qkeys...)
 	if err == redis.Nil {
 		return nil, ErrNoProcessableTask
 	}
@@ -142,13 +142,9 @@ for _, qkey in ipairs(ARGV) do
 end
 return nil`)
 
-func (r *RDB) dequeue(queues ...string) (data string, err error) {
-	var args []interface{}
-	for _, qkey := range queues {
-		args = append(args, qkey)
-	}
+func (r *RDB) dequeue(qkeys ...interface{}) (data string, err error) {
 	res, err := dequeueCmd.Run(r.client,
-		[]string{base.InProgressQueue, base.PausedQueues}, args...).Result()
+		[]string{base.InProgressQueue, base.PausedQueues}, qkeys...).Result()
 	if err != nil {
 		return "", err
 	}
@@ -163,7 +159,10 @@ func (r *RDB) dequeue(queues ...string) (data string, err error) {
 // ARGV[3] -> task ID
 // Note: LREM count ZERO means "remove all elements equal to val"
 var doneCmd = redis.NewScript(`
-redis.call("LREM", KEYS[1], 0, ARGV[1]) 
+local x = redis.call("LREM", KEYS[1], 0, ARGV[1]) 
+if x == 0 then
+  return redis.error_reply("NOT FOUND")
+end
 local n = redis.call("INCR", KEYS[2])
 if tonumber(n) == 1 then
 	redis.call("EXPIREAT", KEYS[2], ARGV[2])
@@ -285,7 +284,10 @@ func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl tim
 // ARGV[3] -> retry_at UNIX timestamp
 // ARGV[4] -> stats expiration timestamp
 var retryCmd = redis.NewScript(`
-redis.call("LREM", KEYS[1], 0, ARGV[1])
+local x = redis.call("LREM", KEYS[1], 0, ARGV[1])
+if x == 0 then
+  return redis.error_reply("NOT FOUND")
+end
 redis.call("ZADD", KEYS[2], ARGV[3], ARGV[2])
 local n = redis.call("INCR", KEYS[3])
 if tonumber(n) == 1 then
@@ -336,7 +338,10 @@ const (
 // ARGV[5] -> max number of tasks in dead queue (e.g., 100)
 // ARGV[6] -> stats expiration timestamp
 var killCmd = redis.NewScript(`
-redis.call("LREM", KEYS[1], 0, ARGV[1])
+local x = redis.call("LREM", KEYS[1], 0, ARGV[1])
+if x == 0 then
+  return redis.error_reply("NOT FOUND")
+end
 redis.call("ZADD", KEYS[2], ARGV[3], ARGV[2])
 redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[4])
 redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[5])
@@ -400,21 +405,17 @@ func (r *RDB) RequeueAll() (int64, error) {
 	return n, nil
 }
 
-// CheckAndEnqueue checks for all scheduled tasks and enqueues any tasks that
-// have to be processed.
-//
-// qnames specifies to which queues to send tasks.
-func (r *RDB) CheckAndEnqueue(qnames ...string) error {
+// CheckAndEnqueue checks for all scheduled/retry tasks and enqueues any tasks that
+// are ready to be processed.
+func (r *RDB) CheckAndEnqueue() (err error) {
 	delayed := []string{base.ScheduledQueue, base.RetryQueue}
 	for _, zset := range delayed {
-		var err error
-		if len(qnames) == 1 {
-			err = r.forwardSingle(zset, base.QueueKey(qnames[0]))
-		} else {
-			err = r.forward(zset)
-		}
-		if err != nil {
-			return err
+		n := 1
+		for n != 0 {
+			n, err = r.forward(zset)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -423,40 +424,27 @@ func (r *RDB) CheckAndEnqueue(qnames ...string) error {
 // KEYS[1] -> source queue (e.g. scheduled or retry queue)
 // ARGV[1] -> current unix time
 // ARGV[2] -> queue prefix
+// Note: Script moves tasks up to 100 at a time to keep the runtime of script short.
 var forwardCmd = redis.NewScript(`
-local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, 100)
 for _, msg in ipairs(msgs) do
 	local decoded = cjson.decode(msg)
 	local qkey = ARGV[2] .. decoded["Queue"]
 	redis.call("LPUSH", qkey, msg)
 	redis.call("ZREM", KEYS[1], msg)
 end
-return msgs`)
+return table.getn(msgs)`)
 
-// forward moves all tasks with a score less than the current unix time
-// from the src zset.
-func (r *RDB) forward(src string) error {
+// forward moves tasks with a score less than the current unix time
+// from the src zset. It returns the number of tasks moved.
+func (r *RDB) forward(src string) (int, error) {
 	now := float64(time.Now().Unix())
-	return forwardCmd.Run(r.client,
-		[]string{src}, now, base.QueuePrefix).Err()
-}
-
-// KEYS[1] -> source queue (e.g. scheduled or retry queue)
-// KEYS[2] -> destination queue
-var forwardSingleCmd = redis.NewScript(`
-local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
-for _, msg in ipairs(msgs) do
-	redis.call("LPUSH", KEYS[2], msg)
-	redis.call("ZREM", KEYS[1], msg)
-end
-return msgs`)
-
-// forwardSingle moves all tasks with a score less than the current unix time
-// from the src zset to dst list.
-func (r *RDB) forwardSingle(src, dst string) error {
-	now := float64(time.Now().Unix())
-	return forwardSingleCmd.Run(r.client,
-		[]string{src, dst}, now).Err()
+	res, err := forwardCmd.Run(r.client,
+		[]string{src}, now, base.QueuePrefix).Result()
+	if err != nil {
+		return 0, err
+	}
+	return cast.ToInt(res), nil
 }
 
 // KEYS[1]  -> asynq:servers:<host:pid:sid>
