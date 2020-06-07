@@ -7,7 +7,6 @@ package asynq
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -29,6 +28,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
 				return time.Second
 			},
+			LogLevel: testLogLevel,
 		})
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
@@ -60,7 +60,6 @@ func BenchmarkEndToEnd(b *testing.B) {
 	const count = 100000
 	for n := 0; n < b.N; n++ {
 		b.StopTimer() // begin setup
-		rand.Seed(time.Now().UnixNano())
 		setup(b)
 		redis := &RedisClientOpt{
 			Addr: redisAddr,
@@ -72,6 +71,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
 				return time.Second
 			},
+			LogLevel: testLogLevel,
 		})
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
@@ -90,8 +90,16 @@ func BenchmarkEndToEnd(b *testing.B) {
 		var wg sync.WaitGroup
 		wg.Add(count * 2)
 		handler := func(ctx context.Context, t *Task) error {
-			// randomly fail 1% of tasks
-			if rand.Intn(100) == 1 {
+			n, err := t.Payload.GetInt("data")
+			if err != nil {
+				b.Logf("internal error: %v", err)
+			}
+			retried, ok := GetRetryCount(ctx)
+			if !ok {
+				b.Logf("internal error: %v", err)
+			}
+			// Fail 1% of tasks for the first attempt.
+			if retried == 0 && n%100 == 0 {
 				return fmt.Errorf(":(")
 			}
 			wg.Done()
@@ -131,6 +139,7 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 				"default": 3,
 				"low":     1,
 			},
+			LogLevel: testLogLevel,
 		})
 		// Create a bunch of tasks
 		for i := 0; i < highCount; i++ {

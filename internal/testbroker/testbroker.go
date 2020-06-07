@@ -132,7 +132,7 @@ func (tb *TestBroker) RequeueAll() (int64, error) {
 	return tb.real.RequeueAll()
 }
 
-func (tb *TestBroker) CheckAndEnqueue(qnames ...string) error {
+func (tb *TestBroker) CheckAndEnqueue() error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {

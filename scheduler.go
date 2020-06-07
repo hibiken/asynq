@@ -21,29 +21,20 @@ type scheduler struct {
 
 	// poll interval on average
 	avgInterval time.Duration
-
-	// list of queues to move the tasks into.
-	qnames []string
 }
 
 type schedulerParams struct {
 	logger   *log.Logger
 	broker   base.Broker
 	interval time.Duration
-	queues   map[string]int
 }
 
 func newScheduler(params schedulerParams) *scheduler {
-	var qnames []string
-	for q := range params.queues {
-		qnames = append(qnames, q)
-	}
 	return &scheduler{
 		logger:      params.logger,
 		broker:      params.broker,
 		done:        make(chan struct{}),
 		avgInterval: params.interval,
-		qnames:      qnames,
 	}
 }
 
@@ -71,7 +62,7 @@ func (s *scheduler) start(wg *sync.WaitGroup) {
 }
 
 func (s *scheduler) exec() {
-	if err := s.broker.CheckAndEnqueue(s.qnames...); err != nil {
+	if err := s.broker.CheckAndEnqueue(); err != nil {
 		s.logger.Errorf("Could not enqueue scheduled tasks: %v", err)
 	}
 }

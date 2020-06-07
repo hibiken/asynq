@@ -860,7 +860,6 @@ func TestCheckAndEnqueue(t *testing.T) {
 	tests := []struct {
 		scheduled     []h.ZSetEntry
 		retry         []h.ZSetEntry
-		qnames        []string
 		wantEnqueued  map[string][]*base.TaskMessage
 		wantScheduled []*base.TaskMessage
 		wantRetry     []*base.TaskMessage
@@ -872,7 +871,6 @@ func TestCheckAndEnqueue(t *testing.T) {
 			},
 			retry: []h.ZSetEntry{
 				{Msg: t3, Score: float64(secondAgo.Unix())}},
-			qnames: []string{"default"},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {t1, t2, t3},
 			},
@@ -885,7 +883,6 @@ func TestCheckAndEnqueue(t *testing.T) {
 				{Msg: t2, Score: float64(secondAgo.Unix())}},
 			retry: []h.ZSetEntry{
 				{Msg: t3, Score: float64(secondAgo.Unix())}},
-			qnames: []string{"default"},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {t2, t3},
 			},
@@ -898,7 +895,6 @@ func TestCheckAndEnqueue(t *testing.T) {
 				{Msg: t2, Score: float64(hourFromNow.Unix())}},
 			retry: []h.ZSetEntry{
 				{Msg: t3, Score: float64(hourFromNow.Unix())}},
-			qnames: []string{"default"},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {},
 			},
@@ -912,7 +908,6 @@ func TestCheckAndEnqueue(t *testing.T) {
 			},
 			retry: []h.ZSetEntry{
 				{Msg: t5, Score: float64(secondAgo.Unix())}},
-			qnames: []string{"default", "critical", "low"},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {t1},
 				"critical": {t4},
@@ -928,7 +923,7 @@ func TestCheckAndEnqueue(t *testing.T) {
 		h.SeedScheduledQueue(t, r.client, tc.scheduled)
 		h.SeedRetryQueue(t, r.client, tc.retry)
 
-		err := r.CheckAndEnqueue(tc.qnames...)
+		err := r.CheckAndEnqueue()
 		if err != nil {
 			t.Errorf("(*RDB).CheckScheduled() = %v, want nil", err)
 			continue

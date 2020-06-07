@@ -23,7 +23,6 @@ func TestScheduler(t *testing.T) {
 		logger:   testLogger,
 		broker:   rdbClient,
 		interval: pollInterval,
-		queues:   defaultQueueConfig,
 	})
 	t1 := h.NewTaskMessage("gen_thumbnail", nil)
 	t2 := h.NewTaskMessage("send_email", nil)
