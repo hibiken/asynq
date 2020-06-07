@@ -177,21 +177,23 @@ func createRedisClient(r RedisConnOpt) *redis.Client {
 	switch r := r.(type) {
 	case *RedisClientOpt:
 		return redis.NewClient(&redis.Options{
-			Network:   r.Network,
-			Addr:      r.Addr,
-			Password:  r.Password,
-			DB:        r.DB,
-			PoolSize:  r.PoolSize,
-			TLSConfig: r.TLSConfig,
+			Network:    r.Network,
+			Addr:       r.Addr,
+			Password:   r.Password,
+			DB:         r.DB,
+			PoolSize:   r.PoolSize,
+			TLSConfig:  r.TLSConfig,
+			MaxRetries: 10,
 		})
 	case RedisClientOpt:
 		return redis.NewClient(&redis.Options{
-			Network:   r.Network,
-			Addr:      r.Addr,
-			Password:  r.Password,
-			DB:        r.DB,
-			PoolSize:  r.PoolSize,
-			TLSConfig: r.TLSConfig,
+			Network:    r.Network,
+			Addr:       r.Addr,
+			Password:   r.Password,
+			DB:         r.DB,
+			PoolSize:   r.PoolSize,
+			TLSConfig:  r.TLSConfig,
+			MaxRetries: 10,
 		})
 	case *RedisFailoverClientOpt:
 		return redis.NewFailoverClient(&redis.FailoverOptions{

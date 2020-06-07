@@ -165,14 +165,23 @@ func (h *heartbeater) beat() {
 	}
 
 	// Debug purpose
-	rdb, ok := h.broker.(*rdb.RDB)
+	r, ok := h.broker.(*rdb.RDB)
 	if !ok {
 		return
 	}
-	stats, err := rdb.CurrentStats()
+	stats, err := r.CurrentStats()
 	if err != nil {
 		h.logger.Errorf("could not get current stat: %v", err)
 	} else {
 		h.logger.Debugf("current stats: %+v", stats)
+	}
+
+	inProgress, err := r.ListInProgress(rdb.Pagination{Size: 10})
+	if err != nil {
+		h.logger.Errorf("could not get in-progress tasks: %v", err)
+	} else {
+		for _, t := range inProgress {
+			h.logger.Debugf("in-progress tasks: %+v", t)
+		}
 	}
 }

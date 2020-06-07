@@ -71,8 +71,10 @@ func (s *syncer) start(wg *sync.WaitGroup) {
 				requests = append(requests, req)
 			case <-time.After(s.interval):
 				var temp []*syncRequest
+				s.logger.Infof("sync requests length: %d", len(requests))
 				for _, req := range requests {
 					if err := req.fn(); err != nil {
+						s.logger.Errorf("could not sync: %v: %v", req.errMsg, err)
 						temp = append(temp, req)
 					}
 				}
