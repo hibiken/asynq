@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2020-06-08
+
 ### Added
 
 - The `pause` and `unpause` commands were added to the CLI. See README for the CLI for details.
