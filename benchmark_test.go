@@ -177,3 +177,62 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 		b.StartTimer() // end teardown
 	}
 }
+
+// E2E benchmark to check client enqueue operation performs correctly,
+// while server is busy processing tasks.
+func BenchmarkClientWhileServerRunning(b *testing.B) {
+	const count = 10000
+	for n := 0; n < b.N; n++ {
+		b.StopTimer() // begin setup
+		setup(b)
+		redis := &RedisClientOpt{
+			Addr: redisAddr,
+			DB:   redisDB,
+		}
+		client := NewClient(redis)
+		srv := NewServer(redis, Config{
+			Concurrency: 10,
+			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
+				return time.Second
+			},
+			LogLevel: testLogLevel,
+		})
+		// Enqueue 10,000 tasks.
+		for i := 0; i < count; i++ {
+			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
+			if err := client.Enqueue(t); err != nil {
+				b.Fatalf("could not enqueue a task: %v", err)
+			}
+		}
+		// Schedule 10,000 tasks.
+		for i := 0; i < count; i++ {
+			t := NewTask(fmt.Sprintf("scheduled%d", i), map[string]interface{}{"data": i})
+			if err := client.EnqueueAt(time.Now().Add(time.Second), t); err != nil {
+				b.Fatalf("could not enqueue a task: %v", err)
+			}
+		}
+
+		handler := func(ctx context.Context, t *Task) error {
+			return nil
+		}
+		srv.Start(HandlerFunc(handler))
+
+		b.StartTimer() // end setup
+
+		b.Log("Starting enqueueing")
+		enqueued := 0
+		for enqueued < 100000 {
+			t := NewTask(fmt.Sprintf("enqueued%d", enqueued), map[string]interface{}{"data": enqueued})
+			if err := client.Enqueue(t); err != nil {
+				b.Logf("could not enqueue task %d: %v", enqueued, err)
+				continue
+			}
+			enqueued++
+		}
+		b.Logf("Finished enqueueing %d tasks", enqueued)
+
+		b.StopTimer() // begin teardown
+		srv.Stop()
+		b.StartTimer() // end teardown
+	}
+}
