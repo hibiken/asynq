@@ -40,6 +40,7 @@ A system can consist of multiple worker servers and brokers, giving way to high 
 - De-duplication of tasks using [unique option](https://github.com/hibiken/asynq/wiki/Unique-Tasks)
 - Allow [timeout and deadline per task](https://github.com/hibiken/asynq/wiki/Task-Timeout-and-Cancelation)
 - [Flexible handler interface with support for middlewares](https://github.com/hibiken/asynq/wiki/Handler-Deep-Dive)
+- [Ability to pause queue](/tools/asynq/README.md#pause) to stop processing tasks from the queue
 - [Support Redis Sentinels](https://github.com/hibiken/asynq/wiki/Automatic-Failover) for HA
 - [CLI](#command-line-tool) to inspect and remote-control queues and tasks
 

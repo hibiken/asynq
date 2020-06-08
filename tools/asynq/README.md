@@ -14,6 +14,7 @@ Asynq CLI is a command line tool to monitor the tasks managed by `asynq` package
   - [Delete](#delete)
   - [Kill](#kill)
   - [Cancel](#cancel)
+  - [Pause](#pause)
 - [Config File](#config-file)
 
 ## Installation
@@ -143,6 +144,17 @@ Handler implementation needs to be context aware in order to actually stop proce
 Example:
 
     asynq cancel bnogo8gt6toe23vhef0g
+
+### Pause
+
+Command `pause` pauses the spcified queue. Tasks in paused queues are not processed by servers.
+To resume processing from the queue, use `unpause` command.
+To see which queues are currently paused, use `stats` command.
+
+Example:
+
+    asynq pause email
+    asynq unpause email
 
 ## Config File
 
