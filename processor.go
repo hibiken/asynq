@@ -253,7 +253,7 @@ func (p *processor) requeue(msg *base.TaskMessage) {
 func (p *processor) markAsDone(msg *base.TaskMessage) {
 	err := p.broker.Done(msg)
 	if err != nil {
-		errMsg := fmt.Sprintf("Could not remove task id=%s type=%q from %q", msg.ID, msg.Type, base.InProgressQueue)
+		errMsg := fmt.Sprintf("Could not remove task id=%s type=%q from %q err: %+v", msg.ID, msg.Type, base.InProgressQueue, err)
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
