@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 )
@@ -40,12 +41,11 @@ func TestPayloadString(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -85,12 +85,11 @@ func TestPayloadInt(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -130,12 +129,11 @@ func TestPayloadFloat64(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -175,12 +173,11 @@ func TestPayloadBool(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -221,12 +218,11 @@ func TestPayloadStringSlice(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -268,12 +264,11 @@ func TestPayloadIntSlice(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -315,21 +310,28 @@ func TestPayloadStringMap(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
 		payload = Payload{out.Payload}
 		got, err = payload.GetStringMap(tc.key)
-		diff = cmp.Diff(got, tc.data[tc.key])
+		ignoreOpt := cmpopts.IgnoreMapEntries(func(key string, val interface{}) bool {
+			switch val.(type) {
+			case json.Number:
+				return true
+			default:
+				return false
+			}
+		})
+		diff = cmp.Diff(got, tc.data[tc.key], ignoreOpt)
 		if err != nil || diff != "" {
-			t.Errorf("With Marshaling: Payload.GetStringMap(%q) = %v, %v, want %v, nil",
-				tc.key, got, err, tc.data[tc.key])
+			t.Errorf("With Marshaling: Payload.GetStringMap(%q) = %v, %v, want %v, nil;(-want,+got)\n%s",
+				tc.key, got, err, tc.data[tc.key], diff)
 		}
 
 		// access non-existent key.
@@ -362,12 +364,11 @@ func TestPayloadStringMapString(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -413,12 +414,11 @@ func TestPayloadStringMapStringSlice(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -465,12 +465,11 @@ func TestPayloadStringMapInt(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -517,12 +516,11 @@ func TestPayloadStringMapBool(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -564,12 +562,11 @@ func TestPayloadTime(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -611,12 +608,11 @@ func TestPayloadDuration(t *testing.T) {
 
 		// encode and then decode task messsage.
 		in := h.NewTaskMessage("testing", tc.data)
-		b, err := json.Marshal(in)
+		encoded, err := base.EncodeMessage(in)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var out base.TaskMessage
-		err = json.Unmarshal(b, &out)
+		out, err := base.DecodeMessage(encoded)
 		if err != nil {
 			t.Fatal(err)
 		}

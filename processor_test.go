@@ -31,6 +31,17 @@ func fakeHeartbeater(starting, finished <-chan *base.TaskMessage, done <-chan st
 	}
 }
 
+// fakeSyncer receives from sync channel and do nothing.
+func fakeSyncer(syncCh <-chan *syncRequest, done <-chan struct{}) {
+	for {
+		select {
+		case <-syncCh:
+		case <-done:
+			return
+		}
+	}
+}
+
 func TestProcessorSuccess(t *testing.T) {
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
@@ -77,14 +88,16 @@ func TestProcessorSuccess(t *testing.T) {
 		}
 		starting := make(chan *base.TaskMessage)
 		finished := make(chan *base.TaskMessage)
+		syncCh := make(chan *syncRequest)
 		done := make(chan struct{})
 		defer func() { close(done) }()
 		go fakeHeartbeater(starting, finished, done)
+		go fakeSyncer(syncCh, done)
 		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
 			retryDelayFunc:  defaultDelayFunc,
-			syncCh:          nil,
+			syncCh:          syncCh,
 			cancelations:    base.NewCancelations(),
 			concurrency:     10,
 			queues:          defaultQueueConfig,
@@ -105,6 +118,9 @@ func TestProcessorSuccess(t *testing.T) {
 			}
 		}
 		time.Sleep(2 * time.Second) // wait for two second to allow all enqueued tasks to be processed.
+		if l := r.LLen(base.InProgressQueue).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", base.InProgressQueue, l)
+		}
 		p.terminate()
 
 		mu.Lock()
@@ -112,10 +128,79 @@ func TestProcessorSuccess(t *testing.T) {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 		mu.Unlock()
+	}
+}
 
+// https://github.com/hibiken/asynq/issues/166
+func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
+	r := setup(t)
+	rdbClient := rdb.NewRDB(r)
+
+	m1 := h.NewTaskMessage("large_number", map[string]interface{}{"data": 111111111111111111})
+	t1 := NewTask(m1.Type, m1.Payload)
+
+	tests := []struct {
+		enqueued      []*base.TaskMessage // initial default queue state
+		wantProcessed []*Task             // tasks to be processed at the end
+	}{
+		{
+			enqueued:      []*base.TaskMessage{m1},
+			wantProcessed: []*Task{t1},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)                        // clean up db before each test case.
+		h.SeedEnqueuedQueue(t, r, tc.enqueued) // initialize default queue.
+
+		var mu sync.Mutex
+		var processed []*Task
+		handler := func(ctx context.Context, task *Task) error {
+			mu.Lock()
+			defer mu.Unlock()
+			if data, err := task.Payload.GetInt("data"); err != nil {
+				t.Errorf("coult not get data from payload: %v", err)
+			} else {
+				t.Logf("data == %d", data)
+			}
+			processed = append(processed, task)
+			return nil
+		}
+		starting := make(chan *base.TaskMessage)
+		finished := make(chan *base.TaskMessage)
+		syncCh := make(chan *syncRequest)
+		done := make(chan struct{})
+		defer func() { close(done) }()
+		go fakeHeartbeater(starting, finished, done)
+		go fakeSyncer(syncCh, done)
+		p := newProcessor(processorParams{
+			logger:          testLogger,
+			broker:          rdbClient,
+			retryDelayFunc:  defaultDelayFunc,
+			syncCh:          syncCh,
+			cancelations:    base.NewCancelations(),
+			concurrency:     10,
+			queues:          defaultQueueConfig,
+			strictPriority:  false,
+			errHandler:      nil,
+			shutdownTimeout: defaultShutdownTimeout,
+			starting:        starting,
+			finished:        finished,
+		})
+		p.handler = HandlerFunc(handler)
+
+		p.start(&sync.WaitGroup{})
+		time.Sleep(2 * time.Second) // wait for two second to allow all enqueued tasks to be processed.
 		if l := r.LLen(base.InProgressQueue).Val(); l != 0 {
 			t.Errorf("%q has %d tasks, want 0", base.InProgressQueue, l)
 		}
+		p.terminate()
+
+		mu.Lock()
+		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmpopts.IgnoreUnexported(Payload{})); diff != "" {
+			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
+		}
+		mu.Unlock()
 	}
 }
 

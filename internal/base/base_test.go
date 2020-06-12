@@ -6,9 +6,13 @@ package base
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/rs/xid"
 )
 
 func TestQueueKey(t *testing.T) {
@@ -99,6 +103,52 @@ func TestWorkersKey(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("WorkersKey(%q, %d, %q) = %q, want = %q",
 				tc.hostname, tc.pid, tc.sid, got, tc.want)
+		}
+	}
+}
+
+func TestMessageEncoding(t *testing.T) {
+	id := xid.New()
+	tests := []struct {
+		in  *TaskMessage
+		out *TaskMessage
+	}{
+		{
+			in: &TaskMessage{
+				Type:    "task1",
+				Payload: map[string]interface{}{"a": 1, "b": "hello!", "c": true},
+				ID:      id,
+				Queue:   "default",
+				Retry:   10,
+				Retried: 0,
+				Timeout: "0",
+			},
+			out: &TaskMessage{
+				Type:    "task1",
+				Payload: map[string]interface{}{"a": json.Number("1"), "b": "hello!", "c": true},
+				ID:      id,
+				Queue:   "default",
+				Retry:   10,
+				Retried: 0,
+				Timeout: "0",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		encoded, err := EncodeMessage(tc.in)
+		if err != nil {
+			t.Errorf("EncodeMessage(msg) returned error: %v", err)
+			continue
+		}
+		decoded, err := DecodeMessage(encoded)
+		if err != nil {
+			t.Errorf("DecodeMessage(encoded) returned error: %v", err)
+			continue
+		}
+		if diff := cmp.Diff(tc.out, decoded); diff != "" {
+			t.Errorf("Decoded message == %+v, want %+v;(-want,+got)\n%s",
+				decoded, tc.out, diff)
 		}
 	}
 }

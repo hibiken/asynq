@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -30,6 +31,19 @@ func (p Payload) Has(key string) bool {
 	return ok
 }
 
+func toInt(v interface{}) (int, error) {
+	switch v := v.(type) {
+	case json.Number:
+		val, err := v.Int64()
+		if err != nil {
+			return 0, err
+		}
+		return int(val), nil
+	default:
+		return cast.ToIntE(v)
+	}
+}
+
 // GetString returns a string value if a string type is associated with
 // the key, otherwise reports an error.
 func (p Payload) GetString(key string) (string, error) {
@@ -47,7 +61,7 @@ func (p Payload) GetInt(key string) (int, error) {
 	if !ok {
 		return 0, &errKeyNotFound{key}
 	}
-	return cast.ToIntE(v)
+	return toInt(v)
 }
 
 // GetFloat64 returns a float64 value if a numeric type is associated with
@@ -57,7 +71,12 @@ func (p Payload) GetFloat64(key string) (float64, error) {
 	if !ok {
 		return 0, &errKeyNotFound{key}
 	}
-	return cast.ToFloat64E(v)
+	switch v := v.(type) {
+	case json.Number:
+		return v.Float64()
+	default:
+		return cast.ToFloat64E(v)
+	}
 }
 
 // GetBool returns a boolean value if a boolean type is associated with
@@ -87,7 +106,20 @@ func (p Payload) GetIntSlice(key string) ([]int, error) {
 	if !ok {
 		return nil, &errKeyNotFound{key}
 	}
-	return cast.ToIntSliceE(v)
+	switch v := v.(type) {
+	case []interface{}:
+		var res []int
+		for _, elem := range v {
+			val, err := toInt(elem)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, int(val))
+		}
+		return res, nil
+	default:
+		return cast.ToIntSliceE(v)
+	}
 }
 
 // GetStringMap returns a map of string to empty interface
@@ -131,7 +163,20 @@ func (p Payload) GetStringMapInt(key string) (map[string]int, error) {
 	if !ok {
 		return nil, &errKeyNotFound{key}
 	}
-	return cast.ToStringMapIntE(v)
+	switch v := v.(type) {
+	case map[string]interface{}:
+		res := make(map[string]int)
+		for key, val := range v {
+			ival, err := toInt(val)
+			if err != nil {
+				return nil, err
+			}
+			res[key] = ival
+		}
+		return res, nil
+	default:
+		return cast.ToStringMapIntE(v)
+	}
 }
 
 // GetStringMapBool returns a map of string to boolean
@@ -162,5 +207,14 @@ func (p Payload) GetDuration(key string) (time.Duration, error) {
 	if !ok {
 		return 0, &errKeyNotFound{key}
 	}
-	return cast.ToDurationE(v)
+	switch v := v.(type) {
+	case json.Number:
+		val, err := v.Int64()
+		if err != nil {
+			return 0, err
+		}
+		return time.Duration(val), nil
+	default:
+		return cast.ToDurationE(v)
+	}
 }
