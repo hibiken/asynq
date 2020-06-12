@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2020-06-12
+
+### Fixed
+
+- Fixes the JSON number overflow issue (https://github.com/hibiken/asynq/issues/166).
+
+
 ## [0.9.2] - 2020-06-08
 
 ### Added
