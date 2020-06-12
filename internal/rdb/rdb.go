@@ -54,12 +54,12 @@ return 1`)
 
 // Enqueue inserts the given task to the tail of the queue.
 func (r *RDB) Enqueue(msg *base.TaskMessage) error {
-	bytes, err := json.Marshal(msg)
+	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
 		return err
 	}
 	key := base.QueueKey(msg.Queue)
-	return enqueueCmd.Run(r.client, []string{key, base.AllQueues}, bytes).Err()
+	return enqueueCmd.Run(r.client, []string{key, base.AllQueues}, encoded).Err()
 }
 
 // KEYS[1] -> unique key in the form <type>:<payload>:<qname>
@@ -81,14 +81,14 @@ return 1
 // EnqueueUnique inserts the given task if the task's uniqueness lock can be acquired.
 // It returns ErrDuplicateTask if the lock cannot be acquired.
 func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
-	bytes, err := json.Marshal(msg)
+	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
 		return err
 	}
 	key := base.QueueKey(msg.Queue)
 	res, err := enqueueUniqueCmd.Run(r.client,
 		[]string{msg.UniqueKey, key, base.AllQueues},
-		msg.ID.String(), int(ttl.Seconds()), bytes).Result()
+		msg.ID.String(), int(ttl.Seconds()), encoded).Result()
 	if err != nil {
 		return err
 	}
@@ -117,12 +117,7 @@ func (r *RDB) Dequeue(qnames ...string) (*base.TaskMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	var msg base.TaskMessage
-	err = json.Unmarshal([]byte(data), &msg)
-	if err != nil {
-		return nil, err
-	}
-	return &msg, nil
+	return base.DecodeMessage(data)
 }
 
 // KEYS[1] -> asynq:in_progress
@@ -176,7 +171,7 @@ return redis.status_reply("OK")
 // Done removes the task from in-progress queue to mark the task as done.
 // It removes a uniqueness lock acquired by the task, if any.
 func (r *RDB) Done(msg *base.TaskMessage) error {
-	bytes, err := json.Marshal(msg)
+	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
 		return err
 	}
@@ -185,7 +180,7 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 	expireAt := now.Add(statsTTL)
 	return doneCmd.Run(r.client,
 		[]string{base.InProgressQueue, processedKey, msg.UniqueKey},
-		bytes, expireAt.Unix(), msg.ID.String()).Err()
+		encoded, expireAt.Unix(), msg.ID.String()).Err()
 }
 
 // KEYS[1] -> asynq:in_progress
@@ -199,13 +194,13 @@ return redis.status_reply("OK")`)
 
 // Requeue moves the task from in-progress queue to the specified queue.
 func (r *RDB) Requeue(msg *base.TaskMessage) error {
-	bytes, err := json.Marshal(msg)
+	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
 		return err
 	}
 	return requeueCmd.Run(r.client,
 		[]string{base.InProgressQueue, base.QueueKey(msg.Queue)},
-		string(bytes)).Err()
+		encoded).Err()
 }
 
 // KEYS[1] -> asynq:scheduled
@@ -221,7 +216,7 @@ return 1
 
 // Schedule adds the task to the backlog queue to be processed in the future.
 func (r *RDB) Schedule(msg *base.TaskMessage, processAt time.Time) error {
-	bytes, err := json.Marshal(msg)
+	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
 		return err
 	}
@@ -229,7 +224,7 @@ func (r *RDB) Schedule(msg *base.TaskMessage, processAt time.Time) error {
 	score := float64(processAt.Unix())
 	return scheduleCmd.Run(r.client,
 		[]string{base.ScheduledQueue, base.AllQueues},
-		score, bytes, qkey).Err()
+		score, encoded, qkey).Err()
 }
 
 // KEYS[1] -> unique key in the format <type>:<payload>:<qname>
@@ -253,7 +248,7 @@ return 1
 // ScheduleUnique adds the task to the backlog queue to be processed in the future if the uniqueness lock can be acquired.
 // It returns ErrDuplicateTask if the lock cannot be acquired.
 func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl time.Duration) error {
-	bytes, err := json.Marshal(msg)
+	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
 		return err
 	}
@@ -261,7 +256,7 @@ func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl tim
 	score := float64(processAt.Unix())
 	res, err := scheduleUniqueCmd.Run(r.client,
 		[]string{msg.UniqueKey, base.ScheduledQueue, base.AllQueues},
-		msg.ID.String(), int(ttl.Seconds()), score, bytes, qkey).Result()
+		msg.ID.String(), int(ttl.Seconds()), score, encoded, qkey).Result()
 	if err != nil {
 		return err
 	}
@@ -302,14 +297,14 @@ return redis.status_reply("OK")`)
 // Retry moves the task from in-progress to retry queue, incrementing retry count
 // and assigning error message to the task message.
 func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) error {
-	bytesToRemove, err := json.Marshal(msg)
+	msgToRemove, err := base.EncodeMessage(msg)
 	if err != nil {
 		return err
 	}
 	modified := *msg
 	modified.Retried++
 	modified.ErrorMsg = errMsg
-	bytesToAdd, err := json.Marshal(&modified)
+	msgToAdd, err := base.EncodeMessage(&modified)
 	if err != nil {
 		return err
 	}
@@ -319,7 +314,7 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) e
 	expireAt := now.Add(statsTTL)
 	return retryCmd.Run(r.client,
 		[]string{base.InProgressQueue, base.RetryQueue, processedKey, failureKey},
-		string(bytesToRemove), string(bytesToAdd), processAt.Unix(), expireAt.Unix()).Err()
+		msgToRemove, msgToAdd, processAt.Unix(), expireAt.Unix()).Err()
 }
 
 const (
@@ -359,13 +354,13 @@ return redis.status_reply("OK")`)
 // the error message to the task.
 // It also trims the set by timestamp and set size.
 func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
-	bytesToRemove, err := json.Marshal(msg)
+	msgToRemove, err := base.EncodeMessage(msg)
 	if err != nil {
 		return err
 	}
 	modified := *msg
 	modified.ErrorMsg = errMsg
-	bytesToAdd, err := json.Marshal(&modified)
+	msgToAdd, err := base.EncodeMessage(&modified)
 	if err != nil {
 		return err
 	}
@@ -376,7 +371,7 @@ func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 	expireAt := now.Add(statsTTL)
 	return killCmd.Run(r.client,
 		[]string{base.InProgressQueue, base.DeadQueue, processedKey, failureKey},
-		string(bytesToRemove), string(bytesToAdd), now.Unix(), limit, maxDeadTasks, expireAt.Unix()).Err()
+		msgToRemove, msgToAdd, now.Unix(), limit, maxDeadTasks, expireAt.Unix()).Err()
 }
 
 // KEYS[1] -> asynq:in_progress

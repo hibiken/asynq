@@ -7,6 +7,7 @@ package base
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -104,6 +105,26 @@ type TaskMessage struct {
 	//
 	// Empty string indicates that no uniqueness lock was used.
 	UniqueKey string
+}
+
+// EncodeMessage marshals the given task message in JSON and returns an encoded string.
+func EncodeMessage(msg *TaskMessage) (string, error) {
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// DecodeMessage unmarshals the given encoded string and returns a decoded task message.
+func DecodeMessage(s string) (*TaskMessage, error) {
+	d := json.NewDecoder(strings.NewReader(s))
+	d.UseNumber()
+	var msg TaskMessage
+	if err := d.Decode(&msg); err != nil {
+		return nil, err
+	}
+	return &msg, nil
 }
 
 // ServerStatus represents status of a server.
