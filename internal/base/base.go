@@ -271,7 +271,6 @@ type Broker interface {
 	ScheduleUnique(msg *TaskMessage, processAt time.Time, ttl time.Duration) error
 	Retry(msg *TaskMessage, processAt time.Time, errMsg string) error
 	Kill(msg *TaskMessage, errMsg string) error
-	RequeueAll() (int64, error)
 	CheckAndEnqueue() error
 	WriteServerState(info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error
 	ClearServerState(host string, pid int, serverID string) error
