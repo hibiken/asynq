@@ -374,32 +374,6 @@ func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 		msgToRemove, msgToAdd, now.Unix(), limit, maxDeadTasks, expireAt.Unix()).Err()
 }
 
-// KEYS[1] -> asynq:in_progress
-// ARGV[1] -> queue prefix
-var requeueAllCmd = redis.NewScript(`
-local msgs = redis.call("LRANGE", KEYS[1], 0, -1)
-for _, msg in ipairs(msgs) do
-	local decoded = cjson.decode(msg)
-	local qkey = ARGV[1] .. decoded["Queue"]
-	redis.call("RPUSH", qkey, msg)
-	redis.call("LREM", KEYS[1], 0, msg)
-end
-return table.getn(msgs)`)
-
-// RequeueAll moves all tasks from in-progress list to the queue
-// and reports the number of tasks restored.
-func (r *RDB) RequeueAll() (int64, error) {
-	res, err := requeueAllCmd.Run(r.client, []string{base.InProgressQueue}, base.QueuePrefix).Result()
-	if err != nil {
-		return 0, err
-	}
-	n, ok := res.(int64)
-	if !ok {
-		return 0, fmt.Errorf("could not cast %v to int64", res)
-	}
-	return n, nil
-}
-
 // CheckAndEnqueue checks for all scheduled/retry tasks and enqueues any tasks that
 // are ready to be processed.
 func (r *RDB) CheckAndEnqueue() (err error) {
