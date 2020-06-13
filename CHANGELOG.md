@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.4] - 2020-06-13
+
+### Fixed
+
+- Fixes issue of same tasks processed by more than one worker (https://github.com/hibiken/asynq/issues/90).
+
 ## [0.9.3] - 2020-06-12
 
 ### Fixed
