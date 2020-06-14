@@ -232,7 +232,8 @@ func (c *Client) enqueueAt(t time.Time, task *Task, opts ...Option) error {
 		UniqueKey: uniqueKey(task, opt.uniqueTTL, opt.queue),
 	}
 	var err error
-	if time.Now().After(t) {
+	now := time.Now()
+	if t.Before(now) || t.Equal(now) {
 		err = c.enqueue(msg, opt.uniqueTTL)
 	} else {
 		err = c.schedule(msg, t, opt.uniqueTTL)
