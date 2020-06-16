@@ -35,6 +35,7 @@ const (
 	RetryQueue      = "asynq:retry"                  // ZSET
 	DeadQueue       = "asynq:dead"                   // ZSET
 	InProgressQueue = "asynq:in_progress"            // LIST
+	KeyDeadlines    = "asynq:deadlines"              // ZSET
 	PausedQueues    = "asynq:paused"                 // SET
 	CancelChannel   = "asynq:cancel"                 // PubSub channel
 )
