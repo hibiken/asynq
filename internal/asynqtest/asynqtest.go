@@ -259,6 +259,12 @@ func GetDeadEntries(tb testing.TB, r *redis.Client) []ZSetEntry {
 	return getZSetEntries(tb, r, base.DeadQueue)
 }
 
+// GetDeadlinesEntries returns all task messages and its score in the deadlines set.
+func GetDeadlinesEntries(tb testing.TB, r *redis.Client) []ZSetEntry {
+	tb.Helper()
+	return getZSetEntries(tb, r, base.KeyDeadlines)
+}
+
 func getListMessages(tb testing.TB, r *redis.Client, list string) []*base.TaskMessage {
 	data := r.LRange(list, 0, -1).Val()
 	return MustUnmarshalSlice(tb, data)
