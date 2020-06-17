@@ -120,17 +120,36 @@ func (r *RDB) Dequeue(qnames ...string) (*base.TaskMessage, error) {
 	return base.DecodeMessage(data)
 }
 
-// KEYS[1] -> asynq:in_progress
-// KEYS[2] -> asynq:paused
-// ARGV    -> List of queues to query in order
+// KEYS[1]  -> asynq:in_progress
+// KEYS[2]  -> asynq:paused
+// KEYS[3]  -> asynq:deadlines
+// ARGV[1]  -> current time in Unix time
+// ARGV[2:] -> List of queues to query in order
 //
 // dequeueCmd checks whether a queue is paused first, before
 // calling RPOPLPUSH to pop a task from the queue.
+// It computes the task deadline by inspecting Timout and Deadline fields,
+// and inserts the task with deadlines set.
 var dequeueCmd = redis.NewScript(`
-for _, qkey in ipairs(ARGV) do
+for i = 2, table.getn(ARGV) do
+	local qkey = ARGV[i]
 	if redis.call("SISMEMBER", KEYS[2], qkey) == 0 then
 		local res = redis.call("RPOPLPUSH", qkey, KEYS[1])
 		if res then
+			local decoded = cjson.decode(res)
+			local timeout = decoded["Timeout"]
+			local deadline = decoded["Deadline"]
+			local score
+			if timeout ~= 0 and deadline ~= 0 then
+				score = math.min(ARGV[1]+timeout, deadline)
+			elseif timeout ~= 0 then
+				score = ARGV[1] + timeout
+			elseif deadline ~= 0 then
+			    score = deadline
+			else
+				return redis.error_reply("asynq internal error: both timeout and deadline are not set")
+			end
+			redis.call("ZADD", KEYS[3], score, res)
 			return res
 		end
 	end
@@ -138,8 +157,11 @@ end
 return nil`)
 
 func (r *RDB) dequeue(qkeys ...interface{}) (data string, err error) {
+	var args []interface{}
+	args = append(args, time.Now().Unix())
+	args = append(args, qkeys...)
 	res, err := dequeueCmd.Run(r.client,
-		[]string{base.InProgressQueue, base.PausedQueues}, qkeys...).Result()
+		[]string{base.InProgressQueue, base.PausedQueues, base.KeyDeadlines}, args...).Result()
 	if err != nil {
 		return "", err
 	}
