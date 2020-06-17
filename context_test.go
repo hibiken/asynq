@@ -16,11 +16,6 @@ import (
 )
 
 func TestCreateContextWithTimeRestrictions(t *testing.T) {
-	var (
-		noTimeout  = time.Duration(0)
-		noDeadline = time.Time{}
-	)
-
 	tests := []struct {
 		desc         string
 		timeout      time.Duration
@@ -37,8 +32,8 @@ func TestCreateContextWithTimeRestrictions(t *testing.T) {
 		msg := &base.TaskMessage{
 			Type:     "something",
 			ID:       xid.New(),
-			Timeout:  tc.timeout.String(),
-			Deadline: tc.deadline.Format(time.RFC3339),
+			Timeout:  int(tc.timeout.Seconds()),
+			Deadline: int(tc.deadline.Unix()),
 		}
 
 		ctx, cancel := createContext(msg)
@@ -68,33 +63,18 @@ func TestCreateContextWithTimeRestrictions(t *testing.T) {
 }
 
 func TestCreateContextWithoutTimeRestrictions(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("did not panic, want panic when both timeout and deadline are missing")
+		}
+	}()
 	msg := &base.TaskMessage{
 		Type:     "something",
 		ID:       xid.New(),
-		Timeout:  time.Duration(0).String(),        // zero value to indicate no timeout
-		Deadline: time.Time{}.Format(time.RFC3339), // zero value to indicate no deadline
+		Timeout:  0, // zero indicates no timeout
+		Deadline: 0, // zero indicates no deadline
 	}
-
-	ctx, cancel := createContext(msg)
-
-	select {
-	case x := <-ctx.Done():
-		t.Errorf("<-ctx.Done() == %v, want nothing (it should block)", x)
-	default:
-	}
-
-	_, ok := ctx.Deadline()
-	if ok {
-		t.Error("ctx.Deadline() returned true, want deadline to not be set")
-	}
-
-	cancel()
-
-	select {
-	case <-ctx.Done():
-	default:
-		t.Error("ctx.Done() blocked, want it to be non-blocking")
-	}
+	createContext(msg)
 }
 
 func TestGetTaskMetadataFromContext(t *testing.T) {
@@ -102,8 +82,8 @@ func TestGetTaskMetadataFromContext(t *testing.T) {
 		desc string
 		msg  *base.TaskMessage
 	}{
-		{"with zero retried message", &base.TaskMessage{Type: "something", ID: xid.New(), Retry: 25, Retried: 0}},
-		{"with non-zero retried message", &base.TaskMessage{Type: "something", ID: xid.New(), Retry: 10, Retried: 5}},
+		{"with zero retried message", &base.TaskMessage{Type: "something", ID: xid.New(), Retry: 25, Retried: 0, Timeout: 1800}},
+		{"with non-zero retried message", &base.TaskMessage{Type: "something", ID: xid.New(), Retry: 10, Retried: 5, Timeout: 1800}},
 	}
 
 	for _, tc := range tests {
