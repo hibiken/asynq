@@ -110,7 +110,7 @@ func composeOptions(opts ...Option) option {
 	res := option{
 		retry:    defaultMaxRetry,
 		queue:    base.DefaultQueueName,
-		timeout:  0,
+		timeout:  0, // do not set to deafultTimeout here
 		deadline: time.Time{},
 	}
 	for _, opt := range opts {
@@ -165,8 +165,19 @@ func serializePayload(payload map[string]interface{}) string {
 	return b.String()
 }
 
-// Default max retry count used if nothing is specified.
-const defaultMaxRetry = 25
+const (
+	// Default max retry count used if nothing is specified.
+	defaultMaxRetry = 25
+
+	// Default timeout used if both timeout and deadline are not specified.
+	defaultTimeout = 30 * time.Minute
+)
+
+// Value zero indicates no timeout and no deadline.
+var (
+	noTimeout  time.Duration = 0
+	noDeadline time.Time     = time.Unix(0, 0)
+)
 
 // SetDefaultOptions sets options to be used for a given task type.
 // The argument opts specifies the behavior of task processing.
@@ -221,14 +232,26 @@ func (c *Client) enqueueAt(t time.Time, task *Task, opts ...Option) error {
 		opts = append(defaults, opts...)
 	}
 	opt := composeOptions(opts...)
+	deadline := noDeadline
+	if !opt.deadline.IsZero() {
+		deadline = opt.deadline
+	}
+	timeout := noTimeout
+	if opt.timeout != 0 {
+		timeout = opt.timeout
+	}
+	if deadline.Equal(noDeadline) && timeout == noTimeout {
+		// If neither deadline nor timeout are set, use default timeout.
+		timeout = defaultTimeout
+	}
 	msg := &base.TaskMessage{
 		ID:        xid.New(),
 		Type:      task.Type,
 		Payload:   task.Payload.data,
 		Queue:     opt.queue,
 		Retry:     opt.retry,
-		Timeout:   opt.timeout.String(),
-		Deadline:  opt.deadline.Format(time.RFC3339),
+		Deadline:  int(deadline.Unix()),
+		Timeout:   int(timeout.Seconds()),
 		UniqueKey: uniqueKey(task, opt.uniqueTTL, opt.queue),
 	}
 	var err error

@@ -34,12 +34,15 @@ func createContext(msg *base.TaskMessage) (ctx context.Context, cancel context.C
 		retryCount: msg.Retried,
 	}
 	ctx = context.WithValue(context.Background(), metadataCtxKey, metadata)
-	timeout, err := time.ParseDuration(msg.Timeout)
-	if err == nil && timeout != 0 {
+	if msg.Timeout == 0 && msg.Deadline == 0 {
+		panic("asynq: internal error: missing both timeout and deadline")
+	}
+	if msg.Timeout != 0 {
+		timeout := time.Duration(msg.Timeout) * time.Second
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 	}
-	deadline, err := time.Parse(time.RFC3339, msg.Deadline)
-	if err == nil && !deadline.IsZero() {
+	if msg.Deadline != 0 {
+		deadline := time.Unix(int64(msg.Deadline), 0)
 		ctx, cancel = context.WithDeadline(ctx, deadline)
 	}
 	if cancel == nil {
