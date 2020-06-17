@@ -89,18 +89,20 @@ type TaskMessage struct {
 	// ErrorMsg holds the error message from the last failure.
 	ErrorMsg string
 
-	// Timeout specifies how long a task may run.
-	// The string value should be compatible with time.Duration.ParseDuration.
+	// Timeout specifies timeout in seconds.
+	// If task processing doesn't complete within the timeout, the task will be retried
+	// if retry count is remaining. Otherwise it will be moved to the dead queue.
 	//
-	// Zero means no limit.
-	Timeout string
+	// Use zero to indicate no timeout.
+	Timeout int
 
-	// Deadline specifies the deadline for the task.
-	// Task won't be processed if it exceeded its deadline.
-	// The string shoulbe be in RFC3339 format.
+	// Deadline specifies the deadline for the task in Unix time,
+	// the number of seconds elapsed since January 1, 1970 UTC.
+	// If task processing doesn't complete before the deadline, the task will be retried
+	// if retry count is remaining. Otherwise it will be moved to the dead queue.
 	//
-	// time.Time's zero value means no deadline.
-	Deadline string
+	// Use zero to indicate no deadline.
+	Deadline int
 
 	// UniqueKey holds the redis key used for uniqueness lock for this task.
 	//
