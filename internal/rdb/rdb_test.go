@@ -533,38 +533,73 @@ func TestDone(t *testing.T) {
 
 func TestRequeue(t *testing.T) {
 	r := setup(t)
-	t1 := h.NewTaskMessage("send_email", nil)
-	t2 := h.NewTaskMessage("export_csv", nil)
-	t3 := h.NewTaskMessageWithQueue("send_email", nil, "critical")
+	now := time.Now()
+	t1 := &base.TaskMessage{
+		ID:      xid.New(),
+		Type:    "send_email",
+		Payload: nil,
+		Queue:   "default",
+		Timeout: 1800,
+	}
+	t2 := &base.TaskMessage{
+		ID:      xid.New(),
+		Type:    "export_csv",
+		Payload: nil,
+		Queue:   "default",
+		Timeout: 3000,
+	}
+	t3 := &base.TaskMessage{
+		ID:      xid.New(),
+		Type:    "send_email",
+		Payload: nil,
+		Queue:   "critical",
+		Timeout: 80,
+	}
+	t1Deadline := int(now.Unix()) + t1.Timeout
+	t2Deadline := int(now.Unix()) + t2.Timeout
+	t3Deadline := int(now.Unix()) + t3.Timeout
 
 	tests := []struct {
 		enqueued       map[string][]*base.TaskMessage // initial state of queues
 		inProgress     []*base.TaskMessage            // initial state of the in-progress list
+		deadlines      []h.ZSetEntry                  // initial state of the deadlines set
 		target         *base.TaskMessage              // task to requeue
 		wantEnqueued   map[string][]*base.TaskMessage // final state of queues
 		wantInProgress []*base.TaskMessage            // final state of the in-progress list
+		wantDeadlines  []h.ZSetEntry                  // final state of the deadlines set
 	}{
 		{
 			enqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {},
 			},
 			inProgress: []*base.TaskMessage{t1, t2},
-			target:     t1,
+			deadlines: []h.ZSetEntry{
+				{Msg: t1, Score: float64(t1Deadline)},
+				{Msg: t2, Score: float64(t2Deadline)},
+			},
+			target: t1,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {t1},
 			},
 			wantInProgress: []*base.TaskMessage{t2},
+			wantDeadlines: []h.ZSetEntry{
+				{Msg: t2, Score: float64(t2Deadline)},
+			},
 		},
 		{
 			enqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {t1},
 			},
 			inProgress: []*base.TaskMessage{t2},
-			target:     t2,
+			deadlines: []h.ZSetEntry{
+				{Msg: t2, Score: float64(t2Deadline)},
+			},
+			target: t2,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {t1, t2},
 			},
 			wantInProgress: []*base.TaskMessage{},
+			wantDeadlines:  []h.ZSetEntry{},
 		},
 		{
 			enqueued: map[string][]*base.TaskMessage{
@@ -572,12 +607,19 @@ func TestRequeue(t *testing.T) {
 				"critical":            {},
 			},
 			inProgress: []*base.TaskMessage{t2, t3},
-			target:     t3,
+			deadlines: []h.ZSetEntry{
+				{Msg: t2, Score: float64(t2Deadline)},
+				{Msg: t3, Score: float64(t3Deadline)},
+			},
+			target: t3,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {t1},
 				"critical":            {t3},
 			},
 			wantInProgress: []*base.TaskMessage{t2},
+			wantDeadlines: []h.ZSetEntry{
+				{Msg: t2, Score: float64(t2Deadline)},
+			},
 		},
 	}
 
@@ -587,6 +629,7 @@ func TestRequeue(t *testing.T) {
 			h.SeedEnqueuedQueue(t, r.client, msgs, qname)
 		}
 		h.SeedInProgressQueue(t, r.client, tc.inProgress)
+		h.SeedDeadlines(t, r.client, tc.deadlines)
 
 		err := r.Requeue(tc.target)
 		if err != nil {
@@ -604,6 +647,10 @@ func TestRequeue(t *testing.T) {
 		gotInProgress := h.GetInProgressMessages(t, r.client)
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.InProgressQueue, diff)
+		}
+		gotDeadlines := h.GetDeadlinesEntries(t, r.client)
+		if diff := cmp.Diff(tc.wantDeadlines, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
+			t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.KeyDeadlines, diff)
 		}
 	}
 }
