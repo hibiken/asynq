@@ -372,9 +372,10 @@ const (
 )
 
 // KEYS[1] -> asynq:in_progress
-// KEYS[2] -> asynq:dead
-// KEYS[3] -> asynq:processed:<yyyy-mm-dd>
-// KEYS[4] -> asynq.failure:<yyyy-mm-dd>
+// KEYS[2] -> asynq:deadlines
+// KEYS[3] -> asynq:dead
+// KEYS[4] -> asynq:processed:<yyyy-mm-dd>
+// KEYS[5] -> asynq.failure:<yyyy-mm-dd>
 // ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
 // ARGV[2] -> base.TaskMessage value to add to Dead queue
 // ARGV[3] -> died_at UNIX timestamp
@@ -386,16 +387,20 @@ local x = redis.call("LREM", KEYS[1], 0, ARGV[1])
 if x == 0 then
   return redis.error_reply("NOT FOUND")
 end
-redis.call("ZADD", KEYS[2], ARGV[3], ARGV[2])
-redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[4])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[5])
-local n = redis.call("INCR", KEYS[3])
-if tonumber(n) == 1 then
-	redis.call("EXPIREAT", KEYS[3], ARGV[6])
+x = redis.call("ZREM", KEYS[2], ARGV[1])
+if x == 0 then
+  return redis.error_reply("NOT FOUND")
 end
-local m = redis.call("INCR", KEYS[4])
-if tonumber(m) == 1 then
+redis.call("ZADD", KEYS[3], ARGV[3], ARGV[2])
+redis.call("ZREMRANGEBYSCORE", KEYS[3], "-inf", ARGV[4])
+redis.call("ZREMRANGEBYRANK", KEYS[3], 0, -ARGV[5])
+local n = redis.call("INCR", KEYS[4])
+if tonumber(n) == 1 then
 	redis.call("EXPIREAT", KEYS[4], ARGV[6])
+end
+local m = redis.call("INCR", KEYS[5])
+if tonumber(m) == 1 then
+	redis.call("EXPIREAT", KEYS[5], ARGV[6])
 end
 return redis.status_reply("OK")`)
 
@@ -419,7 +424,7 @@ func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 	failureKey := base.FailureKey(now)
 	expireAt := now.Add(statsTTL)
 	return killCmd.Run(r.client,
-		[]string{base.InProgressQueue, base.DeadQueue, processedKey, failureKey},
+		[]string{base.InProgressQueue, base.KeyDeadlines, base.DeadQueue, processedKey, failureKey},
 		msgToRemove, msgToAdd, now.Unix(), limit, maxDeadTasks, expireAt.Unix()).Err()
 }
 
