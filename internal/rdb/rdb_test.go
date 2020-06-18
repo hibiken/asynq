@@ -144,7 +144,7 @@ func TestDequeue(t *testing.T) {
 		enqueued       map[string][]*base.TaskMessage
 		args           []string // list of queues to query
 		wantMsg        *base.TaskMessage
-		wantDeadline   int
+		wantDeadline   time.Time
 		err            error
 		wantEnqueued   map[string][]*base.TaskMessage
 		wantInProgress []*base.TaskMessage
@@ -156,7 +156,7 @@ func TestDequeue(t *testing.T) {
 			},
 			args:         []string{"default"},
 			wantMsg:      t1,
-			wantDeadline: t1Deadline,
+			wantDeadline: time.Unix(int64(t1Deadline), 0),
 			err:          nil,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {},
@@ -175,7 +175,7 @@ func TestDequeue(t *testing.T) {
 			},
 			args:         []string{"default"},
 			wantMsg:      nil,
-			wantDeadline: 0,
+			wantDeadline: time.Time{},
 			err:          ErrNoProcessableTask,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {},
@@ -191,7 +191,7 @@ func TestDequeue(t *testing.T) {
 			},
 			args:         []string{"critical", "default", "low"},
 			wantMsg:      t2,
-			wantDeadline: t2Deadline,
+			wantDeadline: time.Unix(int64(t2Deadline), 0),
 			err:          nil,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {t1},
@@ -214,7 +214,7 @@ func TestDequeue(t *testing.T) {
 			},
 			args:         []string{"critical", "default", "low"},
 			wantMsg:      t3,
-			wantDeadline: t3Deadline,
+			wantDeadline: time.Unix(int64(t3Deadline), 0),
 			err:          nil,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {},
@@ -237,7 +237,7 @@ func TestDequeue(t *testing.T) {
 			},
 			args:         []string{"critical", "default", "low"},
 			wantMsg:      nil,
-			wantDeadline: 0,
+			wantDeadline: time.Time{},
 			err:          ErrNoProcessableTask,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {},
