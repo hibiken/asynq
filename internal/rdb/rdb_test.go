@@ -384,40 +384,108 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 
 func TestDone(t *testing.T) {
 	r := setup(t)
-	t1 := h.NewTaskMessage("send_email", nil)
-	t2 := h.NewTaskMessage("export_csv", nil)
+	now := time.Now()
+	t1 := &base.TaskMessage{
+		ID:       xid.New(),
+		Type:     "send_email",
+		Payload:  nil,
+		Timeout:  1800,
+		Deadline: 0,
+	}
+	t1Deadline := int(now.Unix()) + t1.Timeout
+	t2 := &base.TaskMessage{
+		ID:       xid.New(),
+		Type:     "export_csv",
+		Payload:  nil,
+		Timeout:  0,
+		Deadline: 1592485787,
+	}
+	t2Deadline := t2.Deadline
 	t3 := &base.TaskMessage{
 		ID:        xid.New(),
 		Type:      "reindex",
 		Payload:   nil,
+		Timeout:   1800,
+		Deadline:  0,
 		UniqueKey: "reindex:nil:default",
 		Queue:     "default",
 	}
+	t3Deadline := int(now.Unix()) + t3.Deadline
 
 	tests := []struct {
 		inProgress     []*base.TaskMessage // initial state of the in-progress list
+		deadlines      []h.ZSetEntry       // initial state of deadlines set
 		target         *base.TaskMessage   // task to remove
 		wantInProgress []*base.TaskMessage // final state of the in-progress list
+		wantDeadlines  []h.ZSetEntry       // final state of the deadline set
 	}{
 		{
-			inProgress:     []*base.TaskMessage{t1, t2},
+			inProgress: []*base.TaskMessage{t1, t2},
+			deadlines: []h.ZSetEntry{
+				{
+					Msg:   t1,
+					Score: float64(t1Deadline),
+				},
+				{
+					Msg:   t2,
+					Score: float64(t2Deadline),
+				},
+			},
 			target:         t1,
 			wantInProgress: []*base.TaskMessage{t2},
+			wantDeadlines: []h.ZSetEntry{
+				{
+					Msg:   t2,
+					Score: float64(t2Deadline),
+				},
+			},
 		},
 		{
-			inProgress:     []*base.TaskMessage{t1},
+			inProgress: []*base.TaskMessage{t1},
+			deadlines: []h.ZSetEntry{
+				{
+					Msg:   t1,
+					Score: float64(t1Deadline),
+				},
+			},
 			target:         t1,
 			wantInProgress: []*base.TaskMessage{},
+			wantDeadlines:  []h.ZSetEntry{},
 		},
 		{
-			inProgress:     []*base.TaskMessage{t1, t2, t3},
+			inProgress: []*base.TaskMessage{t1, t2, t3},
+			deadlines: []h.ZSetEntry{
+				{
+					Msg:   t1,
+					Score: float64(t1Deadline),
+				},
+				{
+					Msg:   t2,
+					Score: float64(t2Deadline),
+				},
+				{
+					Msg:   t3,
+					Score: float64(t3Deadline),
+				},
+			},
 			target:         t3,
 			wantInProgress: []*base.TaskMessage{t1, t2},
+			wantDeadlines: []h.ZSetEntry{
+				{
+					Msg:   t1,
+					Score: float64(t1Deadline),
+				},
+				{
+					Msg:   t2,
+					Score: float64(t2Deadline),
+				},
+			},
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedDeadlines(t, r.client, tc.deadlines)
 		h.SeedInProgressQueue(t, r.client, tc.inProgress)
 		for _, msg := range tc.inProgress {
 			// Set uniqueness lock if unique key is present.
@@ -438,6 +506,11 @@ func TestDone(t *testing.T) {
 		gotInProgress := h.GetInProgressMessages(t, r.client)
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.InProgressQueue, diff)
+			continue
+		}
+		gotDeadlines := h.GetDeadlinesEntries(t, r.client)
+		if diff := cmp.Diff(tc.wantDeadlines, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
+			t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.KeyDeadlines, diff)
 			continue
 		}
 
