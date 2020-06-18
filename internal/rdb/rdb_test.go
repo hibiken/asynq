@@ -143,7 +143,8 @@ func TestDequeue(t *testing.T) {
 	tests := []struct {
 		enqueued       map[string][]*base.TaskMessage
 		args           []string // list of queues to query
-		want           *base.TaskMessage
+		wantMsg        *base.TaskMessage
+		wantDeadline   int
 		err            error
 		wantEnqueued   map[string][]*base.TaskMessage
 		wantInProgress []*base.TaskMessage
@@ -153,9 +154,10 @@ func TestDequeue(t *testing.T) {
 			enqueued: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
-			args: []string{"default"},
-			want: t1,
-			err:  nil,
+			args:         []string{"default"},
+			wantMsg:      t1,
+			wantDeadline: t1Deadline,
+			err:          nil,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {},
 			},
@@ -171,9 +173,10 @@ func TestDequeue(t *testing.T) {
 			enqueued: map[string][]*base.TaskMessage{
 				"default": {},
 			},
-			args: []string{"default"},
-			want: nil,
-			err:  ErrNoProcessableTask,
+			args:         []string{"default"},
+			wantMsg:      nil,
+			wantDeadline: 0,
+			err:          ErrNoProcessableTask,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {},
 			},
@@ -186,9 +189,10 @@ func TestDequeue(t *testing.T) {
 				"critical": {t2},
 				"low":      {t3},
 			},
-			args: []string{"critical", "default", "low"},
-			want: t2,
-			err:  nil,
+			args:         []string{"critical", "default", "low"},
+			wantMsg:      t2,
+			wantDeadline: t2Deadline,
+			err:          nil,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {t1},
 				"critical": {},
@@ -208,9 +212,10 @@ func TestDequeue(t *testing.T) {
 				"critical": {},
 				"low":      {t2, t1},
 			},
-			args: []string{"critical", "default", "low"},
-			want: t3,
-			err:  nil,
+			args:         []string{"critical", "default", "low"},
+			wantMsg:      t3,
+			wantDeadline: t3Deadline,
+			err:          nil,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
@@ -230,9 +235,10 @@ func TestDequeue(t *testing.T) {
 				"critical": {},
 				"low":      {},
 			},
-			args: []string{"critical", "default", "low"},
-			want: nil,
-			err:  ErrNoProcessableTask,
+			args:         []string{"critical", "default", "low"},
+			wantMsg:      nil,
+			wantDeadline: 0,
+			err:          ErrNoProcessableTask,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
@@ -249,10 +255,20 @@ func TestDequeue(t *testing.T) {
 			h.SeedEnqueuedQueue(t, r.client, msgs, queue)
 		}
 
-		got, err := r.Dequeue(tc.args...)
-		if !cmp.Equal(got, tc.want) || err != tc.err {
-			t.Errorf("(*RDB).Dequeue(%v) = %v, %v; want %v, %v",
-				tc.args, got, err, tc.want, tc.err)
+		gotMsg, gotDeadline, err := r.Dequeue(tc.args...)
+		if err != tc.err {
+			t.Errorf("(*RDB).Dequeue(%v) returned error %v; want %v",
+				tc.args, err, tc.err)
+			continue
+		}
+		if !cmp.Equal(gotMsg, tc.wantMsg) || err != tc.err {
+			t.Errorf("(*RDB).Dequeue(%v) returned message %v; want %v",
+				tc.args, gotMsg, tc.wantMsg)
+			continue
+		}
+		if gotDeadline != tc.wantDeadline {
+			t.Errorf("(*RDB).Dequeue(%v) returned deadline %v; want %v",
+				tc.args, gotDeadline, tc.wantDeadline)
 			continue
 		}
 
@@ -284,7 +300,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 		paused         []string // list of paused queues
 		enqueued       map[string][]*base.TaskMessage
 		args           []string // list of queues to query
-		want           *base.TaskMessage
+		wantMsg        *base.TaskMessage
 		err            error
 		wantEnqueued   map[string][]*base.TaskMessage
 		wantInProgress []*base.TaskMessage
@@ -295,9 +311,9 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 				"default":  {t1},
 				"critical": {t2},
 			},
-			args: []string{"default", "critical"},
-			want: t2,
-			err:  nil,
+			args:    []string{"default", "critical"},
+			wantMsg: t2,
+			err:     nil,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {t1},
 				"critical": {},
@@ -309,9 +325,9 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 			enqueued: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
-			args: []string{"default"},
-			want: nil,
-			err:  ErrNoProcessableTask,
+			args:    []string{"default"},
+			wantMsg: nil,
+			err:     ErrNoProcessableTask,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
@@ -323,9 +339,9 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 				"default":  {t1},
 				"critical": {t2},
 			},
-			args: []string{"default", "critical"},
-			want: nil,
-			err:  ErrNoProcessableTask,
+			args:    []string{"default", "critical"},
+			wantMsg: nil,
+			err:     ErrNoProcessableTask,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {t1},
 				"critical": {t2},
@@ -345,10 +361,10 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 			h.SeedEnqueuedQueue(t, r.client, msgs, queue)
 		}
 
-		got, err := r.Dequeue(tc.args...)
-		if !cmp.Equal(got, tc.want) || err != tc.err {
+		got, _, err := r.Dequeue(tc.args...)
+		if !cmp.Equal(got, tc.wantMsg) || err != tc.err {
 			t.Errorf("Dequeue(%v) = %v, %v; want %v, %v",
-				tc.args, got, err, tc.want, tc.err)
+				tc.args, got, err, tc.wantMsg, tc.err)
 			continue
 		}
 
