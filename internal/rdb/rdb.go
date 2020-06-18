@@ -102,22 +102,26 @@ func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
 	return nil
 }
 
-// Dequeue queries given queues in order and pops a task message if there is one and returns it.
+// Dequeue queries given queues in order and pops a task message
+// off a queue if one exists and returns the message and deadline in Unix time in seconds.
 // Dequeue skips a queue if the queue is paused.
 // If all queues are empty, ErrNoProcessableTask error is returned.
-func (r *RDB) Dequeue(qnames ...string) (*base.TaskMessage, error) {
+func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, deadline int, err error) {
 	var qkeys []interface{}
 	for _, q := range qnames {
 		qkeys = append(qkeys, base.QueueKey(q))
 	}
-	data, err := r.dequeue(qkeys...)
+	data, deadline, err := r.dequeue(qkeys...)
 	if err == redis.Nil {
-		return nil, ErrNoProcessableTask
+		return nil, 0, ErrNoProcessableTask
 	}
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return base.DecodeMessage(data)
+	if msg, err = base.DecodeMessage(data); err != nil {
+		return nil, 0, err
+	}
+	return msg, deadline, nil
 }
 
 // KEYS[1]  -> asynq:in_progress
@@ -134,9 +138,9 @@ var dequeueCmd = redis.NewScript(`
 for i = 2, table.getn(ARGV) do
 	local qkey = ARGV[i]
 	if redis.call("SISMEMBER", KEYS[2], qkey) == 0 then
-		local res = redis.call("RPOPLPUSH", qkey, KEYS[1])
-		if res then
-			local decoded = cjson.decode(res)
+		local msg = redis.call("RPOPLPUSH", qkey, KEYS[1])
+		if msg then
+			local decoded = cjson.decode(msg)
 			local timeout = decoded["Timeout"]
 			local deadline = decoded["Deadline"]
 			local score
@@ -149,23 +153,36 @@ for i = 2, table.getn(ARGV) do
 			else
 				return redis.error_reply("asynq internal error: both timeout and deadline are not set")
 			end
-			redis.call("ZADD", KEYS[3], score, res)
-			return res
+			redis.call("ZADD", KEYS[3], score, msg)
+			return {msg, score}
 		end
 	end
 end
 return nil`)
 
-func (r *RDB) dequeue(qkeys ...interface{}) (data string, err error) {
+func (r *RDB) dequeue(qkeys ...interface{}) (msgjson string, deadline int, err error) {
 	var args []interface{}
 	args = append(args, time.Now().Unix())
 	args = append(args, qkeys...)
 	res, err := dequeueCmd.Run(r.client,
 		[]string{base.InProgressQueue, base.PausedQueues, base.KeyDeadlines}, args...).Result()
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return cast.ToStringE(res)
+	data, err := cast.ToSliceE(res)
+	if err != nil {
+		return "", 0, err
+	}
+	if len(data) != 2 {
+		return "", 0, fmt.Errorf("asynq: internal error: dequeue command returned %v values", len(data))
+	}
+	if msgjson, err = cast.ToStringE(data[0]); err != nil {
+		return "", 0, err
+	}
+	if deadline, err = cast.ToIntE(data[1]); err != nil {
+		return "", 0, err
+	}
+	return msgjson, deadline, nil
 }
 
 // KEYS[1] -> asynq:in_progress
