@@ -315,9 +315,10 @@ func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl tim
 }
 
 // KEYS[1] -> asynq:in_progress
-// KEYS[2] -> asynq:retry
-// KEYS[3] -> asynq:processed:<yyyy-mm-dd>
-// KEYS[4] -> asynq:failure:<yyyy-mm-dd>
+// KEYS[2] -> asynq:deadlines
+// KEYS[3] -> asynq:retry
+// KEYS[4] -> asynq:processed:<yyyy-mm-dd>
+// KEYS[5] -> asynq:failure:<yyyy-mm-dd>
 // ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
 // ARGV[2] -> base.TaskMessage value to add to Retry queue
 // ARGV[3] -> retry_at UNIX timestamp
@@ -327,14 +328,18 @@ local x = redis.call("LREM", KEYS[1], 0, ARGV[1])
 if x == 0 then
   return redis.error_reply("NOT FOUND")
 end
-redis.call("ZADD", KEYS[2], ARGV[3], ARGV[2])
-local n = redis.call("INCR", KEYS[3])
-if tonumber(n) == 1 then
-	redis.call("EXPIREAT", KEYS[3], ARGV[4])
+x = redis.call("ZREM", KEYS[2], ARGV[1])
+if x == 0 then
+  return redis.error_reply("NOT FOUND")
 end
-local m = redis.call("INCR", KEYS[4])
-if tonumber(m) == 1 then
+redis.call("ZADD", KEYS[3], ARGV[3], ARGV[2])
+local n = redis.call("INCR", KEYS[4])
+if tonumber(n) == 1 then
 	redis.call("EXPIREAT", KEYS[4], ARGV[4])
+end
+local m = redis.call("INCR", KEYS[5])
+if tonumber(m) == 1 then
+	redis.call("EXPIREAT", KEYS[5], ARGV[4])
 end
 return redis.status_reply("OK")`)
 
@@ -357,7 +362,7 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) e
 	failureKey := base.FailureKey(now)
 	expireAt := now.Add(statsTTL)
 	return retryCmd.Run(r.client,
-		[]string{base.InProgressQueue, base.RetryQueue, processedKey, failureKey},
+		[]string{base.InProgressQueue, base.KeyDeadlines, base.RetryQueue, processedKey, failureKey},
 		msgToRemove, msgToAdd, processAt.Unix(), expireAt.Unix()).Err()
 }
 
