@@ -187,6 +187,12 @@ func SeedDeadQueue(tb testing.TB, r *redis.Client, entries []ZSetEntry) {
 	seedRedisZSet(tb, r, base.DeadQueue, entries)
 }
 
+// SeedDeadlines initializes the deadlines set with the given entries.
+func SeedDeadlines(tb testing.TB, r *redis.Client, entries []ZSetEntry) {
+	tb.Helper()
+	seedRedisZSet(tb, r, base.KeyDeadlines, entries)
+}
+
 func seedRedisList(tb testing.TB, c *redis.Client, key string, msgs []*base.TaskMessage) {
 	data := MustMarshalSlice(tb, msgs)
 	for _, s := range data {
