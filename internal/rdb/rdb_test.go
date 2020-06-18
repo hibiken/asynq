@@ -694,9 +694,27 @@ func TestScheduleUnique(t *testing.T) {
 
 func TestRetry(t *testing.T) {
 	r := setup(t)
-	t1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "Hola!"})
-	t2 := h.NewTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/image.jpg"})
-	t3 := h.NewTaskMessage("reindex", nil)
+	now := time.Now()
+	t1 := &base.TaskMessage{
+		ID:      xid.New(),
+		Type:    "send_email",
+		Payload: map[string]interface{}{"subject": "Hola!"},
+		Timeout: 1800,
+	}
+	t1Deadline := int(now.Unix()) + t1.Timeout
+	t2 := &base.TaskMessage{
+		ID:      xid.New(),
+		Type:    "gen_thumbnail",
+		Payload: map[string]interface{}{"path": "some/path/to/image.jpg"},
+		Timeout: 3000,
+	}
+	t2Deadline := int(now.Unix()) + t2.Timeout
+	t3 := &base.TaskMessage{
+		ID:      xid.New(),
+		Type:    "reindex",
+		Payload: nil,
+		Timeout: 60,
+	}
 	t1.Retried = 10
 	errMsg := "SMTP server is not responding"
 	t1AfterRetry := &base.TaskMessage{
@@ -706,21 +724,27 @@ func TestRetry(t *testing.T) {
 		Queue:    t1.Queue,
 		Retry:    t1.Retry,
 		Retried:  t1.Retried + 1,
+		Timeout:  t1.Timeout,
 		ErrorMsg: errMsg,
 	}
-	now := time.Now()
 
 	tests := []struct {
 		inProgress     []*base.TaskMessage
+		deadlines      []h.ZSetEntry
 		retry          []h.ZSetEntry
 		msg            *base.TaskMessage
 		processAt      time.Time
 		errMsg         string
 		wantInProgress []*base.TaskMessage
+		wantDeadlines  []h.ZSetEntry
 		wantRetry      []h.ZSetEntry
 	}{
 		{
 			inProgress: []*base.TaskMessage{t1, t2},
+			deadlines: []h.ZSetEntry{
+				{Msg: t1, Score: float64(t1Deadline)},
+				{Msg: t2, Score: float64(t2Deadline)},
+			},
 			retry: []h.ZSetEntry{
 				{
 					Msg:   t3,
@@ -731,6 +755,9 @@ func TestRetry(t *testing.T) {
 			processAt:      now.Add(5 * time.Minute),
 			errMsg:         errMsg,
 			wantInProgress: []*base.TaskMessage{t2},
+			wantDeadlines: []h.ZSetEntry{
+				{Msg: t2, Score: float64(t2Deadline)},
+			},
 			wantRetry: []h.ZSetEntry{
 				{
 					Msg:   t1AfterRetry,
@@ -747,6 +774,7 @@ func TestRetry(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		h.SeedInProgressQueue(t, r.client, tc.inProgress)
+		h.SeedDeadlines(t, r.client, tc.deadlines)
 		h.SeedRetryQueue(t, r.client, tc.retry)
 
 		err := r.Retry(tc.msg, tc.processAt, tc.errMsg)
@@ -759,7 +787,10 @@ func TestRetry(t *testing.T) {
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.InProgressQueue, diff)
 		}
-
+		gotDeadlines := h.GetDeadlinesEntries(t, r.client)
+		if diff := cmp.Diff(tc.wantDeadlines, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
+			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.KeyDeadlines, diff)
+		}
 		gotRetry := h.GetRetryEntries(t, r.client)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortZSetEntryOpt); diff != "" {
 			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
