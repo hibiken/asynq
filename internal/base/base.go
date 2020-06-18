@@ -267,7 +267,7 @@ func (c *Cancelations) GetAll() []context.CancelFunc {
 type Broker interface {
 	Enqueue(msg *TaskMessage) error
 	EnqueueUnique(msg *TaskMessage, ttl time.Duration) error
-	Dequeue(qnames ...string) (*TaskMessage, error)
+	Dequeue(qnames ...string) (*TaskMessage, int, error)
 	Done(msg *TaskMessage) error
 	Requeue(msg *TaskMessage) error
 	Schedule(msg *TaskMessage, processAt time.Time) error
