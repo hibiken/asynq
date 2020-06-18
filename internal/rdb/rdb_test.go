@@ -820,9 +820,37 @@ func TestRetry(t *testing.T) {
 
 func TestKill(t *testing.T) {
 	r := setup(t)
-	t1 := h.NewTaskMessage("send_email", nil)
-	t2 := h.NewTaskMessage("reindex", nil)
-	t3 := h.NewTaskMessage("generate_csv", nil)
+	now := time.Now()
+	t1 := &base.TaskMessage{
+		ID:      xid.New(),
+		Type:    "send_email",
+		Payload: nil,
+		Queue:   "default",
+		Retry:   25,
+		Retried: 0,
+		Timeout: 1800,
+	}
+	t1Deadline := int(now.Unix()) + t1.Timeout
+	t2 := &base.TaskMessage{
+		ID:      xid.New(),
+		Type:    "reindex",
+		Payload: nil,
+		Queue:   "default",
+		Retry:   25,
+		Retried: 0,
+		Timeout: 3000,
+	}
+	t2Deadline := int(now.Unix()) + t2.Timeout
+	t3 := &base.TaskMessage{
+		ID:      xid.New(),
+		Type:    "generate_csv",
+		Payload: nil,
+		Queue:   "default",
+		Retry:   25,
+		Retried: 0,
+		Timeout: 60,
+	}
+	t3Deadline := int(now.Unix()) + t3.Timeout
 	errMsg := "SMTP server not responding"
 	t1AfterKill := &base.TaskMessage{
 		ID:       t1.ID,
@@ -831,20 +859,26 @@ func TestKill(t *testing.T) {
 		Queue:    t1.Queue,
 		Retry:    t1.Retry,
 		Retried:  t1.Retried,
+		Timeout:  t1.Timeout,
 		ErrorMsg: errMsg,
 	}
-	now := time.Now()
 
 	// TODO(hibiken): add test cases for trimming
 	tests := []struct {
 		inProgress     []*base.TaskMessage
+		deadlines      []h.ZSetEntry
 		dead           []h.ZSetEntry
 		target         *base.TaskMessage // task to kill
 		wantInProgress []*base.TaskMessage
+		wantDeadlines  []h.ZSetEntry
 		wantDead       []h.ZSetEntry
 	}{
 		{
 			inProgress: []*base.TaskMessage{t1, t2},
+			deadlines: []h.ZSetEntry{
+				{Msg: t1, Score: float64(t1Deadline)},
+				{Msg: t2, Score: float64(t2Deadline)},
+			},
 			dead: []h.ZSetEntry{
 				{
 					Msg:   t3,
@@ -853,6 +887,9 @@ func TestKill(t *testing.T) {
 			},
 			target:         t1,
 			wantInProgress: []*base.TaskMessage{t2},
+			wantDeadlines: []h.ZSetEntry{
+				{Msg: t2, Score: float64(t2Deadline)},
+			},
 			wantDead: []h.ZSetEntry{
 				{
 					Msg:   t1AfterKill,
@@ -865,10 +902,19 @@ func TestKill(t *testing.T) {
 			},
 		},
 		{
-			inProgress:     []*base.TaskMessage{t1, t2, t3},
+			inProgress: []*base.TaskMessage{t1, t2, t3},
+			deadlines: []h.ZSetEntry{
+				{Msg: t1, Score: float64(t1Deadline)},
+				{Msg: t2, Score: float64(t2Deadline)},
+				{Msg: t3, Score: float64(t3Deadline)},
+			},
 			dead:           []h.ZSetEntry{},
 			target:         t1,
 			wantInProgress: []*base.TaskMessage{t2, t3},
+			wantDeadlines: []h.ZSetEntry{
+				{Msg: t2, Score: float64(t2Deadline)},
+				{Msg: t3, Score: float64(t3Deadline)},
+			},
 			wantDead: []h.ZSetEntry{
 				{
 					Msg:   t1AfterKill,
@@ -881,6 +927,7 @@ func TestKill(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedInProgressQueue(t, r.client, tc.inProgress)
+		h.SeedDeadlines(t, r.client, tc.deadlines)
 		h.SeedDeadQueue(t, r.client, tc.dead)
 
 		err := r.Kill(tc.target, errMsg)
@@ -893,7 +940,10 @@ func TestKill(t *testing.T) {
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q: (-want, +got)\n%s", base.InProgressQueue, diff)
 		}
-
+		gotDeadlines := h.GetDeadlinesEntries(t, r.client)
+		if diff := cmp.Diff(tc.wantDeadlines, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
+			t.Errorf("mismatch found in %q after calling (*RDB).Kill: (-want, +got):\n%s", base.KeyDeadlines, diff)
+		}
 		gotDead := h.GetDeadEntries(t, r.client)
 		if diff := cmp.Diff(tc.wantDead, gotDead, h.SortZSetEntryOpt); diff != "" {
 			t.Errorf("mismatch found in %q after calling (*RDB).Kill: (-want, +got):\n%s", base.DeadQueue, diff)
