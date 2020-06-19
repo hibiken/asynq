@@ -10,46 +10,38 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/rs/xid"
 )
 
-func TestCreateContextWithTimeRestrictions(t *testing.T) {
+func TestCreateContextWithFutureDeadline(t *testing.T) {
 	tests := []struct {
-		desc         string
-		timeout      time.Duration
-		deadline     time.Time
-		wantDeadline time.Time
+		deadline time.Time
 	}{
-		{"only with timeout", 10 * time.Second, noDeadline, time.Now().Add(10 * time.Second)},
-		{"only with deadline", noTimeout, time.Now().Add(time.Hour), time.Now().Add(time.Hour)},
-		{"with timeout and deadline (timeout < deadline)", 10 * time.Second, time.Now().Add(time.Hour), time.Now().Add(10 * time.Second)},
-		{"with timeout and deadline (timeout > deadline)", 10 * time.Minute, time.Now().Add(30 * time.Second), time.Now().Add(30 * time.Second)},
+		{time.Now().Add(time.Hour)},
 	}
 
 	for _, tc := range tests {
 		msg := &base.TaskMessage{
-			Type:     "something",
-			ID:       xid.New(),
-			Timeout:  int(tc.timeout.Seconds()),
-			Deadline: int(tc.deadline.Unix()),
+			Type:    "something",
+			ID:      xid.New(),
+			Payload: nil,
 		}
 
-		ctx, cancel := createContext(msg)
+		ctx, cancel := createContext(msg, tc.deadline)
 
 		select {
 		case x := <-ctx.Done():
-			t.Errorf("%s: <-ctx.Done() == %v, want nothing (it should block)", tc.desc, x)
+			t.Errorf("<-ctx.Done() == %v, want nothing (it should block)", x)
 		default:
 		}
 
 		got, ok := ctx.Deadline()
 		if !ok {
-			t.Errorf("%s: ctx.Deadline() returned false, want deadline to be set", tc.desc)
+			t.Errorf("ctx.Deadline() returned false, want deadline to be set")
 		}
-		if !cmp.Equal(tc.wantDeadline, got, cmpopts.EquateApproxTime(time.Second)) {
-			t.Errorf("%s: ctx.Deadline() returned %v, want %v", tc.desc, got, tc.wantDeadline)
+		if !cmp.Equal(tc.deadline, got) {
+			t.Errorf("ctx.Deadline() returned %v, want %v", got, tc.deadline)
 		}
 
 		cancel()
@@ -62,19 +54,37 @@ func TestCreateContextWithTimeRestrictions(t *testing.T) {
 	}
 }
 
-func TestCreateContextWithoutTimeRestrictions(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("did not panic, want panic when both timeout and deadline are missing")
-		}
-	}()
-	msg := &base.TaskMessage{
-		Type:     "something",
-		ID:       xid.New(),
-		Timeout:  0, // zero indicates no timeout
-		Deadline: 0, // zero indicates no deadline
+func TestCreateContextWithPastDeadline(t *testing.T) {
+	tests := []struct {
+		deadline time.Time
+	}{
+		{time.Now().Add(-2 * time.Hour)},
 	}
-	createContext(msg)
+
+	for _, tc := range tests {
+		msg := &base.TaskMessage{
+			Type:    "something",
+			ID:      xid.New(),
+			Payload: nil,
+		}
+
+		ctx, cancel := createContext(msg, tc.deadline)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+		default:
+			t.Errorf("ctx.Done() blocked, want it to be non-blocking")
+		}
+
+		got, ok := ctx.Deadline()
+		if !ok {
+			t.Errorf("ctx.Deadline() returned false, want deadline to be set")
+		}
+		if !cmp.Equal(tc.deadline, got) {
+			t.Errorf("ctx.Deadline() returned %v, want %v", got, tc.deadline)
+		}
+	}
 }
 
 func TestGetTaskMetadataFromContext(t *testing.T) {
@@ -87,7 +97,8 @@ func TestGetTaskMetadataFromContext(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		ctx, _ := createContext(tc.msg)
+		ctx, cancel := createContext(tc.msg, time.Now().Add(30*time.Minute))
+		defer cancel()
 
 		id, ok := GetTaskID(ctx)
 		if !ok {
