@@ -42,6 +42,7 @@ func TestSyncer(t *testing.T) {
 			fn: func() error {
 				return rdbClient.Done(m)
 			},
+			deadline: time.Now().Add(5 * time.Minute),
 		}
 	}
 
@@ -85,8 +86,9 @@ func TestSyncerRetry(t *testing.T) {
 	}
 
 	syncRequestCh <- &syncRequest{
-		fn:     requestFunc,
-		errMsg: "error",
+		fn:       requestFunc,
+		errMsg:   "error",
+		deadline: time.Now().Add(5 * time.Minute),
 	}
 
 	// allow syncer to retry
@@ -95,6 +97,44 @@ func TestSyncerRetry(t *testing.T) {
 	mu.Lock()
 	if counter != 2 {
 		t.Errorf("counter = %d, want 2", counter)
+	}
+	mu.Unlock()
+}
+
+func TestSyncerDropsStaleRequests(t *testing.T) {
+	const interval = time.Second
+	syncRequestCh := make(chan *syncRequest)
+	syncer := newSyncer(syncerParams{
+		logger:     testLogger,
+		requestsCh: syncRequestCh,
+		interval:   interval,
+	})
+	var wg sync.WaitGroup
+	syncer.start(&wg)
+
+	var (
+		mu sync.Mutex
+		n  int // number of times request has been processed
+	)
+
+	for i := 0; i < 10; i++ {
+		syncRequestCh <- &syncRequest{
+			fn: func() error {
+				mu.Lock()
+				n++
+				mu.Unlock()
+				return nil
+			},
+			deadline: time.Now().Add(time.Duration(-i) * time.Second), // already exceeded deadline
+		}
+	}
+
+	time.Sleep(2 * interval) // ensure that syncer runs at least once
+	syncer.terminate()
+
+	mu.Lock()
+	if n != 0 {
+		t.Errorf("requests has been processed %d times, want 0", n)
 	}
 	mu.Unlock()
 }
