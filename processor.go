@@ -208,7 +208,7 @@ func (p *processor) exec() {
 				return
 			case <-ctx.Done():
 				p.logger.Debugf("Retrying task. task id=%s", msg.ID) // TODO: Improve this log message and above
-				p.retryOrKill(msg, ctx.Err())
+				p.retryOrKill(ctx, msg, ctx.Err())
 				return
 			case resErr := <-resCh:
 				// Note: One of three things should happen.
@@ -219,10 +219,10 @@ func (p *processor) exec() {
 					if p.errHandler != nil {
 						p.errHandler.HandleError(task, resErr, msg.Retried, msg.Retry)
 					}
-					p.retryOrKill(msg, resErr)
+					p.retryOrKill(ctx, msg, resErr)
 					return
 				}
-				p.markAsDone(msg)
+				p.markAsDone(ctx, msg)
 			}
 		}()
 	}
@@ -237,55 +237,70 @@ func (p *processor) requeue(msg *base.TaskMessage) {
 	}
 }
 
-func (p *processor) markAsDone(msg *base.TaskMessage) {
+func (p *processor) markAsDone(ctx context.Context, msg *base.TaskMessage) {
 	err := p.broker.Done(msg)
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not remove task id=%s type=%q from %q err: %+v", msg.ID, msg.Type, base.InProgressQueue, err)
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			panic("asynq: internal error: missing deadline in context")
+		}
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.broker.Done(msg)
 			},
-			errMsg: errMsg,
+			errMsg:   errMsg,
+			deadline: deadline,
 		}
 	}
 }
 
-func (p *processor) retryOrKill(msg *base.TaskMessage, err error) {
+func (p *processor) retryOrKill(ctx context.Context, msg *base.TaskMessage, err error) {
 	if msg.Retried >= msg.Retry {
-		p.kill(msg, err)
+		p.kill(ctx, msg, err)
 	} else {
-		p.retry(msg, err)
+		p.retry(ctx, msg, err)
 	}
 }
 
-func (p *processor) retry(msg *base.TaskMessage, e error) {
+func (p *processor) retry(ctx context.Context, msg *base.TaskMessage, e error) {
 	d := p.retryDelayFunc(msg.Retried, e, NewTask(msg.Type, msg.Payload))
 	retryAt := time.Now().Add(d)
 	err := p.broker.Retry(msg, retryAt, e.Error())
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.InProgressQueue, base.RetryQueue)
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			panic("asynq: internal error: missing deadline in context")
+		}
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.broker.Retry(msg, retryAt, e.Error())
 			},
-			errMsg: errMsg,
+			errMsg:   errMsg,
+			deadline: deadline,
 		}
 	}
 }
 
-func (p *processor) kill(msg *base.TaskMessage, e error) {
+func (p *processor) kill(ctx context.Context, msg *base.TaskMessage, e error) {
 	p.logger.Warnf("Retry exhausted for task id=%s", msg.ID)
 	err := p.broker.Kill(msg, e.Error())
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.InProgressQueue, base.DeadQueue)
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			panic("asynq: internal error: missing deadline in context")
+		}
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.broker.Kill(msg, e.Error())
 			},
-			errMsg: errMsg,
+			errMsg:   errMsg,
+			deadline: deadline,
 		}
 	}
 }

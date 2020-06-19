@@ -26,8 +26,9 @@ type syncer struct {
 }
 
 type syncRequest struct {
-	fn     func() error // sync operation
-	errMsg string       // error message
+	fn       func() error // sync operation
+	errMsg   string       // error message
+	deadline time.Time    // request should be dropped if deadline has been exceeded
 }
 
 type syncerParams struct {
@@ -72,6 +73,9 @@ func (s *syncer) start(wg *sync.WaitGroup) {
 			case <-time.After(s.interval):
 				var temp []*syncRequest
 				for _, req := range requests {
+					if req.deadline.Before(time.Now()) {
+						continue // drop stale request
+					}
 					if err := req.fn(); err != nil {
 						temp = append(temp, req)
 					}
