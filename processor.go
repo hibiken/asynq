@@ -50,11 +50,11 @@ type processor struct {
 	done chan struct{}
 	once sync.Once
 
-	// abort channel is closed when the shutdown of the "processor" goroutine starts.
-	abort chan struct{}
-
-	// quit channel communicates to the in-flight worker goroutines to stop.
+	// quit channel is closed when the shutdown of the "processor" goroutine starts.
 	quit chan struct{}
+
+	// abort channel communicates to the in-flight worker goroutines to stop.
+	abort chan struct{}
 
 	// cancelations is a set of cancel functions for all in-progress tasks.
 	cancelations *base.Cancelations
@@ -98,8 +98,8 @@ func newProcessor(params processorParams) *processor {
 		errLogLimiter:  rate.NewLimiter(rate.Every(3*time.Second), 1),
 		sema:           make(chan struct{}, params.concurrency),
 		done:           make(chan struct{}),
-		abort:          make(chan struct{}),
 		quit:           make(chan struct{}),
+		abort:          make(chan struct{}),
 		errHandler:     params.errHandler,
 		handler:        HandlerFunc(func(ctx context.Context, t *Task) error { return fmt.Errorf("handler not set") }),
 		starting:       params.starting,
@@ -113,7 +113,7 @@ func (p *processor) stop() {
 	p.once.Do(func() {
 		p.logger.Debug("Processor shutting down...")
 		// Unblock if processor is waiting for sema token.
-		close(p.abort)
+		close(p.quit)
 		// Signal the processor goroutine to stop processing tasks
 		// from the queue.
 		p.done <- struct{}{}
@@ -124,14 +124,9 @@ func (p *processor) stop() {
 func (p *processor) terminate() {
 	p.stop()
 
-	time.AfterFunc(p.shutdownTimeout, func() { close(p.quit) })
+	time.AfterFunc(p.shutdownTimeout, func() { close(p.abort) })
+
 	p.logger.Info("Waiting for all workers to finish...")
-
-	// send cancellation signal to all in-progress task handlers
-	for _, cancel := range p.cancelations.GetAll() {
-		cancel()
-	}
-
 	// block until all workers have released the token
 	for i := 0; i < cap(p.sema); i++ {
 		p.sema <- struct{}{}
@@ -159,7 +154,7 @@ func (p *processor) start(wg *sync.WaitGroup) {
 // process the task.
 func (p *processor) exec() {
 	select {
-	case <-p.abort:
+	case <-p.quit:
 		return
 	case p.sema <- struct{}{}: // acquire token
 		qnames := p.queues()
@@ -201,7 +196,7 @@ func (p *processor) exec() {
 			go func() { resCh <- perform(ctx, task, p.handler) }()
 
 			select {
-			case <-p.quit:
+			case <-p.abort:
 				// time is up, push the message back to queue and quit this worker goroutine.
 				p.logger.Warnf("Quitting worker. task id=%s", msg.ID)
 				p.requeue(msg)

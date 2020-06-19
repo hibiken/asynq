@@ -250,17 +250,6 @@ func (c *Cancelations) Get(id string) (fn context.CancelFunc, ok bool) {
 	return fn, ok
 }
 
-// GetAll returns all cancel funcs.
-func (c *Cancelations) GetAll() []context.CancelFunc {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	var res []context.CancelFunc
-	for _, fn := range c.cancelFuncs {
-		res = append(res, fn)
-	}
-	return res
-}
-
 // Broker is a message broker that supports operations to manage task queues.
 //
 // See rdb.RDB as a reference implementation.

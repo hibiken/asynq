@@ -222,9 +222,4 @@ func TestCancelationsConcurrentAccess(t *testing.T) {
 	if ok {
 		t.Errorf("(*Cancelations).Get(%q) = _, true, want <nil>, false", key2)
 	}
-
-	funcs := c.GetAll()
-	if len(funcs) != 2 {
-		t.Errorf("(*Cancelations).GetAll() returns %d functions, want 2", len(funcs))
-	}
 }
