@@ -158,30 +158,30 @@ func (p *processor) start(wg *sync.WaitGroup) {
 // exec pulls a task out of the queue and starts a worker goroutine to
 // process the task.
 func (p *processor) exec() {
-	qnames := p.queues()
-	msg, err := p.broker.Dequeue(qnames...)
-	switch {
-	case err == rdb.ErrNoProcessableTask:
-		p.logger.Debug("All queues are empty")
-		// Queues are empty, this is a normal behavior.
-		// Sleep to avoid slamming redis and let scheduler move tasks into queues.
-		// Note: We are not using blocking pop operation and polling queues instead.
-		// This adds significant load to redis.
-		time.Sleep(time.Second)
-		return
-	case err != nil:
-		if p.errLogLimiter.Allow() {
-			p.logger.Errorf("Dequeue error: %v", err)
-		}
-		return
-	}
-
 	select {
 	case <-p.abort:
-		// shutdown is starting, return immediately after requeuing the message.
-		p.requeue(msg)
 		return
 	case p.sema <- struct{}{}: // acquire token
+		qnames := p.queues()
+		msg, deadline, err := p.broker.Dequeue(qnames...)
+		switch {
+		case err == rdb.ErrNoProcessableTask:
+			p.logger.Debug("All queues are empty")
+			// Queues are empty, this is a normal behavior.
+			// Sleep to avoid slamming redis and let scheduler move tasks into queues.
+			// Note: We are not using blocking pop operation and polling queues instead.
+			// This adds significant load to redis.
+			time.Sleep(time.Second)
+			<-p.sema // release token
+			return
+		case err != nil:
+			if p.errLogLimiter.Allow() {
+				p.logger.Errorf("Dequeue error: %v", err)
+			}
+			<-p.sema // release token
+			return
+		}
+
 		p.starting <- msg
 		go func() {
 			defer func() {
@@ -189,7 +189,7 @@ func (p *processor) exec() {
 				<-p.sema // release token
 			}()
 
-			ctx, cancel := createContext(msg)
+			ctx, cancel := createContext(msg, deadline)
 			p.cancelations.Add(msg.ID.String(), cancel)
 			defer func() {
 				cancel()
@@ -206,6 +206,10 @@ func (p *processor) exec() {
 				p.logger.Warnf("Quitting worker. task id=%s", msg.ID)
 				p.requeue(msg)
 				return
+			case <-ctx.Done():
+				p.logger.Debugf("Retrying task. task id=%s", msg.ID) // TODO: Improve this log message and above
+				p.retryOrKill(msg, ctx.Err())
+				return
 			case resErr := <-resCh:
 				// Note: One of three things should happen.
 				// 1) Done  -> Removes the message from InProgress
@@ -215,11 +219,7 @@ func (p *processor) exec() {
 					if p.errHandler != nil {
 						p.errHandler.HandleError(task, resErr, msg.Retried, msg.Retry)
 					}
-					if msg.Retried >= msg.Retry {
-						p.kill(msg, resErr)
-					} else {
-						p.retry(msg, resErr)
-					}
+					p.retryOrKill(msg, resErr)
 					return
 				}
 				p.markAsDone(msg)
@@ -248,6 +248,14 @@ func (p *processor) markAsDone(msg *base.TaskMessage) {
 			},
 			errMsg: errMsg,
 		}
+	}
+}
+
+func (p *processor) retryOrKill(msg *base.TaskMessage, err error) {
+	if msg.Retried >= msg.Retry {
+		p.kill(msg, err)
+	} else {
+		p.retry(msg, err)
 	}
 }
 
