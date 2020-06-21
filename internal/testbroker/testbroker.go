@@ -132,6 +132,15 @@ func (tb *TestBroker) CheckAndEnqueue() error {
 	return tb.real.CheckAndEnqueue()
 }
 
+func (tb *TestBroker) ListDeadlineExceeded(deadline time.Time) ([]*base.TaskMessage, error) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return nil, errRedisDown
+	}
+	return tb.real.ListDeadlineExceeded(deadline)
+}
+
 func (tb *TestBroker) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo, ttl time.Duration) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
