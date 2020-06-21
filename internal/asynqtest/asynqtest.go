@@ -97,6 +97,20 @@ func NewTaskMessageWithQueue(taskType string, payload map[string]interface{}, qn
 	}
 }
 
+// TaskMessageAfterRetry returns an updated copy of t after retry.
+// It increments retry count and sets the error message.
+func TaskMessageAfterRetry(t base.TaskMessage, errMsg string) *base.TaskMessage {
+	t.Retried = t.Retried + 1
+	t.ErrorMsg = errMsg
+	return &t
+}
+
+// TaskMessageWithError returns an updated copy of t with the given error message.
+func TaskMessageWithError(t base.TaskMessage, errMsg string) *base.TaskMessage {
+	t.ErrorMsg = errMsg
+	return &t
+}
+
 // MustMarshal marshals given task message and returns a json string.
 // Calling test will fail if marshaling errors out.
 func MustMarshal(tb testing.TB, msg *base.TaskMessage) string {
