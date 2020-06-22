@@ -250,8 +250,8 @@ func (c *Client) enqueueAt(t time.Time, task *Task, opts ...Option) error {
 		Payload:   task.Payload.data,
 		Queue:     opt.queue,
 		Retry:     opt.retry,
-		Deadline:  int(deadline.Unix()),
-		Timeout:   int(timeout.Seconds()),
+		Deadline:  deadline.Unix(),
+		Timeout:   int64(timeout.Seconds()),
 		UniqueKey: uniqueKey(task, opt.uniqueTTL, opt.queue),
 	}
 	var err error

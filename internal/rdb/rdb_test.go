@@ -122,7 +122,7 @@ func TestDequeue(t *testing.T) {
 		Timeout:  1800,
 		Deadline: 0,
 	}
-	t1Deadline := int(now.Unix()) + t1.Timeout
+	t1Deadline := now.Unix() + t1.Timeout
 	t2 := &base.TaskMessage{
 		ID:       xid.New(),
 		Type:     "export_csv",
@@ -135,10 +135,10 @@ func TestDequeue(t *testing.T) {
 		ID:       xid.New(),
 		Type:     "reindex",
 		Payload:  nil,
-		Timeout:  int((5 * time.Minute).Seconds()),
-		Deadline: int(time.Now().Add(10 * time.Minute).Unix()),
+		Timeout:  int64((5 * time.Minute).Seconds()),
+		Deadline: time.Now().Add(10 * time.Minute).Unix(),
 	}
-	t3Deadline := int(now.Unix()) + t3.Timeout // use whichever is earliest
+	t3Deadline := now.Unix() + t3.Timeout // use whichever is earliest
 
 	tests := []struct {
 		enqueued       map[string][]*base.TaskMessage
@@ -392,7 +392,7 @@ func TestDone(t *testing.T) {
 		Timeout:  1800,
 		Deadline: 0,
 	}
-	t1Deadline := int(now.Unix()) + t1.Timeout
+	t1Deadline := now.Unix() + t1.Timeout
 	t2 := &base.TaskMessage{
 		ID:       xid.New(),
 		Type:     "export_csv",
@@ -410,7 +410,7 @@ func TestDone(t *testing.T) {
 		UniqueKey: "reindex:nil:default",
 		Queue:     "default",
 	}
-	t3Deadline := int(now.Unix()) + t3.Deadline
+	t3Deadline := now.Unix() + t3.Deadline
 
 	tests := []struct {
 		inProgress     []*base.TaskMessage // initial state of the in-progress list
@@ -555,9 +555,9 @@ func TestRequeue(t *testing.T) {
 		Queue:   "critical",
 		Timeout: 80,
 	}
-	t1Deadline := int(now.Unix()) + t1.Timeout
-	t2Deadline := int(now.Unix()) + t2.Timeout
-	t3Deadline := int(now.Unix()) + t3.Timeout
+	t1Deadline := now.Unix() + t1.Timeout
+	t2Deadline := now.Unix() + t2.Timeout
+	t3Deadline := now.Unix() + t3.Timeout
 
 	tests := []struct {
 		enqueued       map[string][]*base.TaskMessage // initial state of queues
@@ -748,14 +748,14 @@ func TestRetry(t *testing.T) {
 		Payload: map[string]interface{}{"subject": "Hola!"},
 		Timeout: 1800,
 	}
-	t1Deadline := int(now.Unix()) + t1.Timeout
+	t1Deadline := now.Unix() + t1.Timeout
 	t2 := &base.TaskMessage{
 		ID:      xid.New(),
 		Type:    "gen_thumbnail",
 		Payload: map[string]interface{}{"path": "some/path/to/image.jpg"},
 		Timeout: 3000,
 	}
-	t2Deadline := int(now.Unix()) + t2.Timeout
+	t2Deadline := now.Unix() + t2.Timeout
 	t3 := &base.TaskMessage{
 		ID:      xid.New(),
 		Type:    "reindex",
@@ -877,7 +877,7 @@ func TestKill(t *testing.T) {
 		Retried: 0,
 		Timeout: 1800,
 	}
-	t1Deadline := int(now.Unix()) + t1.Timeout
+	t1Deadline := now.Unix() + t1.Timeout
 	t2 := &base.TaskMessage{
 		ID:      xid.New(),
 		Type:    "reindex",
@@ -887,7 +887,7 @@ func TestKill(t *testing.T) {
 		Retried: 0,
 		Timeout: 3000,
 	}
-	t2Deadline := int(now.Unix()) + t2.Timeout
+	t2Deadline := now.Unix() + t2.Timeout
 	t3 := &base.TaskMessage{
 		ID:      xid.New(),
 		Type:    "generate_csv",
@@ -897,7 +897,7 @@ func TestKill(t *testing.T) {
 		Retried: 0,
 		Timeout: 60,
 	}
-	t3Deadline := int(now.Unix()) + t3.Timeout
+	t3Deadline := now.Unix() + t3.Timeout
 	errMsg := "SMTP server not responding"
 	t1AfterKill := &base.TaskMessage{
 		ID:       t1.ID,
