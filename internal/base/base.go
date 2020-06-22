@@ -94,7 +94,7 @@ type TaskMessage struct {
 	// if retry count is remaining. Otherwise it will be moved to the dead queue.
 	//
 	// Use zero to indicate no timeout.
-	Timeout int
+	Timeout int64
 
 	// Deadline specifies the deadline for the task in Unix time,
 	// the number of seconds elapsed since January 1, 1970 UTC.
@@ -102,7 +102,7 @@ type TaskMessage struct {
 	// if retry count is remaining. Otherwise it will be moved to the dead queue.
 	//
 	// Use zero to indicate no deadline.
-	Deadline int
+	Deadline int64
 
 	// UniqueKey holds the redis key used for uniqueness lock for this task.
 	//
