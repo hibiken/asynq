@@ -215,19 +215,6 @@ func TestProcessorRetry(t *testing.T) {
 	m4 := h.NewTaskMessage("sync", nil)
 
 	errMsg := "something went wrong"
-	// r* is m* after retry
-	r1 := *m1
-	r1.ErrorMsg = errMsg
-	r2 := *m2
-	r2.ErrorMsg = errMsg
-	r2.Retried = m2.Retried + 1
-	r3 := *m3
-	r3.ErrorMsg = errMsg
-	r3.Retried = m3.Retried + 1
-	r4 := *m4
-	r4.ErrorMsg = errMsg
-	r4.Retried = m4.Retried + 1
-
 	now := time.Now()
 
 	tests := []struct {
@@ -249,11 +236,11 @@ func TestProcessorRetry(t *testing.T) {
 			}),
 			wait: 2 * time.Second,
 			wantRetry: []h.ZSetEntry{
-				{Msg: &r2, Score: float64(now.Add(time.Minute).Unix())},
-				{Msg: &r3, Score: float64(now.Add(time.Minute).Unix())},
-				{Msg: &r4, Score: float64(now.Add(time.Minute).Unix())},
+				{Msg: h.TaskMessageAfterRetry(*m2, errMsg), Score: float64(now.Add(time.Minute).Unix())},
+				{Msg: h.TaskMessageAfterRetry(*m3, errMsg), Score: float64(now.Add(time.Minute).Unix())},
+				{Msg: h.TaskMessageAfterRetry(*m4, errMsg), Score: float64(now.Add(time.Minute).Unix())},
 			},
-			wantDead:     []*base.TaskMessage{&r1},
+			wantDead:     []*base.TaskMessage{h.TaskMessageWithError(*m1, errMsg)},
 			wantErrCount: 4,
 		},
 	}
