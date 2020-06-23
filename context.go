@@ -27,13 +27,13 @@ type ctxKey int
 const metadataCtxKey ctxKey = 0
 
 // createContext returns a context and cancel function for a given task message.
-func createContext(msg *base.TaskMessage, deadline time.Time) (ctx context.Context, cancel context.CancelFunc) {
+func createContext(msg *base.TaskMessage, deadline time.Time) (context.Context, context.CancelFunc) {
 	metadata := taskMetadata{
 		id:         msg.ID.String(),
 		maxRetry:   msg.Retry,
 		retryCount: msg.Retried,
 	}
-	ctx = context.WithValue(context.Background(), metadataCtxKey, metadata)
+	ctx := context.WithValue(context.Background(), metadataCtxKey, metadata)
 	return context.WithDeadline(ctx, deadline)
 }
 

@@ -150,7 +150,7 @@ for i = 2, table.getn(ARGV) do
 			elseif timeout ~= 0 then
 				score = ARGV[1] + timeout
 			elseif deadline ~= 0 then
-			    score = deadline
+				score = deadline
 			else
 				return redis.error_reply("asynq internal error: both timeout and deadline are not set")
 			end
@@ -175,7 +175,7 @@ func (r *RDB) dequeue(qkeys ...interface{}) (msgjson string, deadline int64, err
 		return "", 0, err
 	}
 	if len(data) != 2 {
-		return "", 0, fmt.Errorf("asynq: internal error: dequeue command returned %v values", len(data))
+		return "", 0, fmt.Errorf("asynq: internal error: dequeue command returned %d values", len(data))
 	}
 	if msgjson, err = cast.ToStringE(data[0]); err != nil {
 		return "", 0, err
@@ -470,23 +470,6 @@ func (r *RDB) forward(src string) (int, error) {
 	}
 	return cast.ToInt(res), nil
 }
-
-// KEYS[1] -> asynq:deadlines
-// KEYS[2] -> asynq:in_progress
-// ARGV[1] -> max deadline score in unix time
-// ARGV[2] -> queue prefix
-/*
-var requeueDeadlineExceededCmd = redis.NewScript(`
-local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, 100)
-for _, msg in ipairs(msgs) do
-	local decoded = cjson.decode(msg)
-	local qkey = ARGV[2] .. decoded["Queue"]
-	redis.call("LPUSH", qkey, msg)
-	redis.call("ZREM", KEYS[1], msg)
-	redis.call("LREM", KEYS[2], 0, msg)
-end
-return table.getn(msgs)`)
-*/
 
 // ListDeadlineExceeded returns a list of task messages that have exceeded the given deadline.
 func (r *RDB) ListDeadlineExceeded(deadline time.Time) ([]*base.TaskMessage, error) {

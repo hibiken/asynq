@@ -156,7 +156,7 @@ func TestDequeue(t *testing.T) {
 			},
 			args:         []string{"default"},
 			wantMsg:      t1,
-			wantDeadline: time.Unix(int64(t1Deadline), 0),
+			wantDeadline: time.Unix(t1Deadline, 0),
 			err:          nil,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {},
@@ -191,7 +191,7 @@ func TestDequeue(t *testing.T) {
 			},
 			args:         []string{"critical", "default", "low"},
 			wantMsg:      t2,
-			wantDeadline: time.Unix(int64(t2Deadline), 0),
+			wantDeadline: time.Unix(t2Deadline, 0),
 			err:          nil,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {t1},
@@ -214,7 +214,7 @@ func TestDequeue(t *testing.T) {
 			},
 			args:         []string{"critical", "default", "low"},
 			wantMsg:      t3,
-			wantDeadline: time.Unix(int64(t3Deadline), 0),
+			wantDeadline: time.Unix(t3Deadline, 0),
 			err:          nil,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {},
@@ -278,12 +278,10 @@ func TestDequeue(t *testing.T) {
 				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.QueueKey(queue), diff)
 			}
 		}
-
 		gotInProgress := h.GetInProgressMessages(t, r.client)
 		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.InProgressQueue, diff)
 		}
-
 		gotDeadlines := h.GetDeadlinesEntries(t, r.client)
 		if diff := cmp.Diff(tc.wantDeadlines, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
 			t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.KeyDeadlines, diff)
@@ -746,6 +744,7 @@ func TestRetry(t *testing.T) {
 		ID:      xid.New(),
 		Type:    "send_email",
 		Payload: map[string]interface{}{"subject": "Hola!"},
+		Retried: 10,
 		Timeout: 1800,
 	}
 	t1Deadline := now.Unix() + t1.Timeout
@@ -762,18 +761,7 @@ func TestRetry(t *testing.T) {
 		Payload: nil,
 		Timeout: 60,
 	}
-	t1.Retried = 10
 	errMsg := "SMTP server is not responding"
-	t1AfterRetry := &base.TaskMessage{
-		ID:       t1.ID,
-		Type:     t1.Type,
-		Payload:  t1.Payload,
-		Queue:    t1.Queue,
-		Retry:    t1.Retry,
-		Retried:  t1.Retried + 1,
-		Timeout:  t1.Timeout,
-		ErrorMsg: errMsg,
-	}
 
 	tests := []struct {
 		inProgress     []*base.TaskMessage
@@ -807,7 +795,7 @@ func TestRetry(t *testing.T) {
 			},
 			wantRetry: []h.ZSetEntry{
 				{
-					Msg:   t1AfterRetry,
+					Msg:   h.TaskMessageAfterRetry(*t1, errMsg),
 					Score: float64(now.Add(5 * time.Minute).Unix()),
 				},
 				{
@@ -899,16 +887,6 @@ func TestKill(t *testing.T) {
 	}
 	t3Deadline := now.Unix() + t3.Timeout
 	errMsg := "SMTP server not responding"
-	t1AfterKill := &base.TaskMessage{
-		ID:       t1.ID,
-		Type:     t1.Type,
-		Payload:  t1.Payload,
-		Queue:    t1.Queue,
-		Retry:    t1.Retry,
-		Retried:  t1.Retried,
-		Timeout:  t1.Timeout,
-		ErrorMsg: errMsg,
-	}
 
 	// TODO(hibiken): add test cases for trimming
 	tests := []struct {
@@ -939,7 +917,7 @@ func TestKill(t *testing.T) {
 			},
 			wantDead: []h.ZSetEntry{
 				{
-					Msg:   t1AfterKill,
+					Msg:   h.TaskMessageWithError(*t1, errMsg),
 					Score: float64(now.Unix()),
 				},
 				{
@@ -964,7 +942,7 @@ func TestKill(t *testing.T) {
 			},
 			wantDead: []h.ZSetEntry{
 				{
-					Msg:   t1AfterKill,
+					Msg:   h.TaskMessageWithError(*t1, errMsg),
 					Score: float64(now.Unix()),
 				},
 			},
