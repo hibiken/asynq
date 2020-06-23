@@ -26,6 +26,9 @@ type TestBroker struct {
 	real base.Broker
 }
 
+// Make sure TestBroker implements Broker interface at compile time.
+var _ base.Broker = (*TestBroker)(nil)
+
 func NewTestBroker(b base.Broker) *TestBroker {
 	return &TestBroker{real: b}
 }
