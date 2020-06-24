@@ -69,13 +69,23 @@ func Queue(name string) Option {
 }
 
 // Timeout returns an option to specify how long a task may run.
+// If the timeout elapses before the Handler returns, then the task
+// will be retried.
 //
 // Zero duration means no limit.
+//
+// If there's a conflicting Deadline option, whichever comes earliest
+// will be used.
 func Timeout(d time.Duration) Option {
 	return timeoutOption(d)
 }
 
 // Deadline returns an option to specify the deadline for the given task.
+// If it reaches the deadline before the Handler returns, then the task
+// will be retried.
+//
+// If there's a conflicting Timeout option, whichever comes earliest
+// will be used.
 func Deadline(t time.Time) Option {
 	return deadlineOption(t)
 }
@@ -196,6 +206,7 @@ func (c *Client) SetDefaultOptions(taskType string, opts ...Option) {
 //
 // The argument opts specifies the behavior of task processing.
 // If there are conflicting Option values the last one overrides others.
+// By deafult, max retry is set to 25 and timeout is set to 30 minutes.
 func (c *Client) EnqueueAt(t time.Time, task *Task, opts ...Option) error {
 	return c.enqueueAt(t, task, opts...)
 }
@@ -206,6 +217,7 @@ func (c *Client) EnqueueAt(t time.Time, task *Task, opts ...Option) error {
 //
 // The argument opts specifies the behavior of task processing.
 // If there are conflicting Option values the last one overrides others.
+// By deafult, max retry is set to 25 and timeout is set to 30 minutes.
 func (c *Client) Enqueue(task *Task, opts ...Option) error {
 	return c.enqueueAt(time.Now(), task, opts...)
 }
@@ -216,6 +228,7 @@ func (c *Client) Enqueue(task *Task, opts ...Option) error {
 //
 // The argument opts specifies the behavior of task processing.
 // If there are conflicting Option values the last one overrides others.
+// By deafult, max retry is set to 25 and timeout is set to 30 minutes.
 func (c *Client) EnqueueIn(d time.Duration, task *Task, opts ...Option) error {
 	return c.enqueueAt(time.Now().Add(d), task, opts...)
 }
