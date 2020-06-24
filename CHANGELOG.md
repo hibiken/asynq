@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- All tasks now requires timeout or deadline. By default, timeout is set to 30 mins.
+- Tasks that exceed its deadline are automatically retried.
+- Encoding schema for task message has changed. Please install the lastest CLI and run `migrate` command if 
+  you have tasks enqueued by the previous version of asynq.
+
 ## [0.9.4] - 2020-06-13
 
 ### Fixed
