@@ -11,6 +11,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/hibiken/asynq/internal/base"
 	"github.com/spf13/cobra"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -26,9 +27,20 @@ var password string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "asynq",
-	Short: "A monitoring tool for asynq queues",
-	Long:  `Asynq is a montoring CLI to inspect tasks and queues managed by asynq.`,
+	Use:     "asynq",
+	Short:   "A monitoring tool for asynq queues",
+	Long:    `Asynq is a montoring CLI to inspect tasks and queues managed by asynq.`,
+	Version: base.Version,
+}
+
+var versionOutput = fmt.Sprintf("asynq version %s\n", base.Version)
+
+var versionCmd = &cobra.Command{
+	Use:    "version",
+	Hidden: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Print(versionOutput)
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -42,6 +54,9 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
+
+	rootCmd.AddCommand(versionCmd)
+	rootCmd.SetVersionTemplate(versionOutput)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file to set flag defaut values (default is $HOME/.asynq.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "redis server URI")

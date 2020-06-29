@@ -19,13 +19,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-const version = "v0.10.0" // TODO: Define this version string in a more canonical place.
-
 // migrateCmd represents the migrate command
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
-	Short: fmt.Sprintf("Migrate all tasks to be compatible with asynq@%s", version),
-	Long:  fmt.Sprintf("Migrate (asynq migrate) will convert all tasks in redis to be compatible with asynq@%s.", version),
+	Short: fmt.Sprintf("Migrate all tasks to be compatible with asynq@%s", base.Version),
+	Long:  fmt.Sprintf("Migrate (asynq migrate) will convert all tasks in redis to be compatible with asynq@%s.", base.Version),
 	Run:   migrate,
 }
 
