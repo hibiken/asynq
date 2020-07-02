@@ -14,9 +14,9 @@ import (
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/uuid"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/rs/xid"
 )
 
 // TODO(hibiken): Get Redis address and db number from ENV variables.
@@ -73,7 +73,7 @@ func TestEnqueue(t *testing.T) {
 func TestEnqueueUnique(t *testing.T) {
 	r := setup(t)
 	m1 := base.TaskMessage{
-		ID:        xid.New(),
+		ID:        uuid.New(),
 		Type:      "email",
 		Payload:   map[string]interface{}{"user_id": 123},
 		Queue:     base.DefaultQueueName,
@@ -116,7 +116,7 @@ func TestDequeue(t *testing.T) {
 	r := setup(t)
 	now := time.Now()
 	t1 := &base.TaskMessage{
-		ID:       xid.New(),
+		ID:       uuid.New(),
 		Type:     "send_email",
 		Payload:  map[string]interface{}{"subject": "hello!"},
 		Timeout:  1800,
@@ -124,7 +124,7 @@ func TestDequeue(t *testing.T) {
 	}
 	t1Deadline := now.Unix() + t1.Timeout
 	t2 := &base.TaskMessage{
-		ID:       xid.New(),
+		ID:       uuid.New(),
 		Type:     "export_csv",
 		Payload:  nil,
 		Timeout:  0,
@@ -132,7 +132,7 @@ func TestDequeue(t *testing.T) {
 	}
 	t2Deadline := t2.Deadline
 	t3 := &base.TaskMessage{
-		ID:       xid.New(),
+		ID:       uuid.New(),
 		Type:     "reindex",
 		Payload:  nil,
 		Timeout:  int64((5 * time.Minute).Seconds()),
@@ -384,7 +384,7 @@ func TestDone(t *testing.T) {
 	r := setup(t)
 	now := time.Now()
 	t1 := &base.TaskMessage{
-		ID:       xid.New(),
+		ID:       uuid.New(),
 		Type:     "send_email",
 		Payload:  nil,
 		Timeout:  1800,
@@ -392,7 +392,7 @@ func TestDone(t *testing.T) {
 	}
 	t1Deadline := now.Unix() + t1.Timeout
 	t2 := &base.TaskMessage{
-		ID:       xid.New(),
+		ID:       uuid.New(),
 		Type:     "export_csv",
 		Payload:  nil,
 		Timeout:  0,
@@ -400,7 +400,7 @@ func TestDone(t *testing.T) {
 	}
 	t2Deadline := t2.Deadline
 	t3 := &base.TaskMessage{
-		ID:        xid.New(),
+		ID:        uuid.New(),
 		Type:      "reindex",
 		Payload:   nil,
 		Timeout:   1800,
@@ -533,21 +533,21 @@ func TestRequeue(t *testing.T) {
 	r := setup(t)
 	now := time.Now()
 	t1 := &base.TaskMessage{
-		ID:      xid.New(),
+		ID:      uuid.New(),
 		Type:    "send_email",
 		Payload: nil,
 		Queue:   "default",
 		Timeout: 1800,
 	}
 	t2 := &base.TaskMessage{
-		ID:      xid.New(),
+		ID:      uuid.New(),
 		Type:    "export_csv",
 		Payload: nil,
 		Queue:   "default",
 		Timeout: 3000,
 	}
 	t3 := &base.TaskMessage{
-		ID:      xid.New(),
+		ID:      uuid.New(),
 		Type:    "send_email",
 		Payload: nil,
 		Queue:   "critical",
@@ -688,7 +688,7 @@ func TestSchedule(t *testing.T) {
 func TestScheduleUnique(t *testing.T) {
 	r := setup(t)
 	m1 := base.TaskMessage{
-		ID:        xid.New(),
+		ID:        uuid.New(),
 		Type:      "email",
 		Payload:   map[string]interface{}{"user_id": 123},
 		Queue:     base.DefaultQueueName,
@@ -741,7 +741,7 @@ func TestRetry(t *testing.T) {
 	r := setup(t)
 	now := time.Now()
 	t1 := &base.TaskMessage{
-		ID:      xid.New(),
+		ID:      uuid.New(),
 		Type:    "send_email",
 		Payload: map[string]interface{}{"subject": "Hola!"},
 		Retried: 10,
@@ -749,14 +749,14 @@ func TestRetry(t *testing.T) {
 	}
 	t1Deadline := now.Unix() + t1.Timeout
 	t2 := &base.TaskMessage{
-		ID:      xid.New(),
+		ID:      uuid.New(),
 		Type:    "gen_thumbnail",
 		Payload: map[string]interface{}{"path": "some/path/to/image.jpg"},
 		Timeout: 3000,
 	}
 	t2Deadline := now.Unix() + t2.Timeout
 	t3 := &base.TaskMessage{
-		ID:      xid.New(),
+		ID:      uuid.New(),
 		Type:    "reindex",
 		Payload: nil,
 		Timeout: 60,
@@ -857,7 +857,7 @@ func TestKill(t *testing.T) {
 	r := setup(t)
 	now := time.Now()
 	t1 := &base.TaskMessage{
-		ID:      xid.New(),
+		ID:      uuid.New(),
 		Type:    "send_email",
 		Payload: nil,
 		Queue:   "default",
@@ -867,7 +867,7 @@ func TestKill(t *testing.T) {
 	}
 	t1Deadline := now.Unix() + t1.Timeout
 	t2 := &base.TaskMessage{
-		ID:      xid.New(),
+		ID:      uuid.New(),
 		Type:    "reindex",
 		Payload: nil,
 		Queue:   "default",
@@ -877,7 +877,7 @@ func TestKill(t *testing.T) {
 	}
 	t2Deadline := now.Unix() + t2.Timeout
 	t3 := &base.TaskMessage{
-		ID:      xid.New(),
+		ID:      uuid.New(),
 		Type:    "generate_csv",
 		Payload: nil,
 		Queue:   "default",

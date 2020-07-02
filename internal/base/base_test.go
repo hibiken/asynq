@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/rs/xid"
+	"github.com/google/uuid"
 )
 
 func TestQueueKey(t *testing.T) {
@@ -108,7 +108,7 @@ func TestWorkersKey(t *testing.T) {
 }
 
 func TestMessageEncoding(t *testing.T) {
-	id := xid.New()
+	id := uuid.New()
 	tests := []struct {
 		in  *TaskMessage
 		out *TaskMessage

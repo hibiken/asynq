@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
-	"github.com/rs/xid"
 )
 
 // heartbeater is responsible for writing process info to redis periodically to
@@ -74,7 +74,7 @@ func newHeartbeater(params heartbeaterParams) *heartbeater {
 
 		host:           host,
 		pid:            os.Getpid(),
-		serverID:       xid.New().String(),
+		serverID:       uuid.New().String(),
 		concurrency:    params.concurrency,
 		queues:         params.queues,
 		strictPriority: params.strictPriority,

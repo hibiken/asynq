@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/rs/xid"
 )
 
 func TestCreateContextWithFutureDeadline(t *testing.T) {
@@ -24,7 +24,7 @@ func TestCreateContextWithFutureDeadline(t *testing.T) {
 	for _, tc := range tests {
 		msg := &base.TaskMessage{
 			Type:    "something",
-			ID:      xid.New(),
+			ID:      uuid.New(),
 			Payload: nil,
 		}
 
@@ -64,7 +64,7 @@ func TestCreateContextWithPastDeadline(t *testing.T) {
 	for _, tc := range tests {
 		msg := &base.TaskMessage{
 			Type:    "something",
-			ID:      xid.New(),
+			ID:      uuid.New(),
 			Payload: nil,
 		}
 
@@ -92,8 +92,8 @@ func TestGetTaskMetadataFromContext(t *testing.T) {
 		desc string
 		msg  *base.TaskMessage
 	}{
-		{"with zero retried message", &base.TaskMessage{Type: "something", ID: xid.New(), Retry: 25, Retried: 0, Timeout: 1800}},
-		{"with non-zero retried message", &base.TaskMessage{Type: "something", ID: xid.New(), Retry: 10, Retried: 5, Timeout: 1800}},
+		{"with zero retried message", &base.TaskMessage{Type: "something", ID: uuid.New(), Retry: 25, Retried: 0, Timeout: 1800}},
+		{"with non-zero retried message", &base.TaskMessage{Type: "something", ID: uuid.New(), Retry: 10, Retried: 5, Timeout: 1800}},
 	}
 
 	for _, tc := range tests {
