@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/rdb"
-	"github.com/rs/xid"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -93,7 +93,7 @@ func ls(cmd *cobra.Command, args []string) {
 // queryID returns an identifier used for "enq" command.
 // score is the zset score and queryType should be one
 // of "s", "r" or "d" (scheduled, retry, dead respectively).
-func queryID(id xid.ID, score int64, qtype string) string {
+func queryID(id uuid.UUID, score int64, qtype string) string {
 	const format = "%v:%v:%v"
 	return fmt.Sprintf(format, qtype, score, id)
 }
@@ -101,22 +101,22 @@ func queryID(id xid.ID, score int64, qtype string) string {
 // parseQueryID is a reverse operation of queryID function.
 // It takes a queryID and return each part of id with proper
 // type if valid, otherwise it reports an error.
-func parseQueryID(queryID string) (id xid.ID, score int64, qtype string, err error) {
+func parseQueryID(queryID string) (id uuid.UUID, score int64, qtype string, err error) {
 	parts := strings.Split(queryID, ":")
 	if len(parts) != 3 {
-		return xid.NilID(), 0, "", fmt.Errorf("invalid id")
+		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
 	}
-	id, err = xid.FromString(parts[2])
+	id, err = uuid.Parse(parts[2])
 	if err != nil {
-		return xid.NilID(), 0, "", fmt.Errorf("invalid id")
+		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
 	}
 	score, err = strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
-		return xid.NilID(), 0, "", fmt.Errorf("invalid id")
+		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
 	}
 	qtype = parts[0]
 	if len(qtype) != 1 || !strings.Contains("srd", qtype) {
-		return xid.NilID(), 0, "", fmt.Errorf("invalid id")
+		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
 	}
 	return id, score, qtype, nil
 }

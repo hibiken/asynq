@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
-	"github.com/rs/xid"
 )
 
 // A Client is responsible for scheduling tasks.
@@ -258,7 +258,7 @@ func (c *Client) enqueueAt(t time.Time, task *Task, opts ...Option) error {
 		timeout = defaultTimeout
 	}
 	msg := &base.TaskMessage{
-		ID:        xid.New(),
+		ID:        uuid.New(),
 		Type:      task.Type,
 		Payload:   task.Payload.data,
 		Queue:     opt.queue,

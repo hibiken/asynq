@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
-	"github.com/rs/xid"
+	"github.com/google/uuid"
 )
 
 // Version of asynq library and CLI.
@@ -78,7 +78,7 @@ type TaskMessage struct {
 	Payload map[string]interface{}
 
 	// ID is a unique identifier for each task.
-	ID xid.ID
+	ID uuid.UUID
 
 	// Queue is a name this message should be enqueued to.
 	Queue string
