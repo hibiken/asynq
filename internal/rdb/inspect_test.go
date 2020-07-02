@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/uuid"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/rs/xid"
 )
 
 func TestCurrentStats(t *testing.T) {
@@ -618,7 +618,7 @@ func TestListScheduledPagination(t *testing.T) {
 func TestListRetry(t *testing.T) {
 	r := setup(t)
 	m1 := &base.TaskMessage{
-		ID:       xid.New(),
+		ID:       uuid.New(),
 		Type:     "send_email",
 		Queue:    "default",
 		Payload:  map[string]interface{}{"subject": "hello"},
@@ -627,7 +627,7 @@ func TestListRetry(t *testing.T) {
 		Retried:  10,
 	}
 	m2 := &base.TaskMessage{
-		ID:       xid.New(),
+		ID:       uuid.New(),
 		Type:     "reindex",
 		Queue:    "default",
 		Payload:  nil,
@@ -763,14 +763,14 @@ func TestListRetryPagination(t *testing.T) {
 func TestListDead(t *testing.T) {
 	r := setup(t)
 	m1 := &base.TaskMessage{
-		ID:       xid.New(),
+		ID:       uuid.New(),
 		Type:     "send_email",
 		Queue:    "default",
 		Payload:  map[string]interface{}{"subject": "hello"},
 		ErrorMsg: "email server not responding",
 	}
 	m2 := &base.TaskMessage{
-		ID:       xid.New(),
+		ID:       uuid.New(),
 		Type:     "reindex",
 		Queue:    "default",
 		Payload:  nil,
@@ -907,7 +907,7 @@ func TestEnqueueDeadTask(t *testing.T) {
 	tests := []struct {
 		dead         []h.ZSetEntry
 		score        int64
-		id           xid.ID
+		id           uuid.UUID
 		want         error // expected return value from calling EnqueueDeadTask
 		wantDead     []*base.TaskMessage
 		wantEnqueued map[string][]*base.TaskMessage
@@ -991,7 +991,7 @@ func TestEnqueueRetryTask(t *testing.T) {
 	tests := []struct {
 		retry        []h.ZSetEntry
 		score        int64
-		id           xid.ID
+		id           uuid.UUID
 		want         error // expected return value from calling EnqueueRetryTask
 		wantRetry    []*base.TaskMessage
 		wantEnqueued map[string][]*base.TaskMessage
@@ -1075,7 +1075,7 @@ func TestEnqueueScheduledTask(t *testing.T) {
 	tests := []struct {
 		scheduled     []h.ZSetEntry
 		score         int64
-		id            xid.ID
+		id            uuid.UUID
 		want          error // expected return value from calling EnqueueScheduledTask
 		wantScheduled []*base.TaskMessage
 		wantEnqueued  map[string][]*base.TaskMessage
@@ -1394,7 +1394,7 @@ func TestKillRetryTask(t *testing.T) {
 	tests := []struct {
 		retry     []h.ZSetEntry
 		dead      []h.ZSetEntry
-		id        xid.ID
+		id        uuid.UUID
 		score     int64
 		want      error
 		wantRetry []h.ZSetEntry
@@ -1471,7 +1471,7 @@ func TestKillScheduledTask(t *testing.T) {
 	tests := []struct {
 		scheduled     []h.ZSetEntry
 		dead          []h.ZSetEntry
-		id            xid.ID
+		id            uuid.UUID
 		score         int64
 		want          error
 		wantScheduled []h.ZSetEntry
@@ -1711,7 +1711,7 @@ func TestDeleteDeadTask(t *testing.T) {
 
 	tests := []struct {
 		dead     []h.ZSetEntry
-		id       xid.ID
+		id       uuid.UUID
 		score    int64
 		want     error
 		wantDead []*base.TaskMessage
@@ -1771,7 +1771,7 @@ func TestDeleteRetryTask(t *testing.T) {
 
 	tests := []struct {
 		retry     []h.ZSetEntry
-		id        xid.ID
+		id        uuid.UUID
 		score     int64
 		want      error
 		wantRetry []*base.TaskMessage
@@ -1823,7 +1823,7 @@ func TestDeleteScheduledTask(t *testing.T) {
 
 	tests := []struct {
 		scheduled     []h.ZSetEntry
-		id            xid.ID
+		id            uuid.UUID
 		score         int64
 		want          error
 		wantScheduled []*base.TaskMessage

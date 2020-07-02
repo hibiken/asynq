@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/rs/xid"
 	"github.com/spf13/cast"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -65,7 +65,7 @@ type oldTaskMessage struct {
 	// Unchanged
 	Type      string
 	Payload   map[string]interface{}
-	ID        xid.ID
+	ID        uuid.UUID
 	Queue     string
 	Retry     int
 	Retried   int
@@ -112,7 +112,7 @@ func convertMessage(old *oldTaskMessage) (*base.TaskMessage, error) {
 	return &base.TaskMessage{
 		Type:      old.Type,
 		Payload:   old.Payload,
-		ID:        old.ID,
+		ID:        uuid.New(),
 		Queue:     old.Queue,
 		Retry:     old.Retry,
 		Retried:   old.Retried,

@@ -13,8 +13,8 @@ import (
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/rs/xid"
 )
 
 // ZSetEntry is an entry in redis sorted set.
@@ -75,7 +75,7 @@ var IgnoreIDOpt = cmpopts.IgnoreFields(base.TaskMessage{}, "ID")
 // NewTaskMessage returns a new instance of TaskMessage given a task type and payload.
 func NewTaskMessage(taskType string, payload map[string]interface{}) *base.TaskMessage {
 	return &base.TaskMessage{
-		ID:       xid.New(),
+		ID:       uuid.New(),
 		Type:     taskType,
 		Queue:    base.DefaultQueueName,
 		Retry:    25,
@@ -89,7 +89,7 @@ func NewTaskMessage(taskType string, payload map[string]interface{}) *base.TaskM
 // task type, payload and queue name.
 func NewTaskMessageWithQueue(taskType string, payload map[string]interface{}, qname string) *base.TaskMessage {
 	return &base.TaskMessage{
-		ID:      xid.New(),
+		ID:      uuid.New(),
 		Type:    taskType,
 		Queue:   qname,
 		Retry:   25,

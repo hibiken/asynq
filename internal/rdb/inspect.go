@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/rs/xid"
 	"github.com/spf13/cast"
 )
 
@@ -53,7 +53,7 @@ type DailyStats struct {
 
 // EnqueuedTask is a task in a queue and is ready to be processed.
 type EnqueuedTask struct {
-	ID      xid.ID
+	ID      uuid.UUID
 	Type    string
 	Payload map[string]interface{}
 	Queue   string
@@ -61,14 +61,14 @@ type EnqueuedTask struct {
 
 // InProgressTask is a task that's currently being processed.
 type InProgressTask struct {
-	ID      xid.ID
+	ID      uuid.UUID
 	Type    string
 	Payload map[string]interface{}
 }
 
 // ScheduledTask is a task that's scheduled to be processed in the future.
 type ScheduledTask struct {
-	ID        xid.ID
+	ID        uuid.UUID
 	Type      string
 	Payload   map[string]interface{}
 	ProcessAt time.Time
@@ -78,7 +78,7 @@ type ScheduledTask struct {
 
 // RetryTask is a task that's in retry queue because worker failed to process the task.
 type RetryTask struct {
-	ID      xid.ID
+	ID      uuid.UUID
 	Type    string
 	Payload map[string]interface{}
 	// TODO(hibiken): add LastFailedAt time.Time
@@ -92,7 +92,7 @@ type RetryTask struct {
 
 // DeadTask is a task in that has exhausted all retries.
 type DeadTask struct {
-	ID           xid.ID
+	ID           uuid.UUID
 	Type         string
 	Payload      map[string]interface{}
 	LastFailedAt time.Time
@@ -446,7 +446,7 @@ func (r *RDB) ListDead(pgn Pagination) ([]*DeadTask, error) {
 // EnqueueDeadTask finds a task that matches the given id and score from dead queue
 // and enqueues it for processing. If a task that matches the id and score
 // does not exist, it returns ErrTaskNotFound.
-func (r *RDB) EnqueueDeadTask(id xid.ID, score int64) error {
+func (r *RDB) EnqueueDeadTask(id uuid.UUID, score int64) error {
 	n, err := r.removeAndEnqueue(base.DeadQueue, id.String(), float64(score))
 	if err != nil {
 		return err
@@ -460,7 +460,7 @@ func (r *RDB) EnqueueDeadTask(id xid.ID, score int64) error {
 // EnqueueRetryTask finds a task that matches the given id and score from retry queue
 // and enqueues it for processing. If a task that matches the id and score
 // does not exist, it returns ErrTaskNotFound.
-func (r *RDB) EnqueueRetryTask(id xid.ID, score int64) error {
+func (r *RDB) EnqueueRetryTask(id uuid.UUID, score int64) error {
 	n, err := r.removeAndEnqueue(base.RetryQueue, id.String(), float64(score))
 	if err != nil {
 		return err
@@ -474,7 +474,7 @@ func (r *RDB) EnqueueRetryTask(id xid.ID, score int64) error {
 // EnqueueScheduledTask finds a task that matches the given id and score from scheduled queue
 // and enqueues it for processing. If a task that matches the id and score does not
 // exist, it returns ErrTaskNotFound.
-func (r *RDB) EnqueueScheduledTask(id xid.ID, score int64) error {
+func (r *RDB) EnqueueScheduledTask(id uuid.UUID, score int64) error {
 	n, err := r.removeAndEnqueue(base.ScheduledQueue, id.String(), float64(score))
 	if err != nil {
 		return err
@@ -553,7 +553,7 @@ func (r *RDB) removeAndEnqueueAll(zset string) (int64, error) {
 // KillRetryTask finds a task that matches the given id and score from retry queue
 // and moves it to dead queue. If a task that maches the id and score does not exist,
 // it returns ErrTaskNotFound.
-func (r *RDB) KillRetryTask(id xid.ID, score int64) error {
+func (r *RDB) KillRetryTask(id uuid.UUID, score int64) error {
 	n, err := r.removeAndKill(base.RetryQueue, id.String(), float64(score))
 	if err != nil {
 		return err
@@ -567,7 +567,7 @@ func (r *RDB) KillRetryTask(id xid.ID, score int64) error {
 // KillScheduledTask finds a task that matches the given id and score from scheduled queue
 // and moves it to dead queue. If a task that maches the id and score does not exist,
 // it returns ErrTaskNotFound.
-func (r *RDB) KillScheduledTask(id xid.ID, score int64) error {
+func (r *RDB) KillScheduledTask(id uuid.UUID, score int64) error {
 	n, err := r.removeAndKill(base.ScheduledQueue, id.String(), float64(score))
 	if err != nil {
 		return err
@@ -660,21 +660,21 @@ func (r *RDB) removeAndKillAll(zset string) (int64, error) {
 // DeleteDeadTask finds a task that matches the given id and score from dead queue
 // and deletes it. If a task that matches the id and score does not exist,
 // it returns ErrTaskNotFound.
-func (r *RDB) DeleteDeadTask(id xid.ID, score int64) error {
+func (r *RDB) DeleteDeadTask(id uuid.UUID, score int64) error {
 	return r.deleteTask(base.DeadQueue, id.String(), float64(score))
 }
 
 // DeleteRetryTask finds a task that matches the given id and score from retry queue
 // and deletes it. If a task that matches the id and score does not exist,
 // it returns ErrTaskNotFound.
-func (r *RDB) DeleteRetryTask(id xid.ID, score int64) error {
+func (r *RDB) DeleteRetryTask(id uuid.UUID, score int64) error {
 	return r.deleteTask(base.RetryQueue, id.String(), float64(score))
 }
 
 // DeleteScheduledTask finds a task that matches the given id and score from
 // scheduled queue  and deletes it. If a task that matches the id and score
 //does not exist, it returns ErrTaskNotFound.
-func (r *RDB) DeleteScheduledTask(id xid.ID, score int64) error {
+func (r *RDB) DeleteScheduledTask(id uuid.UUID, score int64) error {
 	return r.deleteTask(base.ScheduledQueue, id.String(), float64(score))
 }
 
