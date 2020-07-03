@@ -25,10 +25,10 @@ Task is created with two parameters: its type and payload.
         map[string]interface{}{"user_id": 42})
 
     // Enqueue the task to be processed immediately.
-    err := client.Enqueue(t)
+    res, err := client.Enqueue(t)
 
     // Schedule the task to be processed after one minute.
-    err = client.EnqueueIn(time.Minute, t)
+    res, err = client.EnqueueIn(time.Minute, t)
 
 The Server is used to run the background task processing with a given
 handler.

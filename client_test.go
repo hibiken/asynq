@@ -34,6 +34,7 @@ func TestClientEnqueueAt(t *testing.T) {
 		task          *Task
 		processAt     time.Time
 		opts          []Option
+		wantRes       *Result
 		wantEnqueued  map[string][]*base.TaskMessage
 		wantScheduled []h.ZSetEntry
 	}{
@@ -42,6 +43,12 @@ func TestClientEnqueueAt(t *testing.T) {
 			task:      task,
 			processAt: now,
 			opts:      []Option{},
+			wantRes: &Result{
+				Queue:    "default",
+				Retry:    defaultMaxRetry,
+				Timeout:  defaultTimeout,
+				Deadline: noDeadline,
+			},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {
 					{
@@ -57,10 +64,16 @@ func TestClientEnqueueAt(t *testing.T) {
 			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
 		},
 		{
-			desc:         "Schedule task to be processed in the future",
-			task:         task,
-			processAt:    oneHourLater,
-			opts:         []Option{},
+			desc:      "Schedule task to be processed in the future",
+			task:      task,
+			processAt: oneHourLater,
+			opts:      []Option{},
+			wantRes: &Result{
+				Queue:    "default",
+				Retry:    defaultMaxRetry,
+				Timeout:  defaultTimeout,
+				Deadline: noDeadline,
+			},
 			wantEnqueued: nil, // db is flushed in setup so list does not exist hence nil
 			wantScheduled: []h.ZSetEntry{
 				{
@@ -81,10 +94,14 @@ func TestClientEnqueueAt(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r) // clean up db before each test case.
 
-		err := client.EnqueueAt(tc.processAt, tc.task, tc.opts...)
+		gotRes, err := client.EnqueueAt(tc.processAt, tc.task, tc.opts...)
 		if err != nil {
 			t.Error(err)
 			continue
+		}
+		if diff := cmp.Diff(tc.wantRes, gotRes, cmpopts.IgnoreFields(Result{}, "ID")); diff != "" {
+			t.Errorf("%s;\nEnqueueAt(processAt, task) returned %v, want %v; (-want,+got)\n%s",
+				tc.desc, gotRes, tc.wantRes, diff)
 		}
 
 		for qname, want := range tc.wantEnqueued {
@@ -114,6 +131,7 @@ func TestClientEnqueue(t *testing.T) {
 		desc         string
 		task         *Task
 		opts         []Option
+		wantRes      *Result
 		wantEnqueued map[string][]*base.TaskMessage
 	}{
 		{
@@ -121,6 +139,12 @@ func TestClientEnqueue(t *testing.T) {
 			task: task,
 			opts: []Option{
 				MaxRetry(3),
+			},
+			wantRes: &Result{
+				Queue:    "default",
+				Retry:    3,
+				Timeout:  defaultTimeout,
+				Deadline: noDeadline,
 			},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {
@@ -140,6 +164,12 @@ func TestClientEnqueue(t *testing.T) {
 			task: task,
 			opts: []Option{
 				MaxRetry(-2),
+			},
+			wantRes: &Result{
+				Queue:    "default",
+				Retry:    0,
+				Timeout:  defaultTimeout,
+				Deadline: noDeadline,
 			},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {
@@ -161,6 +191,12 @@ func TestClientEnqueue(t *testing.T) {
 				MaxRetry(2),
 				MaxRetry(10),
 			},
+			wantRes: &Result{
+				Queue:    "default",
+				Retry:    10,
+				Timeout:  defaultTimeout,
+				Deadline: noDeadline,
+			},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {
 					{
@@ -179,6 +215,12 @@ func TestClientEnqueue(t *testing.T) {
 			task: task,
 			opts: []Option{
 				Queue("custom"),
+			},
+			wantRes: &Result{
+				Queue:    "custom",
+				Retry:    defaultMaxRetry,
+				Timeout:  defaultTimeout,
+				Deadline: noDeadline,
 			},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"custom": {
@@ -199,6 +241,12 @@ func TestClientEnqueue(t *testing.T) {
 			opts: []Option{
 				Queue("HIGH"),
 			},
+			wantRes: &Result{
+				Queue:    "high",
+				Retry:    defaultMaxRetry,
+				Timeout:  defaultTimeout,
+				Deadline: noDeadline,
+			},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"high": {
 					{
@@ -218,6 +266,12 @@ func TestClientEnqueue(t *testing.T) {
 			opts: []Option{
 				Timeout(20 * time.Second),
 			},
+			wantRes: &Result{
+				Queue:    "default",
+				Retry:    defaultMaxRetry,
+				Timeout:  20 * time.Second,
+				Deadline: noDeadline,
+			},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {
 					{
@@ -236,6 +290,12 @@ func TestClientEnqueue(t *testing.T) {
 			task: task,
 			opts: []Option{
 				Deadline(time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC)),
+			},
+			wantRes: &Result{
+				Queue:    "default",
+				Retry:    defaultMaxRetry,
+				Timeout:  noTimeout,
+				Deadline: time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC),
 			},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {
@@ -257,6 +317,12 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout(20 * time.Second),
 				Deadline(time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC)),
 			},
+			wantRes: &Result{
+				Queue:    "default",
+				Retry:    defaultMaxRetry,
+				Timeout:  20 * time.Second,
+				Deadline: time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC),
+			},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {
 					{
@@ -275,10 +341,14 @@ func TestClientEnqueue(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r) // clean up db before each test case.
 
-		err := client.Enqueue(tc.task, tc.opts...)
+		gotRes, err := client.Enqueue(tc.task, tc.opts...)
 		if err != nil {
 			t.Error(err)
 			continue
+		}
+		if diff := cmp.Diff(tc.wantRes, gotRes, cmpopts.IgnoreFields(Result{}, "ID")); diff != "" {
+			t.Errorf("%s;\nEnqueue(task) returned %v, want %v; (-want,+got)\n%s",
+				tc.desc, gotRes, tc.wantRes, diff)
 		}
 
 		for qname, want := range tc.wantEnqueued {
@@ -304,14 +374,21 @@ func TestClientEnqueueIn(t *testing.T) {
 		task          *Task
 		delay         time.Duration
 		opts          []Option
+		wantRes       *Result
 		wantEnqueued  map[string][]*base.TaskMessage
 		wantScheduled []h.ZSetEntry
 	}{
 		{
-			desc:         "schedule a task to be enqueued in one hour",
-			task:         task,
-			delay:        time.Hour,
-			opts:         []Option{},
+			desc:  "schedule a task to be enqueued in one hour",
+			task:  task,
+			delay: time.Hour,
+			opts:  []Option{},
+			wantRes: &Result{
+				Queue:    "default",
+				Retry:    defaultMaxRetry,
+				Timeout:  defaultTimeout,
+				Deadline: noDeadline,
+			},
 			wantEnqueued: nil, // db is flushed in setup so list does not exist hence nil
 			wantScheduled: []h.ZSetEntry{
 				{
@@ -332,6 +409,12 @@ func TestClientEnqueueIn(t *testing.T) {
 			task:  task,
 			delay: 0,
 			opts:  []Option{},
+			wantRes: &Result{
+				Queue:    "default",
+				Retry:    defaultMaxRetry,
+				Timeout:  defaultTimeout,
+				Deadline: noDeadline,
+			},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {
 					{
@@ -351,10 +434,14 @@ func TestClientEnqueueIn(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r) // clean up db before each test case.
 
-		err := client.EnqueueIn(tc.delay, tc.task, tc.opts...)
+		gotRes, err := client.EnqueueIn(tc.delay, tc.task, tc.opts...)
 		if err != nil {
 			t.Error(err)
 			continue
+		}
+		if diff := cmp.Diff(tc.wantRes, gotRes, cmpopts.IgnoreFields(Result{}, "ID")); diff != "" {
+			t.Errorf("%s;\nEnqueueIn(delay, task) returned %v, want %v; (-want,+got)\n%s",
+				tc.desc, gotRes, tc.wantRes, diff)
 		}
 
 		for qname, want := range tc.wantEnqueued {
@@ -379,6 +466,7 @@ func TestClientDefaultOptions(t *testing.T) {
 		defaultOpts []Option // options set at the client level.
 		opts        []Option // options used at enqueue time.
 		task        *Task
+		wantRes     *Result
 		queue       string // queue that the message should go into.
 		want        *base.TaskMessage
 	}{
@@ -387,7 +475,13 @@ func TestClientDefaultOptions(t *testing.T) {
 			defaultOpts: []Option{Queue("feed")},
 			opts:        []Option{},
 			task:        NewTask("feed:import", nil),
-			queue:       "feed",
+			wantRes: &Result{
+				Queue:    "feed",
+				Retry:    defaultMaxRetry,
+				Timeout:  defaultTimeout,
+				Deadline: noDeadline,
+			},
+			queue: "feed",
 			want: &base.TaskMessage{
 				Type:     "feed:import",
 				Payload:  nil,
@@ -402,7 +496,13 @@ func TestClientDefaultOptions(t *testing.T) {
 			defaultOpts: []Option{Queue("feed"), MaxRetry(5)},
 			opts:        []Option{},
 			task:        NewTask("feed:import", nil),
-			queue:       "feed",
+			wantRes: &Result{
+				Queue:    "feed",
+				Retry:    5,
+				Timeout:  defaultTimeout,
+				Deadline: noDeadline,
+			},
+			queue: "feed",
 			want: &base.TaskMessage{
 				Type:     "feed:import",
 				Payload:  nil,
@@ -417,7 +517,13 @@ func TestClientDefaultOptions(t *testing.T) {
 			defaultOpts: []Option{Queue("feed"), MaxRetry(5)},
 			opts:        []Option{Queue("critical")},
 			task:        NewTask("feed:import", nil),
-			queue:       "critical",
+			wantRes: &Result{
+				Queue:    "critical",
+				Retry:    5,
+				Timeout:  defaultTimeout,
+				Deadline: noDeadline,
+			},
+			queue: "critical",
 			want: &base.TaskMessage{
 				Type:     "feed:import",
 				Payload:  nil,
@@ -433,9 +539,13 @@ func TestClientDefaultOptions(t *testing.T) {
 		h.FlushDB(t, r)
 		c := NewClient(RedisClientOpt{Addr: redisAddr, DB: redisDB})
 		c.SetDefaultOptions(tc.task.Type, tc.defaultOpts...)
-		err := c.Enqueue(tc.task, tc.opts...)
+		gotRes, err := c.Enqueue(tc.task, tc.opts...)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if diff := cmp.Diff(tc.wantRes, gotRes, cmpopts.IgnoreFields(Result{}, "ID")); diff != "" {
+			t.Errorf("%s;\nEnqueue(task, opts...) returned %v, want %v; (-want,+got)\n%s",
+				tc.desc, gotRes, tc.wantRes, diff)
 		}
 		enqueued := h.GetEnqueuedMessages(t, r, tc.queue)
 		if len(enqueued) != 1 {
@@ -538,7 +648,7 @@ func TestEnqueueUnique(t *testing.T) {
 		h.FlushDB(t, r) // clean up db before each test case.
 
 		// Enqueue the task first. It should succeed.
-		err := c.Enqueue(tc.task, Unique(tc.ttl))
+		_, err := c.Enqueue(tc.task, Unique(tc.ttl))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -550,7 +660,7 @@ func TestEnqueueUnique(t *testing.T) {
 		}
 
 		// Enqueue the task again. It should fail.
-		err = c.Enqueue(tc.task, Unique(tc.ttl))
+		_, err = c.Enqueue(tc.task, Unique(tc.ttl))
 		if err == nil {
 			t.Errorf("Enqueueing %+v did not return an error", tc.task)
 			continue
@@ -585,7 +695,7 @@ func TestEnqueueInUnique(t *testing.T) {
 		h.FlushDB(t, r) // clean up db before each test case.
 
 		// Enqueue the task first. It should succeed.
-		err := c.EnqueueIn(tc.d, tc.task, Unique(tc.ttl))
+		_, err := c.EnqueueIn(tc.d, tc.task, Unique(tc.ttl))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -598,7 +708,7 @@ func TestEnqueueInUnique(t *testing.T) {
 		}
 
 		// Enqueue the task again. It should fail.
-		err = c.EnqueueIn(tc.d, tc.task, Unique(tc.ttl))
+		_, err = c.EnqueueIn(tc.d, tc.task, Unique(tc.ttl))
 		if err == nil {
 			t.Errorf("Enqueueing %+v did not return an error", tc.task)
 			continue
@@ -633,7 +743,7 @@ func TestEnqueueAtUnique(t *testing.T) {
 		h.FlushDB(t, r) // clean up db before each test case.
 
 		// Enqueue the task first. It should succeed.
-		err := c.EnqueueAt(tc.at, tc.task, Unique(tc.ttl))
+		_, err := c.EnqueueAt(tc.at, tc.task, Unique(tc.ttl))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -646,7 +756,7 @@ func TestEnqueueAtUnique(t *testing.T) {
 		}
 
 		// Enqueue the task again. It should fail.
-		err = c.EnqueueAt(tc.at, tc.task, Unique(tc.ttl))
+		_, err = c.EnqueueAt(tc.at, tc.task, Unique(tc.ttl))
 		if err == nil {
 			t.Errorf("Enqueueing %+v did not return an error", tc.task)
 			continue
