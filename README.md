@@ -157,10 +157,11 @@ func main() {
     // ------------------------------------------------------
 
     t := tasks.NewEmailDeliveryTask(42, "some:template:id")
-    err := c.Enqueue(t)
+    res, err := c.Enqueue(t)
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
     }
+    fmt.Printf("Enqueued Result: %+v\n", res)
 
 
     // ------------------------------------------------------------
@@ -169,10 +170,11 @@ func main() {
     // ------------------------------------------------------------
 
     t = tasks.NewEmailDeliveryTask(42, "other:template:id")
-    err = c.EnqueueIn(24*time.Hour, t)
+    res, err = c.EnqueueIn(24*time.Hour, t)
     if err != nil {
         log.Fatal("could not schedule task: %v", err)
     }
+    fmt.Printf("Enqueued Result: %+v\n", res)
 
 
     // ----------------------------------------------------------------------------
@@ -183,10 +185,11 @@ func main() {
     c.SetDefaultOptions(tasks.ImageProcessing, asynq.MaxRetry(10), asynq.Timeout(time.Minute))
 
     t = tasks.NewImageProcessingTask("some/blobstore/url", "other/blobstore/url")
-    err = c.Enqueue(t)
+    res, err = c.Enqueue(t)
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
     }
+    fmt.Printf("Enqueued Result: %+v\n", res)
 
     // ---------------------------------------------------------------------------
     // Example 4: Pass options to tune task processing behavior at enqueue time.
@@ -194,10 +197,11 @@ func main() {
     // ---------------------------------------------------------------------------
 
     t = tasks.NewImageProcessingTask("some/blobstore/url", "other/blobstore/url")
-    err = c.Enqueue(t, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
+    res, err = c.Enqueue(t, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
     }
+    fmt.Printf("Enqueued Result: %+v\n", res)
 }
 ```
 

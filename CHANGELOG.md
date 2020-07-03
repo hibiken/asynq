@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tasks that exceed its deadline are automatically retried.
 - Encoding schema for task message has changed. Please install the lastest CLI and run `migrate` command if 
   you have tasks enqueued by the previous version of asynq.
+- API of `(*Client).Enqueue`, `(*Client).EnqueueIn`, and `(*Client).EnqueueAt` has changed to return a `*Result`.
 
 ## [0.9.4] - 2020-06-13
 
