@@ -125,7 +125,7 @@ type Config struct {
 	ShutdownTimeout time.Duration
 }
 
-// An ErrorHandler handles errors returned by the task handler.
+// An ErrorHandler handles an error occured during task processing.
 type ErrorHandler interface {
 	HandleError(ctx context.Context, task *Task, err error)
 }
