@@ -212,7 +212,7 @@ func (p *processor) exec() {
 				// 3) Kill  -> Removes the message from InProgress & Adds the message to Dead
 				if resErr != nil {
 					if p.errHandler != nil {
-						p.errHandler.HandleError(task, resErr, msg.Retried, msg.Retry)
+						p.errHandler.HandleError(ctx, task, resErr)
 					}
 					p.retryOrKill(ctx, msg, resErr)
 					return

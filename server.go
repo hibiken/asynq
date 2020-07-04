@@ -127,16 +127,16 @@ type Config struct {
 
 // An ErrorHandler handles errors returned by the task handler.
 type ErrorHandler interface {
-	HandleError(task *Task, err error, retried, maxRetry int)
+	HandleError(ctx context.Context, task *Task, err error)
 }
 
 // The ErrorHandlerFunc type is an adapter to allow the use of  ordinary functions as a ErrorHandler.
 // If f is a function with the appropriate signature, ErrorHandlerFunc(f) is a ErrorHandler that calls f.
-type ErrorHandlerFunc func(task *Task, err error, retried, maxRetry int)
+type ErrorHandlerFunc func(ctx context.Context, task *Task, err error)
 
-// HandleError calls fn(task, err, retried, maxRetry)
-func (fn ErrorHandlerFunc) HandleError(task *Task, err error, retried, maxRetry int) {
-	fn(task, err, retried, maxRetry)
+// HandleError calls fn(ctx, task, err)
+func (fn ErrorHandlerFunc) HandleError(ctx context.Context, task *Task, err error) {
+	fn(ctx, task, err)
 }
 
 // Logger supports logging at various log levels.

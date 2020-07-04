@@ -11,9 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - All tasks now requires timeout or deadline. By default, timeout is set to 30 mins.
 - Tasks that exceed its deadline are automatically retried.
-- Encoding schema for task message has changed. Please install the lastest CLI and run `migrate` command if 
-  you have tasks enqueued by the previous version of asynq.
+- Encoding schema for task message has changed. Please install the latest CLI and run `migrate` command if 
+  you have tasks enqueued with the previous version of asynq.
 - API of `(*Client).Enqueue`, `(*Client).EnqueueIn`, and `(*Client).EnqueueAt` has changed to return a `*Result`.
+- API of `ErrorHandler` has changed. It now takes context as the first argument and removed `retried`, `maxRetry` from the argument list.
+  Use `GetRetryCount` and/or `GetMaxRetry` to get the count values.
 
 ## [0.9.4] - 2020-06-13
 
