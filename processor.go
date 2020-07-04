@@ -203,6 +203,9 @@ func (p *processor) exec() {
 				return
 			case <-ctx.Done():
 				p.logger.Debugf("Retrying task. task id=%s", msg.ID) // TODO: Improve this log message and above
+				if p.errHandler != nil {
+					p.errHandler.HandleError(ctx, task, ctx.Err())
+				}
 				p.retryOrKill(ctx, msg, ctx.Err())
 				return
 			case resErr := <-resCh:
