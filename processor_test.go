@@ -257,7 +257,7 @@ func TestProcessorRetry(t *testing.T) {
 			mu sync.Mutex // guards n
 			n  int        // number of times error handler is called
 		)
-		errHandler := func(t *Task, err error, retried, maxRetry int) {
+		errHandler := func(ctx context.Context, t *Task, err error) {
 			mu.Lock()
 			defer mu.Unlock()
 			n++
