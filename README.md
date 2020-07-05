@@ -34,6 +34,7 @@ A system can consist of multiple worker servers and brokers, giving way to high 
 - Scheduling of tasks
 - Durability since tasks are written to Redis
 - [Retries](https://github.com/hibiken/asynq/wiki/Task-Retry) of failed tasks
+- Automatic recovery of tasks in the event of a worker crash
 - [Weighted priority queues](https://github.com/hibiken/asynq/wiki/Priority-Queues#weighted-priority-queues)
 - [Strict priority queues](https://github.com/hibiken/asynq/wiki/Priority-Queues#strict-priority-queues)
 - Low latency to add a task since writes are fast in Redis
