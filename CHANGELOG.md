@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2020-07-06
+
 ### Changed
 
 - All tasks now requires timeout or deadline. By default, timeout is set to 30 mins.
