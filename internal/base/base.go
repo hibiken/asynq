@@ -133,6 +133,12 @@ func DecodeMessage(s string) (*TaskMessage, error) {
 	return &msg, nil
 }
 
+// Z represents sorted set member.
+type Z struct {
+	Message *TaskMessage
+	Score   int64
+}
+
 // ServerStatus represents status of a server.
 // ServerStatus methods are concurrency safe.
 type ServerStatus struct {

@@ -8,8 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-redis/redis/v7"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -48,21 +47,22 @@ func init() {
 }
 
 func enqall(cmd *cobra.Command, args []string) {
-	c := redis.NewClient(&redis.Options{
+	i := asynq.NewInspector(asynq.RedisClientOpt{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),
 		Password: viper.GetString("password"),
 	})
-	r := rdb.NewRDB(c)
-	var n int64
-	var err error
+	var (
+		n   int
+		err error
+	)
 	switch args[0] {
 	case "scheduled":
-		n, err = r.EnqueueAllScheduledTasks()
+		n, err = i.EnqueueAllScheduledTasks()
 	case "retry":
-		n, err = r.EnqueueAllRetryTasks()
+		n, err = i.EnqueueAllRetryTasks()
 	case "dead":
-		n, err = r.EnqueueAllDeadTasks()
+		n, err = i.EnqueueAllDeadTasks()
 	default:
 		fmt.Printf("error: `asynq enqall [state]` only accepts %v as the argument.\n", enqallValidArgs)
 		os.Exit(1)

@@ -8,15 +8,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-redis/redis/v7"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 // killCmd represents the kill command
 var killCmd = &cobra.Command{
-	Use:   "kill [task id]",
+	Use:   "kill [task key]",
 	Short: "Kills a task given an identifier",
 	Long: `Kill (asynq kill) will put a task in dead state given an identifier.
 
@@ -44,25 +43,12 @@ func init() {
 }
 
 func kill(cmd *cobra.Command, args []string) {
-	id, score, qtype, err := parseQueryID(args[0])
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	r := rdb.NewRDB(redis.NewClient(&redis.Options{
+	i := asynq.NewInspector(asynq.RedisClientOpt{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),
 		Password: viper.GetString("password"),
-	}))
-	switch qtype {
-	case "s":
-		err = r.KillScheduledTask(id, score)
-	case "r":
-		err = r.KillRetryTask(id, score)
-	default:
-		fmt.Println("invalid argument")
-		os.Exit(1)
-	}
+	})
+	err := i.KillTaskByKey(args[0])
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

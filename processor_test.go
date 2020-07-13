@@ -223,7 +223,7 @@ func TestProcessorRetry(t *testing.T) {
 		delay        time.Duration       // retry delay duration
 		handler      Handler             // task handler
 		wait         time.Duration       // wait duration between starting and stopping processor for this test case
-		wantRetry    []h.ZSetEntry       // tasks in retry queue at the end
+		wantRetry    []base.Z            // tasks in retry queue at the end
 		wantDead     []*base.TaskMessage // tasks in dead queue at the end
 		wantErrCount int                 // number of times error handler should be called
 	}{
@@ -235,10 +235,10 @@ func TestProcessorRetry(t *testing.T) {
 				return fmt.Errorf(errMsg)
 			}),
 			wait: 2 * time.Second,
-			wantRetry: []h.ZSetEntry{
-				{Msg: h.TaskMessageAfterRetry(*m2, errMsg), Score: float64(now.Add(time.Minute).Unix())},
-				{Msg: h.TaskMessageAfterRetry(*m3, errMsg), Score: float64(now.Add(time.Minute).Unix())},
-				{Msg: h.TaskMessageAfterRetry(*m4, errMsg), Score: float64(now.Add(time.Minute).Unix())},
+			wantRetry: []base.Z{
+				{Message: h.TaskMessageAfterRetry(*m2, errMsg), Score: now.Add(time.Minute).Unix()},
+				{Message: h.TaskMessageAfterRetry(*m3, errMsg), Score: now.Add(time.Minute).Unix()},
+				{Message: h.TaskMessageAfterRetry(*m4, errMsg), Score: now.Add(time.Minute).Unix()},
 			},
 			wantDead:     []*base.TaskMessage{h.TaskMessageWithError(*m1, errMsg)},
 			wantErrCount: 4,

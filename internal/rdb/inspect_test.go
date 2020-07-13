@@ -6,7 +6,6 @@ package rdb
 
 import (
 	"fmt"
-	"sort"
 	"testing"
 	"time"
 
@@ -32,9 +31,9 @@ func TestCurrentStats(t *testing.T) {
 	tests := []struct {
 		enqueued   map[string][]*base.TaskMessage
 		inProgress []*base.TaskMessage
-		scheduled  []h.ZSetEntry
-		retry      []h.ZSetEntry
-		dead       []h.ZSetEntry
+		scheduled  []base.Z
+		retry      []base.Z
+		dead       []base.Z
 		processed  int
 		failed     int
 		allQueues  []interface{}
@@ -48,11 +47,11 @@ func TestCurrentStats(t *testing.T) {
 				"low":                 {m6},
 			},
 			inProgress: []*base.TaskMessage{m2},
-			scheduled: []h.ZSetEntry{
-				{Msg: m3, Score: float64(now.Add(time.Hour).Unix())},
-				{Msg: m4, Score: float64(now.Unix())}},
-			retry:     []h.ZSetEntry{},
-			dead:      []h.ZSetEntry{},
+			scheduled: []base.Z{
+				{Message: m3, Score: now.Add(time.Hour).Unix()},
+				{Message: m4, Score: now.Unix()}},
+			retry:     []base.Z{},
+			dead:      []base.Z{},
 			processed: 120,
 			failed:    2,
 			allQueues: []interface{}{base.DefaultQueue, base.QueueKey("critical"), base.QueueKey("low")},
@@ -79,13 +78,13 @@ func TestCurrentStats(t *testing.T) {
 				base.DefaultQueueName: {},
 			},
 			inProgress: []*base.TaskMessage{},
-			scheduled: []h.ZSetEntry{
-				{Msg: m3, Score: float64(now.Unix())},
-				{Msg: m4, Score: float64(now.Unix())}},
-			retry: []h.ZSetEntry{
-				{Msg: m1, Score: float64(now.Add(time.Minute).Unix())}},
-			dead: []h.ZSetEntry{
-				{Msg: m2, Score: float64(now.Add(-time.Hour).Unix())}},
+			scheduled: []base.Z{
+				{Message: m3, Score: now.Unix()},
+				{Message: m4, Score: now.Unix()}},
+			retry: []base.Z{
+				{Message: m1, Score: now.Add(time.Minute).Unix()}},
+			dead: []base.Z{
+				{Message: m2, Score: now.Add(-time.Hour).Unix()}},
 			processed: 90,
 			failed:    10,
 			allQueues: []interface{}{base.DefaultQueue},
@@ -111,11 +110,11 @@ func TestCurrentStats(t *testing.T) {
 				"low":                 {m6},
 			},
 			inProgress: []*base.TaskMessage{m2},
-			scheduled: []h.ZSetEntry{
-				{Msg: m3, Score: float64(now.Add(time.Hour).Unix())},
-				{Msg: m4, Score: float64(now.Unix())}},
-			retry:     []h.ZSetEntry{},
-			dead:      []h.ZSetEntry{},
+			scheduled: []base.Z{
+				{Message: m3, Score: now.Add(time.Hour).Unix()},
+				{Message: m4, Score: now.Unix()}},
+			retry:     []base.Z{},
+			dead:      []base.Z{},
 			processed: 120,
 			failed:    2,
 			allQueues: []interface{}{base.DefaultQueue, base.QueueKey("critical"), base.QueueKey("low")},
@@ -276,27 +275,25 @@ func TestListEnqueued(t *testing.T) {
 	m2 := h.NewTaskMessage("reindex", nil)
 	m3 := h.NewTaskMessageWithQueue("important_notification", nil, "critical")
 	m4 := h.NewTaskMessageWithQueue("minor_notification", nil, "low")
-	t1 := &EnqueuedTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, Queue: m1.Queue}
-	t2 := &EnqueuedTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, Queue: m2.Queue}
-	t3 := &EnqueuedTask{ID: m3.ID, Type: m3.Type, Payload: m3.Payload, Queue: m3.Queue}
+
 	tests := []struct {
 		enqueued map[string][]*base.TaskMessage
 		qname    string
-		want     []*EnqueuedTask
+		want     []*base.TaskMessage
 	}{
 		{
 			enqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {m1, m2},
 			},
 			qname: base.DefaultQueueName,
-			want:  []*EnqueuedTask{t1, t2},
+			want:  []*base.TaskMessage{m1, m2},
 		},
 		{
 			enqueued: map[string][]*base.TaskMessage{
-				base.DefaultQueueName: {},
+				base.DefaultQueueName: nil,
 			},
 			qname: base.DefaultQueueName,
-			want:  []*EnqueuedTask{},
+			want:  []*base.TaskMessage(nil),
 		},
 		{
 			enqueued: map[string][]*base.TaskMessage{
@@ -305,7 +302,7 @@ func TestListEnqueued(t *testing.T) {
 				"low":                 {m4},
 			},
 			qname: base.DefaultQueueName,
-			want:  []*EnqueuedTask{t1, t2},
+			want:  []*base.TaskMessage{m1, m2},
 		},
 		{
 			enqueued: map[string][]*base.TaskMessage{
@@ -314,7 +311,7 @@ func TestListEnqueued(t *testing.T) {
 				"low":                 {m4},
 			},
 			qname: "critical",
-			want:  []*EnqueuedTask{t3},
+			want:  []*base.TaskMessage{m3},
 		},
 	}
 
@@ -330,19 +327,13 @@ func TestListEnqueued(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		sortOpt := cmp.Transformer("SortMsg", func(in []*EnqueuedTask) []*EnqueuedTask {
-			out := append([]*EnqueuedTask(nil), in...) // Copy input to avoid mutating it
-			sort.Slice(out, func(i, j int) bool {
-				return out[i].ID.String() < out[j].ID.String()
-			})
-			return out
-		})
-		if diff := cmp.Diff(tc.want, got, sortOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
 		}
 	}
 }
+
 func TestListEnqueuedPagination(t *testing.T) {
 	r := setup(t)
 	var msgs []*base.TaskMessage
@@ -412,22 +403,14 @@ func TestListEnqueuedPagination(t *testing.T) {
 func TestListInProgress(t *testing.T) {
 	r := setup(t)
 
-	m1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
-	m2 := h.NewTaskMessage("reindex", nil)
-	t1 := &InProgressTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload}
-	t2 := &InProgressTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload}
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+
 	tests := []struct {
 		inProgress []*base.TaskMessage
-		want       []*InProgressTask
 	}{
-		{
-			inProgress: []*base.TaskMessage{m1, m2},
-			want:       []*InProgressTask{t1, t2},
-		},
-		{
-			inProgress: []*base.TaskMessage{},
-			want:       []*InProgressTask{},
-		},
+		{inProgress: []*base.TaskMessage{m1, m2}},
+		{inProgress: []*base.TaskMessage(nil)},
 	}
 
 	for _, tc := range tests {
@@ -437,18 +420,11 @@ func TestListInProgress(t *testing.T) {
 		got, err := r.ListInProgress(Pagination{Size: 20, Page: 0})
 		op := "r.ListInProgress(Pagination{Size: 20, Page: 0})"
 		if err != nil {
-			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
+			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.inProgress)
 			continue
 		}
-		sortOpt := cmp.Transformer("SortMsg", func(in []*InProgressTask) []*InProgressTask {
-			out := append([]*InProgressTask(nil), in...) // Copy input to avoid mutating it
-			sort.Slice(out, func(i, j int) bool {
-				return out[i].ID.String() < out[j].ID.String()
-			})
-			return out
-		})
-		if diff := cmp.Diff(tc.want, got, sortOpt); diff != "" {
-			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
+		if diff := cmp.Diff(tc.inProgress, got); diff != "" {
+			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.inProgress, diff)
 			continue
 		}
 	}
@@ -511,27 +487,33 @@ func TestListInProgressPagination(t *testing.T) {
 
 func TestListScheduled(t *testing.T) {
 	r := setup(t)
-	m1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
-	m2 := h.NewTaskMessage("reindex", nil)
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessage("task3", nil)
 	p1 := time.Now().Add(30 * time.Minute)
 	p2 := time.Now().Add(24 * time.Hour)
-	t1 := &ScheduledTask{ID: m1.ID, Type: m1.Type, Payload: m1.Payload, ProcessAt: p1, Score: p1.Unix(), Queue: m1.Queue}
-	t2 := &ScheduledTask{ID: m2.ID, Type: m2.Type, Payload: m2.Payload, ProcessAt: p2, Score: p2.Unix(), Queue: m2.Queue}
+	p3 := time.Now().Add(5 * time.Minute)
 
 	tests := []struct {
-		scheduled []h.ZSetEntry
-		want      []*ScheduledTask
+		scheduled []base.Z
+		want      []base.Z
 	}{
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: m1, Score: float64(p1.Unix())},
-				{Msg: m2, Score: float64(p2.Unix())},
+			scheduled: []base.Z{
+				{Message: m1, Score: p1.Unix()},
+				{Message: m2, Score: p2.Unix()},
+				{Message: m3, Score: p3.Unix()},
 			},
-			want: []*ScheduledTask{t1, t2},
+			// should be sorted by score in ascending order
+			want: []base.Z{
+				{Message: m3, Score: p3.Unix()},
+				{Message: m1, Score: p1.Unix()},
+				{Message: m2, Score: p2.Unix()},
+			},
 		},
 		{
-			scheduled: []h.ZSetEntry{},
-			want:      []*ScheduledTask{},
+			scheduled: []base.Z(nil),
+			want:      []base.Z(nil),
 		},
 	}
 
@@ -545,14 +527,7 @@ func TestListScheduled(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		sortOpt := cmp.Transformer("SortMsg", func(in []*ScheduledTask) []*ScheduledTask {
-			out := append([]*ScheduledTask(nil), in...) // Copy input to avoid mutating it
-			sort.Slice(out, func(i, j int) bool {
-				return out[i].ID.String() < out[j].ID.String()
-			})
-			return out
-		})
-		if diff := cmp.Diff(tc.want, got, sortOpt, timeCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, timeCmpOpt); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
 		}
@@ -601,13 +576,13 @@ func TestListScheduledPagination(t *testing.T) {
 			continue
 		}
 
-		first := got[0]
+		first := got[0].Message
 		if first.Type != tc.wantFirst {
 			t.Errorf("%s; %s returned a list with first message %q, want %q",
 				tc.desc, op, first.Type, tc.wantFirst)
 		}
 
-		last := got[len(got)-1]
+		last := got[len(got)-1].Message
 		if last.Type != tc.wantLast {
 			t.Errorf("%s; %s returned a list with the last message %q, want %q",
 				tc.desc, op, last.Type, tc.wantLast)
@@ -637,43 +612,24 @@ func TestListRetry(t *testing.T) {
 	}
 	p1 := time.Now().Add(5 * time.Minute)
 	p2 := time.Now().Add(24 * time.Hour)
-	t1 := &RetryTask{
-		ID:        m1.ID,
-		Type:      m1.Type,
-		Payload:   m1.Payload,
-		ProcessAt: p1,
-		ErrorMsg:  m1.ErrorMsg,
-		Retried:   m1.Retried,
-		Retry:     m1.Retry,
-		Score:     p1.Unix(),
-		Queue:     m1.Queue,
-	}
-	t2 := &RetryTask{
-		ID:        m2.ID,
-		Type:      m2.Type,
-		Payload:   m2.Payload,
-		ProcessAt: p2,
-		ErrorMsg:  m2.ErrorMsg,
-		Retried:   m2.Retried,
-		Retry:     m2.Retry,
-		Score:     p2.Unix(),
-		Queue:     m1.Queue,
-	}
 
 	tests := []struct {
-		retry []h.ZSetEntry
-		want  []*RetryTask
+		retry []base.Z
+		want  []base.Z
 	}{
 		{
-			retry: []h.ZSetEntry{
-				{Msg: m1, Score: float64(p1.Unix())},
-				{Msg: m2, Score: float64(p2.Unix())},
+			retry: []base.Z{
+				{Message: m1, Score: p1.Unix()},
+				{Message: m2, Score: p2.Unix()},
 			},
-			want: []*RetryTask{t1, t2},
+			want: []base.Z{
+				{Message: m1, Score: p1.Unix()},
+				{Message: m2, Score: p2.Unix()},
+			},
 		},
 		{
-			retry: []h.ZSetEntry{},
-			want:  []*RetryTask{},
+			retry: []base.Z(nil),
+			want:  []base.Z(nil),
 		},
 	}
 
@@ -687,16 +643,9 @@ func TestListRetry(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		sortOpt := cmp.Transformer("SortMsg", func(in []*RetryTask) []*RetryTask {
-			out := append([]*RetryTask(nil), in...) // Copy input to avoid mutating it
-			sort.Slice(out, func(i, j int) bool {
-				return out[i].ID.String() < out[j].ID.String()
-			})
-			return out
-		})
-
-		if diff := cmp.Diff(tc.want, got, sortOpt, timeCmpOpt); diff != "" {
-			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
+		if diff := cmp.Diff(tc.want, got, timeCmpOpt); diff != "" {
+			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
+				op, got, err, tc.want, diff)
 			continue
 		}
 	}
@@ -706,11 +655,11 @@ func TestListRetryPagination(t *testing.T) {
 	r := setup(t)
 	// create 100 tasks with an increasing number of wait time.
 	now := time.Now()
-	var seed []h.ZSetEntry
+	var seed []base.Z
 	for i := 0; i < 100; i++ {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
 		processAt := now.Add(time.Duration(i) * time.Second)
-		seed = append(seed, h.ZSetEntry{Msg: msg, Score: float64(processAt.Unix())})
+		seed = append(seed, base.Z{Message: msg, Score: processAt.Unix()})
 	}
 	h.SeedRetryQueue(t, r.client, seed)
 
@@ -731,14 +680,16 @@ func TestListRetryPagination(t *testing.T) {
 
 	for _, tc := range tests {
 		got, err := r.ListRetry(Pagination{Size: tc.size, Page: tc.page})
-		op := fmt.Sprintf("r.ListRetry(Pagination{Size: %d, Page: %d})", tc.size, tc.page)
+		op := fmt.Sprintf("r.ListRetry(Pagination{Size: %d, Page: %d})",
+			tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
 			continue
 		}
 
 		if len(got) != tc.wantSize {
-			t.Errorf("%s; %s returned list of size %d, want %d", tc.desc, op, len(got), tc.wantSize)
+			t.Errorf("%s; %s returned list of size %d, want %d",
+				tc.desc, op, len(got), tc.wantSize)
 			continue
 		}
 
@@ -746,13 +697,13 @@ func TestListRetryPagination(t *testing.T) {
 			continue
 		}
 
-		first := got[0]
+		first := got[0].Message
 		if first.Type != tc.wantFirst {
 			t.Errorf("%s; %s returned a list with first message %q, want %q",
 				tc.desc, op, first.Type, tc.wantFirst)
 		}
 
-		last := got[len(got)-1]
+		last := got[len(got)-1].Message
 		if last.Type != tc.wantLast {
 			t.Errorf("%s; %s returned a list with the last message %q, want %q",
 				tc.desc, op, last.Type, tc.wantLast)
@@ -778,39 +729,24 @@ func TestListDead(t *testing.T) {
 	}
 	f1 := time.Now().Add(-5 * time.Minute)
 	f2 := time.Now().Add(-24 * time.Hour)
-	t1 := &DeadTask{
-		ID:           m1.ID,
-		Type:         m1.Type,
-		Payload:      m1.Payload,
-		LastFailedAt: f1,
-		ErrorMsg:     m1.ErrorMsg,
-		Score:        f1.Unix(),
-		Queue:        m1.Queue,
-	}
-	t2 := &DeadTask{
-		ID:           m2.ID,
-		Type:         m2.Type,
-		Payload:      m2.Payload,
-		LastFailedAt: f2,
-		ErrorMsg:     m2.ErrorMsg,
-		Score:        f2.Unix(),
-		Queue:        m2.Queue,
-	}
 
 	tests := []struct {
-		dead []h.ZSetEntry
-		want []*DeadTask
+		dead []base.Z
+		want []base.Z
 	}{
 		{
-			dead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(f1.Unix())},
-				{Msg: m2, Score: float64(f2.Unix())},
+			dead: []base.Z{
+				{Message: m1, Score: f1.Unix()},
+				{Message: m2, Score: f2.Unix()},
 			},
-			want: []*DeadTask{t1, t2},
+			want: []base.Z{
+				{Message: m2, Score: f2.Unix()}, // FIXME: shouldn't be sorted in the other order?
+				{Message: m1, Score: f1.Unix()},
+			},
 		},
 		{
-			dead: []h.ZSetEntry{},
-			want: []*DeadTask{},
+			dead: []base.Z(nil),
+			want: []base.Z(nil),
 		},
 	}
 
@@ -824,15 +760,9 @@ func TestListDead(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		sortOpt := cmp.Transformer("SortMsg", func(in []*DeadTask) []*DeadTask {
-			out := append([]*DeadTask(nil), in...) // Copy input to avoid mutating it
-			sort.Slice(out, func(i, j int) bool {
-				return out[i].ID.String() < out[j].ID.String()
-			})
-			return out
-		})
-		if diff := cmp.Diff(tc.want, got, sortOpt, timeCmpOpt); diff != "" {
-			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
+		if diff := cmp.Diff(tc.want, got, timeCmpOpt); diff != "" {
+			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
+				op, got, err, tc.want, diff)
 			continue
 		}
 	}
@@ -840,10 +770,10 @@ func TestListDead(t *testing.T) {
 
 func TestListDeadPagination(t *testing.T) {
 	r := setup(t)
-	var entries []h.ZSetEntry
+	var entries []base.Z
 	for i := 0; i < 100; i++ {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
-		entries = append(entries, h.ZSetEntry{Msg: msg, Score: float64(i)})
+		entries = append(entries, base.Z{Message: msg, Score: int64(i)})
 	}
 	h.SeedDeadQueue(t, r.client, entries)
 
@@ -864,14 +794,16 @@ func TestListDeadPagination(t *testing.T) {
 
 	for _, tc := range tests {
 		got, err := r.ListDead(Pagination{Size: tc.size, Page: tc.page})
-		op := fmt.Sprintf("r.ListDead(Pagination{Size: %d, Page: %d})", tc.size, tc.page)
+		op := fmt.Sprintf("r.ListDead(Pagination{Size: %d, Page: %d})",
+			tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
 			continue
 		}
 
 		if len(got) != tc.wantSize {
-			t.Errorf("%s; %s returned list of size %d, want %d", tc.desc, op, len(got), tc.wantSize)
+			t.Errorf("%s; %s returned list of size %d, want %d",
+				tc.desc, op, len(got), tc.wantSize)
 			continue
 		}
 
@@ -879,13 +811,13 @@ func TestListDeadPagination(t *testing.T) {
 			continue
 		}
 
-		first := got[0]
+		first := got[0].Message
 		if first.Type != tc.wantFirst {
 			t.Errorf("%s; %s returned a list with first message %q, want %q",
 				tc.desc, op, first.Type, tc.wantFirst)
 		}
 
-		last := got[len(got)-1]
+		last := got[len(got)-1].Message
 		if last.Type != tc.wantLast {
 			t.Errorf("%s; %s returned a list with the last message %q, want %q",
 				tc.desc, op, last.Type, tc.wantLast)
@@ -905,7 +837,7 @@ func TestEnqueueDeadTask(t *testing.T) {
 	s2 := time.Now().Add(-time.Hour).Unix()
 
 	tests := []struct {
-		dead         []h.ZSetEntry
+		dead         []base.Z
 		score        int64
 		id           uuid.UUID
 		want         error // expected return value from calling EnqueueDeadTask
@@ -913,9 +845,9 @@ func TestEnqueueDeadTask(t *testing.T) {
 		wantEnqueued map[string][]*base.TaskMessage
 	}{
 		{
-			dead: []h.ZSetEntry{
-				{Msg: t1, Score: float64(s1)},
-				{Msg: t2, Score: float64(s2)},
+			dead: []base.Z{
+				{Message: t1, Score: s1},
+				{Message: t2, Score: s2},
 			},
 			score:    s2,
 			id:       t2.ID,
@@ -926,9 +858,9 @@ func TestEnqueueDeadTask(t *testing.T) {
 			},
 		},
 		{
-			dead: []h.ZSetEntry{
-				{Msg: t1, Score: float64(s1)},
-				{Msg: t2, Score: float64(s2)},
+			dead: []base.Z{
+				{Message: t1, Score: s1},
+				{Message: t2, Score: s2},
 			},
 			score:    123,
 			id:       t2.ID,
@@ -939,10 +871,10 @@ func TestEnqueueDeadTask(t *testing.T) {
 			},
 		},
 		{
-			dead: []h.ZSetEntry{
-				{Msg: t1, Score: float64(s1)},
-				{Msg: t2, Score: float64(s2)},
-				{Msg: t3, Score: float64(s1)},
+			dead: []base.Z{
+				{Message: t1, Score: s1},
+				{Message: t2, Score: s2},
+				{Message: t3, Score: s1},
 			},
 			score:    s1,
 			id:       t3.ID,
@@ -989,7 +921,7 @@ func TestEnqueueRetryTask(t *testing.T) {
 	s1 := time.Now().Add(-5 * time.Minute).Unix()
 	s2 := time.Now().Add(-time.Hour).Unix()
 	tests := []struct {
-		retry        []h.ZSetEntry
+		retry        []base.Z
 		score        int64
 		id           uuid.UUID
 		want         error // expected return value from calling EnqueueRetryTask
@@ -997,9 +929,9 @@ func TestEnqueueRetryTask(t *testing.T) {
 		wantEnqueued map[string][]*base.TaskMessage
 	}{
 		{
-			retry: []h.ZSetEntry{
-				{Msg: t1, Score: float64(s1)},
-				{Msg: t2, Score: float64(s2)},
+			retry: []base.Z{
+				{Message: t1, Score: s1},
+				{Message: t2, Score: s2},
 			},
 			score:     s2,
 			id:        t2.ID,
@@ -1010,9 +942,9 @@ func TestEnqueueRetryTask(t *testing.T) {
 			},
 		},
 		{
-			retry: []h.ZSetEntry{
-				{Msg: t1, Score: float64(s1)},
-				{Msg: t2, Score: float64(s2)},
+			retry: []base.Z{
+				{Message: t1, Score: s1},
+				{Message: t2, Score: s2},
 			},
 			score:     123,
 			id:        t2.ID,
@@ -1023,10 +955,10 @@ func TestEnqueueRetryTask(t *testing.T) {
 			},
 		},
 		{
-			retry: []h.ZSetEntry{
-				{Msg: t1, Score: float64(s1)},
-				{Msg: t2, Score: float64(s2)},
-				{Msg: t3, Score: float64(s2)},
+			retry: []base.Z{
+				{Message: t1, Score: s1},
+				{Message: t2, Score: s2},
+				{Message: t3, Score: s2},
 			},
 			score:     s2,
 			id:        t3.ID,
@@ -1073,7 +1005,7 @@ func TestEnqueueScheduledTask(t *testing.T) {
 	s2 := time.Now().Add(-time.Hour).Unix()
 
 	tests := []struct {
-		scheduled     []h.ZSetEntry
+		scheduled     []base.Z
 		score         int64
 		id            uuid.UUID
 		want          error // expected return value from calling EnqueueScheduledTask
@@ -1081,9 +1013,9 @@ func TestEnqueueScheduledTask(t *testing.T) {
 		wantEnqueued  map[string][]*base.TaskMessage
 	}{
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: float64(s1)},
-				{Msg: t2, Score: float64(s2)},
+			scheduled: []base.Z{
+				{Message: t1, Score: s1},
+				{Message: t2, Score: s2},
 			},
 			score:         s2,
 			id:            t2.ID,
@@ -1094,9 +1026,9 @@ func TestEnqueueScheduledTask(t *testing.T) {
 			},
 		},
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: float64(s1)},
-				{Msg: t2, Score: float64(s2)},
+			scheduled: []base.Z{
+				{Message: t1, Score: s1},
+				{Message: t2, Score: s2},
 			},
 			score:         123,
 			id:            t2.ID,
@@ -1107,10 +1039,10 @@ func TestEnqueueScheduledTask(t *testing.T) {
 			},
 		},
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: float64(s1)},
-				{Msg: t2, Score: float64(s2)},
-				{Msg: t3, Score: float64(s1)},
+			scheduled: []base.Z{
+				{Message: t1, Score: s1},
+				{Message: t2, Score: s2},
+				{Message: t3, Score: s1},
 			},
 			score:         s1,
 			id:            t3.ID,
@@ -1159,16 +1091,16 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 
 	tests := []struct {
 		desc         string
-		scheduled    []h.ZSetEntry
+		scheduled    []base.Z
 		want         int64
 		wantEnqueued map[string][]*base.TaskMessage
 	}{
 		{
 			desc: "with tasks in scheduled queue",
-			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: float64(time.Now().Add(time.Hour).Unix())},
-				{Msg: t2, Score: float64(time.Now().Add(time.Hour).Unix())},
-				{Msg: t3, Score: float64(time.Now().Add(time.Hour).Unix())},
+			scheduled: []base.Z{
+				{Message: t1, Score: time.Now().Add(time.Hour).Unix()},
+				{Message: t2, Score: time.Now().Add(time.Hour).Unix()},
+				{Message: t3, Score: time.Now().Add(time.Hour).Unix()},
 			},
 			want: 3,
 			wantEnqueued: map[string][]*base.TaskMessage{
@@ -1177,7 +1109,7 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 		},
 		{
 			desc:      "with empty scheduled queue",
-			scheduled: []h.ZSetEntry{},
+			scheduled: []base.Z{},
 			want:      0,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {},
@@ -1185,12 +1117,12 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 		},
 		{
 			desc: "with custom queues",
-			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: float64(time.Now().Add(time.Hour).Unix())},
-				{Msg: t2, Score: float64(time.Now().Add(time.Hour).Unix())},
-				{Msg: t3, Score: float64(time.Now().Add(time.Hour).Unix())},
-				{Msg: t4, Score: float64(time.Now().Add(time.Hour).Unix())},
-				{Msg: t5, Score: float64(time.Now().Add(time.Hour).Unix())},
+			scheduled: []base.Z{
+				{Message: t1, Score: time.Now().Add(time.Hour).Unix()},
+				{Message: t2, Score: time.Now().Add(time.Hour).Unix()},
+				{Message: t3, Score: time.Now().Add(time.Hour).Unix()},
+				{Message: t4, Score: time.Now().Add(time.Hour).Unix()},
+				{Message: t5, Score: time.Now().Add(time.Hour).Unix()},
 			},
 			want: 5,
 			wantEnqueued: map[string][]*base.TaskMessage{
@@ -1238,16 +1170,16 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 
 	tests := []struct {
 		desc         string
-		retry        []h.ZSetEntry
+		retry        []base.Z
 		want         int64
 		wantEnqueued map[string][]*base.TaskMessage
 	}{
 		{
 			desc: "with tasks in retry queue",
-			retry: []h.ZSetEntry{
-				{Msg: t1, Score: float64(time.Now().Add(time.Hour).Unix())},
-				{Msg: t2, Score: float64(time.Now().Add(time.Hour).Unix())},
-				{Msg: t3, Score: float64(time.Now().Add(time.Hour).Unix())},
+			retry: []base.Z{
+				{Message: t1, Score: time.Now().Add(time.Hour).Unix()},
+				{Message: t2, Score: time.Now().Add(time.Hour).Unix()},
+				{Message: t3, Score: time.Now().Add(time.Hour).Unix()},
 			},
 			want: 3,
 			wantEnqueued: map[string][]*base.TaskMessage{
@@ -1256,7 +1188,7 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 		},
 		{
 			desc:  "with empty retry queue",
-			retry: []h.ZSetEntry{},
+			retry: []base.Z{},
 			want:  0,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {},
@@ -1264,12 +1196,12 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 		},
 		{
 			desc: "with custom queues",
-			retry: []h.ZSetEntry{
-				{Msg: t1, Score: float64(time.Now().Add(time.Hour).Unix())},
-				{Msg: t2, Score: float64(time.Now().Add(time.Hour).Unix())},
-				{Msg: t3, Score: float64(time.Now().Add(time.Hour).Unix())},
-				{Msg: t4, Score: float64(time.Now().Add(time.Hour).Unix())},
-				{Msg: t5, Score: float64(time.Now().Add(time.Hour).Unix())},
+			retry: []base.Z{
+				{Message: t1, Score: time.Now().Add(time.Hour).Unix()},
+				{Message: t2, Score: time.Now().Add(time.Hour).Unix()},
+				{Message: t3, Score: time.Now().Add(time.Hour).Unix()},
+				{Message: t4, Score: time.Now().Add(time.Hour).Unix()},
+				{Message: t5, Score: time.Now().Add(time.Hour).Unix()},
 			},
 			want: 5,
 			wantEnqueued: map[string][]*base.TaskMessage{
@@ -1317,16 +1249,16 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 
 	tests := []struct {
 		desc         string
-		dead         []h.ZSetEntry
+		dead         []base.Z
 		want         int64
 		wantEnqueued map[string][]*base.TaskMessage
 	}{
 		{
 			desc: "with tasks in dead queue",
-			dead: []h.ZSetEntry{
-				{Msg: t1, Score: float64(time.Now().Add(-time.Minute).Unix())},
-				{Msg: t2, Score: float64(time.Now().Add(-time.Minute).Unix())},
-				{Msg: t3, Score: float64(time.Now().Add(-time.Minute).Unix())},
+			dead: []base.Z{
+				{Message: t1, Score: time.Now().Add(-time.Minute).Unix()},
+				{Message: t2, Score: time.Now().Add(-time.Minute).Unix()},
+				{Message: t3, Score: time.Now().Add(-time.Minute).Unix()},
 			},
 			want: 3,
 			wantEnqueued: map[string][]*base.TaskMessage{
@@ -1335,7 +1267,7 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 		},
 		{
 			desc: "with empty dead queue",
-			dead: []h.ZSetEntry{},
+			dead: []base.Z{},
 			want: 0,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {},
@@ -1343,12 +1275,12 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 		},
 		{
 			desc: "with custom queues",
-			dead: []h.ZSetEntry{
-				{Msg: t1, Score: float64(time.Now().Add(-time.Minute).Unix())},
-				{Msg: t2, Score: float64(time.Now().Add(-time.Minute).Unix())},
-				{Msg: t3, Score: float64(time.Now().Add(-time.Minute).Unix())},
-				{Msg: t4, Score: float64(time.Now().Add(-time.Minute).Unix())},
-				{Msg: t5, Score: float64(time.Now().Add(-time.Minute).Unix())},
+			dead: []base.Z{
+				{Message: t1, Score: time.Now().Add(-time.Minute).Unix()},
+				{Message: t2, Score: time.Now().Add(-time.Minute).Unix()},
+				{Message: t3, Score: time.Now().Add(-time.Minute).Unix()},
+				{Message: t4, Score: time.Now().Add(-time.Minute).Unix()},
+				{Message: t5, Score: time.Now().Add(-time.Minute).Unix()},
 			},
 			want: 5,
 			wantEnqueued: map[string][]*base.TaskMessage{
@@ -1392,45 +1324,45 @@ func TestKillRetryTask(t *testing.T) {
 	t2 := time.Now().Add(time.Hour)
 
 	tests := []struct {
-		retry     []h.ZSetEntry
-		dead      []h.ZSetEntry
+		retry     []base.Z
+		dead      []base.Z
 		id        uuid.UUID
 		score     int64
 		want      error
-		wantRetry []h.ZSetEntry
-		wantDead  []h.ZSetEntry
+		wantRetry []base.Z
+		wantDead  []base.Z
 	}{
 		{
-			retry: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			retry: []base.Z{
+				{Message: m1, Score: t1.Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
-			dead:  []h.ZSetEntry{},
+			dead:  []base.Z{},
 			id:    m1.ID,
 			score: t1.Unix(),
 			want:  nil,
-			wantRetry: []h.ZSetEntry{
-				{Msg: m2, Score: float64(t2.Unix())},
+			wantRetry: []base.Z{
+				{Message: m2, Score: t2.Unix()},
 			},
-			wantDead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(time.Now().Unix())},
+			wantDead: []base.Z{
+				{Message: m1, Score: time.Now().Unix()},
 			},
 		},
 		{
-			retry: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
+			retry: []base.Z{
+				{Message: m1, Score: t1.Unix()},
 			},
-			dead: []h.ZSetEntry{
-				{Msg: m2, Score: float64(t2.Unix())},
+			dead: []base.Z{
+				{Message: m2, Score: t2.Unix()},
 			},
 			id:    m2.ID,
 			score: t2.Unix(),
 			want:  ErrTaskNotFound,
-			wantRetry: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
+			wantRetry: []base.Z{
+				{Message: m1, Score: t1.Unix()},
 			},
-			wantDead: []h.ZSetEntry{
-				{Msg: m2, Score: float64(t2.Unix())},
+			wantDead: []base.Z{
+				{Message: m2, Score: t2.Unix()},
 			},
 		},
 	}
@@ -1469,45 +1401,45 @@ func TestKillScheduledTask(t *testing.T) {
 	t2 := time.Now().Add(time.Hour)
 
 	tests := []struct {
-		scheduled     []h.ZSetEntry
-		dead          []h.ZSetEntry
+		scheduled     []base.Z
+		dead          []base.Z
 		id            uuid.UUID
 		score         int64
 		want          error
-		wantScheduled []h.ZSetEntry
-		wantDead      []h.ZSetEntry
+		wantScheduled []base.Z
+		wantDead      []base.Z
 	}{
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			scheduled: []base.Z{
+				{Message: m1, Score: t1.Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
-			dead:  []h.ZSetEntry{},
+			dead:  []base.Z{},
 			id:    m1.ID,
 			score: t1.Unix(),
 			want:  nil,
-			wantScheduled: []h.ZSetEntry{
-				{Msg: m2, Score: float64(t2.Unix())},
+			wantScheduled: []base.Z{
+				{Message: m2, Score: t2.Unix()},
 			},
-			wantDead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(time.Now().Unix())},
+			wantDead: []base.Z{
+				{Message: m1, Score: time.Now().Unix()},
 			},
 		},
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
+			scheduled: []base.Z{
+				{Message: m1, Score: t1.Unix()},
 			},
-			dead: []h.ZSetEntry{
-				{Msg: m2, Score: float64(t2.Unix())},
+			dead: []base.Z{
+				{Message: m2, Score: t2.Unix()},
 			},
 			id:    m2.ID,
 			score: t2.Unix(),
 			want:  ErrTaskNotFound,
-			wantScheduled: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
+			wantScheduled: []base.Z{
+				{Message: m1, Score: t1.Unix()},
 			},
-			wantDead: []h.ZSetEntry{
-				{Msg: m2, Score: float64(t2.Unix())},
+			wantDead: []base.Z{
+				{Message: m2, Score: t2.Unix()},
 			},
 		},
 	}
@@ -1546,50 +1478,50 @@ func TestKillAllRetryTasks(t *testing.T) {
 	t2 := time.Now().Add(time.Hour)
 
 	tests := []struct {
-		retry     []h.ZSetEntry
-		dead      []h.ZSetEntry
+		retry     []base.Z
+		dead      []base.Z
 		want      int64
-		wantRetry []h.ZSetEntry
-		wantDead  []h.ZSetEntry
+		wantRetry []base.Z
+		wantDead  []base.Z
 	}{
 		{
-			retry: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			retry: []base.Z{
+				{Message: m1, Score: t1.Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
-			dead:      []h.ZSetEntry{},
+			dead:      []base.Z{},
 			want:      2,
-			wantRetry: []h.ZSetEntry{},
-			wantDead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(time.Now().Unix())},
-				{Msg: m2, Score: float64(time.Now().Unix())},
+			wantRetry: []base.Z{},
+			wantDead: []base.Z{
+				{Message: m1, Score: time.Now().Unix()},
+				{Message: m2, Score: time.Now().Unix()},
 			},
 		},
 		{
-			retry: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
+			retry: []base.Z{
+				{Message: m1, Score: t1.Unix()},
 			},
-			dead: []h.ZSetEntry{
-				{Msg: m2, Score: float64(t2.Unix())},
+			dead: []base.Z{
+				{Message: m2, Score: t2.Unix()},
 			},
 			want:      1,
-			wantRetry: []h.ZSetEntry{},
-			wantDead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(time.Now().Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			wantRetry: []base.Z{},
+			wantDead: []base.Z{
+				{Message: m1, Score: time.Now().Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
 		},
 		{
-			retry: []h.ZSetEntry{},
-			dead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			retry: []base.Z{},
+			dead: []base.Z{
+				{Message: m1, Score: t1.Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
 			want:      0,
-			wantRetry: []h.ZSetEntry{},
-			wantDead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			wantRetry: []base.Z{},
+			wantDead: []base.Z{
+				{Message: m1, Score: t1.Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
 		},
 	}
@@ -1628,50 +1560,50 @@ func TestKillAllScheduledTasks(t *testing.T) {
 	t2 := time.Now().Add(time.Hour)
 
 	tests := []struct {
-		scheduled     []h.ZSetEntry
-		dead          []h.ZSetEntry
+		scheduled     []base.Z
+		dead          []base.Z
 		want          int64
-		wantScheduled []h.ZSetEntry
-		wantDead      []h.ZSetEntry
+		wantScheduled []base.Z
+		wantDead      []base.Z
 	}{
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			scheduled: []base.Z{
+				{Message: m1, Score: t1.Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
-			dead:          []h.ZSetEntry{},
+			dead:          []base.Z{},
 			want:          2,
-			wantScheduled: []h.ZSetEntry{},
-			wantDead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(time.Now().Unix())},
-				{Msg: m2, Score: float64(time.Now().Unix())},
+			wantScheduled: []base.Z{},
+			wantDead: []base.Z{
+				{Message: m1, Score: time.Now().Unix()},
+				{Message: m2, Score: time.Now().Unix()},
 			},
 		},
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
+			scheduled: []base.Z{
+				{Message: m1, Score: t1.Unix()},
 			},
-			dead: []h.ZSetEntry{
-				{Msg: m2, Score: float64(t2.Unix())},
+			dead: []base.Z{
+				{Message: m2, Score: t2.Unix()},
 			},
 			want:          1,
-			wantScheduled: []h.ZSetEntry{},
-			wantDead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(time.Now().Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			wantScheduled: []base.Z{},
+			wantDead: []base.Z{
+				{Message: m1, Score: time.Now().Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
 		},
 		{
-			scheduled: []h.ZSetEntry{},
-			dead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			scheduled: []base.Z{},
+			dead: []base.Z{
+				{Message: m1, Score: t1.Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
 			want:          0,
-			wantScheduled: []h.ZSetEntry{},
-			wantDead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			wantScheduled: []base.Z{},
+			wantDead: []base.Z{
+				{Message: m1, Score: t1.Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
 		},
 	}
@@ -1710,16 +1642,16 @@ func TestDeleteDeadTask(t *testing.T) {
 	t2 := time.Now().Add(-time.Hour)
 
 	tests := []struct {
-		dead     []h.ZSetEntry
+		dead     []base.Z
 		id       uuid.UUID
 		score    int64
 		want     error
 		wantDead []*base.TaskMessage
 	}{
 		{
-			dead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			dead: []base.Z{
+				{Message: m1, Score: t1.Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
 			id:       m1.ID,
 			score:    t1.Unix(),
@@ -1727,9 +1659,9 @@ func TestDeleteDeadTask(t *testing.T) {
 			wantDead: []*base.TaskMessage{m2},
 		},
 		{
-			dead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			dead: []base.Z{
+				{Message: m1, Score: t1.Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
 			id:       m1.ID,
 			score:    t2.Unix(), // id and score mismatch
@@ -1737,7 +1669,7 @@ func TestDeleteDeadTask(t *testing.T) {
 			wantDead: []*base.TaskMessage{m1, m2},
 		},
 		{
-			dead:     []h.ZSetEntry{},
+			dead:     []base.Z{},
 			id:       m1.ID,
 			score:    t1.Unix(),
 			want:     ErrTaskNotFound,
@@ -1770,16 +1702,16 @@ func TestDeleteRetryTask(t *testing.T) {
 	t2 := time.Now().Add(time.Hour)
 
 	tests := []struct {
-		retry     []h.ZSetEntry
+		retry     []base.Z
 		id        uuid.UUID
 		score     int64
 		want      error
 		wantRetry []*base.TaskMessage
 	}{
 		{
-			retry: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			retry: []base.Z{
+				{Message: m1, Score: t1.Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
 			id:        m1.ID,
 			score:     t1.Unix(),
@@ -1787,8 +1719,8 @@ func TestDeleteRetryTask(t *testing.T) {
 			wantRetry: []*base.TaskMessage{m2},
 		},
 		{
-			retry: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
+			retry: []base.Z{
+				{Message: m1, Score: t1.Unix()},
 			},
 			id:        m2.ID,
 			score:     t2.Unix(),
@@ -1822,16 +1754,16 @@ func TestDeleteScheduledTask(t *testing.T) {
 	t2 := time.Now().Add(time.Hour)
 
 	tests := []struct {
-		scheduled     []h.ZSetEntry
+		scheduled     []base.Z
 		id            uuid.UUID
 		score         int64
 		want          error
 		wantScheduled []*base.TaskMessage
 	}{
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
-				{Msg: m2, Score: float64(t2.Unix())},
+			scheduled: []base.Z{
+				{Message: m1, Score: t1.Unix()},
+				{Message: m2, Score: t2.Unix()},
 			},
 			id:            m1.ID,
 			score:         t1.Unix(),
@@ -1839,8 +1771,8 @@ func TestDeleteScheduledTask(t *testing.T) {
 			wantScheduled: []*base.TaskMessage{m2},
 		},
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: m1, Score: float64(t1.Unix())},
+			scheduled: []base.Z{
+				{Message: m1, Score: t1.Unix()},
 			},
 			id:            m2.ID,
 			score:         t2.Unix(),
@@ -1873,15 +1805,22 @@ func TestDeleteAllDeadTasks(t *testing.T) {
 	m3 := h.NewTaskMessage("gen_thumbnail", nil)
 
 	tests := []struct {
-		dead     []h.ZSetEntry
+		dead     []base.Z
+		want     int64
 		wantDead []*base.TaskMessage
 	}{
 		{
-			dead: []h.ZSetEntry{
-				{Msg: m1, Score: float64(time.Now().Unix())},
-				{Msg: m2, Score: float64(time.Now().Unix())},
-				{Msg: m3, Score: float64(time.Now().Unix())},
+			dead: []base.Z{
+				{Message: m1, Score: time.Now().Unix()},
+				{Message: m2, Score: time.Now().Unix()},
+				{Message: m3, Score: time.Now().Unix()},
 			},
+			want:     3,
+			wantDead: []*base.TaskMessage{},
+		},
+		{
+			dead:     []base.Z{},
+			want:     0,
 			wantDead: []*base.TaskMessage{},
 		},
 	}
@@ -1890,11 +1829,13 @@ func TestDeleteAllDeadTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedDeadQueue(t, r.client, tc.dead)
 
-		err := r.DeleteAllDeadTasks()
+		got, err := r.DeleteAllDeadTasks()
 		if err != nil {
-			t.Errorf("r.DeleteAllDeaadTasks = %v, want nil", err)
+			t.Errorf("r.DeleteAllDeadTasks returned error: %v", err)
 		}
-
+		if got != tc.want {
+			t.Errorf("r.DeleteAllDeadTasks() = %d, nil, want %d, nil", got, tc.want)
+		}
 		gotDead := h.GetDeadMessages(t, r.client)
 		if diff := cmp.Diff(tc.wantDead, gotDead, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DeadQueue, diff)
@@ -1909,15 +1850,22 @@ func TestDeleteAllRetryTasks(t *testing.T) {
 	m3 := h.NewTaskMessage("gen_thumbnail", nil)
 
 	tests := []struct {
-		retry     []h.ZSetEntry
+		retry     []base.Z
+		want      int64
 		wantRetry []*base.TaskMessage
 	}{
 		{
-			retry: []h.ZSetEntry{
-				{Msg: m1, Score: float64(time.Now().Unix())},
-				{Msg: m2, Score: float64(time.Now().Unix())},
-				{Msg: m3, Score: float64(time.Now().Unix())},
+			retry: []base.Z{
+				{Message: m1, Score: time.Now().Unix()},
+				{Message: m2, Score: time.Now().Unix()},
+				{Message: m3, Score: time.Now().Unix()},
 			},
+			want:      3,
+			wantRetry: []*base.TaskMessage{},
+		},
+		{
+			retry:     []base.Z{},
+			want:      0,
 			wantRetry: []*base.TaskMessage{},
 		},
 	}
@@ -1926,11 +1874,13 @@ func TestDeleteAllRetryTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedRetryQueue(t, r.client, tc.retry)
 
-		err := r.DeleteAllRetryTasks()
+		got, err := r.DeleteAllRetryTasks()
 		if err != nil {
-			t.Errorf("r.DeleteAllDeaadTasks = %v, want nil", err)
+			t.Errorf("r.DeleteAllRetryTasks returned error: %v", err)
 		}
-
+		if got != tc.want {
+			t.Errorf("r.DeleteAllRetryTasks() = %d, nil, want %d, nil", got, tc.want)
+		}
 		gotRetry := h.GetRetryMessages(t, r.client)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
@@ -1945,15 +1895,22 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 	m3 := h.NewTaskMessage("gen_thumbnail", nil)
 
 	tests := []struct {
-		scheduled     []h.ZSetEntry
+		scheduled     []base.Z
+		want          int64
 		wantScheduled []*base.TaskMessage
 	}{
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: m1, Score: float64(time.Now().Add(time.Minute).Unix())},
-				{Msg: m2, Score: float64(time.Now().Add(time.Minute).Unix())},
-				{Msg: m3, Score: float64(time.Now().Add(time.Minute).Unix())},
+			scheduled: []base.Z{
+				{Message: m1, Score: time.Now().Add(time.Minute).Unix()},
+				{Message: m2, Score: time.Now().Add(time.Minute).Unix()},
+				{Message: m3, Score: time.Now().Add(time.Minute).Unix()},
 			},
+			want:          3,
+			wantScheduled: []*base.TaskMessage{},
+		},
+		{
+			scheduled:     []base.Z{},
+			want:          0,
 			wantScheduled: []*base.TaskMessage{},
 		},
 	}
@@ -1962,11 +1919,13 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedScheduledQueue(t, r.client, tc.scheduled)
 
-		err := r.DeleteAllScheduledTasks()
+		got, err := r.DeleteAllScheduledTasks()
 		if err != nil {
-			t.Errorf("r.DeleteAllDeaadTasks = %v, want nil", err)
+			t.Errorf("r.DeleteAllScheduledTasks returned error: %v", err)
 		}
-
+		if got != tc.want {
+			t.Errorf("r.DeleteAllScheduledTasks() = %d, nil, want %d, nil", got, tc.want)
+		}
 		gotScheduled := h.GetScheduledMessages(t, r.client)
 		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, h.SortMsgOpt); diff != "" {
 			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledQueue, diff)

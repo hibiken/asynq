@@ -31,8 +31,8 @@ func TestScheduler(t *testing.T) {
 	now := time.Now()
 
 	tests := []struct {
-		initScheduled []h.ZSetEntry       // scheduled queue initial state
-		initRetry     []h.ZSetEntry       // retry queue initial state
+		initScheduled []base.Z            // scheduled queue initial state
+		initRetry     []base.Z            // retry queue initial state
 		initQueue     []*base.TaskMessage // default queue initial state
 		wait          time.Duration       // wait duration before checking for final state
 		wantScheduled []*base.TaskMessage // schedule queue final state
@@ -40,12 +40,12 @@ func TestScheduler(t *testing.T) {
 		wantQueue     []*base.TaskMessage // default queue final state
 	}{
 		{
-			initScheduled: []h.ZSetEntry{
-				{Msg: t1, Score: float64(now.Add(time.Hour).Unix())},
-				{Msg: t2, Score: float64(now.Add(-2 * time.Second).Unix())},
+			initScheduled: []base.Z{
+				{Message: t1, Score: now.Add(time.Hour).Unix()},
+				{Message: t2, Score: now.Add(-2 * time.Second).Unix()},
 			},
-			initRetry: []h.ZSetEntry{
-				{Msg: t3, Score: float64(time.Now().Add(-500 * time.Millisecond).Unix())},
+			initRetry: []base.Z{
+				{Message: t3, Score: time.Now().Add(-500 * time.Millisecond).Unix()},
 			},
 			initQueue:     []*base.TaskMessage{t4},
 			wait:          pollInterval * 2,
@@ -54,12 +54,12 @@ func TestScheduler(t *testing.T) {
 			wantQueue:     []*base.TaskMessage{t2, t3, t4},
 		},
 		{
-			initScheduled: []h.ZSetEntry{
-				{Msg: t1, Score: float64(now.Unix())},
-				{Msg: t2, Score: float64(now.Add(-2 * time.Second).Unix())},
-				{Msg: t3, Score: float64(now.Add(-500 * time.Millisecond).Unix())},
+			initScheduled: []base.Z{
+				{Message: t1, Score: now.Unix()},
+				{Message: t2, Score: now.Add(-2 * time.Second).Unix()},
+				{Message: t3, Score: now.Add(-500 * time.Millisecond).Unix()},
 			},
-			initRetry:     []h.ZSetEntry{},
+			initRetry:     []base.Z{},
 			initQueue:     []*base.TaskMessage{t4},
 			wait:          pollInterval * 2,
 			wantScheduled: []*base.TaskMessage{},

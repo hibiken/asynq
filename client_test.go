@@ -36,7 +36,7 @@ func TestClientEnqueueAt(t *testing.T) {
 		opts          []Option
 		wantRes       *Result
 		wantEnqueued  map[string][]*base.TaskMessage
-		wantScheduled []h.ZSetEntry
+		wantScheduled []base.Z
 	}{
 		{
 			desc:      "Process task immediately",
@@ -75,9 +75,9 @@ func TestClientEnqueueAt(t *testing.T) {
 				Deadline: noDeadline,
 			},
 			wantEnqueued: nil, // db is flushed in setup so list does not exist hence nil
-			wantScheduled: []h.ZSetEntry{
+			wantScheduled: []base.Z{
 				{
-					Msg: &base.TaskMessage{
+					Message: &base.TaskMessage{
 						Type:     task.Type,
 						Payload:  task.Payload.data,
 						Retry:    defaultMaxRetry,
@@ -85,7 +85,7 @@ func TestClientEnqueueAt(t *testing.T) {
 						Timeout:  int64(defaultTimeout.Seconds()),
 						Deadline: noDeadline.Unix(),
 					},
-					Score: float64(oneHourLater.Unix()),
+					Score: oneHourLater.Unix(),
 				},
 			},
 		},
@@ -376,7 +376,7 @@ func TestClientEnqueueIn(t *testing.T) {
 		opts          []Option
 		wantRes       *Result
 		wantEnqueued  map[string][]*base.TaskMessage
-		wantScheduled []h.ZSetEntry
+		wantScheduled []base.Z
 	}{
 		{
 			desc:  "schedule a task to be enqueued in one hour",
@@ -390,9 +390,9 @@ func TestClientEnqueueIn(t *testing.T) {
 				Deadline: noDeadline,
 			},
 			wantEnqueued: nil, // db is flushed in setup so list does not exist hence nil
-			wantScheduled: []h.ZSetEntry{
+			wantScheduled: []base.Z{
 				{
-					Msg: &base.TaskMessage{
+					Message: &base.TaskMessage{
 						Type:     task.Type,
 						Payload:  task.Payload.data,
 						Retry:    defaultMaxRetry,
@@ -400,7 +400,7 @@ func TestClientEnqueueIn(t *testing.T) {
 						Timeout:  int64(defaultTimeout.Seconds()),
 						Deadline: noDeadline.Unix(),
 					},
-					Score: float64(time.Now().Add(time.Hour).Unix()),
+					Score: time.Now().Add(time.Hour).Unix(),
 				},
 			},
 		},

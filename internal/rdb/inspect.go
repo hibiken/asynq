@@ -51,56 +51,6 @@ type DailyStats struct {
 	Time      time.Time
 }
 
-// EnqueuedTask is a task in a queue and is ready to be processed.
-type EnqueuedTask struct {
-	ID      uuid.UUID
-	Type    string
-	Payload map[string]interface{}
-	Queue   string
-}
-
-// InProgressTask is a task that's currently being processed.
-type InProgressTask struct {
-	ID      uuid.UUID
-	Type    string
-	Payload map[string]interface{}
-}
-
-// ScheduledTask is a task that's scheduled to be processed in the future.
-type ScheduledTask struct {
-	ID        uuid.UUID
-	Type      string
-	Payload   map[string]interface{}
-	ProcessAt time.Time
-	Score     int64
-	Queue     string
-}
-
-// RetryTask is a task that's in retry queue because worker failed to process the task.
-type RetryTask struct {
-	ID      uuid.UUID
-	Type    string
-	Payload map[string]interface{}
-	// TODO(hibiken): add LastFailedAt time.Time
-	ProcessAt time.Time
-	ErrorMsg  string
-	Retried   int
-	Retry     int
-	Score     int64
-	Queue     string
-}
-
-// DeadTask is a task in that has exhausted all retries.
-type DeadTask struct {
-	ID           uuid.UUID
-	Type         string
-	Payload      map[string]interface{}
-	LastFailedAt time.Time
-	ErrorMsg     string
-	Score        int64
-	Queue        string
-}
-
 // KEYS[1] -> asynq:queues
 // KEYS[2] -> asynq:in_progress
 // KEYS[3] -> asynq:scheduled
@@ -289,158 +239,79 @@ func (p Pagination) stop() int64 {
 }
 
 // ListEnqueued returns enqueued tasks that are ready to be processed.
-func (r *RDB) ListEnqueued(qname string, pgn Pagination) ([]*EnqueuedTask, error) {
+func (r *RDB) ListEnqueued(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
 	qkey := base.QueueKey(qname)
 	if !r.client.SIsMember(base.AllQueues, qkey).Val() {
 		return nil, fmt.Errorf("queue %q does not exist", qname)
 	}
-	// Note: Because we use LPUSH to redis list, we need to calculate the
-	// correct range and reverse the list to get the tasks with pagination.
-	stop := -pgn.start() - 1
-	start := -pgn.stop() - 1
-	data, err := r.client.LRange(qkey, start, stop).Result()
-	if err != nil {
-		return nil, err
-	}
-	reverse(data)
-	var tasks []*EnqueuedTask
-	for _, s := range data {
-		var msg base.TaskMessage
-		err := json.Unmarshal([]byte(s), &msg)
-		if err != nil {
-			continue // bad data, ignore and continue
-		}
-		tasks = append(tasks, &EnqueuedTask{
-			ID:      msg.ID,
-			Type:    msg.Type,
-			Payload: msg.Payload,
-			Queue:   msg.Queue,
-		})
-	}
-	return tasks, nil
+	return r.listMessages(qkey, pgn)
 }
 
 // ListInProgress returns all tasks that are currently being processed.
-func (r *RDB) ListInProgress(pgn Pagination) ([]*InProgressTask, error) {
+func (r *RDB) ListInProgress(pgn Pagination) ([]*base.TaskMessage, error) {
+	return r.listMessages(base.InProgressQueue, pgn)
+}
+
+// listMessages returns a list of TaskMessage in Redis list with the given key.
+func (r *RDB) listMessages(key string, pgn Pagination) ([]*base.TaskMessage, error) {
 	// Note: Because we use LPUSH to redis list, we need to calculate the
 	// correct range and reverse the list to get the tasks with pagination.
 	stop := -pgn.start() - 1
 	start := -pgn.stop() - 1
-	data, err := r.client.LRange(base.InProgressQueue, start, stop).Result()
+	data, err := r.client.LRange(key, start, stop).Result()
 	if err != nil {
 		return nil, err
 	}
 	reverse(data)
-	var tasks []*InProgressTask
+	var msgs []*base.TaskMessage
 	for _, s := range data {
-		var msg base.TaskMessage
-		err := json.Unmarshal([]byte(s), &msg)
+		m, err := base.DecodeMessage(s)
 		if err != nil {
 			continue // bad data, ignore and continue
 		}
-		tasks = append(tasks, &InProgressTask{
-			ID:      msg.ID,
-			Type:    msg.Type,
-			Payload: msg.Payload,
-		})
+		msgs = append(msgs, m)
 	}
-	return tasks, nil
+	return msgs, nil
+
 }
 
 // ListScheduled returns all tasks that are scheduled to be processed
 // in the future.
-func (r *RDB) ListScheduled(pgn Pagination) ([]*ScheduledTask, error) {
-	data, err := r.client.ZRangeWithScores(base.ScheduledQueue, pgn.start(), pgn.stop()).Result()
-	if err != nil {
-		return nil, err
-	}
-	var tasks []*ScheduledTask
-	for _, z := range data {
-		s, ok := z.Member.(string)
-		if !ok {
-			continue // bad data, ignore and continue
-		}
-		var msg base.TaskMessage
-		err := json.Unmarshal([]byte(s), &msg)
-		if err != nil {
-			continue // bad data, ignore and continue
-		}
-		processAt := time.Unix(int64(z.Score), 0)
-		tasks = append(tasks, &ScheduledTask{
-			ID:        msg.ID,
-			Type:      msg.Type,
-			Payload:   msg.Payload,
-			Queue:     msg.Queue,
-			ProcessAt: processAt,
-			Score:     int64(z.Score),
-		})
-	}
-	return tasks, nil
+func (r *RDB) ListScheduled(pgn Pagination) ([]base.Z, error) {
+	return r.listZSetEntries(base.ScheduledQueue, pgn)
 }
 
 // ListRetry returns all tasks that have failed before and willl be retried
 // in the future.
-func (r *RDB) ListRetry(pgn Pagination) ([]*RetryTask, error) {
-	data, err := r.client.ZRangeWithScores(base.RetryQueue, pgn.start(), pgn.stop()).Result()
-	if err != nil {
-		return nil, err
-	}
-	var tasks []*RetryTask
-	for _, z := range data {
-		s, ok := z.Member.(string)
-		if !ok {
-			continue // bad data, ignore and continue
-		}
-		var msg base.TaskMessage
-		err := json.Unmarshal([]byte(s), &msg)
-		if err != nil {
-			continue // bad data, ignore and continue
-		}
-		processAt := time.Unix(int64(z.Score), 0)
-		tasks = append(tasks, &RetryTask{
-			ID:        msg.ID,
-			Type:      msg.Type,
-			Payload:   msg.Payload,
-			ErrorMsg:  msg.ErrorMsg,
-			Retry:     msg.Retry,
-			Retried:   msg.Retried,
-			Queue:     msg.Queue,
-			ProcessAt: processAt,
-			Score:     int64(z.Score),
-		})
-	}
-	return tasks, nil
+func (r *RDB) ListRetry(pgn Pagination) ([]base.Z, error) {
+	return r.listZSetEntries(base.RetryQueue, pgn)
 }
 
 // ListDead returns all tasks that have exhausted its retry limit.
-func (r *RDB) ListDead(pgn Pagination) ([]*DeadTask, error) {
-	data, err := r.client.ZRangeWithScores(base.DeadQueue, pgn.start(), pgn.stop()).Result()
+func (r *RDB) ListDead(pgn Pagination) ([]base.Z, error) {
+	return r.listZSetEntries(base.DeadQueue, pgn)
+}
+
+// listZSetEntries returns a list of message and score pairs in Redis sorted-set
+// with the given key.
+func (r *RDB) listZSetEntries(key string, pgn Pagination) ([]base.Z, error) {
+	data, err := r.client.ZRangeWithScores(key, pgn.start(), pgn.stop()).Result()
 	if err != nil {
 		return nil, err
 	}
-	var tasks []*DeadTask
+	var res []base.Z
 	for _, z := range data {
 		s, ok := z.Member.(string)
 		if !ok {
 			continue // bad data, ignore and continue
 		}
-		var msg base.TaskMessage
-		err := json.Unmarshal([]byte(s), &msg)
+		msg, err := base.DecodeMessage(s)
 		if err != nil {
 			continue // bad data, ignore and continue
 		}
-		lastFailedAt := time.Unix(int64(z.Score), 0)
-		tasks = append(tasks, &DeadTask{
-			ID:           msg.ID,
-			Type:         msg.Type,
-			Payload:      msg.Payload,
-			ErrorMsg:     msg.ErrorMsg,
-			Queue:        msg.Queue,
-			LastFailedAt: lastFailedAt,
-			Score:        int64(z.Score),
-		})
+		res = append(res, base.Z{msg, int64(z.Score)})
 	}
-	return tasks, nil
+	return res, nil
 }
 
 // EnqueueDeadTask finds a task that matches the given id and score from dead queue
@@ -704,19 +575,40 @@ func (r *RDB) deleteTask(zset, id string, score float64) error {
 	return nil
 }
 
-// DeleteAllDeadTasks deletes all tasks from the dead queue.
-func (r *RDB) DeleteAllDeadTasks() error {
-	return r.client.Del(base.DeadQueue).Err()
+// KEYS[1] -> queue to delete
+var deleteAllCmd = redis.NewScript(`
+local n = redis.call("ZCARD", KEYS[1])
+redis.call("DEL", KEYS[1])
+return n`)
+
+// DeleteAllDeadTasks deletes all tasks from the dead queue
+// and returns the number of tasks deleted.
+func (r *RDB) DeleteAllDeadTasks() (int64, error) {
+	return r.deleteAll(base.DeadQueue)
 }
 
-// DeleteAllRetryTasks deletes all tasks from the dead queue.
-func (r *RDB) DeleteAllRetryTasks() error {
-	return r.client.Del(base.RetryQueue).Err()
+// DeleteAllRetryTasks deletes all tasks from the dead queue
+// and returns the number of tasks deleted.
+func (r *RDB) DeleteAllRetryTasks() (int64, error) {
+	return r.deleteAll(base.RetryQueue)
 }
 
-// DeleteAllScheduledTasks deletes all tasks from the dead queue.
-func (r *RDB) DeleteAllScheduledTasks() error {
-	return r.client.Del(base.ScheduledQueue).Err()
+// DeleteAllScheduledTasks deletes all tasks from the dead queue
+// and returns the number of tasks deleted.
+func (r *RDB) DeleteAllScheduledTasks() (int64, error) {
+	return r.deleteAll(base.ScheduledQueue)
+}
+
+func (r *RDB) deleteAll(key string) (int64, error) {
+	res, err := deleteAllCmd.Run(r.client, []string{key}).Result()
+	if err != nil {
+		return 0, err
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, fmt.Errorf("could not cast %v to int64", res)
+	}
+	return n, nil
 }
 
 // ErrQueueNotFound indicates specified queue does not exist.
