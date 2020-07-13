@@ -8,15 +8,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-redis/redis/v7"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 // delCmd represents the del command
 var delCmd = &cobra.Command{
-	Use:   "del [task id]",
+	Use:   "del [task key]",
 	Short: "Deletes a task given an identifier",
 	Long: `Del (asynq del) will delete a task given an identifier.
 
@@ -44,27 +43,12 @@ func init() {
 }
 
 func del(cmd *cobra.Command, args []string) {
-	id, score, qtype, err := parseQueryID(args[0])
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	r := rdb.NewRDB(redis.NewClient(&redis.Options{
+	i := asynq.NewInspector(asynq.RedisClientOpt{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),
 		Password: viper.GetString("password"),
-	}))
-	switch qtype {
-	case "s":
-		err = r.DeleteScheduledTask(id, score)
-	case "r":
-		err = r.DeleteRetryTask(id, score)
-	case "d":
-		err = r.DeleteDeadTask(id, score)
-	default:
-		fmt.Println("invalid argument")
-		os.Exit(1)
-	}
+	})
+	err := i.DeleteTaskByKey(args[0])
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

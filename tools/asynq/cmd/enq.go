@@ -8,15 +8,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-redis/redis/v7"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 // enqCmd represents the enq command
 var enqCmd = &cobra.Command{
-	Use:   "enq [task id]",
+	Use:   "enq [task key]",
 	Short: "Enqueues a task given an identifier",
 	Long: `Enq (asynq enq) will enqueue a task given an identifier.
 
@@ -47,27 +46,12 @@ func init() {
 }
 
 func enq(cmd *cobra.Command, args []string) {
-	id, score, qtype, err := parseQueryID(args[0])
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	r := rdb.NewRDB(redis.NewClient(&redis.Options{
+	i := asynq.NewInspector(asynq.RedisClientOpt{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),
 		Password: viper.GetString("password"),
-	}))
-	switch qtype {
-	case "s":
-		err = r.EnqueueScheduledTask(id, score)
-	case "r":
-		err = r.EnqueueRetryTask(id, score)
-	case "d":
-		err = r.EnqueueDeadTask(id, score)
-	default:
-		fmt.Println("invalid argument")
-		os.Exit(1)
-	}
+	})
+	err := i.EnqueueTaskByKey(args[0])
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

@@ -34,24 +34,24 @@ func TestRecoverer(t *testing.T) {
 	tests := []struct {
 		desc           string
 		inProgress     []*base.TaskMessage
-		deadlines      []h.ZSetEntry
-		retry          []h.ZSetEntry
-		dead           []h.ZSetEntry
+		deadlines      []base.Z
+		retry          []base.Z
+		dead           []base.Z
 		wantInProgress []*base.TaskMessage
-		wantDeadlines  []h.ZSetEntry
+		wantDeadlines  []base.Z
 		wantRetry      []*base.TaskMessage
 		wantDead       []*base.TaskMessage
 	}{
 		{
 			desc:       "with one task in-progress",
 			inProgress: []*base.TaskMessage{t1},
-			deadlines: []h.ZSetEntry{
-				{Msg: t1, Score: float64(fiveMinutesAgo.Unix())},
+			deadlines: []base.Z{
+				{Message: t1, Score: fiveMinutesAgo.Unix()},
 			},
-			retry:          []h.ZSetEntry{},
-			dead:           []h.ZSetEntry{},
+			retry:          []base.Z{},
+			dead:           []base.Z{},
 			wantInProgress: []*base.TaskMessage{},
-			wantDeadlines:  []h.ZSetEntry{},
+			wantDeadlines:  []base.Z{},
 			wantRetry: []*base.TaskMessage{
 				h.TaskMessageAfterRetry(*t1, "deadline exceeded"),
 			},
@@ -60,30 +60,30 @@ func TestRecoverer(t *testing.T) {
 		{
 			desc:       "with a task with max-retry reached",
 			inProgress: []*base.TaskMessage{t4},
-			deadlines: []h.ZSetEntry{
-				{Msg: t4, Score: float64(fiveMinutesAgo.Unix())},
+			deadlines: []base.Z{
+				{Message: t4, Score: fiveMinutesAgo.Unix()},
 			},
-			retry:          []h.ZSetEntry{},
-			dead:           []h.ZSetEntry{},
+			retry:          []base.Z{},
+			dead:           []base.Z{},
 			wantInProgress: []*base.TaskMessage{},
-			wantDeadlines:  []h.ZSetEntry{},
+			wantDeadlines:  []base.Z{},
 			wantRetry:      []*base.TaskMessage{},
 			wantDead:       []*base.TaskMessage{h.TaskMessageWithError(*t4, "deadline exceeded")},
 		},
 		{
 			desc:       "with multiple tasks in-progress, and one expired",
 			inProgress: []*base.TaskMessage{t1, t2, t3},
-			deadlines: []h.ZSetEntry{
-				{Msg: t1, Score: float64(oneHourAgo.Unix())},
-				{Msg: t2, Score: float64(fiveMinutesFromNow.Unix())},
-				{Msg: t3, Score: float64(oneHourFromNow.Unix())},
+			deadlines: []base.Z{
+				{Message: t1, Score: oneHourAgo.Unix()},
+				{Message: t2, Score: fiveMinutesFromNow.Unix()},
+				{Message: t3, Score: oneHourFromNow.Unix()},
 			},
-			retry:          []h.ZSetEntry{},
-			dead:           []h.ZSetEntry{},
+			retry:          []base.Z{},
+			dead:           []base.Z{},
 			wantInProgress: []*base.TaskMessage{t2, t3},
-			wantDeadlines: []h.ZSetEntry{
-				{Msg: t2, Score: float64(fiveMinutesFromNow.Unix())},
-				{Msg: t3, Score: float64(oneHourFromNow.Unix())},
+			wantDeadlines: []base.Z{
+				{Message: t2, Score: fiveMinutesFromNow.Unix()},
+				{Message: t3, Score: oneHourFromNow.Unix()},
 			},
 			wantRetry: []*base.TaskMessage{
 				h.TaskMessageAfterRetry(*t1, "deadline exceeded"),
@@ -93,16 +93,16 @@ func TestRecoverer(t *testing.T) {
 		{
 			desc:       "with multiple expired tasks in-progress",
 			inProgress: []*base.TaskMessage{t1, t2, t3},
-			deadlines: []h.ZSetEntry{
-				{Msg: t1, Score: float64(oneHourAgo.Unix())},
-				{Msg: t2, Score: float64(fiveMinutesAgo.Unix())},
-				{Msg: t3, Score: float64(oneHourFromNow.Unix())},
+			deadlines: []base.Z{
+				{Message: t1, Score: oneHourAgo.Unix()},
+				{Message: t2, Score: fiveMinutesAgo.Unix()},
+				{Message: t3, Score: oneHourFromNow.Unix()},
 			},
-			retry:          []h.ZSetEntry{},
-			dead:           []h.ZSetEntry{},
+			retry:          []base.Z{},
+			dead:           []base.Z{},
 			wantInProgress: []*base.TaskMessage{t3},
-			wantDeadlines: []h.ZSetEntry{
-				{Msg: t3, Score: float64(oneHourFromNow.Unix())},
+			wantDeadlines: []base.Z{
+				{Message: t3, Score: oneHourFromNow.Unix()},
 			},
 			wantRetry: []*base.TaskMessage{
 				h.TaskMessageAfterRetry(*t1, "deadline exceeded"),
@@ -113,11 +113,11 @@ func TestRecoverer(t *testing.T) {
 		{
 			desc:           "with empty in-progress queue",
 			inProgress:     []*base.TaskMessage{},
-			deadlines:      []h.ZSetEntry{},
-			retry:          []h.ZSetEntry{},
-			dead:           []h.ZSetEntry{},
+			deadlines:      []base.Z{},
+			retry:          []base.Z{},
+			dead:           []base.Z{},
 			wantInProgress: []*base.TaskMessage{},
-			wantDeadlines:  []h.ZSetEntry{},
+			wantDeadlines:  []base.Z{},
 			wantRetry:      []*base.TaskMessage{},
 			wantDead:       []*base.TaskMessage{},
 		},

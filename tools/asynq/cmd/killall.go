@@ -8,8 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-redis/redis/v7"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -45,19 +44,20 @@ func init() {
 }
 
 func killall(cmd *cobra.Command, args []string) {
-	c := redis.NewClient(&redis.Options{
+	i := asynq.NewInspector(asynq.RedisClientOpt{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),
 		Password: viper.GetString("password"),
 	})
-	r := rdb.NewRDB(c)
-	var n int64
-	var err error
+	var (
+		n   int
+		err error
+	)
 	switch args[0] {
 	case "scheduled":
-		n, err = r.KillAllScheduledTasks()
+		n, err = i.KillAllScheduledTasks()
 	case "retry":
-		n, err = r.KillAllRetryTasks()
+		n, err = i.KillAllRetryTasks()
 	default:
 		fmt.Printf("error: `asynq killall [state]` only accepts %v as the argument.\n", killallValidArgs)
 		os.Exit(1)

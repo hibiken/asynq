@@ -8,8 +8,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-redis/redis/v7"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -45,20 +44,22 @@ func init() {
 }
 
 func delall(cmd *cobra.Command, args []string) {
-	c := redis.NewClient(&redis.Options{
+	i := asynq.NewInspector(asynq.RedisClientOpt{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),
 		Password: viper.GetString("password"),
 	})
-	r := rdb.NewRDB(c)
-	var err error
+	var (
+		n   int
+		err error
+	)
 	switch args[0] {
 	case "scheduled":
-		err = r.DeleteAllScheduledTasks()
+		n, err = i.DeleteAllScheduledTasks()
 	case "retry":
-		err = r.DeleteAllRetryTasks()
+		n, err = i.DeleteAllRetryTasks()
 	case "dead":
-		err = r.DeleteAllDeadTasks()
+		n, err = i.DeleteAllDeadTasks()
 	default:
 		fmt.Printf("error: `asynq delall [state]` only accepts %v as the argument.\n", delallValidArgs)
 		os.Exit(1)
@@ -67,5 +68,5 @@ func delall(cmd *cobra.Command, args []string) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Printf("Deleted all tasks in %q state\n", args[0])
+	fmt.Printf("Deleted all %d tasks in %q state\n", n, args[0])
 }

@@ -8,13 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v7"
-	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -62,12 +59,11 @@ func ls(cmd *cobra.Command, args []string) {
 		fmt.Println("page number cannot be negative.")
 		os.Exit(1)
 	}
-	c := redis.NewClient(&redis.Options{
+	i := asynq.NewInspector(asynq.RedisClientOpt{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),
 		Password: viper.GetString("password"),
 	})
-	r := rdb.NewRDB(c)
 	parts := strings.Split(args[0], ":")
 	switch parts[0] {
 	case "enqueued":
@@ -75,54 +71,23 @@ func ls(cmd *cobra.Command, args []string) {
 			fmt.Printf("error: Missing queue name\n`asynq ls enqueued:[queue name]`\n")
 			os.Exit(1)
 		}
-		listEnqueued(r, parts[1])
+		listEnqueued(i, parts[1])
 	case "inprogress":
-		listInProgress(r)
+		listInProgress(i)
 	case "scheduled":
-		listScheduled(r)
+		listScheduled(i)
 	case "retry":
-		listRetry(r)
+		listRetry(i)
 	case "dead":
-		listDead(r)
+		listDead(i)
 	default:
 		fmt.Printf("error: `asynq ls [state]`\nonly accepts %v as the argument.\n", lsValidArgs)
 		os.Exit(1)
 	}
 }
 
-// queryID returns an identifier used for "enq" command.
-// score is the zset score and queryType should be one
-// of "s", "r" or "d" (scheduled, retry, dead respectively).
-func queryID(id uuid.UUID, score int64, qtype string) string {
-	const format = "%v:%v:%v"
-	return fmt.Sprintf(format, qtype, score, id)
-}
-
-// parseQueryID is a reverse operation of queryID function.
-// It takes a queryID and return each part of id with proper
-// type if valid, otherwise it reports an error.
-func parseQueryID(queryID string) (id uuid.UUID, score int64, qtype string, err error) {
-	parts := strings.Split(queryID, ":")
-	if len(parts) != 3 {
-		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
-	}
-	id, err = uuid.Parse(parts[2])
-	if err != nil {
-		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
-	}
-	score, err = strconv.ParseInt(parts[1], 10, 64)
-	if err != nil {
-		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
-	}
-	qtype = parts[0]
-	if len(qtype) != 1 || !strings.Contains("srd", qtype) {
-		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
-	}
-	return id, score, qtype, nil
-}
-
-func listEnqueued(r *rdb.RDB, qname string) {
-	tasks, err := r.ListEnqueued(qname, rdb.Pagination{Size: pageSize, Page: pageNum})
+func listEnqueued(i *asynq.Inspector, qname string) {
+	tasks, err := i.ListEnqueuedTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -132,17 +97,16 @@ func listEnqueued(r *rdb.RDB, qname string) {
 		return
 	}
 	cols := []string{"ID", "Type", "Payload", "Queue"}
-	printRows := func(w io.Writer, tmpl string) {
+	printTable(cols, func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
 			fmt.Fprintf(w, tmpl, t.ID, t.Type, t.Payload, t.Queue)
 		}
-	}
-	printTable(cols, printRows)
+	})
 	fmt.Printf("\nShowing %d tasks from page %d\n", len(tasks), pageNum)
 }
 
-func listInProgress(r *rdb.RDB) {
-	tasks, err := r.ListInProgress(rdb.Pagination{Size: pageSize, Page: pageNum})
+func listInProgress(i *asynq.Inspector) {
+	tasks, err := i.ListInProgressTasks(asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -152,17 +116,16 @@ func listInProgress(r *rdb.RDB) {
 		return
 	}
 	cols := []string{"ID", "Type", "Payload"}
-	printRows := func(w io.Writer, tmpl string) {
+	printTable(cols, func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
 			fmt.Fprintf(w, tmpl, t.ID, t.Type, t.Payload)
 		}
-	}
-	printTable(cols, printRows)
+	})
 	fmt.Printf("\nShowing %d tasks from page %d\n", len(tasks), pageNum)
 }
 
-func listScheduled(r *rdb.RDB) {
-	tasks, err := r.ListScheduled(rdb.Pagination{Size: pageSize, Page: pageNum})
+func listScheduled(i *asynq.Inspector) {
+	tasks, err := i.ListScheduledTasks(asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -171,19 +134,19 @@ func listScheduled(r *rdb.RDB) {
 		fmt.Println("No scheduled tasks")
 		return
 	}
-	cols := []string{"ID", "Type", "Payload", "Process In", "Queue"}
-	printRows := func(w io.Writer, tmpl string) {
+	cols := []string{"Key", "Type", "Payload", "Process In", "Queue"}
+	printTable(cols, func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
-			processIn := fmt.Sprintf("%.0f seconds", t.ProcessAt.Sub(time.Now()).Seconds())
-			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "s"), t.Type, t.Payload, processIn, t.Queue)
+			processIn := fmt.Sprintf("%.0f seconds",
+				t.NextEnqueueAt.Sub(time.Now()).Seconds())
+			fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload, processIn, t.Queue)
 		}
-	}
-	printTable(cols, printRows)
+	})
 	fmt.Printf("\nShowing %d tasks from page %d\n", len(tasks), pageNum)
 }
 
-func listRetry(r *rdb.RDB) {
-	tasks, err := r.ListRetry(rdb.Pagination{Size: pageSize, Page: pageNum})
+func listRetry(i *asynq.Inspector) {
+	tasks, err := i.ListRetryTasks(asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -192,24 +155,23 @@ func listRetry(r *rdb.RDB) {
 		fmt.Println("No retry tasks")
 		return
 	}
-	cols := []string{"ID", "Type", "Payload", "Next Retry", "Last Error", "Retried", "Max Retry", "Queue"}
-	printRows := func(w io.Writer, tmpl string) {
+	cols := []string{"Key", "Type", "Payload", "Next Retry", "Last Error", "Retried", "Max Retry", "Queue"}
+	printTable(cols, func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
 			var nextRetry string
-			if d := t.ProcessAt.Sub(time.Now()); d > 0 {
+			if d := t.NextEnqueueAt.Sub(time.Now()); d > 0 {
 				nextRetry = fmt.Sprintf("in %v", d.Round(time.Second))
 			} else {
 				nextRetry = "right now"
 			}
-			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "r"), t.Type, t.Payload, nextRetry, t.ErrorMsg, t.Retried, t.Retry, t.Queue)
+			fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload, nextRetry, t.ErrorMsg, t.Retried, t.MaxRetry, t.Queue)
 		}
-	}
-	printTable(cols, printRows)
+	})
 	fmt.Printf("\nShowing %d tasks from page %d\n", len(tasks), pageNum)
 }
 
-func listDead(r *rdb.RDB) {
-	tasks, err := r.ListDead(rdb.Pagination{Size: pageSize, Page: pageNum})
+func listDead(i *asynq.Inspector) {
+	tasks, err := i.ListDeadTasks(asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -218,12 +180,11 @@ func listDead(r *rdb.RDB) {
 		fmt.Println("No dead tasks")
 		return
 	}
-	cols := []string{"ID", "Type", "Payload", "Last Failed", "Last Error", "Queue"}
-	printRows := func(w io.Writer, tmpl string) {
+	cols := []string{"Key", "Type", "Payload", "Last Failed", "Last Error", "Queue"}
+	printTable(cols, func(w io.Writer, tmpl string) {
 		for _, t := range tasks {
-			fmt.Fprintf(w, tmpl, queryID(t.ID, t.Score, "d"), t.Type, t.Payload, t.LastFailedAt, t.ErrorMsg, t.Queue)
+			fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload, t.LastFailedAt, t.ErrorMsg, t.Queue)
 		}
-	}
-	printTable(cols, printRows)
+	})
 	fmt.Printf("\nShowing %d tasks from page %d\n", len(tasks), pageNum)
 }
