@@ -10,8 +10,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/go-redis/redis/v7"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -38,14 +37,13 @@ func init() {
 }
 
 func history(cmd *cobra.Command, args []string) {
-	c := redis.NewClient(&redis.Options{
+	i := asynq.NewInspector(asynq.RedisClientOpt{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),
 		Password: viper.GetString("password"),
 	})
-	r := rdb.NewRDB(c)
 
-	stats, err := r.HistoricalStats(days)
+	stats, err := i.History(days)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -53,7 +51,7 @@ func history(cmd *cobra.Command, args []string) {
 	printDailyStats(stats)
 }
 
-func printDailyStats(stats []*rdb.DailyStats) {
+func printDailyStats(stats []*asynq.DailyStats) {
 	format := strings.Repeat("%v\t", 4) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
 	fmt.Fprintf(tw, format, "Date (UTC)", "Processed", "Failed", "Error Rate")

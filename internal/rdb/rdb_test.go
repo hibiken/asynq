@@ -148,7 +148,7 @@ func TestDequeue(t *testing.T) {
 		err            error
 		wantEnqueued   map[string][]*base.TaskMessage
 		wantInProgress []*base.TaskMessage
-		wantDeadlines  []h.ZSetEntry
+		wantDeadlines  []base.Z
 	}{
 		{
 			enqueued: map[string][]*base.TaskMessage{
@@ -162,10 +162,10 @@ func TestDequeue(t *testing.T) {
 				"default": {},
 			},
 			wantInProgress: []*base.TaskMessage{t1},
-			wantDeadlines: []h.ZSetEntry{
+			wantDeadlines: []base.Z{
 				{
-					Msg:   t1,
-					Score: float64(t1Deadline),
+					Message: t1,
+					Score:   t1Deadline,
 				},
 			},
 		},
@@ -181,7 +181,7 @@ func TestDequeue(t *testing.T) {
 				"default": {},
 			},
 			wantInProgress: []*base.TaskMessage{},
-			wantDeadlines:  []h.ZSetEntry{},
+			wantDeadlines:  []base.Z{},
 		},
 		{
 			enqueued: map[string][]*base.TaskMessage{
@@ -199,10 +199,10 @@ func TestDequeue(t *testing.T) {
 				"low":      {t3},
 			},
 			wantInProgress: []*base.TaskMessage{t2},
-			wantDeadlines: []h.ZSetEntry{
+			wantDeadlines: []base.Z{
 				{
-					Msg:   t2,
-					Score: float64(t2Deadline),
+					Message: t2,
+					Score:   t2Deadline,
 				},
 			},
 		},
@@ -222,10 +222,10 @@ func TestDequeue(t *testing.T) {
 				"low":      {t2, t1},
 			},
 			wantInProgress: []*base.TaskMessage{t3},
-			wantDeadlines: []h.ZSetEntry{
+			wantDeadlines: []base.Z{
 				{
-					Msg:   t3,
-					Score: float64(t3Deadline),
+					Message: t3,
+					Score:   t3Deadline,
 				},
 			},
 		},
@@ -245,7 +245,7 @@ func TestDequeue(t *testing.T) {
 				"low":      {},
 			},
 			wantInProgress: []*base.TaskMessage{},
-			wantDeadlines:  []h.ZSetEntry{},
+			wantDeadlines:  []base.Z{},
 		},
 	}
 
@@ -412,70 +412,70 @@ func TestDone(t *testing.T) {
 
 	tests := []struct {
 		inProgress     []*base.TaskMessage // initial state of the in-progress list
-		deadlines      []h.ZSetEntry       // initial state of deadlines set
+		deadlines      []base.Z            // initial state of deadlines set
 		target         *base.TaskMessage   // task to remove
 		wantInProgress []*base.TaskMessage // final state of the in-progress list
-		wantDeadlines  []h.ZSetEntry       // final state of the deadline set
+		wantDeadlines  []base.Z            // final state of the deadline set
 	}{
 		{
 			inProgress: []*base.TaskMessage{t1, t2},
-			deadlines: []h.ZSetEntry{
+			deadlines: []base.Z{
 				{
-					Msg:   t1,
-					Score: float64(t1Deadline),
+					Message: t1,
+					Score:   t1Deadline,
 				},
 				{
-					Msg:   t2,
-					Score: float64(t2Deadline),
+					Message: t2,
+					Score:   t2Deadline,
 				},
 			},
 			target:         t1,
 			wantInProgress: []*base.TaskMessage{t2},
-			wantDeadlines: []h.ZSetEntry{
+			wantDeadlines: []base.Z{
 				{
-					Msg:   t2,
-					Score: float64(t2Deadline),
+					Message: t2,
+					Score:   t2Deadline,
 				},
 			},
 		},
 		{
 			inProgress: []*base.TaskMessage{t1},
-			deadlines: []h.ZSetEntry{
+			deadlines: []base.Z{
 				{
-					Msg:   t1,
-					Score: float64(t1Deadline),
+					Message: t1,
+					Score:   t1Deadline,
 				},
 			},
 			target:         t1,
 			wantInProgress: []*base.TaskMessage{},
-			wantDeadlines:  []h.ZSetEntry{},
+			wantDeadlines:  []base.Z{},
 		},
 		{
 			inProgress: []*base.TaskMessage{t1, t2, t3},
-			deadlines: []h.ZSetEntry{
+			deadlines: []base.Z{
 				{
-					Msg:   t1,
-					Score: float64(t1Deadline),
+					Message: t1,
+					Score:   t1Deadline,
 				},
 				{
-					Msg:   t2,
-					Score: float64(t2Deadline),
+					Message: t2,
+					Score:   t2Deadline,
 				},
 				{
-					Msg:   t3,
-					Score: float64(t3Deadline),
+					Message: t3,
+					Score:   t3Deadline,
 				},
 			},
 			target:         t3,
 			wantInProgress: []*base.TaskMessage{t1, t2},
-			wantDeadlines: []h.ZSetEntry{
+			wantDeadlines: []base.Z{
 				{
-					Msg:   t1,
-					Score: float64(t1Deadline),
+					Message: t1,
+					Score:   t1Deadline,
 				},
 				{
-					Msg:   t2,
-					Score: float64(t2Deadline),
+					Message: t2,
+					Score:   t2Deadline,
 				},
 			},
 		},
@@ -560,28 +560,28 @@ func TestRequeue(t *testing.T) {
 	tests := []struct {
 		enqueued       map[string][]*base.TaskMessage // initial state of queues
 		inProgress     []*base.TaskMessage            // initial state of the in-progress list
-		deadlines      []h.ZSetEntry                  // initial state of the deadlines set
+		deadlines      []base.Z                       // initial state of the deadlines set
 		target         *base.TaskMessage              // task to requeue
 		wantEnqueued   map[string][]*base.TaskMessage // final state of queues
 		wantInProgress []*base.TaskMessage            // final state of the in-progress list
-		wantDeadlines  []h.ZSetEntry                  // final state of the deadlines set
+		wantDeadlines  []base.Z                       // final state of the deadlines set
 	}{
 		{
 			enqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {},
 			},
 			inProgress: []*base.TaskMessage{t1, t2},
-			deadlines: []h.ZSetEntry{
-				{Msg: t1, Score: float64(t1Deadline)},
-				{Msg: t2, Score: float64(t2Deadline)},
+			deadlines: []base.Z{
+				{Message: t1, Score: t1Deadline},
+				{Message: t2, Score: t2Deadline},
 			},
 			target: t1,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {t1},
 			},
 			wantInProgress: []*base.TaskMessage{t2},
-			wantDeadlines: []h.ZSetEntry{
-				{Msg: t2, Score: float64(t2Deadline)},
+			wantDeadlines: []base.Z{
+				{Message: t2, Score: t2Deadline},
 			},
 		},
 		{
@@ -589,15 +589,15 @@ func TestRequeue(t *testing.T) {
 				base.DefaultQueueName: {t1},
 			},
 			inProgress: []*base.TaskMessage{t2},
-			deadlines: []h.ZSetEntry{
-				{Msg: t2, Score: float64(t2Deadline)},
+			deadlines: []base.Z{
+				{Message: t2, Score: t2Deadline},
 			},
 			target: t2,
 			wantEnqueued: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {t1, t2},
 			},
 			wantInProgress: []*base.TaskMessage{},
-			wantDeadlines:  []h.ZSetEntry{},
+			wantDeadlines:  []base.Z{},
 		},
 		{
 			enqueued: map[string][]*base.TaskMessage{
@@ -605,9 +605,9 @@ func TestRequeue(t *testing.T) {
 				"critical":            {},
 			},
 			inProgress: []*base.TaskMessage{t2, t3},
-			deadlines: []h.ZSetEntry{
-				{Msg: t2, Score: float64(t2Deadline)},
-				{Msg: t3, Score: float64(t3Deadline)},
+			deadlines: []base.Z{
+				{Message: t2, Score: t2Deadline},
+				{Message: t3, Score: t3Deadline},
 			},
 			target: t3,
 			wantEnqueued: map[string][]*base.TaskMessage{
@@ -615,8 +615,8 @@ func TestRequeue(t *testing.T) {
 				"critical":            {t3},
 			},
 			wantInProgress: []*base.TaskMessage{t2},
-			wantDeadlines: []h.ZSetEntry{
-				{Msg: t2, Score: float64(t2Deadline)},
+			wantDeadlines: []base.Z{
+				{Message: t2, Score: t2Deadline},
 			},
 		},
 	}
@@ -765,42 +765,42 @@ func TestRetry(t *testing.T) {
 
 	tests := []struct {
 		inProgress     []*base.TaskMessage
-		deadlines      []h.ZSetEntry
-		retry          []h.ZSetEntry
+		deadlines      []base.Z
+		retry          []base.Z
 		msg            *base.TaskMessage
 		processAt      time.Time
 		errMsg         string
 		wantInProgress []*base.TaskMessage
-		wantDeadlines  []h.ZSetEntry
-		wantRetry      []h.ZSetEntry
+		wantDeadlines  []base.Z
+		wantRetry      []base.Z
 	}{
 		{
 			inProgress: []*base.TaskMessage{t1, t2},
-			deadlines: []h.ZSetEntry{
-				{Msg: t1, Score: float64(t1Deadline)},
-				{Msg: t2, Score: float64(t2Deadline)},
+			deadlines: []base.Z{
+				{Message: t1, Score: t1Deadline},
+				{Message: t2, Score: t2Deadline},
 			},
-			retry: []h.ZSetEntry{
+			retry: []base.Z{
 				{
-					Msg:   t3,
-					Score: float64(now.Add(time.Minute).Unix()),
+					Message: t3,
+					Score:   now.Add(time.Minute).Unix(),
 				},
 			},
 			msg:            t1,
 			processAt:      now.Add(5 * time.Minute),
 			errMsg:         errMsg,
 			wantInProgress: []*base.TaskMessage{t2},
-			wantDeadlines: []h.ZSetEntry{
-				{Msg: t2, Score: float64(t2Deadline)},
+			wantDeadlines: []base.Z{
+				{Message: t2, Score: t2Deadline},
 			},
-			wantRetry: []h.ZSetEntry{
+			wantRetry: []base.Z{
 				{
-					Msg:   h.TaskMessageAfterRetry(*t1, errMsg),
-					Score: float64(now.Add(5 * time.Minute).Unix()),
+					Message: h.TaskMessageAfterRetry(*t1, errMsg),
+					Score:   now.Add(5 * time.Minute).Unix(),
 				},
 				{
-					Msg:   t3,
-					Score: float64(now.Add(time.Minute).Unix()),
+					Message: t3,
+					Score:   now.Add(time.Minute).Unix(),
 				},
 			},
 		},
@@ -891,59 +891,59 @@ func TestKill(t *testing.T) {
 	// TODO(hibiken): add test cases for trimming
 	tests := []struct {
 		inProgress     []*base.TaskMessage
-		deadlines      []h.ZSetEntry
-		dead           []h.ZSetEntry
+		deadlines      []base.Z
+		dead           []base.Z
 		target         *base.TaskMessage // task to kill
 		wantInProgress []*base.TaskMessage
-		wantDeadlines  []h.ZSetEntry
-		wantDead       []h.ZSetEntry
+		wantDeadlines  []base.Z
+		wantDead       []base.Z
 	}{
 		{
 			inProgress: []*base.TaskMessage{t1, t2},
-			deadlines: []h.ZSetEntry{
-				{Msg: t1, Score: float64(t1Deadline)},
-				{Msg: t2, Score: float64(t2Deadline)},
+			deadlines: []base.Z{
+				{Message: t1, Score: t1Deadline},
+				{Message: t2, Score: t2Deadline},
 			},
-			dead: []h.ZSetEntry{
+			dead: []base.Z{
 				{
-					Msg:   t3,
-					Score: float64(now.Add(-time.Hour).Unix()),
+					Message: t3,
+					Score:   now.Add(-time.Hour).Unix(),
 				},
 			},
 			target:         t1,
 			wantInProgress: []*base.TaskMessage{t2},
-			wantDeadlines: []h.ZSetEntry{
-				{Msg: t2, Score: float64(t2Deadline)},
+			wantDeadlines: []base.Z{
+				{Message: t2, Score: t2Deadline},
 			},
-			wantDead: []h.ZSetEntry{
+			wantDead: []base.Z{
 				{
-					Msg:   h.TaskMessageWithError(*t1, errMsg),
-					Score: float64(now.Unix()),
+					Message: h.TaskMessageWithError(*t1, errMsg),
+					Score:   now.Unix(),
 				},
 				{
-					Msg:   t3,
-					Score: float64(now.Add(-time.Hour).Unix()),
+					Message: t3,
+					Score:   now.Add(-time.Hour).Unix(),
 				},
 			},
 		},
 		{
 			inProgress: []*base.TaskMessage{t1, t2, t3},
-			deadlines: []h.ZSetEntry{
-				{Msg: t1, Score: float64(t1Deadline)},
-				{Msg: t2, Score: float64(t2Deadline)},
-				{Msg: t3, Score: float64(t3Deadline)},
+			deadlines: []base.Z{
+				{Message: t1, Score: t1Deadline},
+				{Message: t2, Score: t2Deadline},
+				{Message: t3, Score: t3Deadline},
 			},
-			dead:           []h.ZSetEntry{},
+			dead:           []base.Z{},
 			target:         t1,
 			wantInProgress: []*base.TaskMessage{t2, t3},
-			wantDeadlines: []h.ZSetEntry{
-				{Msg: t2, Score: float64(t2Deadline)},
-				{Msg: t3, Score: float64(t3Deadline)},
+			wantDeadlines: []base.Z{
+				{Message: t2, Score: t2Deadline},
+				{Message: t3, Score: t3Deadline},
 			},
-			wantDead: []h.ZSetEntry{
+			wantDead: []base.Z{
 				{
-					Msg:   h.TaskMessageWithError(*t1, errMsg),
-					Score: float64(now.Unix()),
+					Message: h.TaskMessageWithError(*t1, errMsg),
+					Score:   now.Unix(),
 				},
 			},
 		},
@@ -1009,19 +1009,19 @@ func TestCheckAndEnqueue(t *testing.T) {
 	hourFromNow := time.Now().Add(time.Hour)
 
 	tests := []struct {
-		scheduled     []h.ZSetEntry
-		retry         []h.ZSetEntry
+		scheduled     []base.Z
+		retry         []base.Z
 		wantEnqueued  map[string][]*base.TaskMessage
 		wantScheduled []*base.TaskMessage
 		wantRetry     []*base.TaskMessage
 	}{
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: float64(secondAgo.Unix())},
-				{Msg: t2, Score: float64(secondAgo.Unix())},
+			scheduled: []base.Z{
+				{Message: t1, Score: secondAgo.Unix()},
+				{Message: t2, Score: secondAgo.Unix()},
 			},
-			retry: []h.ZSetEntry{
-				{Msg: t3, Score: float64(secondAgo.Unix())}},
+			retry: []base.Z{
+				{Message: t3, Score: secondAgo.Unix()}},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {t1, t2, t3},
 			},
@@ -1029,11 +1029,11 @@ func TestCheckAndEnqueue(t *testing.T) {
 			wantRetry:     []*base.TaskMessage{},
 		},
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: float64(hourFromNow.Unix())},
-				{Msg: t2, Score: float64(secondAgo.Unix())}},
-			retry: []h.ZSetEntry{
-				{Msg: t3, Score: float64(secondAgo.Unix())}},
+			scheduled: []base.Z{
+				{Message: t1, Score: hourFromNow.Unix()},
+				{Message: t2, Score: secondAgo.Unix()}},
+			retry: []base.Z{
+				{Message: t3, Score: secondAgo.Unix()}},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {t2, t3},
 			},
@@ -1041,11 +1041,11 @@ func TestCheckAndEnqueue(t *testing.T) {
 			wantRetry:     []*base.TaskMessage{},
 		},
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: float64(hourFromNow.Unix())},
-				{Msg: t2, Score: float64(hourFromNow.Unix())}},
-			retry: []h.ZSetEntry{
-				{Msg: t3, Score: float64(hourFromNow.Unix())}},
+			scheduled: []base.Z{
+				{Message: t1, Score: hourFromNow.Unix()},
+				{Message: t2, Score: hourFromNow.Unix()}},
+			retry: []base.Z{
+				{Message: t3, Score: hourFromNow.Unix()}},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {},
 			},
@@ -1053,12 +1053,12 @@ func TestCheckAndEnqueue(t *testing.T) {
 			wantRetry:     []*base.TaskMessage{t3},
 		},
 		{
-			scheduled: []h.ZSetEntry{
-				{Msg: t1, Score: float64(secondAgo.Unix())},
-				{Msg: t4, Score: float64(secondAgo.Unix())},
+			scheduled: []base.Z{
+				{Message: t1, Score: secondAgo.Unix()},
+				{Message: t4, Score: secondAgo.Unix()},
 			},
-			retry: []h.ZSetEntry{
-				{Msg: t5, Score: float64(secondAgo.Unix())}},
+			retry: []base.Z{
+				{Message: t5, Score: secondAgo.Unix()}},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {t1},
 				"critical": {t4},
@@ -1112,41 +1112,41 @@ func TestListDeadlineExceeded(t *testing.T) {
 
 	tests := []struct {
 		desc      string
-		deadlines []h.ZSetEntry
+		deadlines []base.Z
 		t         time.Time
 		want      []*base.TaskMessage
 	}{
 		{
 			desc: "with one task in-progress",
-			deadlines: []h.ZSetEntry{
-				{Msg: t1, Score: float64(fiveMinutesAgo.Unix())},
+			deadlines: []base.Z{
+				{Message: t1, Score: fiveMinutesAgo.Unix()},
 			},
 			t:    time.Now(),
 			want: []*base.TaskMessage{t1},
 		},
 		{
 			desc: "with multiple tasks in-progress, and one expired",
-			deadlines: []h.ZSetEntry{
-				{Msg: t1, Score: float64(oneHourAgo.Unix())},
-				{Msg: t2, Score: float64(fiveMinutesFromNow.Unix())},
-				{Msg: t3, Score: float64(oneHourFromNow.Unix())},
+			deadlines: []base.Z{
+				{Message: t1, Score: oneHourAgo.Unix()},
+				{Message: t2, Score: fiveMinutesFromNow.Unix()},
+				{Message: t3, Score: oneHourFromNow.Unix()},
 			},
 			t:    time.Now(),
 			want: []*base.TaskMessage{t1},
 		},
 		{
 			desc: "with multiple expired tasks in-progress",
-			deadlines: []h.ZSetEntry{
-				{Msg: t1, Score: float64(oneHourAgo.Unix())},
-				{Msg: t2, Score: float64(fiveMinutesAgo.Unix())},
-				{Msg: t3, Score: float64(oneHourFromNow.Unix())},
+			deadlines: []base.Z{
+				{Message: t1, Score: oneHourAgo.Unix()},
+				{Message: t2, Score: fiveMinutesAgo.Unix()},
+				{Message: t3, Score: oneHourFromNow.Unix()},
 			},
 			t:    time.Now(),
 			want: []*base.TaskMessage{t1, t2},
 		},
 		{
 			desc:      "with empty in-progress queue",
-			deadlines: []h.ZSetEntry{},
+			deadlines: []base.Z{},
 			t:         time.Now(),
 			want:      []*base.TaskMessage{},
 		},

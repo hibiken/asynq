@@ -17,12 +17,6 @@ import (
 	"github.com/hibiken/asynq/internal/base"
 )
 
-// ZSetEntry is an entry in redis sorted set.
-type ZSetEntry struct {
-	Msg   *base.TaskMessage
-	Score float64
-}
-
 // SortMsgOpt is a cmp.Option to sort base.TaskMessage for comparing slice of task messages.
 var SortMsgOpt = cmp.Transformer("SortTaskMessages", func(in []*base.TaskMessage) []*base.TaskMessage {
 	out := append([]*base.TaskMessage(nil), in...) // Copy input to avoid mutating it
@@ -33,10 +27,10 @@ var SortMsgOpt = cmp.Transformer("SortTaskMessages", func(in []*base.TaskMessage
 })
 
 // SortZSetEntryOpt is an cmp.Option to sort ZSetEntry for comparing slice of zset entries.
-var SortZSetEntryOpt = cmp.Transformer("SortZSetEntries", func(in []ZSetEntry) []ZSetEntry {
-	out := append([]ZSetEntry(nil), in...) // Copy input to avoid mutating it
+var SortZSetEntryOpt = cmp.Transformer("SortZSetEntries", func(in []base.Z) []base.Z {
+	out := append([]base.Z(nil), in...) // Copy input to avoid mutating it
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].Msg.ID.String() < out[j].Msg.ID.String()
+		return out[i].Message.ID.String() < out[j].Message.ID.String()
 	})
 	return out
 })
@@ -177,6 +171,15 @@ func SeedEnqueuedQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage,
 	seedRedisList(tb, r, queue, msgs)
 }
 
+// SeedAllEnqueuedQueues initializes all of the specified queues with the given messages.
+//
+// enqueued map maps a queue name a list of messages.
+func SeedAllEnqueuedQueues(tb testing.TB, r *redis.Client, enqueued map[string][]*base.TaskMessage) {
+	for q, msgs := range enqueued {
+		SeedEnqueuedQueue(tb, r, msgs, q)
+	}
+}
+
 // SeedInProgressQueue initializes the in-progress queue with the given messages.
 func SeedInProgressQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage) {
 	tb.Helper()
@@ -184,25 +187,25 @@ func SeedInProgressQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessag
 }
 
 // SeedScheduledQueue initializes the scheduled queue with the given messages.
-func SeedScheduledQueue(tb testing.TB, r *redis.Client, entries []ZSetEntry) {
+func SeedScheduledQueue(tb testing.TB, r *redis.Client, entries []base.Z) {
 	tb.Helper()
 	seedRedisZSet(tb, r, base.ScheduledQueue, entries)
 }
 
 // SeedRetryQueue initializes the retry queue with the given messages.
-func SeedRetryQueue(tb testing.TB, r *redis.Client, entries []ZSetEntry) {
+func SeedRetryQueue(tb testing.TB, r *redis.Client, entries []base.Z) {
 	tb.Helper()
 	seedRedisZSet(tb, r, base.RetryQueue, entries)
 }
 
 // SeedDeadQueue initializes the dead queue with the given messages.
-func SeedDeadQueue(tb testing.TB, r *redis.Client, entries []ZSetEntry) {
+func SeedDeadQueue(tb testing.TB, r *redis.Client, entries []base.Z) {
 	tb.Helper()
 	seedRedisZSet(tb, r, base.DeadQueue, entries)
 }
 
 // SeedDeadlines initializes the deadlines set with the given entries.
-func SeedDeadlines(tb testing.TB, r *redis.Client, entries []ZSetEntry) {
+func SeedDeadlines(tb testing.TB, r *redis.Client, entries []base.Z) {
 	tb.Helper()
 	seedRedisZSet(tb, r, base.KeyDeadlines, entries)
 }
@@ -216,9 +219,9 @@ func seedRedisList(tb testing.TB, c *redis.Client, key string, msgs []*base.Task
 	}
 }
 
-func seedRedisZSet(tb testing.TB, c *redis.Client, key string, items []ZSetEntry) {
+func seedRedisZSet(tb testing.TB, c *redis.Client, key string, items []base.Z) {
 	for _, item := range items {
-		z := &redis.Z{Member: MustMarshal(tb, item.Msg), Score: float64(item.Score)}
+		z := &redis.Z{Member: MustMarshal(tb, item.Message), Score: float64(item.Score)}
 		if err := c.ZAdd(key, z).Err(); err != nil {
 			tb.Fatal(err)
 		}
@@ -262,25 +265,25 @@ func GetDeadMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
 }
 
 // GetScheduledEntries returns all task messages and its score in the scheduled queue.
-func GetScheduledEntries(tb testing.TB, r *redis.Client) []ZSetEntry {
+func GetScheduledEntries(tb testing.TB, r *redis.Client) []base.Z {
 	tb.Helper()
 	return getZSetEntries(tb, r, base.ScheduledQueue)
 }
 
 // GetRetryEntries returns all task messages and its score in the retry queue.
-func GetRetryEntries(tb testing.TB, r *redis.Client) []ZSetEntry {
+func GetRetryEntries(tb testing.TB, r *redis.Client) []base.Z {
 	tb.Helper()
 	return getZSetEntries(tb, r, base.RetryQueue)
 }
 
 // GetDeadEntries returns all task messages and its score in the dead queue.
-func GetDeadEntries(tb testing.TB, r *redis.Client) []ZSetEntry {
+func GetDeadEntries(tb testing.TB, r *redis.Client) []base.Z {
 	tb.Helper()
 	return getZSetEntries(tb, r, base.DeadQueue)
 }
 
 // GetDeadlinesEntries returns all task messages and its score in the deadlines set.
-func GetDeadlinesEntries(tb testing.TB, r *redis.Client) []ZSetEntry {
+func GetDeadlinesEntries(tb testing.TB, r *redis.Client) []base.Z {
 	tb.Helper()
 	return getZSetEntries(tb, r, base.KeyDeadlines)
 }
@@ -295,13 +298,13 @@ func getZSetMessages(tb testing.TB, r *redis.Client, zset string) []*base.TaskMe
 	return MustUnmarshalSlice(tb, data)
 }
 
-func getZSetEntries(tb testing.TB, r *redis.Client, zset string) []ZSetEntry {
+func getZSetEntries(tb testing.TB, r *redis.Client, zset string) []base.Z {
 	data := r.ZRangeWithScores(zset, 0, -1).Val()
-	var entries []ZSetEntry
+	var entries []base.Z
 	for _, z := range data {
-		entries = append(entries, ZSetEntry{
-			Msg:   MustUnmarshal(tb, z.Member.(string)),
-			Score: z.Score,
+		entries = append(entries, base.Z{
+			Message: MustUnmarshal(tb, z.Member.(string)),
+			Score:   int64(z.Score),
 		})
 	}
 	return entries
