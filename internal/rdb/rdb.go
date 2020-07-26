@@ -45,6 +45,11 @@ func (r *RDB) Close() error {
 	return r.client.Close()
 }
 
+// Ping checks the connection with redis server.
+func (r *RDB) Ping() error {
+	return r.client.Ping().Err()
+}
+
 // KEYS[1] -> asynq:queues:<qname>
 // KEYS[2] -> asynq:queues
 // ARGV[1] -> task message data

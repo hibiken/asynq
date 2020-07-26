@@ -40,13 +40,14 @@ type Server struct {
 	status *base.ServerStatus
 
 	// wait group to wait for all goroutines to finish.
-	wg          sync.WaitGroup
-	scheduler   *scheduler
-	processor   *processor
-	syncer      *syncer
-	heartbeater *heartbeater
-	subscriber  *subscriber
-	recoverer   *recoverer
+	wg            sync.WaitGroup
+	scheduler     *scheduler
+	processor     *processor
+	syncer        *syncer
+	heartbeater   *heartbeater
+	subscriber    *subscriber
+	recoverer     *recoverer
+	healthchecker *healthchecker
 }
 
 // Config specifies the server's background-task processing behavior.
@@ -123,6 +124,15 @@ type Config struct {
 	//
 	// If unset or zero, default timeout of 8 seconds is used.
 	ShutdownTimeout time.Duration
+
+	// HealthCheckFunc is called periodically with any errors encountered during ping to the
+	// connected redis server.
+	HealthCheckFunc func(error)
+
+	// HealthCheckInterval specifies the interval between healthchecks.
+	//
+	// If unset or zero, the interval is set to 15 seconds.
+	HealthCheckInterval time.Duration
 }
 
 // An ErrorHandler handles an error occured during task processing.
@@ -250,7 +260,11 @@ var defaultQueueConfig = map[string]int{
 	base.DefaultQueueName: 1,
 }
 
-const defaultShutdownTimeout = 8 * time.Second
+const (
+	defaultShutdownTimeout = 8 * time.Second
+
+	defaultHealthCheckInterval = 15 * time.Second
+)
 
 // NewServer returns a new Server given a redis connection option
 // and background processing configuration.
@@ -275,6 +289,10 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	shutdownTimeout := cfg.ShutdownTimeout
 	if shutdownTimeout == 0 {
 		shutdownTimeout = defaultShutdownTimeout
+	}
+	healthcheckInterval := cfg.HealthCheckInterval
+	if healthcheckInterval == 0 {
+		healthcheckInterval = defaultHealthCheckInterval
 	}
 	logger := log.NewLogger(cfg.Logger)
 	loglevel := cfg.LogLevel
@@ -336,16 +354,23 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		retryDelayFunc: delayFunc,
 		interval:       1 * time.Minute,
 	})
+	healthchecker := newHealthChecker(healthcheckerParams{
+		logger:          logger,
+		broker:          rdb,
+		interval:        healthcheckInterval,
+		healthcheckFunc: cfg.HealthCheckFunc,
+	})
 	return &Server{
-		logger:      logger,
-		broker:      rdb,
-		status:      status,
-		scheduler:   scheduler,
-		processor:   processor,
-		syncer:      syncer,
-		heartbeater: heartbeater,
-		subscriber:  subscriber,
-		recoverer:   recoverer,
+		logger:        logger,
+		broker:        rdb,
+		status:        status,
+		scheduler:     scheduler,
+		processor:     processor,
+		syncer:        syncer,
+		heartbeater:   heartbeater,
+		subscriber:    subscriber,
+		recoverer:     recoverer,
+		healthchecker: healthchecker,
 	}
 }
 
@@ -413,6 +438,7 @@ func (srv *Server) Start(handler Handler) error {
 	srv.logger.Info("Starting processing")
 
 	srv.heartbeater.start(&srv.wg)
+	srv.healthchecker.start(&srv.wg)
 	srv.subscriber.start(&srv.wg)
 	srv.syncer.start(&srv.wg)
 	srv.recoverer.start(&srv.wg)
@@ -442,6 +468,7 @@ func (srv *Server) Stop() {
 	srv.recoverer.terminate()
 	srv.syncer.terminate()
 	srv.subscriber.terminate()
+	srv.healthchecker.terminate()
 	srv.heartbeater.terminate()
 
 	srv.wg.Wait()
