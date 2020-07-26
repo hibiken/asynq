@@ -180,6 +180,15 @@ func (tb *TestBroker) PublishCancelation(id string) error {
 	return tb.real.PublishCancelation(id)
 }
 
+func (tb *TestBroker) Ping() error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.Ping()
+}
+
 func (tb *TestBroker) Close() error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
