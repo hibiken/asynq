@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -768,8 +769,12 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 			t.Errorf("There are still %d entries in scheduled queue, want empty",
 				len(gotScheduled))
 		}
+		// Allow Z.Score to differ by up to 2.
+		approxOpt := cmp.Comparer(func(a, b int64) bool {
+			return math.Abs(float64(a-b)) < 2
+		})
 		gotDead := asynqtest.GetDeadEntries(t, r)
-		if diff := cmp.Diff(tc.wantDead, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
+		if diff := cmp.Diff(tc.wantDead, gotDead, asynqtest.SortZSetEntryOpt, approxOpt); diff != "" {
 			t.Errorf("mismatch in %q; (-want,+got)\n%s", base.DeadQueue, diff)
 		}
 	}
