@@ -173,7 +173,7 @@ func SeedEnqueuedQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage,
 
 // SeedAllEnqueuedQueues initializes all of the specified queues with the given messages.
 //
-// enqueued map maps a queue name a list of messages.
+// enqueued maps a queue name to a list of messages.
 func SeedAllEnqueuedQueues(tb testing.TB, r *redis.Client, enqueued map[string][]*base.TaskMessage) {
 	for q, msgs := range enqueued {
 		SeedEnqueuedQueue(tb, r, msgs, q)
