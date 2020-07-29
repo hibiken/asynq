@@ -486,3 +486,15 @@ func (i *Inspector) KillTaskByKey(key string) error {
 		return fmt.Errorf("invalid key")
 	}
 }
+
+// PauseQueue pauses task processing on the specified queue.
+// If the queue is already paused, it will return a non-nil error.
+func (i *Inspector) PauseQueue(qname string) error {
+	return i.rdb.Pause(qname)
+}
+
+// UnpauseQueue resumes task processing on the specified queue.
+// If the queue is not paused, it will return a non-nil error.
+func (i *Inspector) UnpauseQueue(qname string) error {
+	return i.rdb.Unpause(qname)
+}
