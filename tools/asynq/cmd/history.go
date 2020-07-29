@@ -63,7 +63,7 @@ func printDailyStats(stats []*asynq.DailyStats) {
 		} else {
 			errrate = fmt.Sprintf("%.2f%%", float64(s.Failed)/float64(s.Processed)*100)
 		}
-		fmt.Fprintf(tw, format, s.Time.Format("2006-01-02"), s.Processed, s.Failed, errrate)
+		fmt.Fprintf(tw, format, s.Date.Format("2006-01-02"), s.Processed, s.Failed, errrate)
 	}
 	tw.Flush()
 }
