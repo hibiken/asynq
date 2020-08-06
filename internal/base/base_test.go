@@ -20,7 +20,8 @@ func TestQueueKey(t *testing.T) {
 		qname string
 		want  string
 	}{
-		{"custom", "asynq:queues:custom"},
+		{"default", "asynq:{default}"},
+		{"custom", "asynq:{custom}"},
 	}
 
 	for _, tc := range tests {
@@ -31,36 +32,140 @@ func TestQueueKey(t *testing.T) {
 	}
 }
 
-func TestProcessedKey(t *testing.T) {
+func TestInProgressKey(t *testing.T) {
 	tests := []struct {
-		input time.Time
+		qname string
 		want  string
 	}{
-		{time.Date(2019, 11, 14, 10, 30, 1, 1, time.UTC), "asynq:processed:2019-11-14"},
-		{time.Date(2020, 12, 1, 1, 0, 1, 1, time.UTC), "asynq:processed:2020-12-01"},
-		{time.Date(2020, 1, 6, 15, 02, 1, 1, time.UTC), "asynq:processed:2020-01-06"},
+		{"default", "asynq:{default}:in_progress"},
+		{"custom", "asynq:{custom}:in_progress"},
 	}
 
 	for _, tc := range tests {
-		got := ProcessedKey(tc.input)
+		got := InProgressKey(tc.qname)
+		if got != tc.want {
+			t.Errorf("InProgressKey(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
+func TestDeadlinesKey(t *testing.T) {
+	tests := []struct {
+		qname string
+		want  string
+	}{
+		{"default", "asynq:{default}:deadlines"},
+		{"custom", "asynq:{custom}:deadlines"},
+	}
+
+	for _, tc := range tests {
+		got := DeadlinesKey(tc.qname)
+		if got != tc.want {
+			t.Errorf("DeadlinesKey(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
+func TestScheduledKey(t *testing.T) {
+	tests := []struct {
+		qname string
+		want  string
+	}{
+		{"default", "asynq:{default}:scheduled"},
+		{"custom", "asynq:{custom}:scheduled"},
+	}
+
+	for _, tc := range tests {
+		got := ScheduledKey(tc.qname)
+		if got != tc.want {
+			t.Errorf("ScheduledKey(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
+func TestRetryKey(t *testing.T) {
+	tests := []struct {
+		qname string
+		want  string
+	}{
+		{"default", "asynq:{default}:retry"},
+		{"custom", "asynq:{custom}:retry"},
+	}
+
+	for _, tc := range tests {
+		got := RetryKey(tc.qname)
+		if got != tc.want {
+			t.Errorf("RetryKey(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
+func TestDeadKey(t *testing.T) {
+	tests := []struct {
+		qname string
+		want  string
+	}{
+		{"default", "asynq:{default}:dead"},
+		{"custom", "asynq:{custom}:dead"},
+	}
+
+	for _, tc := range tests {
+		got := DeadKey(tc.qname)
+		if got != tc.want {
+			t.Errorf("DeadKey(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
+func TestPausedKey(t *testing.T) {
+	tests := []struct {
+		qname string
+		want  string
+	}{
+		{"default", "asynq:{default}:paused"},
+		{"custom", "asynq:{custom}:paused"},
+	}
+
+	for _, tc := range tests {
+		got := PausedKey(tc.qname)
+		if got != tc.want {
+			t.Errorf("PausedKey(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
+func TestProcessedKey(t *testing.T) {
+	tests := []struct {
+		qname string
+		input time.Time
+		want  string
+	}{
+		{"default", time.Date(2019, 11, 14, 10, 30, 1, 1, time.UTC), "asynq:{default}:processed:2019-11-14"},
+		{"critical", time.Date(2020, 12, 1, 1, 0, 1, 1, time.UTC), "asynq:{critical}:processed:2020-12-01"},
+		{"default", time.Date(2020, 1, 6, 15, 02, 1, 1, time.UTC), "asynq:{default}:processed:2020-01-06"},
+	}
+
+	for _, tc := range tests {
+		got := ProcessedKey(tc.qname, tc.input)
 		if got != tc.want {
 			t.Errorf("ProcessedKey(%v) = %q, want %q", tc.input, got, tc.want)
 		}
 	}
 }
 
-func TestFailureKey(t *testing.T) {
+func TestFailedKey(t *testing.T) {
 	tests := []struct {
+		qname string
 		input time.Time
 		want  string
 	}{
-		{time.Date(2019, 11, 14, 10, 30, 1, 1, time.UTC), "asynq:failure:2019-11-14"},
-		{time.Date(2020, 12, 1, 1, 0, 1, 1, time.UTC), "asynq:failure:2020-12-01"},
-		{time.Date(2020, 1, 6, 15, 02, 1, 1, time.UTC), "asynq:failure:2020-01-06"},
+		{"default", time.Date(2019, 11, 14, 10, 30, 1, 1, time.UTC), "asynq:{default}:failed:2019-11-14"},
+		{"custom", time.Date(2020, 12, 1, 1, 0, 1, 1, time.UTC), "asynq:{custom}:failed:2020-12-01"},
+		{"low", time.Date(2020, 1, 6, 15, 02, 1, 1, time.UTC), "asynq:{low}:failed:2020-01-06"},
 	}
 
 	for _, tc := range tests {
-		got := FailureKey(tc.input)
+		got := FailedKey(tc.qname, tc.input)
 		if got != tc.want {
 			t.Errorf("FailureKey(%v) = %q, want %q", tc.input, got, tc.want)
 		}
@@ -74,8 +179,8 @@ func TestServerInfoKey(t *testing.T) {
 		sid      string
 		want     string
 	}{
-		{"localhost", 9876, "server123", "asynq:servers:localhost:9876:server123"},
-		{"127.0.0.1", 1234, "server987", "asynq:servers:127.0.0.1:1234:server987"},
+		{"localhost", 9876, "server123", "asynq:servers:{localhost:9876:server123}"},
+		{"127.0.0.1", 1234, "server987", "asynq:servers:{127.0.0.1:1234:server987}"},
 	}
 
 	for _, tc := range tests {
@@ -94,8 +199,8 @@ func TestWorkersKey(t *testing.T) {
 		sid      string
 		want     string
 	}{
-		{"localhost", 9876, "server1", "asynq:workers:localhost:9876:server1"},
-		{"127.0.0.1", 1234, "server2", "asynq:workers:127.0.0.1:1234:server2"},
+		{"localhost", 9876, "server1", "asynq:workers:{localhost:9876:server1}"},
+		{"127.0.0.1", 1234, "server2", "asynq:workers:{127.0.0.1:1234:server2}"},
 	}
 
 	for _, tc := range tests {
