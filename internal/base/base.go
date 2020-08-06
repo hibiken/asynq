@@ -23,49 +23,71 @@ const Version = "0.10.0"
 // DefaultQueueName is the queue name used if none are specified by user.
 const DefaultQueueName = "default"
 
-// Redis keys
+// DefaultQueue is the redis key for the default queue.
+var DefaultQueue = QueueKey(DefaultQueueName)
+
+// Global Redis keys.
 const (
-	AllServers      = "asynq:servers"                // ZSET
-	serversPrefix   = "asynq:servers:"               // STRING - asynq:ps:<host>:<pid>:<serverid>
-	AllWorkers      = "asynq:workers"                // ZSET
-	workersPrefix   = "asynq:workers:"               // HASH   - asynq:workers:<host:<pid>:<serverid>
-	processedPrefix = "asynq:processed:"             // STRING - asynq:processed:<yyyy-mm-dd>
-	failurePrefix   = "asynq:failure:"               // STRING - asynq:failure:<yyyy-mm-dd>
-	QueuePrefix     = "asynq:queues:"                // LIST   - asynq:queues:<qname>
-	AllQueues       = "asynq:queues"                 // SET
-	DefaultQueue    = QueuePrefix + DefaultQueueName // LIST
-	ScheduledQueue  = "asynq:scheduled"              // ZSET
-	RetryQueue      = "asynq:retry"                  // ZSET
-	DeadQueue       = "asynq:dead"                   // ZSET
-	InProgressQueue = "asynq:in_progress"            // LIST
-	KeyDeadlines    = "asynq:deadlines"              // ZSET
-	PausedQueues    = "asynq:paused"                 // SET
-	CancelChannel   = "asynq:cancel"                 // PubSub channel
+	AllServers    = "asynq:servers" // ZSET
+	AllWorkers    = "asynq:workers" // ZSET
+	AllQueues     = "asynq:queues"  // SET
+	CancelChannel = "asynq:cancel"  // PubSub channel
 )
 
 // QueueKey returns a redis key for the given queue name.
 func QueueKey(qname string) string {
-	return QueuePrefix + strings.ToLower(qname)
+	return fmt.Sprintf("asynq:{%s}", qname)
 }
 
-// ProcessedKey returns a redis key for processed count for the given day.
-func ProcessedKey(t time.Time) string {
-	return processedPrefix + t.UTC().Format("2006-01-02")
+// TODO: Should we rename this to "active"?
+// InProgressKey returns a redis key for the in-progress tasks.
+func InProgressKey(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:in_progress", qname)
 }
 
-// FailureKey returns a redis key for failure count for the given day.
-func FailureKey(t time.Time) string {
-	return failurePrefix + t.UTC().Format("2006-01-02")
+// ScheduledKey returns a redis key for the scheduled tasks.
+func ScheduledKey(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:scheduled", qname)
+}
+
+// RetryKey returns a redis key for the retry tasks.
+func RetryKey(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:retry", qname)
+}
+
+// DeadKey returns a redis key for the dead tasks.
+func DeadKey(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:dead", qname)
+}
+
+// DeadlinesKey returns a redis key for the deadlines.
+func DeadlinesKey(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:deadlines", qname)
+}
+
+// PausedKey returns a redis key to indicate that the given queue is paused.
+func PausedKey(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:paused", qname)
+}
+
+// ProcessedKey returns a redis key for processed count for the given day for the queue.
+func ProcessedKey(qname string, t time.Time) string {
+	return fmt.Sprintf("asynq:{%s}:processed:%s", qname, t.UTC().Format("2006-01-02"))
+}
+
+// FailedKey returns a redis key for failure count for the given day for the queue.
+func FailedKey(qname string, t time.Time) string {
+	return fmt.Sprintf("asynq:{%s}:failed:%s", qname, t.UTC().Format("2006-01-02"))
 }
 
 // ServerInfoKey returns a redis key for process info.
 func ServerInfoKey(hostname string, pid int, sid string) string {
-	return fmt.Sprintf("%s%s:%d:%s", serversPrefix, hostname, pid, sid)
+	return fmt.Sprintf("asynq:servers:{%s:%d:%s}", hostname, pid, sid)
 }
 
 // WorkersKey returns a redis key for the workers given hostname, pid, and server ID.
 func WorkersKey(hostname string, pid int, sid string) string {
-	return fmt.Sprintf("%s%s:%d:%s", workersPrefix, hostname, pid, sid)
+	return fmt.Sprintf("asynq:workers:{%s:%d:%s}", hostname, pid, sid)
 }
 
 // TaskMessage is the internal representation of a task with additional metadata fields.
