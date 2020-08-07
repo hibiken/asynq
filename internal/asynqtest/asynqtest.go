@@ -159,16 +159,10 @@ func FlushDB(tb testing.TB, r *redis.Client) {
 }
 
 // SeedEnqueuedQueue initializes the specified queue with the given messages.
-//
-// If queue name option is not passed, it defaults to the default queue.
-func SeedEnqueuedQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage, queueOpt ...string) {
+func SeedEnqueuedQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage, qname string) {
 	tb.Helper()
-	queue := base.DefaultQueue
-	if len(queueOpt) > 0 {
-		queue = base.QueueKey(queueOpt[0])
-	}
-	r.SAdd(base.AllQueues, queue)
-	seedRedisList(tb, r, queue, msgs)
+	r.SAdd(base.AllQueues, qname)
+	seedRedisList(tb, r, base.QueueKey(qname), msgs)
 }
 
 // SeedAllEnqueuedQueues initializes all of the specified queues with the given messages.
@@ -180,30 +174,35 @@ func SeedAllEnqueuedQueues(tb testing.TB, r *redis.Client, enqueued map[string][
 	}
 }
 
+// TODO: need to scope to a queue
 // SeedInProgressQueue initializes the in-progress queue with the given messages.
 func SeedInProgressQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage) {
 	tb.Helper()
 	seedRedisList(tb, r, base.InProgressQueue, msgs)
 }
 
+// TODO: need to scope to a queue
 // SeedScheduledQueue initializes the scheduled queue with the given messages.
 func SeedScheduledQueue(tb testing.TB, r *redis.Client, entries []base.Z) {
 	tb.Helper()
 	seedRedisZSet(tb, r, base.ScheduledQueue, entries)
 }
 
+// TODO: need to scope to a queue
 // SeedRetryQueue initializes the retry queue with the given messages.
 func SeedRetryQueue(tb testing.TB, r *redis.Client, entries []base.Z) {
 	tb.Helper()
 	seedRedisZSet(tb, r, base.RetryQueue, entries)
 }
 
+// TODO: need to scope to a queue
 // SeedDeadQueue initializes the dead queue with the given messages.
 func SeedDeadQueue(tb testing.TB, r *redis.Client, entries []base.Z) {
 	tb.Helper()
 	seedRedisZSet(tb, r, base.DeadQueue, entries)
 }
 
+// TODO: need to scope to a queue
 // SeedDeadlines initializes the deadlines set with the given entries.
 func SeedDeadlines(tb testing.TB, r *redis.Client, entries []base.Z) {
 	tb.Helper()
@@ -228,64 +227,58 @@ func seedRedisZSet(tb testing.TB, c *redis.Client, key string, items []base.Z) {
 	}
 }
 
-// GetEnqueuedMessages returns all task messages in the specified queue.
-//
-// If queue name option is not passed, it defaults to the default queue.
-func GetEnqueuedMessages(tb testing.TB, r *redis.Client, queueOpt ...string) []*base.TaskMessage {
+// GetEnqueuedMessages returns all enqueued messages in the given queue.
+func GetEnqueuedMessages(tb testing.TB, r *redis.Client, qname string) []*base.TaskMessage {
 	tb.Helper()
-	queue := base.DefaultQueue
-	if len(queueOpt) > 0 {
-		queue = base.QueueKey(queueOpt[0])
-	}
-	return getListMessages(tb, r, queue)
+	return getListMessages(tb, r, base.QueueKey(qname))
 }
 
-// GetInProgressMessages returns all task messages in the in-progress queue.
-func GetInProgressMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
+// GetInProgressMessages returns all in-progress messages in the given queue.
+func GetInProgressMessages(tb testing.TB, r *redis.Client, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getListMessages(tb, r, base.InProgressQueue)
+	return getListMessages(tb, r, base.InProgressKey(qname))
 }
 
-// GetScheduledMessages returns all task messages in the scheduled queue.
-func GetScheduledMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
+// GetScheduledMessages returns all scheduled task messages in the given queue.
+func GetScheduledMessages(tb testing.TB, r *redis.Client, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getZSetMessages(tb, r, base.ScheduledQueue)
+	return getZSetMessages(tb, r, base.ScheduledKey(qname))
 }
 
-// GetRetryMessages returns all task messages in the retry queue.
-func GetRetryMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
+// GetRetryMessages returns all retry messages in the given queue.
+func GetRetryMessages(tb testing.TB, r *redis.Client, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getZSetMessages(tb, r, base.RetryQueue)
+	return getZSetMessages(tb, r, base.RetryKey(qname))
 }
 
-// GetDeadMessages returns all task messages in the dead queue.
-func GetDeadMessages(tb testing.TB, r *redis.Client) []*base.TaskMessage {
+// GetDeadMessages returns all dead messages in the given queue.
+func GetDeadMessages(tb testing.TB, r *redis.Client, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getZSetMessages(tb, r, base.DeadQueue)
+	return getZSetMessages(tb, r, base.DeadKey(qname))
 }
 
-// GetScheduledEntries returns all task messages and its score in the scheduled queue.
-func GetScheduledEntries(tb testing.TB, r *redis.Client) []base.Z {
+// GetScheduledEntries returns all scheduled messages and its score in the given queue.
+func GetScheduledEntries(tb testing.TB, r *redis.Client, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.ScheduledQueue)
+	return getZSetEntries(tb, r, base.ScheduledKey(qname))
 }
 
-// GetRetryEntries returns all task messages and its score in the retry queue.
-func GetRetryEntries(tb testing.TB, r *redis.Client) []base.Z {
+// GetRetryEntries returns all retry messages and its score in the given queue.
+func GetRetryEntries(tb testing.TB, r *redis.Client, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.RetryQueue)
+	return getZSetEntries(tb, r, base.RetryKey(qname))
 }
 
-// GetDeadEntries returns all task messages and its score in the dead queue.
-func GetDeadEntries(tb testing.TB, r *redis.Client) []base.Z {
+// GetDeadEntries returns all dead messages and its score in the given queue.
+func GetDeadEntries(tb testing.TB, r *redis.Client, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.DeadQueue)
+	return getZSetEntries(tb, r, base.DeadKey(qname))
 }
 
-// GetDeadlinesEntries returns all task messages and its score in the deadlines set.
-func GetDeadlinesEntries(tb testing.TB, r *redis.Client) []base.Z {
+// GetDeadlinesEntries returns all task messages and its score in the deadlines set for the given queue.
+func GetDeadlinesEntries(tb testing.TB, r *redis.Client, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.KeyDeadlines)
+	return getZSetEntries(tb, r, base.DeadlinesKey(qname))
 }
 
 func getListMessages(tb testing.TB, r *redis.Client, list string) []*base.TaskMessage {
