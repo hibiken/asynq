@@ -7,7 +7,6 @@ package asynq
 import (
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -142,39 +141,6 @@ func composeOptions(opts ...Option) option {
 	return res
 }
 
-// uniqueKey computes the redis key used for the given task.
-// It returns an empty string if ttl is zero.
-func uniqueKey(t *Task, ttl time.Duration, qname string) string {
-	if ttl == 0 {
-		return ""
-	}
-	return fmt.Sprintf("%s:%s:%s", t.Type, serializePayload(t.Payload.data), qname)
-}
-
-func serializePayload(payload map[string]interface{}) string {
-	if payload == nil {
-		return "nil"
-	}
-	type entry struct {
-		k string
-		v interface{}
-	}
-	var es []entry
-	for k, v := range payload {
-		es = append(es, entry{k, v})
-	}
-	// sort entries by key
-	sort.Slice(es, func(i, j int) bool { return es[i].k < es[j].k })
-	var b strings.Builder
-	for _, e := range es {
-		if b.Len() > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString(fmt.Sprintf("%s=%v", e.k, e.v))
-	}
-	return b.String()
-}
-
 const (
 	// Default max retry count used if nothing is specified.
 	defaultMaxRetry = 25
@@ -286,6 +252,10 @@ func (c *Client) enqueueAt(t time.Time, task *Task, opts ...Option) (*Result, er
 		// If neither deadline nor timeout are set, use default timeout.
 		timeout = defaultTimeout
 	}
+	var uniqueKey string
+	if opt.uniqueTTL > 0 {
+		uniqueKey = base.UniqueKey(opt.queue, task.Type, task.Payload.data)
+	}
 	msg := &base.TaskMessage{
 		ID:        uuid.New(),
 		Type:      task.Type,
@@ -294,7 +264,7 @@ func (c *Client) enqueueAt(t time.Time, task *Task, opts ...Option) (*Result, er
 		Retry:     opt.retry,
 		Deadline:  deadline.Unix(),
 		Timeout:   int64(timeout.Seconds()),
-		UniqueKey: uniqueKey(task, opt.uniqueTTL, opt.queue),
+		UniqueKey: uniqueKey,
 	}
 	var err error
 	now := time.Now()

@@ -212,6 +212,63 @@ func TestWorkersKey(t *testing.T) {
 	}
 }
 
+func TestUniqueKey(t *testing.T) {
+	tests := []struct {
+		desc     string
+		qname    string
+		tasktype string
+		payload  map[string]interface{}
+		want     string
+	}{
+		{
+			"with primitive types",
+			"default",
+			"email:send",
+			map[string]interface{}{"a": 123, "b": "hello", "c": true},
+			"asynq:{default}:unique:email:send:a=123,b=hello,c=true",
+		},
+		{
+			"with unsorted keys",
+			"default",
+			"email:send",
+			map[string]interface{}{"b": "hello", "c": true, "a": 123},
+			"asynq:{default}:unique:email:send:a=123,b=hello,c=true",
+		},
+		{
+			"with composite types",
+			"default",
+			"email:send",
+			map[string]interface{}{
+				"address": map[string]string{"line": "123 Main St", "city": "Boston", "state": "MA"},
+				"names":   []string{"bob", "mike", "rob"}},
+			"asynq:{default}:unique:email:send:address=map[city:Boston line:123 Main St state:MA],names=[bob mike rob]",
+		},
+		{
+			"with complex types",
+			"default",
+			"email:send",
+			map[string]interface{}{
+				"time":     time.Date(2020, time.July, 28, 0, 0, 0, 0, time.UTC),
+				"duration": time.Hour},
+			"asynq:{default}:unique:email:send:duration=1h0m0s,time=2020-07-28 00:00:00 +0000 UTC",
+		},
+		{
+			"with nil payload",
+			"default",
+			"reindex",
+			nil,
+			"asynq:{default}:unique:reindex:nil",
+		},
+	}
+
+	for _, tc := range tests {
+		got := UniqueKey(tc.qname, tc.tasktype, tc.payload)
+		if got != tc.want {
+			t.Errorf("%s: UniqueKey(%q, %q, %v) = %q, want %q", tc.desc, tc.qname, tc.tasktype, tc.payload, got, tc.want)
+		}
+	}
+}
+
 func TestMessageEncoding(t *testing.T) {
 	id := uuid.New()
 	tests := []struct {
