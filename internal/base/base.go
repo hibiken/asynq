@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -88,6 +89,35 @@ func ServerInfoKey(hostname string, pid int, sid string) string {
 // WorkersKey returns a redis key for the workers given hostname, pid, and server ID.
 func WorkersKey(hostname string, pid int, sid string) string {
 	return fmt.Sprintf("asynq:workers:{%s:%d:%s}", hostname, pid, sid)
+}
+
+// UniqueKey returns a redis key with the given type, payload, and queue name.
+func UniqueKey(qname, tasktype string, payload map[string]interface{}) string {
+	return fmt.Sprintf("asynq:{%s}:unique:%s:%s", qname, tasktype, serializePayload(payload))
+}
+
+func serializePayload(payload map[string]interface{}) string {
+	if payload == nil {
+		return "nil"
+	}
+	type entry struct {
+		k string
+		v interface{}
+	}
+	var es []entry
+	for k, v := range payload {
+		es = append(es, entry{k, v})
+	}
+	// sort entries by key
+	sort.Slice(es, func(i, j int) bool { return es[i].k < es[j].k })
+	var b strings.Builder
+	for _, e := range es {
+		if b.Len() > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(fmt.Sprintf("%s=%v", e.k, e.v))
+	}
+	return b.String()
 }
 
 // TaskMessage is the internal representation of a task with additional metadata fields.
