@@ -779,61 +779,99 @@ func TestRetry(t *testing.T) {
 		Payload: map[string]interface{}{"subject": "Hola!"},
 		Retried: 10,
 		Timeout: 1800,
+		Queue:   "default",
 	}
-	t1Deadline := now.Unix() + t1.Timeout
 	t2 := &base.TaskMessage{
 		ID:      uuid.New(),
 		Type:    "gen_thumbnail",
 		Payload: map[string]interface{}{"path": "some/path/to/image.jpg"},
 		Timeout: 3000,
+		Queue:   "default",
 	}
-	t2Deadline := now.Unix() + t2.Timeout
 	t3 := &base.TaskMessage{
 		ID:      uuid.New(),
 		Type:    "reindex",
 		Payload: nil,
 		Timeout: 60,
+		Queue:   "default",
 	}
+	t4 := &base.TaskMessage{
+		ID:      uuid.New(),
+		Type:    "send_notification",
+		Payload: nil,
+		Timeout: 1800,
+		Queue:   "custom",
+	}
+	t1Deadline := now.Unix() + t1.Timeout
+	t2Deadline := now.Unix() + t2.Timeout
+	t4Deadline := now.Unix() + t4.Timeout
 	errMsg := "SMTP server is not responding"
 
 	tests := []struct {
-		inProgress     []*base.TaskMessage
-		deadlines      []base.Z
-		retry          []base.Z
+		inProgress     map[string][]*base.TaskMessage
+		deadlines      map[string][]base.Z
+		retry          map[string][]base.Z
 		msg            *base.TaskMessage
 		processAt      time.Time
 		errMsg         string
-		wantInProgress []*base.TaskMessage
-		wantDeadlines  []base.Z
-		wantRetry      []base.Z
+		wantInProgress map[string][]*base.TaskMessage
+		wantDeadlines  map[string][]base.Z
+		wantRetry      map[string][]base.Z
 	}{
 		{
-			inProgress: []*base.TaskMessage{t1, t2},
-			deadlines: []base.Z{
-				{Message: t1, Score: t1Deadline},
-				{Message: t2, Score: t2Deadline},
+			inProgress: map[string][]*base.TaskMessage{
+				"default": {t1, t2},
 			},
-			retry: []base.Z{
-				{
-					Message: t3,
-					Score:   now.Add(time.Minute).Unix(),
+			deadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}, {Message: t2, Score: t2Deadline}},
+			},
+			retry: map[string][]base.Z{
+				"default": {{Message: t3, Score: now.Add(time.Minute).Unix()}},
+			},
+			msg:       t1,
+			processAt: now.Add(5 * time.Minute),
+			errMsg:    errMsg,
+			wantInProgress: map[string][]*base.TaskMessage{
+				"default": {t2},
+			},
+			wantDeadlines: map[string][]base.Z{
+				"default": {{Message: t2, Score: t2Deadline}},
+			},
+			wantRetry: map[string][]base.Z{
+				"default": {
+					{Message: h.TaskMessageAfterRetry(*t1, errMsg), Score: now.Add(5 * time.Minute).Unix()},
+					{Message: t3, Score: now.Add(time.Minute).Unix()},
 				},
 			},
-			msg:            t1,
-			processAt:      now.Add(5 * time.Minute),
-			errMsg:         errMsg,
-			wantInProgress: []*base.TaskMessage{t2},
-			wantDeadlines: []base.Z{
-				{Message: t2, Score: t2Deadline},
+		},
+		{
+			inProgress: map[string][]*base.TaskMessage{
+				"default": {t1, t2},
+				"custom":  {t4},
 			},
-			wantRetry: []base.Z{
-				{
-					Message: h.TaskMessageAfterRetry(*t1, errMsg),
-					Score:   now.Add(5 * time.Minute).Unix(),
-				},
-				{
-					Message: t3,
-					Score:   now.Add(time.Minute).Unix(),
+			deadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}, {Message: t2, Score: t2Deadline}},
+				"custom":  {{Message: t4, Score: t4Deadline}},
+			},
+			retry: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			msg:       t4,
+			processAt: now.Add(5 * time.Minute),
+			errMsg:    errMsg,
+			wantInProgress: map[string][]*base.TaskMessage{
+				"default": {t1, t2},
+				"custom":  {},
+			},
+			wantDeadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}, {Message: t2, Score: t2Deadline}},
+				"custom":  {},
+			},
+			wantRetry: map[string][]base.Z{
+				"default": {},
+				"custom": {
+					{Message: h.TaskMessageAfterRetry(*t4, errMsg), Score: now.Add(5 * time.Minute).Unix()},
 				},
 			},
 		},
@@ -841,9 +879,9 @@ func TestRetry(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		h.SeedInProgressQueue(t, r.client, tc.inProgress)
-		h.SeedDeadlines(t, r.client, tc.deadlines)
-		h.SeedRetryQueue(t, r.client, tc.retry)
+		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
+		h.SeedAllDeadlines(t, r.client, tc.deadlines)
+		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
 		err := r.Retry(tc.msg, tc.processAt, tc.errMsg)
 		if err != nil {
@@ -851,20 +889,26 @@ func TestRetry(t *testing.T) {
 			continue
 		}
 
-		gotInProgress := h.GetInProgressMessages(t, r.client)
-		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, h.SortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.InProgressQueue, diff)
+		for queue, want := range tc.wantInProgress {
+			gotInProgress := h.GetInProgressMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotInProgress, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.InProgressKey(queue), diff)
+			}
 		}
-		gotDeadlines := h.GetDeadlinesEntries(t, r.client)
-		if diff := cmp.Diff(tc.wantDeadlines, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.KeyDeadlines, diff)
+		for queue, want := range tc.wantDeadlines {
+			gotDeadlines := h.GetDeadlinesEntries(t, r.client, queue)
+			if diff := cmp.Diff(want, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DeadlinesKey(queue), diff)
+			}
 		}
-		gotRetry := h.GetRetryEntries(t, r.client)
-		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortZSetEntryOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
+		for queue, want := range tc.wantRetry {
+			gotRetry := h.GetRetryEntries(t, r.client, queue)
+			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryKey(queue), diff)
+			}
 		}
 
-		processedKey := base.ProcessedKey(time.Now())
+		processedKey := base.ProcessedKey(tc.msg.Queue, time.Now())
 		gotProcessed := r.client.Get(processedKey).Val()
 		if gotProcessed != "1" {
 			t.Errorf("GET %q = %q, want 1", processedKey, gotProcessed)
@@ -874,14 +918,14 @@ func TestRetry(t *testing.T) {
 			t.Errorf("TTL %q = %v, want less than or equal to %v", processedKey, gotTTL, statsTTL)
 		}
 
-		failureKey := base.FailureKey(time.Now())
-		gotFailure := r.client.Get(failureKey).Val()
+		failedKey := base.FailedKey(tc.msg.Queue, time.Now())
+		gotFailure := r.client.Get(failedKey).Val()
 		if gotFailure != "1" {
-			t.Errorf("GET %q = %q, want 1", failureKey, gotFailure)
+			t.Errorf("GET %q = %q, want 1", failedKey, gotFailure)
 		}
-		gotTTL = r.client.TTL(processedKey).Val()
+		gotTTL = r.client.TTL(failedKey).Val()
 		if gotTTL > statsTTL {
-			t.Errorf("TTL %q = %v, want less than or equal to %v", failureKey, gotTTL, statsTTL)
+			t.Errorf("TTL %q = %v, want less than or equal to %v", failedKey, gotTTL, statsTTL)
 		}
 	}
 }
