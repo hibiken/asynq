@@ -364,11 +364,11 @@ const (
 	deadExpirationInDays = 90
 )
 
-// KEYS[1] -> asynq:in_progress
-// KEYS[2] -> asynq:deadlines
-// KEYS[3] -> asynq:dead
-// KEYS[4] -> asynq:processed:<yyyy-mm-dd>
-// KEYS[5] -> asynq.failure:<yyyy-mm-dd>
+// KEYS[1] -> asynq:{<qname>}:in_progress
+// KEYS[2] -> asynq:{<qname>}:deadlines
+// KEYS[3] -> asynq:{<qname>}:dead
+// KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
+// KEYS[5] -> asynq:{<qname>}:failure:<yyyy-mm-dd>
 // ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
 // ARGV[2] -> base.TaskMessage value to add to Dead queue
 // ARGV[3] -> died_at UNIX timestamp
@@ -411,11 +411,11 @@ func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 	}
 	now := time.Now()
 	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
-	processedKey := base.ProcessedKey(now)
-	failureKey := base.FailureKey(now)
+	processedKey := base.ProcessedKey(msg.Queue, now)
+	failureKey := base.FailureKey(msg.Queue, now)
 	expireAt := now.Add(statsTTL)
 	return killCmd.Run(r.client,
-		[]string{base.InProgressQueue, base.KeyDeadlines, base.DeadQueue, processedKey, failureKey},
+		[]string{base.InProgressKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.DeadKey(msg.Queue), processedKey, failureKey},
 		msgToRemove, msgToAdd, now.Unix(), limit, maxDeadTasks, expireAt.Unix()).Err()
 }
 
