@@ -187,9 +187,9 @@ func (r *RDB) dequeue(qkeys ...interface{}) (msgjson string, deadline int64, err
 	return msgjson, deadline, nil
 }
 
-// KEYS[1] -> asynq:in_progress
-// KEYS[2] -> asynq:deadlines
-// KEYS[3] -> asynq:processed:<yyyy-mm-dd>
+// KEYS[1] -> asynq:{<qname>}:in_progress
+// KEYS[2] -> asynq:{<qname>}:deadlines
+// KEYS[3] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[4] -> unique key
 // ARGV[1] -> base.TaskMessage value
 // ARGV[2] -> stats expiration timestamp
@@ -220,10 +220,9 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 		return err
 	}
 	now := time.Now()
-	processedKey := base.ProcessedKey(now)
 	expireAt := now.Add(statsTTL)
 	return doneCmd.Run(r.client,
-		[]string{base.InProgressQueue, base.KeyDeadlines, processedKey, msg.UniqueKey},
+		[]string{base.InProgressKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.ProcessedKey(msg.Queue, now), msg.UniqueKey},
 		encoded, expireAt.Unix(), msg.ID.String()).Err()
 }
 

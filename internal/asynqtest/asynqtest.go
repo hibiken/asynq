@@ -165,6 +165,36 @@ func SeedEnqueuedQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage,
 	seedRedisList(tb, r, base.QueueKey(qname), msgs)
 }
 
+// SeedInProgressQueue initializes the in-progress queue with the given messages.
+func SeedInProgressQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage, qname string) {
+	tb.Helper()
+	seedRedisList(tb, r, base.InProgressKey(qname), msgs)
+}
+
+// SeedScheduledQueue initializes the scheduled queue with the given messages.
+func SeedScheduledQueue(tb testing.TB, r *redis.Client, entries []base.Z, qname string) {
+	tb.Helper()
+	seedRedisZSet(tb, r, base.ScheduledKey(qname), entries)
+}
+
+// SeedRetryQueue initializes the retry queue with the given messages.
+func SeedRetryQueue(tb testing.TB, r *redis.Client, entries []base.Z, qname string) {
+	tb.Helper()
+	seedRedisZSet(tb, r, base.RetryKey(qname), entries)
+}
+
+// SeedDeadQueue initializes the dead queue with the given messages.
+func SeedDeadQueue(tb testing.TB, r *redis.Client, entries []base.Z, qname string) {
+	tb.Helper()
+	seedRedisZSet(tb, r, base.DeadKey(qname), entries)
+}
+
+// SeedDeadlines initializes the deadlines set with the given entries.
+func SeedDeadlines(tb testing.TB, r *redis.Client, entries []base.Z, qname string) {
+	tb.Helper()
+	seedRedisZSet(tb, r, base.DeadlinesKey(qname), entries)
+}
+
 // SeedAllEnqueuedQueues initializes all of the specified queues with the given messages.
 //
 // enqueued maps a queue name to a list of messages.
@@ -174,39 +204,39 @@ func SeedAllEnqueuedQueues(tb testing.TB, r *redis.Client, enqueued map[string][
 	}
 }
 
-// TODO: need to scope to a queue
-// SeedInProgressQueue initializes the in-progress queue with the given messages.
-func SeedInProgressQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage) {
-	tb.Helper()
-	seedRedisList(tb, r, base.InProgressQueue, msgs)
+// SeedAllInProgressQueues initializes all of the specified in-progress queues with the given messages.
+func SeedAllInProgressQueues(tb testing.TB, r *redis.Client, inprogress map[string][]*base.TaskMessage) {
+	for q, msgs := range inprogress {
+		SeedInProgressQueue(tb, r, msgs, q)
+	}
 }
 
-// TODO: need to scope to a queue
-// SeedScheduledQueue initializes the scheduled queue with the given messages.
-func SeedScheduledQueue(tb testing.TB, r *redis.Client, entries []base.Z) {
-	tb.Helper()
-	seedRedisZSet(tb, r, base.ScheduledQueue, entries)
+// SeedAllScheduledQueues initializes all of the specified scheduled queues with the given entries.
+func SeedAllScheduledQueues(tb testing.TB, r *redis.Client, scheduled map[string][]base.Z) {
+	for q, entries := range scheduled {
+		SeedScheduledQueue(tb, r, entries, q)
+	}
 }
 
-// TODO: need to scope to a queue
-// SeedRetryQueue initializes the retry queue with the given messages.
-func SeedRetryQueue(tb testing.TB, r *redis.Client, entries []base.Z) {
-	tb.Helper()
-	seedRedisZSet(tb, r, base.RetryQueue, entries)
+// SeedAllRetryQueues initializes all of the specified retry queues with the given entries.
+func SeedAllRetryQueues(tb testing.TB, r *redis.Client, retry map[string][]base.Z) {
+	for q, entries := range retry {
+		SeedRetryQueue(tb, r, entries, q)
+	}
 }
 
-// TODO: need to scope to a queue
-// SeedDeadQueue initializes the dead queue with the given messages.
-func SeedDeadQueue(tb testing.TB, r *redis.Client, entries []base.Z) {
-	tb.Helper()
-	seedRedisZSet(tb, r, base.DeadQueue, entries)
+// SeedAllDeadQueues initializes all of the specified dead queues with the given entries.
+func SeedAllDeadQueues(tb testing.TB, r *redis.Client, dead map[string][]base.Z) {
+	for q, entries := range dead {
+		SeedDeadQueue(tb, r, entries, q)
+	}
 }
 
-// TODO: need to scope to a queue
-// SeedDeadlines initializes the deadlines set with the given entries.
-func SeedDeadlines(tb testing.TB, r *redis.Client, entries []base.Z) {
-	tb.Helper()
-	seedRedisZSet(tb, r, base.KeyDeadlines, entries)
+// SeedAllDeadlines initializes all of the deadlines with the given entries.
+func SeedAllDeadlines(tb testing.TB, r *redis.Client, deadlines map[string][]base.Z) {
+	for q, entries := range deadlines {
+		SeedDeadlines(tb, r, entries, q)
+	}
 }
 
 func seedRedisList(tb testing.TB, c *redis.Client, key string, msgs []*base.TaskMessage) {
