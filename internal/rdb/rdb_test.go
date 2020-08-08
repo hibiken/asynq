@@ -414,16 +414,16 @@ func TestDone(t *testing.T) {
 		Payload:  nil,
 		Timeout:  1800,
 		Deadline: 0,
+		Queue:    "default",
 	}
-	t1Deadline := now.Unix() + t1.Timeout
 	t2 := &base.TaskMessage{
 		ID:       uuid.New(),
 		Type:     "export_csv",
 		Payload:  nil,
 		Timeout:  0,
 		Deadline: 1592485787,
+		Queue:    "custom",
 	}
-	t2Deadline := t2.Deadline
 	t3 := &base.TaskMessage{
 		ID:        uuid.New(),
 		Type:      "reindex",
@@ -433,89 +433,84 @@ func TestDone(t *testing.T) {
 		UniqueKey: "reindex:nil:default",
 		Queue:     "default",
 	}
+	t1Deadline := now.Unix() + t1.Timeout
+	t2Deadline := t2.Deadline
 	t3Deadline := now.Unix() + t3.Deadline
 
 	tests := []struct {
-		inProgress     []*base.TaskMessage // initial state of the in-progress list
-		deadlines      []base.Z            // initial state of deadlines set
-		target         *base.TaskMessage   // task to remove
-		wantInProgress []*base.TaskMessage // final state of the in-progress list
-		wantDeadlines  []base.Z            // final state of the deadline set
+		inProgress     map[string][]*base.TaskMessage // initial state of the in-progress list
+		deadlines      map[string][]base.Z            // initial state of deadlines set
+		target         *base.TaskMessage              // task to remove
+		wantInProgress map[string][]*base.TaskMessage // final state of the in-progress list
+		wantDeadlines  map[string][]base.Z            // final state of the deadline set
 	}{
 		{
-			inProgress: []*base.TaskMessage{t1, t2},
-			deadlines: []base.Z{
-				{
-					Message: t1,
-					Score:   t1Deadline,
-				},
-				{
-					Message: t2,
-					Score:   t2Deadline,
-				},
+			inProgress: map[string][]*base.TaskMessage{
+				"default": {t1},
+				"custom":  {t2},
 			},
-			target:         t1,
-			wantInProgress: []*base.TaskMessage{t2},
-			wantDeadlines: []base.Z{
-				{
-					Message: t2,
-					Score:   t2Deadline,
-				},
+			deadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}},
+				"custom":  {{Message: t2, Score: t2Deadline}},
+			},
+			target: t1,
+			wantInProgress: map[string][]*base.TaskMessage{
+				"default": {t2},
+				"custom":  {},
+			},
+			wantDeadlines: map[string][]base.Z{
+				"default": {},
+				"custom":  {{Message: t2, Score: t2Deadline}},
 			},
 		},
 		{
-			inProgress: []*base.TaskMessage{t1},
-			deadlines: []base.Z{
-				{
-					Message: t1,
-					Score:   t1Deadline,
-				},
+			inProgress: map[string][]*base.TaskMessage{
+				"default": {t1},
 			},
-			target:         t1,
-			wantInProgress: []*base.TaskMessage{},
-			wantDeadlines:  []base.Z{},
+			deadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}},
+			},
+			target: t1,
+			wantInProgress: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantDeadlines: map[string][]base.Z{
+				"default": {},
+			},
 		},
 		{
-			inProgress: []*base.TaskMessage{t1, t2, t3},
-			deadlines: []base.Z{
-				{
-					Message: t1,
-					Score:   t1Deadline,
-				},
-				{
-					Message: t2,
-					Score:   t2Deadline,
-				},
-				{
-					Message: t3,
-					Score:   t3Deadline,
-				},
+			inProgress: map[string][]*base.TaskMessage{
+				"default": {t1, t3},
+				"custom":  {t2},
 			},
-			target:         t3,
-			wantInProgress: []*base.TaskMessage{t1, t2},
-			wantDeadlines: []base.Z{
-				{
-					Message: t1,
-					Score:   t1Deadline,
-				},
-				{
-					Message: t2,
-					Score:   t2Deadline,
-				},
+			deadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}, {Message: t3, Score: t3Deadline}},
+				"custom":  {{Message: t2, Score: t2Deadline}},
+			},
+			target: t3,
+			wantInProgress: map[string][]*base.TaskMessage{
+				"defualt": {t1},
+				"custom":  {t2},
+			},
+			wantDeadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}},
+				"custom":  {{Message: t2, Score: t2Deadline}},
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedDeadlines(t, r.client, tc.deadlines)
-		h.SeedInProgressQueue(t, r.client, tc.inProgress)
-		for _, msg := range tc.inProgress {
-			// Set uniqueness lock if unique key is present.
-			if len(msg.UniqueKey) > 0 {
-				err := r.client.SetNX(msg.UniqueKey, msg.ID.String(), time.Minute).Err()
-				if err != nil {
-					t.Fatal(err)
+		h.SeedAllDeadlines(t, r.client, tc.deadlines)
+		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
+		for _, msgs := range tc.inProgress {
+			for _, msg := range msgs {
+				// Set uniqueness lock if unique key is present.
+				if len(msg.UniqueKey) > 0 {
+					err := r.client.SetNX(msg.UniqueKey, msg.ID.String(), time.Minute).Err()
+					if err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 		}
@@ -526,18 +521,22 @@ func TestDone(t *testing.T) {
 			continue
 		}
 
-		gotInProgress := h.GetInProgressMessages(t, r.client)
-		if diff := cmp.Diff(tc.wantInProgress, gotInProgress, h.SortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.InProgressQueue, diff)
-			continue
+		for queue, want := range tc.wantInProgress {
+			gotInProgress := h.GetInProgressMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotInProgress, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.InProgressKey(queue), diff)
+				continue
+			}
 		}
-		gotDeadlines := h.GetDeadlinesEntries(t, r.client)
-		if diff := cmp.Diff(tc.wantDeadlines, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
-			t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.KeyDeadlines, diff)
-			continue
+		for queue, want := range tc.wantDeadlines {
+			gotDeadlines := h.GetDeadlinesEntries(t, r.client, queue)
+			if diff := cmp.Diff(want, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.DeadlinesKey(queue), diff)
+				continue
+			}
 		}
 
-		processedKey := base.ProcessedKey(time.Now())
+		processedKey := base.ProcessedKey(tc.target.Queue, time.Now())
 		gotProcessed := r.client.Get(processedKey).Val()
 		if gotProcessed != "1" {
 			t.Errorf("GET %q = %q, want 1", processedKey, gotProcessed)
