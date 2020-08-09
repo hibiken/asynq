@@ -1161,82 +1161,120 @@ func TestCheckAndEnqueue(t *testing.T) {
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("generate_csv", nil)
 	t3 := h.NewTaskMessage("gen_thumbnail", nil)
-	t4 := h.NewTaskMessage("important_task", nil)
-	t4.Queue = "critical"
-	t5 := h.NewTaskMessage("minor_task", nil)
-	t5.Queue = "low"
+	t4 := h.NewTaskMessageWithQueue("important_task", nil, "critical")
+	t5 := h.NewTaskMessageWithQueue("minor_task", nil, "low")
 	secondAgo := time.Now().Add(-time.Second)
 	hourFromNow := time.Now().Add(time.Hour)
 
 	tests := []struct {
-		scheduled     []base.Z
-		retry         []base.Z
+		scheduled     map[string][]base.Z
+		retry         map[string][]base.Z
+		qnames        []string
 		wantEnqueued  map[string][]*base.TaskMessage
-		wantScheduled []*base.TaskMessage
-		wantRetry     []*base.TaskMessage
+		wantScheduled map[string][]*base.TaskMessage
+		wantRetry     map[string][]*base.TaskMessage
 	}{
 		{
-			scheduled: []base.Z{
-				{Message: t1, Score: secondAgo.Unix()},
-				{Message: t2, Score: secondAgo.Unix()},
+			scheduled: map[string][]base.Z{
+				"default": {
+					{Message: t1, Score: secondAgo.Unix()},
+					{Message: t2, Score: secondAgo.Unix()},
+				},
 			},
-			retry: []base.Z{
-				{Message: t3, Score: secondAgo.Unix()}},
+			retry: map[string][]base.Z{
+				"default": {{Message: t3, Score: secondAgo.Unix()}},
+			},
+			qnames: []string{"default"},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {t1, t2, t3},
 			},
-			wantScheduled: []*base.TaskMessage{},
-			wantRetry:     []*base.TaskMessage{},
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantRetry: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 		},
 		{
-			scheduled: []base.Z{
-				{Message: t1, Score: hourFromNow.Unix()},
-				{Message: t2, Score: secondAgo.Unix()}},
-			retry: []base.Z{
-				{Message: t3, Score: secondAgo.Unix()}},
+			scheduled: map[string][]base.Z{
+				"default": {
+					{Message: t1, Score: hourFromNow.Unix()},
+					{Message: t2, Score: secondAgo.Unix()},
+				},
+			},
+			retry: map[string][]base.Z{
+				"default": {{Message: t3, Score: secondAgo.Unix()}},
+			},
+			qnames: []string{"default"},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {t2, t3},
 			},
-			wantScheduled: []*base.TaskMessage{t1},
-			wantRetry:     []*base.TaskMessage{},
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			wantRetry: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 		},
 		{
-			scheduled: []base.Z{
-				{Message: t1, Score: hourFromNow.Unix()},
-				{Message: t2, Score: hourFromNow.Unix()}},
-			retry: []base.Z{
-				{Message: t3, Score: hourFromNow.Unix()}},
+			scheduled: map[string][]base.Z{
+				"default": {
+					{Message: t1, Score: hourFromNow.Unix()},
+					{Message: t2, Score: hourFromNow.Unix()},
+				},
+			},
+			retry: map[string][]base.Z{
+				"default": {{Message: t3, Score: hourFromNow.Unix()}},
+			},
+			qnames: []string{"default"},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default": {},
 			},
-			wantScheduled: []*base.TaskMessage{t1, t2},
-			wantRetry:     []*base.TaskMessage{t3},
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default": {t1, t2},
+			},
+			wantRetry: map[string][]*base.TaskMessage{
+				"default": {t3},
+			},
 		},
 		{
-			scheduled: []base.Z{
-				{Message: t1, Score: secondAgo.Unix()},
-				{Message: t4, Score: secondAgo.Unix()},
+			scheduled: map[string][]base.Z{
+				"default":  {{Message: t1, Score: secondAgo.Unix()}},
+				"critical": {{Message: t4, Score: secondAgo.Unix()}},
+				"low":      {},
 			},
-			retry: []base.Z{
-				{Message: t5, Score: secondAgo.Unix()}},
+			retry: map[string][]base.Z{
+				"default":  {},
+				"critical": {},
+				"low":      {{Message: t5, Score: secondAgo.Unix()}},
+			},
+			qnames: []string{"default", "critical", "low"},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {t1},
 				"critical": {t4},
 				"low":      {t5},
 			},
-			wantScheduled: []*base.TaskMessage{},
-			wantRetry:     []*base.TaskMessage{},
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
+			wantRetry: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedScheduledQueue(t, r.client, tc.scheduled)
-		h.SeedRetryQueue(t, r.client, tc.retry)
+		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		err := r.CheckAndEnqueue()
+		err := r.CheckAndEnqueue(tc.qnames...)
 		if err != nil {
-			t.Errorf("(*RDB).CheckScheduled() = %v, want nil", err)
+			t.Errorf("(*RDB).CheckScheduled(%v) = %v, want nil", tc.qnames, err)
 			continue
 		}
 
@@ -1246,15 +1284,17 @@ func TestCheckAndEnqueue(t *testing.T) {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.QueueKey(qname), diff)
 			}
 		}
-
-		gotScheduled := h.GetScheduledMessages(t, r.client)
-		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, h.SortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledQueue, diff)
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := h.GetScheduledMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotScheduled, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledKey(qname), diff)
+			}
 		}
-
-		gotRetry := h.GetRetryMessages(t, r.client)
-		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryQueue, diff)
+		for qname, want := range tc.wantRetry {
+			gotRetry := h.GetRetryMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotRetry, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryKey(qname), diff)
+			}
 		}
 	}
 }
