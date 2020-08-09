@@ -286,6 +286,10 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	if len(queues) == 0 {
 		queues = defaultQueueConfig
 	}
+	var qnames []string
+	for q, _ := range queues {
+		qnames = append(qnames, q)
+	}
 	shutdownTimeout := cfg.ShutdownTimeout
 	if shutdownTimeout == 0 {
 		shutdownTimeout = defaultShutdownTimeout
@@ -327,6 +331,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	scheduler := newScheduler(schedulerParams{
 		logger:   logger,
 		broker:   rdb,
+		queues:   qnames,
 		interval: 5 * time.Second,
 	})
 	subscriber := newSubscriber(subscriberParams{
