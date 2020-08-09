@@ -19,6 +19,9 @@ type scheduler struct {
 	// channel to communicate back to the long running "scheduler" goroutine.
 	done chan struct{}
 
+	// list of queue names to check and enqueue.
+	queues []string
+
 	// poll interval on average
 	avgInterval time.Duration
 }
@@ -26,6 +29,7 @@ type scheduler struct {
 type schedulerParams struct {
 	logger   *log.Logger
 	broker   base.Broker
+	queues   []string
 	interval time.Duration
 }
 
@@ -34,6 +38,7 @@ func newScheduler(params schedulerParams) *scheduler {
 		logger:      params.logger,
 		broker:      params.broker,
 		done:        make(chan struct{}),
+		queues:      params.queues,
 		avgInterval: params.interval,
 	}
 }
@@ -62,7 +67,7 @@ func (s *scheduler) start(wg *sync.WaitGroup) {
 }
 
 func (s *scheduler) exec() {
-	if err := s.broker.CheckAndEnqueue(); err != nil {
+	if err := s.broker.CheckAndEnqueue(s.queues...); err != nil {
 		s.logger.Errorf("Could not enqueue scheduled tasks: %v", err)
 	}
 }
