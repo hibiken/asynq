@@ -226,9 +226,9 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 		encoded, expireAt.Unix(), msg.ID.String()).Err()
 }
 
-// KEYS[1] -> asynq:in_progress
-// KEYS[2] -> asynq:deadlines
-// KEYS[3] -> asynq:queues:<qname>
+// KEYS[1] -> asynq:{<qname>}:in_progress
+// KEYS[2] -> asynq:{<qname>}:deadlines
+// KEYS[3] -> asynq:{<qname>}
 // ARGV[1] -> base.TaskMessage value
 // Note: Use RPUSH to push to the head of the queue.
 var requeueCmd = redis.NewScript(`
@@ -248,7 +248,7 @@ func (r *RDB) Requeue(msg *base.TaskMessage) error {
 		return err
 	}
 	return requeueCmd.Run(r.client,
-		[]string{base.InProgressQueue, base.KeyDeadlines, base.QueueKey(msg.Queue)},
+		[]string{base.InProgressKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.QueueKey(msg.Queue)},
 		encoded).Err()
 }
 
