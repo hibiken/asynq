@@ -357,6 +357,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		logger:         logger,
 		broker:         rdb,
 		retryDelayFunc: delayFunc,
+		queues:         qnames,
 		interval:       1 * time.Minute,
 	})
 	healthchecker := newHealthChecker(healthcheckerParams{
