@@ -56,8 +56,7 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 	if err != nil {
 		return err
 	}
-	err := r.client.SAdd(base.AllQueues, msg.Queue).Err()
-	if err != nil {
+	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
 		return err
 	}
 	key := base.QueueKey(msg.Queue)
@@ -85,8 +84,7 @@ func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
 	if err != nil {
 		return err
 	}
-	err := r.client.SAdd(base.AllQueues, msg.Queue).Err()
-	if err != nil {
+	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
 		return err
 	}
 	res, err := enqueueUniqueCmd.Run(r.client,
@@ -258,8 +256,7 @@ func (r *RDB) Schedule(msg *base.TaskMessage, processAt time.Time) error {
 	if err != nil {
 		return err
 	}
-	err := r.client.SAdd(base.AllQueues, msg.Queue).Err()
-	if err != nil {
+	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
 		return err
 	}
 	score := float64(processAt.Unix())
@@ -288,8 +285,7 @@ func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl tim
 	if err != nil {
 		return err
 	}
-	err := r.client.SAdd(base.AllQueues, msg.Queue).Err()
-	if err != nil {
+	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
 		return err
 	}
 	score := float64(processAt.Unix())
