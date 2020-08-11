@@ -309,7 +309,7 @@ func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl tim
 // KEYS[2] -> asynq:{<qname>}:deadlines
 // KEYS[3] -> asynq:{<qname>}:retry
 // KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
-// KEYS[5] -> asynq:{<qname>}:failure:<yyyy-mm-dd>
+// KEYS[5] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
 // ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
 // ARGV[2] -> base.TaskMessage value to add to Retry queue
 // ARGV[3] -> retry_at UNIX timestamp
@@ -364,7 +364,7 @@ const (
 // KEYS[2] -> asynq:{<qname>}:deadlines
 // KEYS[3] -> asynq:{<qname>}:dead
 // KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
-// KEYS[5] -> asynq:{<qname>}:failure:<yyyy-mm-dd>
+// KEYS[5] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
 // ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
 // ARGV[2] -> base.TaskMessage value to add to Dead queue
 // ARGV[3] -> died_at UNIX timestamp
@@ -408,10 +408,10 @@ func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 	now := time.Now()
 	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
 	processedKey := base.ProcessedKey(msg.Queue, now)
-	failureKey := base.FailureKey(msg.Queue, now)
+	failedKey := base.FailedKey(msg.Queue, now)
 	expireAt := now.Add(statsTTL)
 	return killCmd.Run(r.client,
-		[]string{base.InProgressKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.DeadKey(msg.Queue), processedKey, failureKey},
+		[]string{base.InProgressKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.DeadKey(msg.Queue), processedKey, failedKey},
 		msgToRemove, msgToAdd, now.Unix(), limit, maxDeadTasks, expireAt.Unix()).Err()
 }
 
@@ -454,7 +454,7 @@ func (r *RDB) forward(src, dst string) (int, error) {
 
 // forwardAll moves tasks with a score less than the current unix time from the src zset,
 // until there's no more tasks.
-func (r *RDB) forwardAll(src, dst string) error {
+func (r *RDB) forwardAll(src, dst string) (err error) {
 	n := 1
 	for n != 0 {
 		n, err = r.forward(src, dst)
@@ -488,25 +488,20 @@ func (r *RDB) ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*bas
 	return msgs, nil
 }
 
-// KEYS[1]  -> asynq:servers:<host:pid:sid>
-// KEYS[2]  -> asynq:servers
-// KEYS[3]  -> asynq:workers<host:pid:sid>
-// KEYS[4]  -> asynq:workers
-// ARGV[1]  -> expiration time
-// ARGV[2]  -> TTL in seconds
-// ARGV[3]  -> server info
-// ARGV[4:] -> alternate key-value pair of (worker id, worker data)
+// KEYS[1]  -> asynq:servers:{<host:pid:sid>}
+// KEYS[2]  -> asynq:workers:{<host:pid:sid>}
+// ARGV[1]  -> TTL in seconds
+// ARGV[2]  -> server info
+// ARGV[3:] -> alternate key-value pair of (worker id, worker data)
 // Note: Add key to ZSET with expiration time as score.
 // ref: https://github.com/antirez/redis/issues/135#issuecomment-2361996
 var writeServerStateCmd = redis.NewScript(`
-redis.call("SETEX", KEYS[1], ARGV[2], ARGV[3])
-redis.call("ZADD", KEYS[2], ARGV[1], KEYS[1])
-redis.call("DEL", KEYS[3])
-for i = 4, table.getn(ARGV)-1, 2 do
-	redis.call("HSET", KEYS[3], ARGV[i], ARGV[i+1])
+redis.call("SETEX", KEYS[1], ARGV[1], ARGV[2])
+redis.call("DEL", KEYS[2])
+for i = 3, table.getn(ARGV)-1, 2 do
+	redis.call("HSET", KEYS[2], ARGV[i], ARGV[i+1])
 end
-redis.call("EXPIRE", KEYS[3], ARGV[2])
-redis.call("ZADD", KEYS[4], ARGV[1], KEYS[3])
+redis.call("EXPIRE", KEYS[2], ARGV[1])
 return redis.status_reply("OK")`)
 
 // WriteServerState writes server state data to redis with expiration set to the value ttl.
@@ -516,7 +511,7 @@ func (r *RDB) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo
 		return err
 	}
 	exp := time.Now().Add(ttl).UTC()
-	args := []interface{}{float64(exp.Unix()), ttl.Seconds(), bytes} // args to the lua script
+	args := []interface{}{ttl.Seconds(), bytes} // args to the lua script
 	for _, w := range workers {
 		bytes, err := json.Marshal(w)
 		if err != nil {
@@ -526,28 +521,33 @@ func (r *RDB) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo
 	}
 	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
 	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
-	return writeServerStateCmd.Run(r.client,
-		[]string{skey, base.AllServers, wkey, base.AllWorkers},
-		args...).Err()
+	if err := r.client.ZAdd(base.AllServers, &redis.Z{Score: float64(exp.Unix()), Member: skey}).Err(); err != nil {
+		return err
+	}
+	if err := r.client.ZAdd(base.AllWorkers, &redis.Z{Score: float64(exp.Unix()), Member: wkey}).Err(); err != nil {
+		return err
+	}
+	return writeServerStateCmd.Run(r.client, []string{skey, wkey}, args...).Err()
 }
 
-// KEYS[1] -> asynq:servers
-// KEYS[2] -> asynq:servers:<host:pid:sid>
-// KEYS[3] -> asynq:workers
-// KEYS[4] -> asynq:workers<host:pid:sid>
+// KEYS[1] -> asynq:servers:{<host:pid:sid>}
+// KEYS[2] -> asynq:workers:{<host:pid:sid>}
 var clearServerStateCmd = redis.NewScript(`
-redis.call("ZREM", KEYS[1], KEYS[2])
+redis.call("DEL", KEYS[1])
 redis.call("DEL", KEYS[2])
-redis.call("ZREM", KEYS[3], KEYS[4])
-redis.call("DEL", KEYS[4])
 return redis.status_reply("OK")`)
 
 // ClearServerState deletes server state data from redis.
 func (r *RDB) ClearServerState(host string, pid int, serverID string) error {
 	skey := base.ServerInfoKey(host, pid, serverID)
 	wkey := base.WorkersKey(host, pid, serverID)
-	return clearServerStateCmd.Run(r.client,
-		[]string{base.AllServers, skey, base.AllWorkers, wkey}).Err()
+	if err := r.client.ZRem(base.AllServers, skey).Err(); err != nil {
+		return err
+	}
+	if err := r.client.ZRem(base.AllWorkers, wkey).Err(); err != nil {
+		return err
+	}
+	return clearServerStateCmd.Run(r.client, []string{skey, wkey}).Err()
 }
 
 // CancelationPubSub returns a pubsub for cancelation messages.
