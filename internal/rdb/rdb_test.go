@@ -267,7 +267,7 @@ func TestDequeue(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllEnqueuedQueues(t, r.client, msgs, queue, tc.enqueued)
+		h.SeedAllEnqueuedQueues(t, r.client, tc.enqueued)
 
 		gotMsg, gotDeadline, err := r.Dequeue(tc.args...)
 		if err != tc.err {
@@ -438,6 +438,7 @@ func TestDone(t *testing.T) {
 	t3Deadline := now.Unix() + t3.Deadline
 
 	tests := []struct {
+		desc           string
 		inProgress     map[string][]*base.TaskMessage // initial state of the in-progress list
 		deadlines      map[string][]base.Z            // initial state of deadlines set
 		target         *base.TaskMessage              // task to remove
@@ -445,6 +446,7 @@ func TestDone(t *testing.T) {
 		wantDeadlines  map[string][]base.Z            // final state of the deadline set
 	}{
 		{
+			desc: "removes message from the correct queue",
 			inProgress: map[string][]*base.TaskMessage{
 				"default": {t1},
 				"custom":  {t2},
@@ -455,8 +457,8 @@ func TestDone(t *testing.T) {
 			},
 			target: t1,
 			wantInProgress: map[string][]*base.TaskMessage{
-				"default": {t2},
-				"custom":  {},
+				"default": {},
+				"custom":  {t2},
 			},
 			wantDeadlines: map[string][]base.Z{
 				"default": {},
@@ -464,6 +466,7 @@ func TestDone(t *testing.T) {
 			},
 		},
 		{
+			desc: "with one queue",
 			inProgress: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
@@ -479,6 +482,7 @@ func TestDone(t *testing.T) {
 			},
 		},
 		{
+			desc: "with multiple messages in a queue",
 			inProgress: map[string][]*base.TaskMessage{
 				"default": {t1, t3},
 				"custom":  {t2},
@@ -489,7 +493,7 @@ func TestDone(t *testing.T) {
 			},
 			target: t3,
 			wantInProgress: map[string][]*base.TaskMessage{
-				"defualt": {t1},
+				"default": {t1},
 				"custom":  {t2},
 			},
 			wantDeadlines: map[string][]base.Z{
@@ -517,21 +521,21 @@ func TestDone(t *testing.T) {
 
 		err := r.Done(tc.target)
 		if err != nil {
-			t.Errorf("(*RDB).Done(task) = %v, want nil", err)
+			t.Errorf("%s; (*RDB).Done(task) = %v, want nil", tc.desc, err)
 			continue
 		}
 
 		for queue, want := range tc.wantInProgress {
 			gotInProgress := h.GetInProgressMessages(t, r.client, queue)
 			if diff := cmp.Diff(want, gotInProgress, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.InProgressKey(queue), diff)
+				t.Errorf("%s; mismatch found in %q: (-want, +got):\n%s", tc.desc, base.InProgressKey(queue), diff)
 				continue
 			}
 		}
 		for queue, want := range tc.wantDeadlines {
 			gotDeadlines := h.GetDeadlinesEntries(t, r.client, queue)
 			if diff := cmp.Diff(want, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
-				t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.DeadlinesKey(queue), diff)
+				t.Errorf("%s; mismatch found in %q: (-want, +got):\n%s", tc.desc, base.DeadlinesKey(queue), diff)
 				continue
 			}
 		}
@@ -539,16 +543,16 @@ func TestDone(t *testing.T) {
 		processedKey := base.ProcessedKey(tc.target.Queue, time.Now())
 		gotProcessed := r.client.Get(processedKey).Val()
 		if gotProcessed != "1" {
-			t.Errorf("GET %q = %q, want 1", processedKey, gotProcessed)
+			t.Errorf("%s; GET %q = %q, want 1", tc.desc, processedKey, gotProcessed)
 		}
 
 		gotTTL := r.client.TTL(processedKey).Val()
 		if gotTTL > statsTTL {
-			t.Errorf("TTL %q = %v, want less than or equal to %v", processedKey, gotTTL, statsTTL)
+			t.Errorf("%s; TTL %q = %v, want less than or equal to %v", tc.desc, processedKey, gotTTL, statsTTL)
 		}
 
 		if len(tc.target.UniqueKey) > 0 && r.client.Exists(tc.target.UniqueKey).Val() != 0 {
-			t.Errorf("Uniqueness lock %q still exists", tc.target.UniqueKey)
+			t.Errorf("%s; Uniqueness lock %q still exists", tc.desc, tc.target.UniqueKey)
 		}
 	}
 }
@@ -597,7 +601,7 @@ func TestRequeue(t *testing.T) {
 			inProgress: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 			},
-			deadlines: []base.Z{
+			deadlines: map[string][]base.Z{
 				"default": {
 					{Message: t1, Score: t1Deadline},
 					{Message: t2, Score: t2Deadline},
@@ -610,8 +614,8 @@ func TestRequeue(t *testing.T) {
 			wantInProgress: map[string][]*base.TaskMessage{
 				"default": {t2},
 			},
-			wantDeadlines: []base.Z{
-				"defult": {
+			wantDeadlines: map[string][]base.Z{
+				"default": {
 					{Message: t2, Score: t2Deadline},
 				},
 			},
@@ -649,8 +653,8 @@ func TestRequeue(t *testing.T) {
 				"critical": {t3},
 			},
 			deadlines: map[string][]base.Z{
-				"defualt": {{Message: t2, Score: t2Deadline}},
-				"critial": {{Message: t3, Score: t3Deadline}},
+				"default":  {{Message: t2, Score: t2Deadline}},
+				"critical": {{Message: t3, Score: t3Deadline}},
 			},
 			target: t3,
 			wantEnqueued: map[string][]*base.TaskMessage{
@@ -670,7 +674,7 @@ func TestRequeue(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllEnqueuedQueues(t, r.client, msgs, tc.enqueued)
+		h.SeedAllEnqueuedQueues(t, r.client, tc.enqueued)
 		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
 
@@ -694,7 +698,7 @@ func TestRequeue(t *testing.T) {
 		}
 		for qname, want := range tc.wantDeadlines {
 			gotDeadlines := h.GetDeadlinesEntries(t, r.client, qname)
-			if diff := cmp.Diff(wnt, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.DeadlinesKey(qname), diff)
 			}
 		}
@@ -1028,7 +1032,7 @@ func TestKill(t *testing.T) {
 			wantInProgress: map[string][]*base.TaskMessage{
 				"default": {t2},
 			},
-			wantDeadlines: map[string]base.Z{
+			wantDeadlines: map[string][]base.Z{
 				"default": {{Message: t2, Score: t2Deadline}},
 			},
 			wantDead: map[string][]base.Z{
@@ -1090,7 +1094,7 @@ func TestKill(t *testing.T) {
 				"default": {t1},
 				"custom":  {},
 			},
-			wantDeadlines: map[string]base.Z{
+			wantDeadlines: map[string][]base.Z{
 				"default": {{Message: t1, Score: t1Deadline}},
 				"custom":  {},
 			},
@@ -1354,7 +1358,7 @@ func TestListDeadlineExceeded(t *testing.T) {
 			},
 			qnames: []string{"default", "critical"},
 			t:      time.Now(),
-			want:   []*base.TaskMessage{t1, t2},
+			want:   []*base.TaskMessage{t1, t3},
 		},
 		{
 			desc: "with empty in-progress queue",
