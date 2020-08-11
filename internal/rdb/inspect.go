@@ -17,31 +17,32 @@ import (
 	"github.com/spf13/cast"
 )
 
+// AllQueues returns a list of all queue names.
+func (r *RDB) AllQueues() ([]string, error) {
+	return r.client.SMembers(base.AllQueues).Result()
+}
+
 // Stats represents a state of queues at a certain time.
 type Stats struct {
+	// Name of the queue (e.g. "default", "critical").
+	// Note: It doesn't include the prefix "asynq:queues:".
+	Name string
+	// Paused indicates whether the queue is paused.
+	// If true, tasks in the queue should not be processed.
+	Paused bool
+	// Number of tasks in each state.
 	Enqueued   int
 	InProgress int
 	Scheduled  int
 	Retry      int
 	Dead       int
-	Processed  int
-	Failed     int
-	Queues     []*Queue
-	Timestamp  time.Time
-}
-
-// Queue represents a task queue.
-type Queue struct {
-	// Name of the queue (e.g. "default", "critical").
-	// Note: It doesn't include the prefix "asynq:queues:".
-	Name string
-
-	// Paused indicates whether the queue is paused.
-	// If true, tasks in the queue should not be processed.
-	Paused bool
-
-	// Size is the number of tasks in the queue.
-	Size int
+	// Total number of tasks processed during the current date.
+	// The number includes both succeeded and failed tasks.
+	Processed int
+	// Total number of tasks failed during the current date.
+	Failed int
+	// Time this stats was taken.
+	Timestamp time.Time
 }
 
 // DailyStats holds aggregate data for a given day.

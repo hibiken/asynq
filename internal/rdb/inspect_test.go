@@ -16,6 +16,34 @@ import (
 	"github.com/hibiken/asynq/internal/base"
 )
 
+func TestAllQueues(t *testing.T) {
+	r := setup(t)
+
+	tests := []struct {
+		queues []string
+	}{
+		{queues: []string{"default"}},
+		{queues: []string{"custom1", "custom2"}},
+		{queues: []string{"default", "custom1", "custom2"}},
+		{queues: []string{}},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		if err := r.client.SAdd(base.AllQueues, tc.queues...).Err(); err != nil {
+			t.Fatal("could not initialize all queue set")
+		}
+		got, err := r.AllQueues()
+		if err != nil {
+			t.Errorf("AllQueues() returned an error: %v", err)
+			continue
+		}
+		if diff := cmp.Diff(tc.queues, got, h.SortStringSliceOpt); diff != nil {
+			t.Errorf("AllQueues() = %v, want %v; (-want, +got)\n%s", got, tc.queues, diff)
+		}
+	}
+}
+
 func TestCurrentStats(t *testing.T) {
 	r := setup(t)
 	m1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
