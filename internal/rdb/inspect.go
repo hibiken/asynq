@@ -6,8 +6,8 @@ package rdb
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -52,20 +52,20 @@ type DailyStats struct {
 	Time      time.Time
 }
 
-// KEYS[1] -> asynq:queues
-// KEYS[2] -> asynq:in_progress
-// KEYS[3] -> asynq:scheduled
-// KEYS[4] -> asynq:retry
-// KEYS[5] -> asynq:dead
-// KEYS[6] -> asynq:processed:<yyyy-mm-dd>
-// KEYS[7] -> asynq:failure:<yyyy-mm-dd>
+var ErrQueueNotFound = errors.New("rdb: queue does not exist")
+
+// KEYS[1] -> asynq:<qname>
+// KEYS[2] -> asynq:<qname>:in_progress
+// KEYS[3] -> asynq:<qname>:scheduled
+// KEYS[4] -> asynq:<qname>:retry
+// KEYS[5] -> asynq:<qname>:dead
+// KEYS[6] -> asynq:<qname>:processed:<yyyy-mm-dd>
+// KEYS[7] -> asynq:<qname>:failed:<yyyy-mm-dd>
+// KEYS[8] -> asynq:<qname>:paused
 var currentStatsCmd = redis.NewScript(`
 local res = {}
-local queues = redis.call("SMEMBERS", KEYS[1])
-for _, qkey in ipairs(queues) do
-	table.insert(res, qkey)
-	table.insert(res, redis.call("LLEN", qkey))
-end
+table.insert(res, KEYS[1])
+table.insert(res, redis.call("LLEN", KEYS[1]))
 table.insert(res, KEYS[2])
 table.insert(res, redis.call("LLEN", KEYS[2]))
 table.insert(res, KEYS[3])
@@ -79,28 +79,38 @@ local p = redis.call("GET", KEYS[6])
 if p then
 	pcount = tonumber(p) 
 end
-table.insert(res, "processed")
+table.insert(res, KEYS[6])
 table.insert(res, pcount)
 local fcount = 0
 local f = redis.call("GET", KEYS[7])
 if f then
 	fcount = tonumber(f)
 end
-table.insert(res, "failed")
+table.insert(res, KEYS[7])
 table.insert(res, fcount)
+table.insert(res, KEYS[8])
+table.insert(res, redis.call("EXISTS", KEYS[8]))
 return res`)
 
 // CurrentStats returns a current state of the queues.
-func (r *RDB) CurrentStats() (*Stats, error) {
+func (r *RDB) CurrentStats(qname string) (*Stats, error) {
+	exists, err := r.client.SIsMember(base.AllQueues, qname).Result()
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, ErrQueueNotFound
+	}
 	now := time.Now()
 	res, err := currentStatsCmd.Run(r.client, []string{
-		base.AllQueues,
-		base.InProgressQueue,
-		base.ScheduledQueue,
-		base.RetryQueue,
-		base.DeadQueue,
-		base.ProcessedKey(now),
-		base.FailureKey(now),
+		base.QueueKey(qname),
+		base.InProgressKey(qname),
+		base.ScheduledKey(qname),
+		base.RetryKey(qname),
+		base.DeadKey(qname),
+		base.ProcessedKey(qname, now),
+		base.FailedKey(qname, now),
+		base.PausedKey(qname),
 	}).Result()
 	if err != nil {
 		return nil, err
@@ -109,46 +119,36 @@ func (r *RDB) CurrentStats() (*Stats, error) {
 	if err != nil {
 		return nil, err
 	}
-	paused, err := r.client.SMembersMap(base.PausedQueues).Result()
-	if err != nil {
-		return nil, err
-	}
 	stats := &Stats{
-		Queues:    make([]*Queue, 0),
+		Name:      qname,
 		Timestamp: now,
 	}
 	for i := 0; i < len(data); i += 2 {
 		key := cast.ToString(data[i])
 		val := cast.ToInt(data[i+1])
-
-		switch {
-		case strings.HasPrefix(key, base.QueuePrefix):
-			stats.Enqueued += val
-			q := Queue{
-				Name: strings.TrimPrefix(key, base.QueuePrefix),
-				Size: val,
-			}
-			if _, exist := paused[key]; exist {
-				q.Paused = true
-			}
-			stats.Queues = append(stats.Queues, &q)
-		case key == base.InProgressQueue:
+		switch key {
+		case base.QueueKey(qname):
+			stats.Enqueued = val
+		case base.InProgressKey(qname):
 			stats.InProgress = val
-		case key == base.ScheduledQueue:
+		case base.ScheduledKey(qname):
 			stats.Scheduled = val
-		case key == base.RetryQueue:
+		case ase.RetryKey(qname):
 			stats.Retry = val
-		case key == base.DeadQueue:
+		case base.DeadKey(qname):
 			stats.Dead = val
-		case key == "processed":
+		case base.ProcessedKey(qname, now):
 			stats.Processed = val
-		case key == "failed":
+		case base.FailedKey(qname, now):
 			stats.Failed = val
+		case base.PausedKey(qname):
+			if val == 0 {
+				stats.Paused = false
+			} else {
+				stats.Paused = true
+			}
 		}
 	}
-	sort.Slice(stats.Queues, func(i, j int) bool {
-		return stats.Queues[i].Name < stats.Queues[j].Name
-	})
 	return stats, nil
 }
 
