@@ -254,9 +254,9 @@ func (r *RDB) ListEnqueued(qname string, pgn Pagination) ([]*base.TaskMessage, e
 	return r.listMessages(qkey, pgn)
 }
 
-// ListInProgress returns all tasks that are currently being processed.
-func (r *RDB) ListInProgress(pgn Pagination) ([]*base.TaskMessage, error) {
-	return r.listMessages(base.InProgressQueue, pgn)
+// ListInProgress returns all tasks that are currently being processed for the given queue.
+func (r *RDB) ListInProgress(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
+	return r.listMessages(base.InProgressKey(qname), pgn)
 }
 
 // listMessages returns a list of TaskMessage in Redis list with the given key.
@@ -282,21 +282,21 @@ func (r *RDB) listMessages(key string, pgn Pagination) ([]*base.TaskMessage, err
 
 }
 
-// ListScheduled returns all tasks that are scheduled to be processed
-// in the future.
-func (r *RDB) ListScheduled(pgn Pagination) ([]base.Z, error) {
-	return r.listZSetEntries(base.ScheduledQueue, pgn)
+// ListScheduled returns all tasks from the given queue that are scheduled
+// to be processed in the future.
+func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]base.Z, error) {
+	return r.listZSetEntries(base.ScheduledKey(qname), pgn)
 }
 
-// ListRetry returns all tasks that have failed before and willl be retried
-// in the future.
-func (r *RDB) ListRetry(pgn Pagination) ([]base.Z, error) {
-	return r.listZSetEntries(base.RetryQueue, pgn)
+// ListRetry returns all tasks from the given queue that have failed before
+// and willl be retried in the future.
+func (r *RDB) ListRetry(qname string, pgn Pagination) ([]base.Z, error) {
+	return r.listZSetEntries(base.RetryKey(qname), pgn)
 }
 
-// ListDead returns all tasks that have exhausted its retry limit.
-func (r *RDB) ListDead(pgn Pagination) ([]base.Z, error) {
-	return r.listZSetEntries(base.DeadQueue, pgn)
+// ListDead returns all tasks from the given queue that have exhausted its retry limit.
+func (r *RDB) ListDead(qname string, pgn Pagination) ([]base.Z, error) {
+	return r.listZSetEntries(base.DeadKey(qname), pgn)
 }
 
 // listZSetEntries returns a list of message and score pairs in Redis sorted-set
