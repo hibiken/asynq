@@ -25,8 +25,7 @@ func (r *RDB) AllQueues() ([]string, error) {
 // Stats represents a state of queues at a certain time.
 type Stats struct {
 	// Name of the queue (e.g. "default", "critical").
-	// Note: It doesn't include the prefix "asynq:queues:".
-	Name string
+	Queue string
 	// Paused indicates whether the queue is paused.
 	// If true, tasks in the queue should not be processed.
 	Paused bool
@@ -47,9 +46,15 @@ type Stats struct {
 
 // DailyStats holds aggregate data for a given day.
 type DailyStats struct {
+	// Name of the queue (e.g. "default", "critical").
+	Queue string
+	// Total number of tasks processed during the given day.
+	// The number includes both succeeded and failed tasks.
 	Processed int
-	Failed    int
-	Time      time.Time
+	// Total number of tasks failed during the given day.
+	Failed int
+	// Date this stats was taken.
+	Time time.Time
 }
 
 var ErrQueueNotFound = errors.New("rdb: queue does not exist")
@@ -120,7 +125,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		return nil, err
 	}
 	stats := &Stats{
-		Name:      qname,
+		Queue:     qname,
 		Timestamp: now,
 	}
 	for i := 0; i < len(data); i += 2 {
@@ -157,14 +162,14 @@ local res = {}
 for _, key in ipairs(KEYS) do
 	local n = redis.call("GET", key)
 	if not n then
-	n = 0
+		n = 0
 	end
 	table.insert(res, tonumber(n))
 end
 return res`)
 
-// HistoricalStats returns a list of stats from the last n days.
-func (r *RDB) HistoricalStats(n int) ([]*DailyStats, error) {
+// HistoricalStats returns a list of stats from the last n days for the given queue.
+func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 	if n < 1 {
 		return []*DailyStats{}, nil
 	}
@@ -175,10 +180,10 @@ func (r *RDB) HistoricalStats(n int) ([]*DailyStats, error) {
 	for i := 0; i < n; i++ {
 		ts := now.Add(-time.Duration(i) * day)
 		days = append(days, ts)
-		keys = append(keys, base.ProcessedKey(ts))
-		keys = append(keys, base.FailureKey(ts))
+		keys = append(keys, base.ProcessedKey(qname, ts))
+		keys = append(keys, base.FailureKey(qname, ts))
 	}
-	res, err := historicalStatsCmd.Run(r.client, keys, len(keys)).Result()
+	res, err := historicalStatsCmd.Run(r.client, keys).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -189,6 +194,7 @@ func (r *RDB) HistoricalStats(n int) ([]*DailyStats, error) {
 	var stats []*DailyStats
 	for i := 0; i < len(data); i += 2 {
 		stats = append(stats, &DailyStats{
+			Queue:     qname,
 			Processed: data[i],
 			Failed:    data[i+1],
 			Time:      days[i/2],

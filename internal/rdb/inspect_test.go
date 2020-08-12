@@ -108,7 +108,7 @@ func TestCurrentStats(t *testing.T) {
 			paused: []string{},
 			qname:  "default",
 			want: &Stats{
-				Name:       "default",
+				Queue:      "default",
 				Paused:     false,
 				Enqueued:   1,
 				InProgress: 1,
@@ -162,7 +162,7 @@ func TestCurrentStats(t *testing.T) {
 			paused: []string{"critical", "low"},
 			qname:  "critical",
 			want: &Stats{
-				Name:       "critical",
+				Queue:      "critical",
 				Paused:     true,
 				Enqueued:   1,
 				InProgress: 0,
@@ -225,11 +225,12 @@ func TestHistoricalStats(t *testing.T) {
 	now := time.Now().UTC()
 
 	tests := []struct {
-		n int // number of days
+		qname     // queue of interest
+		n     int // number of days
 	}{
-		{90},
-		{7},
-		{0},
+		{"default", 90},
+		{"custom", 7},
+		{"default", 0},
 	}
 
 	for _, tc := range tests {
@@ -238,31 +239,32 @@ func TestHistoricalStats(t *testing.T) {
 		// populate last n days data
 		for i := 0; i < tc.n; i++ {
 			ts := now.Add(-time.Duration(i) * 24 * time.Hour)
-			processedKey := base.ProcessedKey(ts)
-			failedKey := base.FailureKey(ts)
+			processedKey := base.ProcessedKey(tc.qname, ts)
+			failedKey := base.FailureKey(tc.qname, ts)
 			r.client.Set(processedKey, (i+1)*1000, 0)
 			r.client.Set(failedKey, (i+1)*10, 0)
 		}
 
-		got, err := r.HistoricalStats(tc.n)
+		got, err := r.HistoricalStats(tc.qname, tc.n)
 		if err != nil {
-			t.Errorf("RDB.HistoricalStats(%v) returned error: %v", tc.n, err)
+			t.Errorf("RDB.HistoricalStats(%q, %d) returned error: %v", tc.qname, tc.n, err)
 			continue
 		}
 
 		if len(got) != tc.n {
-			t.Errorf("RDB.HistorycalStats(%v) returned %d daily stats, want %d", tc.n, len(got), tc.n)
+			t.Errorf("RDB.HistorycalStats(%q, %d) returned %d daily stats, want %d", tc.qname, tc.n, len(got), tc.n)
 			continue
 		}
 
 		for i := 0; i < tc.n; i++ {
 			want := &DailyStats{
+				Queue:     tc.qname,
 				Processed: (i + 1) * 1000,
 				Failed:    (i + 1) * 10,
 				Time:      now.Add(-time.Duration(i) * 24 * time.Hour),
 			}
 			if diff := cmp.Diff(want, got[i], timeCmpOpt); diff != "" {
-				t.Errorf("RDB.HistoricalStats %d days ago data; got %+v, want %+v; (-want,+got):\n%s", i, got[i], want, diff)
+				t.Errorf("RDB.HistoricalStats for the last %d days; got %+v, want %+v; (-want,+got):\n%s", i, got[i], want, diff)
 			}
 		}
 	}
