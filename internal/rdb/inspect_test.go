@@ -2194,37 +2194,22 @@ func TestPause(t *testing.T) {
 	r := setup(t)
 
 	tests := []struct {
-		initial []string // initial keys in the paused set
-		qname   string   // name of the queue to pause
-		want    []string // expected keys in the paused set
+		qname string // name of the queue to pause
 	}{
-		{[]string{}, "default", []string{"asynq:queues:default"}},
-		{[]string{"asynq:queues:default"}, "critical", []string{"asynq:queues:default", "asynq:queues:critical"}},
+		{qname: "default"},
+		{qname: "custom"},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
-		// Set up initial state.
-		for _, qkey := range tc.initial {
-			if err := r.client.SAdd(base.PausedQueues, qkey).Err(); err != nil {
-				t.Fatal(err)
-			}
-		}
-
 		err := r.Pause(tc.qname)
 		if err != nil {
 			t.Errorf("Pause(%q) returned error: %v", tc.qname, err)
 		}
-
-		got, err := r.client.SMembers(base.PausedQueues).Result()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if diff := cmp.Diff(tc.want, got, h.SortStringSliceOpt); diff != "" {
-			t.Errorf("%q has members %v, want %v; (-want,+got)\n%s",
-				base.PausedQueues, got, tc.want, diff)
+		key := base.PauseKey(tc.qname)
+		if r.client.Exists(key).Val() == 0 {
+			t.Errorf("key %q does not exist", key)
 		}
 	}
 }
@@ -2233,37 +2218,24 @@ func TestPauseError(t *testing.T) {
 	r := setup(t)
 
 	tests := []struct {
-		desc    string   // test case description
-		initial []string // initial keys in the paused set
-		qname   string   // name of the queue to pause
-		want    []string // expected keys in the paused set
+		desc   string   // test case description
+		paused []string // already paused queues
+		qname  string   // name of the queue to pause
 	}{
-		{"queue already paused", []string{"asynq:queues:default"}, "default", []string{"asynq:queues:default"}},
+		{"queue already paused", []string{"default", "custom"}, "default"},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-
-		// Set up initial state.
-		for _, qkey := range tc.initial {
-			if err := r.client.SAdd(base.PausedQueues, qkey).Err(); err != nil {
-				t.Fatal(err)
+		for _, qname := range tc.paused {
+			if err := r.Pause(qname); err != nil {
+				t.Fatalf("could not pause %q: %v", qname, err)
 			}
 		}
 
 		err := r.Pause(tc.qname)
 		if err == nil {
 			t.Errorf("%s; Pause(%q) returned nil: want error", tc.desc, tc.qname)
-		}
-
-		got, err := r.client.SMembers(base.PausedQueues).Result()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if diff := cmp.Diff(tc.want, got, h.SortStringSliceOpt); diff != "" {
-			t.Errorf("%s; %q has members %v, want %v; (-want,+got)\n%s",
-				tc.desc, base.PausedQueues, got, tc.want, diff)
 		}
 	}
 }
@@ -2272,21 +2244,17 @@ func TestUnpause(t *testing.T) {
 	r := setup(t)
 
 	tests := []struct {
-		initial []string // initial keys in the paused set
-		qname   string   // name of the queue to unpause
-		want    []string // expected keys in the paused set
+		paused []string // already paused queues
+		qname  string   // name of the queue to unpause
 	}{
-		{[]string{"asynq:queues:default"}, "default", []string{}},
-		{[]string{"asynq:queues:default", "asynq:queues:low"}, "low", []string{"asynq:queues:default"}},
+		{[]string{"default", "custom"}, "default"},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-
-		// Set up initial state.
-		for _, qkey := range tc.initial {
-			if err := r.client.SAdd(base.PausedQueues, qkey).Err(); err != nil {
-				t.Fatal(err)
+		for _, qname := range tc.paused {
+			if err := r.Pause(qname); err != nil {
+				t.Fatalf("could not pause %q: %v", qname, err)
 			}
 		}
 
@@ -2294,15 +2262,9 @@ func TestUnpause(t *testing.T) {
 		if err != nil {
 			t.Errorf("Unpause(%q) returned error: %v", tc.qname, err)
 		}
-
-		got, err := r.client.SMembers(base.PausedQueues).Result()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if diff := cmp.Diff(tc.want, got, h.SortStringSliceOpt); diff != "" {
-			t.Errorf("%q has members %v, want %v; (-want,+got)\n%s",
-				base.PausedQueues, got, tc.want, diff)
+		key := base.PauseKey(tc.qname)
+		if r.client.Exists(key) == 1 {
+			t.Errorf("key %q exists", key)
 		}
 	}
 }
@@ -2311,38 +2273,24 @@ func TestUnpauseError(t *testing.T) {
 	r := setup(t)
 
 	tests := []struct {
-		desc    string   // test case description
-		initial []string // initial keys in the paused set
-		qname   string   // name of the queue to unpause
-		want    []string // expected keys in the paused set
+		desc   string   // test case description
+		paused []string // already paused queues
+		qname  string   // name of the queue to unpause
 	}{
-		{"set is empty", []string{}, "default", []string{}},
-		{"queue is not in the set", []string{"asynq:queues:default"}, "low", []string{"asynq:queues:default"}},
+		{"queue is not paused", []string{"default"}, "custom"},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-
-		// Set up initial state.
-		for _, qkey := range tc.initial {
-			if err := r.client.SAdd(base.PausedQueues, qkey).Err(); err != nil {
-				t.Fatal(err)
+		for _, qname := range tc.paused {
+			if err := r.Pause(qname); err != nil {
+				t.Fatalf("could not pause %q: %v", qname, err)
 			}
 		}
 
 		err := r.Unpause(tc.qname)
 		if err == nil {
 			t.Errorf("%s; Unpause(%q) returned nil: want error", tc.desc, tc.qname)
-		}
-
-		got, err := r.client.SMembers(base.PausedQueues).Result()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if diff := cmp.Diff(tc.want, got, h.SortStringSliceOpt); diff != "" {
-			t.Errorf("%s; %q has members %v, want %v; (-want,+got)\n%s",
-				tc.desc, base.PausedQueues, got, tc.want, diff)
 		}
 	}
 }

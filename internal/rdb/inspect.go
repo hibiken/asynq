@@ -753,32 +753,28 @@ func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
 	return workers, nil
 }
 
-// KEYS[1] -> asynq:paused
-// ARGV[1] -> asynq:queues:<qname> - queue to pause
-var pauseCmd = redis.NewScript(`
-local ismem = redis.call("SISMEMBER", KEYS[1], ARGV[1])
-if ismem == 1 then
-	return redis.error_reply("queue is already paused")
-end
-return redis.call("SADD", KEYS[1], ARGV[1])`)
-
 // Pause pauses processing of tasks from the given queue.
 func (r *RDB) Pause(qname string) error {
-	qkey := base.QueueKey(qname)
-	return pauseCmd.Run(r.client, []string{base.PausedQueues}, qkey).Err()
+	key := base.PauseKey(qname)
+	exists, err := r.client.SetNX(key, time.Now().Unix(), 0).Result()
+	if err != nil {
+		return err
+	}
+	if exists {
+		return fmt.Errorf("queue %q is already paused", qname)
+	}
+	return nil
 }
-
-// KEYS[1] -> asynq:paused
-// ARGV[1] -> asynq:queues:<qname> - queue to unpause
-var unpauseCmd = redis.NewScript(`
-local ismem = redis.call("SISMEMBER", KEYS[1], ARGV[1])
-if ismem == 0 then
-	return redis.error_reply("queue is not paused")
-end
-return redis.call("SREM", KEYS[1], ARGV[1])`)
 
 // Unpause resumes processing of tasks from the given queue.
 func (r *RDB) Unpause(qname string) error {
-	qkey := base.QueueKey(qname)
-	return unpauseCmd.Run(r.client, []string{base.PausedQueues}, qkey).Err()
+	key := base.PauseKey(qname)
+	deleted, err := r.client.Del(key).Result()
+	if err != nil {
+		return err
+	}
+	if deleted == 0 {
+		return fmt.Errorf("queue %q is not paused", qname)
+	}
+	return nil
 }
