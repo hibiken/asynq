@@ -309,8 +309,22 @@ func TestDequeue(t *testing.T) {
 
 func TestDequeueIgnoresPausedQueues(t *testing.T) {
 	r := setup(t)
-	t1 := h.NewTaskMessageWithQueue("send_email", map[string]interface{}{"subject": "hello!"}, "default")
-	t2 := h.NewTaskMessageWithQueue("export_csv", nil, "critical")
+	t1 := &base.TaskMessage{
+		ID:       uuid.New(),
+		Type:     "send_email",
+		Payload:  map[string]interface{}{"subject": "hello!"},
+		Queue:    "default",
+		Timeout:  1800,
+		Deadline: 0,
+	}
+	t2 := &base.TaskMessage{
+		ID:       uuid.New(),
+		Type:     "export_csv",
+		Payload:  nil,
+		Queue:    "critical",
+		Timeout:  1800,
+		Deadline: 0,
+	}
 
 	tests := []struct {
 		paused         []string // list of paused queues
@@ -381,7 +395,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		h.SeedAllEnqueuedQueues(t, r.client, msgs, queue, tc.enqueued)
+		h.SeedAllEnqueuedQueues(t, r.client, tc.enqueued)
 
 		got, _, err := r.Dequeue(tc.args...)
 		if !cmp.Equal(got, tc.wantMsg) || err != tc.err {
