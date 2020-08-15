@@ -1599,325 +1599,549 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 	}
 }
 
-/*
 func TestKillRetryTask(t *testing.T) {
 	r := setup(t)
-	m1 := h.NewTaskMessage("send_email", nil)
-	m2 := h.NewTaskMessage("reindex", nil)
-	t1 := time.Now().Add(time.Minute)
-	t2 := time.Now().Add(time.Hour)
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
+	t1 := time.Now().Add(1 * time.Minute)
+	t2 := time.Now().Add(1 * time.Hour)
+	t3 := time.Now().Add(2 * time.Hour)
+	t4 := time.Now().Add(3 * time.Hour)
 
 	tests := []struct {
-		retry     []base.Z
-		dead      []base.Z
+		retry     map[string][]base.Z
+		dead      map[string][]base.Z
+		qname     string
 		id        uuid.UUID
 		score     int64
 		want      error
-		wantRetry []base.Z
-		wantDead  []base.Z
+		wantRetry map[string][]base.Z
+		wantDead  map[string][]base.Z
 	}{
 		{
-			retry: []base.Z{
-				{Message: m1, Score: t1.Unix()},
-				{Message: m2, Score: t2.Unix()},
+			retry: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
 			},
-			dead:  []base.Z{},
+			dead: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
 			id:    m1.ID,
 			score: t1.Unix(),
 			want:  nil,
-			wantRetry: []base.Z{
-				{Message: m2, Score: t2.Unix()},
+			wantRetry: map[string][]base.Z{
+				"default": {{Message: m2, Score: t2.Unix()}},
 			},
-			wantDead: []base.Z{
-				{Message: m1, Score: time.Now().Unix()},
+			wantDead: map[string][]base.Z{
+				"default": {{Message: m1, Score: time.Now().Unix()}},
 			},
 		},
 		{
-			retry: []base.Z{
-				{Message: m1, Score: t1.Unix()},
+			retry: map[string][]base.Z{
+				"default": {{Message: m1, Score: t1.Unix()}},
 			},
-			dead: []base.Z{
-				{Message: m2, Score: t2.Unix()},
+			dead: map[string][]base.Z{
+				"default": {{Message: m2, Score: t2.Unix()}},
 			},
+			qname: "default",
 			id:    m2.ID,
 			score: t2.Unix(),
 			want:  ErrTaskNotFound,
-			wantRetry: []base.Z{
-				{Message: m1, Score: t1.Unix()},
+			wantRetry: map[string][]base.Z{
+				"default": {{Message: m1, Score: t1.Unix()}},
 			},
-			wantDead: []base.Z{
-				{Message: m2, Score: t2.Unix()},
+			wantDead: map[string][]base.Z{
+				"default": {{Message: m2, Score: t2.Unix()}},
+			},
+		},
+		{
+			retry: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+				"custom": {
+					{Message: m3, Score: t3.Unix()},
+					{Message: m4, Score: t4.Unix()},
+				},
+			},
+			dead: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			qname: "custom",
+			id:    m3.ID,
+			score: t3.Unix(),
+			want:  nil,
+			wantRetry: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+				"custom": {
+					{Message: m4, Score: t4.Unix()},
+				},
+			},
+			wantDead: map[string][]base.Z{
+				"default": {},
+				"custom":  {{Message: m3, Score: time.Now().Unix()}},
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		h.SeedRetryQueue(t, r.client, tc.retry)
-		h.SeedDeadQueue(t, r.client, tc.dead)
+		h.SeedAllRetryQueues(t, r.client, tc.retry)
+		h.SeedAllDeadQueues(t, r.client, tc.dead)
 
-		got := r.KillRetryTask(tc.id, tc.score)
+		got := r.KillRetryTask(tc.qname, tc.id, tc.score)
 		if got != tc.want {
-			t.Errorf("(*RDB).KillRetryTask(%v, %v) = %v, want %v",
-				tc.id, tc.score, got, tc.want)
+			t.Errorf("(*RDB).KillRetryTask(%q, %v, %v) = %v, want %v",
+				tc.qname, tc.id, tc.score, got, tc.want)
 			continue
 		}
 
-		gotRetry := h.GetRetryEntries(t, r.client)
-		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want,+got)\n%s",
-				base.RetryQueue, diff)
+		for qname, want := range tc.wantRetry {
+			gotRetry := h.GetRetryEntries(t, r.client, qname)
+			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
+					base.RetryKey(qname), diff)
+			}
 		}
 
-		gotDead := h.GetDeadEntries(t, r.client)
-		if diff := cmp.Diff(tc.wantDead, gotDead, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want,+got)\n%s",
-				base.DeadQueue, diff)
+		for qname, want := range tc.wantDead {
+			gotDead := h.GetDeadEntries(t, r.client, qname)
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
+					base.DeadKey(qname), diff)
+			}
 		}
 	}
 }
 
 func TestKillScheduledTask(t *testing.T) {
 	r := setup(t)
-	m1 := h.NewTaskMessage("send_email", nil)
-	m2 := h.NewTaskMessage("reindex", nil)
-	t1 := time.Now().Add(time.Minute)
-	t2 := time.Now().Add(time.Hour)
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
+	t1 := time.Now().Add(1 * time.Minute)
+	t2 := time.Now().Add(1 * time.Hour)
+	t3 := time.Now().Add(2 * time.Hour)
+	t4 := time.Now().Add(3 * time.Hour)
 
 	tests := []struct {
-		scheduled     []base.Z
-		dead          []base.Z
+		scheduled     map[string][]base.Z
+		dead          map[string][]base.Z
+		qname         string
 		id            uuid.UUID
 		score         int64
 		want          error
-		wantScheduled []base.Z
-		wantDead      []base.Z
+		wantScheduled map[string][]base.Z
+		wantDead      map[string][]base.Z
 	}{
 		{
-			scheduled: []base.Z{
-				{Message: m1, Score: t1.Unix()},
-				{Message: m2, Score: t2.Unix()},
+			scheduled: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
 			},
-			dead:  []base.Z{},
+			dead: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
 			id:    m1.ID,
 			score: t1.Unix(),
 			want:  nil,
-			wantScheduled: []base.Z{
-				{Message: m2, Score: t2.Unix()},
+			wantScheduled: map[string][]base.Z{
+				"default": {{Message: m2, Score: t2.Unix()}},
 			},
-			wantDead: []base.Z{
-				{Message: m1, Score: time.Now().Unix()},
+			wantDead: map[string][]base.Z{
+				"default": {{Message: m1, Score: time.Now().Unix()}},
 			},
 		},
 		{
-			scheduled: []base.Z{
-				{Message: m1, Score: t1.Unix()},
+			scheduled: map[string][]base.Z{
+				"default": {{Message: m1, Score: t1.Unix()}},
 			},
-			dead: []base.Z{
-				{Message: m2, Score: t2.Unix()},
+			dead: map[string][]base.Z{
+				"default": {{Message: m2, Score: t2.Unix()}},
 			},
+			qname: "default",
 			id:    m2.ID,
 			score: t2.Unix(),
 			want:  ErrTaskNotFound,
-			wantScheduled: []base.Z{
-				{Message: m1, Score: t1.Unix()},
+			wantScheduled: map[string][]base.Z{
+				"default": {{Message: m1, Score: t1.Unix()}},
 			},
-			wantDead: []base.Z{
-				{Message: m2, Score: t2.Unix()},
+			wantDead: map[string][]base.Z{
+				"default": {{Message: m2, Score: t2.Unix()}},
+			},
+		},
+		{
+			scheduled: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+				"custom": {
+					{Message: m3, Score: t3.Unix()},
+					{Message: m4, Score: t4.Unix()},
+				},
+			},
+			dead: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			qname: "custom",
+			id:    m3.ID,
+			score: t3.Unix(),
+			want:  nil,
+			wantScheduled: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+				"custom": {
+					{Message: m4, Score: t4.Unix()},
+				},
+			},
+			wantDead: map[string][]base.Z{
+				"default": {},
+				"custom":  {{Message: m3, Score: time.Now().Unix()}},
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		h.SeedScheduledQueue(t, r.client, tc.scheduled)
-		h.SeedDeadQueue(t, r.client, tc.dead)
+		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		h.SeedAllDeadQueues(t, r.client, tc.dead)
 
-		got := r.KillScheduledTask(tc.id, tc.score)
+		got := r.KillScheduledTask(tc.qname, tc.id, tc.score)
 		if got != tc.want {
-			t.Errorf("(*RDB).KillScheduledTask(%v, %v) = %v, want %v",
-				tc.id, tc.score, got, tc.want)
+			t.Errorf("(*RDB).KillScheduledTask(%q, %v, %v) = %v, want %v",
+				tc.qname, tc.id, tc.score, got, tc.want)
 			continue
 		}
 
-		gotScheduled := h.GetScheduledEntries(t, r.client)
-		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want,+got)\n%s",
-				base.ScheduledQueue, diff)
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := h.GetScheduledEntries(t, r.client, qname)
+			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
+					base.ScheduledKey(qname), diff)
+			}
 		}
 
-		gotDead := h.GetDeadEntries(t, r.client)
-		if diff := cmp.Diff(tc.wantDead, gotDead, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want,+got)\n%s",
-				base.DeadQueue, diff)
+		for qname, want := range tc.wantDead {
+			gotDead := h.GetDeadEntries(t, r.client, qname)
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
+					base.DeadKey(qname), diff)
+			}
 		}
 	}
 }
 
 func TestKillAllRetryTasks(t *testing.T) {
 	r := setup(t)
-	m1 := h.NewTaskMessage("send_email", nil)
-	m2 := h.NewTaskMessage("reindex", nil)
-	t1 := time.Now().Add(time.Minute)
-	t2 := time.Now().Add(time.Hour)
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
+	t1 := time.Now().Add(1 * time.Minute)
+	t2 := time.Now().Add(1 * time.Hour)
+	t3 := time.Now().Add(2 * time.Hour)
+	t4 := time.Now().Add(3 * time.Hour)
 
 	tests := []struct {
-		retry     []base.Z
-		dead      []base.Z
+		retry     map[string][]base.Z
+		dead      map[string][]base.Z
+		qname     string
 		want      int64
-		wantRetry []base.Z
-		wantDead  []base.Z
+		wantRetry map[string][]base.Z
+		wantDead  map[string][]base.Z
 	}{
 		{
-			retry: []base.Z{
-				{Message: m1, Score: t1.Unix()},
-				{Message: m2, Score: t2.Unix()},
+			retry: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
 			},
-			dead:      []base.Z{},
-			want:      2,
-			wantRetry: []base.Z{},
-			wantDead: []base.Z{
-				{Message: m1, Score: time.Now().Unix()},
-				{Message: m2, Score: time.Now().Unix()},
+			dead: map[string][]base.Z{
+				"default": {},
 			},
-		},
-		{
-			retry: []base.Z{
-				{Message: m1, Score: t1.Unix()},
+			qname: "default",
+			want:  2,
+			wantRetry: map[string][]base.Z{
+				"default": {},
 			},
-			dead: []base.Z{
-				{Message: m2, Score: t2.Unix()},
-			},
-			want:      1,
-			wantRetry: []base.Z{},
-			wantDead: []base.Z{
-				{Message: m1, Score: time.Now().Unix()},
-				{Message: m2, Score: t2.Unix()},
+			wantDead: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: time.Now().Unix()},
+					{Message: m2, Score: time.Now().Unix()},
+				},
 			},
 		},
 		{
-			retry: []base.Z{},
-			dead: []base.Z{
-				{Message: m1, Score: t1.Unix()},
-				{Message: m2, Score: t2.Unix()},
+			retry: map[string][]base.Z{
+				"default": {{Message: m1, Score: t1.Unix()}},
 			},
-			want:      0,
-			wantRetry: []base.Z{},
-			wantDead: []base.Z{
-				{Message: m1, Score: t1.Unix()},
-				{Message: m2, Score: t2.Unix()},
+			dead: map[string][]base.Z{
+				"default": {{Message: m2, Score: t2.Unix()}},
+			},
+			qname: "default",
+			want:  1,
+			wantRetry: map[string][]base.Z{
+				"default": {},
+			},
+			wantDead: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: time.Now().Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+			},
+		},
+		{
+			retry: map[string][]base.Z{
+				"default": {},
+			},
+			dead: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+			},
+			qname: "default",
+			want:  0,
+			wantRetry: map[string][]base.Z{
+				"default": {},
+			},
+			wantDead: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+			},
+		},
+		{
+			retry: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+				"custom": {
+					{Message: m3, Score: t3.Unix()},
+					{Message: m4, Score: t4.Unix()},
+				},
+			},
+			dead: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			qname: "custom",
+			want:  2,
+			wantRetry: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+				"custom": {},
+			},
+			wantDead: map[string][]base.Z{
+				"default": {},
+				"custom": {
+					{Message: m3, Score: time.Now().Unix()},
+					{Message: m4, Score: time.Now().Unix()},
+				},
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		h.SeedRetryQueue(t, r.client, tc.retry)
-		h.SeedDeadQueue(t, r.client, tc.dead)
+		h.SeedAllRetryQueues(t, r.client, tc.retry)
+		h.SeedAllDeadQueues(t, r.client, tc.dead)
 
-		got, err := r.KillAllRetryTasks()
+		got, err := r.KillAllRetryTasks(tc.qname)
 		if got != tc.want || err != nil {
-			t.Errorf("(*RDB).KillAllRetryTasks() = %v, %v; want %v, nil",
-				got, err, tc.want)
+			t.Errorf("(*RDB).KillAllRetryTasks(%q) = %v, %v; want %v, nil",
+				tc.qname, got, err, tc.want)
 			continue
 		}
 
-		gotRetry := h.GetRetryEntries(t, r.client)
-		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want,+got)\n%s",
-				base.RetryQueue, diff)
+		for qname, want := range tc.wantRetry {
+			gotRetry := h.GetRetryEntries(t, r.client, qname)
+			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
+					base.RetryKey(qname), diff)
+			}
 		}
 
-		gotDead := h.GetDeadEntries(t, r.client)
-		if diff := cmp.Diff(tc.wantDead, gotDead, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want,+got)\n%s",
-				base.DeadQueue, diff)
+		for qname, want := range tc.wantDead {
+			gotDead := h.GetDeadEntries(t, r.client, qname)
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
+					base.DeadKey(qname), diff)
+			}
 		}
 	}
 }
 
 func TestKillAllScheduledTasks(t *testing.T) {
 	r := setup(t)
-	m1 := h.NewTaskMessage("send_email", nil)
-	m2 := h.NewTaskMessage("reindex", nil)
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 	t1 := time.Now().Add(time.Minute)
 	t2 := time.Now().Add(time.Hour)
+	t3 := time.Now().Add(time.Hour)
+	t4 := time.Now().Add(time.Hour)
 
 	tests := []struct {
-		scheduled     []base.Z
-		dead          []base.Z
+		scheduled     map[string][]base.Z
+		dead          map[string][]base.Z
+		qname         string
 		want          int64
-		wantScheduled []base.Z
-		wantDead      []base.Z
+		wantScheduled map[string][]base.Z
+		wantDead      map[string][]base.Z
 	}{
 		{
-			scheduled: []base.Z{
-				{Message: m1, Score: t1.Unix()},
-				{Message: m2, Score: t2.Unix()},
+			scheduled: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
 			},
-			dead:          []base.Z{},
-			want:          2,
-			wantScheduled: []base.Z{},
-			wantDead: []base.Z{
-				{Message: m1, Score: time.Now().Unix()},
-				{Message: m2, Score: time.Now().Unix()},
+			dead: map[string][]base.Z{
+				"default": {},
 			},
-		},
-		{
-			scheduled: []base.Z{
-				{Message: m1, Score: t1.Unix()},
+			qname: "default",
+			want:  2,
+			wantScheduled: map[string][]base.Z{
+				"default": {},
 			},
-			dead: []base.Z{
-				{Message: m2, Score: t2.Unix()},
-			},
-			want:          1,
-			wantScheduled: []base.Z{},
-			wantDead: []base.Z{
-				{Message: m1, Score: time.Now().Unix()},
-				{Message: m2, Score: t2.Unix()},
+			wantDead: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: time.Now().Unix()},
+					{Message: m2, Score: time.Now().Unix()},
+				},
 			},
 		},
 		{
-			scheduled: []base.Z{},
-			dead: []base.Z{
-				{Message: m1, Score: t1.Unix()},
-				{Message: m2, Score: t2.Unix()},
+			scheduled: map[string][]base.Z{
+				"default": {{Message: m1, Score: t1.Unix()}},
 			},
-			want:          0,
-			wantScheduled: []base.Z{},
-			wantDead: []base.Z{
-				{Message: m1, Score: t1.Unix()},
-				{Message: m2, Score: t2.Unix()},
+			dead: map[string][]base.Z{
+				"default": {{Message: m2, Score: t2.Unix()}},
+			},
+			qname: "default",
+			want:  1,
+			wantScheduled: map[string][]base.Z{
+				"default": {},
+			},
+			wantDead: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: time.Now().Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+			},
+		},
+		{
+			scheduled: map[string][]base.Z{
+				"default": {},
+			},
+			dead: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+			},
+			qname: "default",
+			want:  0,
+			wantScheduled: map[string][]base.Z{
+				"default": {},
+			},
+			wantDead: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+			},
+		},
+		{
+			scheduled: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+				"custom": {
+					{Message: m3, Score: t3.Unix()},
+					{Message: m4, Score: t4.Unix()},
+				},
+			},
+			dead: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			qname: "custom",
+			want:  2,
+			wantScheduled: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+				"custom": {},
+			},
+			wantDead: map[string][]base.Z{
+				"default": {},
+				"custom": {
+					{Message: m3, Score: time.Now().Unix()},
+					{Message: m4, Score: time.Now().Unix()},
+				},
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		h.SeedScheduledQueue(t, r.client, tc.scheduled)
-		h.SeedDeadQueue(t, r.client, tc.dead)
+		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		h.SeedAllDeadQueues(t, r.client, tc.dead)
 
-		got, err := r.KillAllScheduledTasks()
+		got, err := r.KillAllScheduledTasks(tc.qname)
 		if got != tc.want || err != nil {
-			t.Errorf("(*RDB).KillAllScheduledTasks() = %v, %v; want %v, nil",
-				got, err, tc.want)
+			t.Errorf("(*RDB).KillAllScheduledTasks(%q) = %v, %v; want %v, nil",
+				tc.qname, got, err, tc.want)
 			continue
 		}
 
-		gotScheduled := h.GetScheduledEntries(t, r.client)
-		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want,+got)\n%s",
-				base.ScheduledQueue, diff)
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := h.GetScheduledEntries(t, r.client, qname)
+			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
+					base.ScheduledKey(qname), diff)
+			}
 		}
 
-		gotDead := h.GetDeadEntries(t, r.client)
-		if diff := cmp.Diff(tc.wantDead, gotDead, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
-			t.Errorf("mismatch found in %q; (-want,+got)\n%s",
-				base.DeadQueue, diff)
+		for qname, want := range tc.wantDead {
+			gotDead := h.GetDeadEntries(t, r.client, qname)
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
+					base.DeadKey(qname), diff)
+			}
 		}
 	}
 }
 
+/*
 func TestDeleteDeadTask(t *testing.T) {
 	r := setup(t)
 	m1 := h.NewTaskMessage("send_email", nil)
