@@ -420,12 +420,10 @@ func (r *RDB) removeAndEnqueueAll(zset, qkey string) (int64, error) {
 	return n, nil
 }
 
-/*
-// KillRetryTask finds a task that matches the given id and score from retry queue
-// and moves it to dead queue. If a task that maches the id and score does not exist,
-// it returns ErrTaskNotFound.
-func (r *RDB) KillRetryTask(id uuid.UUID, score int64) error {
-	n, err := r.removeAndKill(base.RetryQueue, id.String(), float64(score))
+// KillRetryTask finds a retry task that matches the given id and score from the given queue
+// and kills it. If a task that maches the id and score does not exist, it returns ErrTaskNotFound.
+func (r *RDB) KillRetryTask(qname string, id uuid.UUID, score int64) error {
+	n, err := r.removeAndKill(base.RetryKey(qname), base.DeadKey(qname), id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -435,11 +433,10 @@ func (r *RDB) KillRetryTask(id uuid.UUID, score int64) error {
 	return nil
 }
 
-// KillScheduledTask finds a task that matches the given id and score from scheduled queue
-// and moves it to dead queue. If a task that maches the id and score does not exist,
-// it returns ErrTaskNotFound.
-func (r *RDB) KillScheduledTask(id uuid.UUID, score int64) error {
-	n, err := r.removeAndKill(base.ScheduledQueue, id.String(), float64(score))
+// KillScheduledTask finds a scheduled task that matches the given id and score from the given queue
+// and kills it. If a task that maches the id and score does not exist, it returns ErrTaskNotFound.
+func (r *RDB) KillScheduledTask(qname string, id uuid.UUID, score int64) error {
+	n, err := r.removeAndKill(base.ScheduledKey(qname), base.DeadKey(qname), id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -449,20 +446,20 @@ func (r *RDB) KillScheduledTask(id uuid.UUID, score int64) error {
 	return nil
 }
 
-// KillAllRetryTasks moves all tasks from retry queue to dead queue and
+// KillAllRetryTasks kills all retry tasks from the given queue and
 // returns the number of tasks that were moved.
-func (r *RDB) KillAllRetryTasks() (int64, error) {
-	return r.removeAndKillAll(base.RetryQueue)
+func (r *RDB) KillAllRetryTasks(qname string) (int64, error) {
+	return r.removeAndKillAll(base.RetryKey(qname), base.DeadKey(qname))
 }
 
-// KillAllScheduledTasks moves all tasks from scheduled queue to dead queue and
+// KillAllScheduledTasks kills all scheduled tasks from the given queue and
 // returns the number of tasks that were moved.
-func (r *RDB) KillAllScheduledTasks() (int64, error) {
-	return r.removeAndKillAll(base.ScheduledQueue)
+func (r *RDB) KillAllScheduledTasks(qname string) (int64, error) {
+	return r.removeAndKillAll(base.ScheduledKey(qname), base.DeadKey(qname))
 }
 
 // KEYS[1] -> ZSET to move task from (e.g., retry queue)
-// KEYS[2] -> asynq:dead
+// KEYS[2] -> asynq:{<qname>}:dead
 // ARGV[1] -> score of the task to kill
 // ARGV[2] -> id of the task to kill
 // ARGV[3] -> current timestamp
@@ -482,11 +479,11 @@ for _, msg in ipairs(msgs) do
 end
 return 0`)
 
-func (r *RDB) removeAndKill(zset, id string, score float64) (int64, error) {
+func (r *RDB) removeAndKill(src, dst, id string, score float64) (int64, error) {
 	now := time.Now()
 	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
 	res, err := removeAndKillCmd.Run(r.client,
-		[]string{zset, base.DeadQueue},
+		[]string{src, dst},
 		score, id, now.Unix(), limit, maxDeadTasks).Result()
 	if err != nil {
 		return 0, err
@@ -499,7 +496,7 @@ func (r *RDB) removeAndKill(zset, id string, score float64) (int64, error) {
 }
 
 // KEYS[1] -> ZSET to move task from (e.g., retry queue)
-// KEYS[2] -> asynq:dead
+// KEYS[2] -> asynq:{<qname>}:dead
 // ARGV[1] -> current timestamp
 // ARGV[2] -> cutoff timestamp (e.g., 90 days ago)
 // ARGV[3] -> max number of tasks in dead queue (e.g., 100)
@@ -513,10 +510,10 @@ for _, msg in ipairs(msgs) do
 end
 return table.getn(msgs)`)
 
-func (r *RDB) removeAndKillAll(zset string) (int64, error) {
+func (r *RDB) removeAndKillAll(src, dst string) (int64, error) {
 	now := time.Now()
 	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
-	res, err := removeAndKillAllCmd.Run(r.client, []string{zset, base.DeadQueue},
+	res, err := removeAndKillAllCmd.Run(r.client, []string{src, dst},
 		now.Unix(), limit, maxDeadTasks).Result()
 	if err != nil {
 		return 0, err
@@ -528,6 +525,7 @@ func (r *RDB) removeAndKillAll(zset string) (int64, error) {
 	return n, nil
 }
 
+/*
 // DeleteDeadTask finds a task that matches the given id and score from dead queue
 // and deletes it. If a task that matches the id and score does not exist,
 // it returns ErrTaskNotFound.
