@@ -525,26 +525,22 @@ func (r *RDB) removeAndKillAll(src, dst string) (int64, error) {
 	return n, nil
 }
 
-/*
-// DeleteDeadTask finds a task that matches the given id and score from dead queue
-// and deletes it. If a task that matches the id and score does not exist,
-// it returns ErrTaskNotFound.
-func (r *RDB) DeleteDeadTask(id uuid.UUID, score int64) error {
-	return r.deleteTask(base.DeadQueue, id.String(), float64(score))
+// DeleteDeadTask deletes a dead task that matches the given id and score from the given queue.
+// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
+func (r *RDB) DeleteDeadTask(qname string, id uuid.UUID, score int64) error {
+	return r.deleteTask(base.DeadKey(qname), id.String(), float64(score))
 }
 
-// DeleteRetryTask finds a task that matches the given id and score from retry queue
-// and deletes it. If a task that matches the id and score does not exist,
-// it returns ErrTaskNotFound.
-func (r *RDB) DeleteRetryTask(id uuid.UUID, score int64) error {
-	return r.deleteTask(base.RetryQueue, id.String(), float64(score))
+// DeleteRetryTask deletes a retry task that matches the given id and score from the given queue.
+// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
+func (r *RDB) DeleteRetryTask(qname string, id uuid.UUID, score int64) error {
+	return r.deleteTask(base.RetryKey(qname), id.String(), float64(score))
 }
 
-// DeleteScheduledTask finds a task that matches the given id and score from
-// scheduled queue  and deletes it. If a task that matches the id and score
-//does not exist, it returns ErrTaskNotFound.
-func (r *RDB) DeleteScheduledTask(id uuid.UUID, score int64) error {
-	return r.deleteTask(base.ScheduledQueue, id.String(), float64(score))
+// DeleteScheduledTask deletes a scheduled task that matches the given id and score from the given queue.
+// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
+func (r *RDB) DeleteScheduledTask(qname string, id uuid.UUID, score int64) error {
+	return r.deleteTask(base.ScheduledKey(qname), id.String(), float64(score))
 }
 
 var deleteTaskCmd = redis.NewScript(`
@@ -558,8 +554,8 @@ for _, msg in ipairs(msgs) do
 end
 return 0`)
 
-func (r *RDB) deleteTask(zset, id string, score float64) error {
-	res, err := deleteTaskCmd.Run(r.client, []string{zset}, score, id).Result()
+func (r *RDB) deleteTask(key, id string, score float64) error {
+	res, err := deleteTaskCmd.Run(r.client, []string{key}, score, id).Result()
 	if err != nil {
 		return err
 	}
@@ -579,22 +575,22 @@ local n = redis.call("ZCARD", KEYS[1])
 redis.call("DEL", KEYS[1])
 return n`)
 
-// DeleteAllDeadTasks deletes all tasks from the dead queue
+// DeleteAllDeadTasks deletes all dead tasks from the given queue
 // and returns the number of tasks deleted.
-func (r *RDB) DeleteAllDeadTasks() (int64, error) {
-	return r.deleteAll(base.DeadQueue)
+func (r *RDB) DeleteAllDeadTasks(qname string) (int64, error) {
+	return r.deleteAll(base.DeadKey(qname))
 }
 
-// DeleteAllRetryTasks deletes all tasks from the dead queue
+// DeleteAllRetryTasks deletes all retry tasks from the given queue
 // and returns the number of tasks deleted.
-func (r *RDB) DeleteAllRetryTasks() (int64, error) {
-	return r.deleteAll(base.RetryQueue)
+func (r *RDB) DeleteAllRetryTasks(qname string) (int64, error) {
+	return r.deleteAll(base.RetryKey(qname))
 }
 
-// DeleteAllScheduledTasks deletes all tasks from the dead queue
+// DeleteAllScheduledTasks deletes all scheduled tasks from the given queue
 // and returns the number of tasks deleted.
-func (r *RDB) DeleteAllScheduledTasks() (int64, error) {
-	return r.deleteAll(base.ScheduledQueue)
+func (r *RDB) DeleteAllScheduledTasks(qname string) (int64, error) {
+	return r.deleteAll(base.ScheduledKey(qname))
 }
 
 func (r *RDB) deleteAll(key string) (int64, error) {
@@ -608,7 +604,6 @@ func (r *RDB) deleteAll(key string) (int64, error) {
 	}
 	return n, nil
 }
-*/
 
 // ErrQueueNotFound indicates specified queue does not exist.
 type ErrQueueNotFound struct {
