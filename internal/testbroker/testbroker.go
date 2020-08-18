@@ -126,22 +126,22 @@ func (tb *TestBroker) Kill(msg *base.TaskMessage, errMsg string) error {
 	return tb.real.Kill(msg, errMsg)
 }
 
-func (tb *TestBroker) CheckAndEnqueue() error {
+func (tb *TestBroker) CheckAndEnqueue(qnames ...string) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return errRedisDown
 	}
-	return tb.real.CheckAndEnqueue()
+	return tb.real.CheckAndEnqueue(qnames...)
 }
 
-func (tb *TestBroker) ListDeadlineExceeded(deadline time.Time) ([]*base.TaskMessage, error) {
+func (tb *TestBroker) ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*base.TaskMessage, error) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return nil, errRedisDown
 	}
-	return tb.real.ListDeadlineExceeded(deadline)
+	return tb.real.ListDeadlineExceeded(deadline, qnames...)
 }
 
 func (tb *TestBroker) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo, ttl time.Duration) error {

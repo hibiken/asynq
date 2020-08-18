@@ -325,8 +325,8 @@ type Broker interface {
 	ScheduleUnique(msg *TaskMessage, processAt time.Time, ttl time.Duration) error
 	Retry(msg *TaskMessage, processAt time.Time, errMsg string) error
 	Kill(msg *TaskMessage, errMsg string) error
-	CheckAndEnqueue() error
-	ListDeadlineExceeded(deadline time.Time) ([]*TaskMessage, error)
+	CheckAndEnqueue(qnames ...string) error
+	ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*TaskMessage, error)
 	WriteServerState(info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error
 	ClearServerState(host string, pid int, serverID string) error
 	CancelationPubSub() (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers
