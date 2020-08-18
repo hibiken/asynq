@@ -241,7 +241,7 @@ func (p *processor) requeue(msg *base.TaskMessage) {
 func (p *processor) markAsDone(ctx context.Context, msg *base.TaskMessage) {
 	err := p.broker.Done(msg)
 	if err != nil {
-		errMsg := fmt.Sprintf("Could not remove task id=%s type=%q from %q err: %+v", msg.ID, msg.Type, base.InProgressQueue, err)
+		errMsg := fmt.Sprintf("Could not remove task id=%s type=%q from %q err: %+v", msg.ID, msg.Type, base.InProgressKey(msg.Queue), err)
 		deadline, ok := ctx.Deadline()
 		if !ok {
 			panic("asynq: internal error: missing deadline in context")
@@ -274,7 +274,7 @@ func (p *processor) retry(ctx context.Context, msg *base.TaskMessage, e error) {
 	retryAt := time.Now().Add(d)
 	err := p.broker.Retry(msg, retryAt, e.Error())
 	if err != nil {
-		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.InProgressQueue, base.RetryQueue)
+		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.InProgressKey(msg.Queue), base.RetryKey(msg.Queue))
 		deadline, ok := ctx.Deadline()
 		if !ok {
 			panic("asynq: internal error: missing deadline in context")
@@ -293,7 +293,7 @@ func (p *processor) retry(ctx context.Context, msg *base.TaskMessage, e error) {
 func (p *processor) kill(ctx context.Context, msg *base.TaskMessage, e error) {
 	err := p.broker.Kill(msg, e.Error())
 	if err != nil {
-		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.InProgressQueue, base.DeadQueue)
+		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.InProgressKey(msg.Queue), base.DeadKey(msg.Queue))
 		deadline, ok := ctx.Deadline()
 		if !ok {
 			panic("asynq: internal error: missing deadline in context")

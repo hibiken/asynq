@@ -23,7 +23,7 @@ func TestSyncer(t *testing.T) {
 	}
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
-	h.SeedInProgressQueue(t, r, inProgress)
+	h.SeedInProgressQueue(t, r, inProgress, base.DefaultQueueName)
 
 	const interval = time.Second
 	syncRequestCh := make(chan *syncRequest)
@@ -48,9 +48,9 @@ func TestSyncer(t *testing.T) {
 
 	time.Sleep(2 * interval) // ensure that syncer runs at least once
 
-	gotInProgress := h.GetInProgressMessages(t, r)
+	gotInProgress := h.GetInProgressMessages(t, r, base.DefaultQueueName)
 	if l := len(gotInProgress); l != 0 {
-		t.Errorf("%q has length %d; want 0", base.InProgressQueue, l)
+		t.Errorf("%q has length %d; want 0", base.InProgressKey(base.DefaultQueueName), l)
 	}
 }
 

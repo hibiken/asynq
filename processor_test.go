@@ -74,8 +74,8 @@ func TestProcessorSuccess(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r)                        // clean up db before each test case.
-		h.SeedEnqueuedQueue(t, r, tc.enqueued) // initialize default queue.
+		h.FlushDB(t, r)                                               // clean up db before each test case.
+		h.SeedEnqueuedQueue(t, r, tc.enqueued, base.DefaultQueueName) // initialize default queue.
 
 		// instantiate a new processor
 		var mu sync.Mutex
@@ -118,8 +118,8 @@ func TestProcessorSuccess(t *testing.T) {
 			}
 		}
 		time.Sleep(2 * time.Second) // wait for two second to allow all enqueued tasks to be processed.
-		if l := r.LLen(base.InProgressQueue).Val(); l != 0 {
-			t.Errorf("%q has %d tasks, want 0", base.InProgressQueue, l)
+		if l := r.LLen(base.InProgressKey(base.DefaultQueueName)).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", base.InProgressKey(base.DefaultQueueName), l)
 		}
 		p.terminate()
 
@@ -150,8 +150,8 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r)                        // clean up db before each test case.
-		h.SeedEnqueuedQueue(t, r, tc.enqueued) // initialize default queue.
+		h.FlushDB(t, r)                                               // clean up db before each test case.
+		h.SeedEnqueuedQueue(t, r, tc.enqueued, base.DefaultQueueName) // initialize default queue.
 
 		var mu sync.Mutex
 		var processed []*Task
@@ -191,8 +191,8 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 
 		p.start(&sync.WaitGroup{})
 		time.Sleep(2 * time.Second) // wait for two second to allow all enqueued tasks to be processed.
-		if l := r.LLen(base.InProgressQueue).Val(); l != 0 {
-			t.Errorf("%q has %d tasks, want 0", base.InProgressQueue, l)
+		if l := r.LLen(base.InProgressKey(base.DefaultQueueName)).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", base.InProgressKey(base.DefaultQueueName), l)
 		}
 		p.terminate()
 
@@ -246,8 +246,8 @@ func TestProcessorRetry(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r)                        // clean up db before each test case.
-		h.SeedEnqueuedQueue(t, r, tc.enqueued) // initialize default queue.
+		h.FlushDB(t, r)                                               // clean up db before each test case.
+		h.SeedEnqueuedQueue(t, r, tc.enqueued, base.DefaultQueueName) // initialize default queue.
 
 		// instantiate a new processor
 		delayFunc := func(n int, e error, t *Task) time.Duration {
@@ -295,18 +295,18 @@ func TestProcessorRetry(t *testing.T) {
 		p.terminate()
 
 		cmpOpt := cmpopts.EquateApprox(0, float64(time.Second)) // allow up to a second difference in zset score
-		gotRetry := h.GetRetryEntries(t, r)
+		gotRetry := h.GetRetryEntries(t, r, base.DefaultQueueName)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortZSetEntryOpt, cmpOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.RetryQueue, diff)
+			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.RetryKey(base.DefaultQueueName), diff)
 		}
 
-		gotDead := h.GetDeadMessages(t, r)
+		gotDead := h.GetDeadMessages(t, r, base.DefaultQueueName)
 		if diff := cmp.Diff(tc.wantDead, gotDead, h.SortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.DeadQueue, diff)
+			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.DeadKey(base.DefaultQueueName), diff)
 		}
 
-		if l := r.LLen(base.InProgressQueue).Val(); l != 0 {
-			t.Errorf("%q has %d tasks, want 0", base.InProgressQueue, l)
+		if l := r.LLen(base.InProgressKey(base.DefaultQueueName)).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", base.InProgressKey(base.DefaultQueueName), l)
 		}
 
 		if n != tc.wantErrCount {
@@ -455,8 +455,8 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 
-		if l := r.LLen(base.InProgressQueue).Val(); l != 0 {
-			t.Errorf("%q has %d tasks, want 0", base.InProgressQueue, l)
+		if l := r.LLen(base.InProgressKey(base.DefaultQueueName)).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", base.InProgressKey(base.DefaultQueueName), l)
 		}
 	}
 }

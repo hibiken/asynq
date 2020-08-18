@@ -129,7 +129,7 @@ func TestScheduler(t *testing.T) {
 		for qname, want := range tc.wantEnqueued {
 			gotEnqueued := h.GetEnqueuedMessages(t, r, qname)
 			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q after running scheduler: (-want, +got)\n%s", base.DefaultKey(qname), diff)
+				t.Errorf("mismatch found in %q after running scheduler: (-want, +got)\n%s", base.QueueKey(qname), diff)
 			}
 		}
 	}

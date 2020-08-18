@@ -36,7 +36,7 @@ func TestClientEnqueueAt(t *testing.T) {
 		opts          []Option
 		wantRes       *Result
 		wantEnqueued  map[string][]*base.TaskMessage
-		wantScheduled []base.Z
+		wantScheduled map[string][]base.Z
 	}{
 		{
 			desc:      "Process task immediately",
@@ -61,7 +61,9 @@ func TestClientEnqueueAt(t *testing.T) {
 					},
 				},
 			},
-			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
+			wantScheduled: map[string][]base.Z{
+				"default": {},
+			},
 		},
 		{
 			desc:      "Schedule task to be processed in the future",
@@ -74,18 +76,22 @@ func TestClientEnqueueAt(t *testing.T) {
 				Timeout:  defaultTimeout,
 				Deadline: noDeadline,
 			},
-			wantEnqueued: nil, // db is flushed in setup so list does not exist hence nil
-			wantScheduled: []base.Z{
-				{
-					Message: &base.TaskMessage{
-						Type:     task.Type,
-						Payload:  task.Payload.data,
-						Retry:    defaultMaxRetry,
-						Queue:    "default",
-						Timeout:  int64(defaultTimeout.Seconds()),
-						Deadline: noDeadline.Unix(),
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantScheduled: map[string][]base.Z{
+				"default": {
+					{
+						Message: &base.TaskMessage{
+							Type:     task.Type,
+							Payload:  task.Payload.data,
+							Retry:    defaultMaxRetry,
+							Queue:    "default",
+							Timeout:  int64(defaultTimeout.Seconds()),
+							Deadline: noDeadline.Unix(),
+						},
+						Score: oneHourLater.Unix(),
 					},
-					Score: oneHourLater.Unix(),
 				},
 			},
 		},
@@ -110,10 +116,11 @@ func TestClientEnqueueAt(t *testing.T) {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.QueueKey(qname), diff)
 			}
 		}
-
-		gotScheduled := h.GetScheduledEntries(t, r)
-		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, h.IgnoreIDOpt); diff != "" {
-			t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledQueue, diff)
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := h.GetScheduledEntries(t, r, qname)
+			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt); diff != "" {
+				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledKey(qname), diff)
+			}
 		}
 	}
 }
@@ -376,7 +383,7 @@ func TestClientEnqueueIn(t *testing.T) {
 		opts          []Option
 		wantRes       *Result
 		wantEnqueued  map[string][]*base.TaskMessage
-		wantScheduled []base.Z
+		wantScheduled map[string][]base.Z
 	}{
 		{
 			desc:  "schedule a task to be enqueued in one hour",
@@ -389,18 +396,22 @@ func TestClientEnqueueIn(t *testing.T) {
 				Timeout:  defaultTimeout,
 				Deadline: noDeadline,
 			},
-			wantEnqueued: nil, // db is flushed in setup so list does not exist hence nil
-			wantScheduled: []base.Z{
-				{
-					Message: &base.TaskMessage{
-						Type:     task.Type,
-						Payload:  task.Payload.data,
-						Retry:    defaultMaxRetry,
-						Queue:    "default",
-						Timeout:  int64(defaultTimeout.Seconds()),
-						Deadline: noDeadline.Unix(),
+			wantEnqueued: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantScheduled: map[string][]base.Z{
+				"default": {
+					{
+						Message: &base.TaskMessage{
+							Type:     task.Type,
+							Payload:  task.Payload.data,
+							Retry:    defaultMaxRetry,
+							Queue:    "default",
+							Timeout:  int64(defaultTimeout.Seconds()),
+							Deadline: noDeadline.Unix(),
+						},
+						Score: time.Now().Add(time.Hour).Unix(),
 					},
-					Score: time.Now().Add(time.Hour).Unix(),
 				},
 			},
 		},
@@ -427,7 +438,9 @@ func TestClientEnqueueIn(t *testing.T) {
 					},
 				},
 			},
-			wantScheduled: nil, // db is flushed in setup so zset does not exist hence nil
+			wantScheduled: map[string][]base.Z{
+				"default": {},
+			},
 		},
 	}
 
@@ -450,10 +463,11 @@ func TestClientEnqueueIn(t *testing.T) {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.QueueKey(qname), diff)
 			}
 		}
-
-		gotScheduled := h.GetScheduledEntries(t, r)
-		if diff := cmp.Diff(tc.wantScheduled, gotScheduled, h.IgnoreIDOpt); diff != "" {
-			t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledQueue, diff)
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := h.GetScheduledEntries(t, r, qname)
+			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt); diff != "" {
+				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledKey(qname), diff)
+			}
 		}
 	}
 }
@@ -587,7 +601,7 @@ func TestEnqueueUnique(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(uniqueKey(tc.task, tc.ttl, base.DefaultQueueName)).Val()
+		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type, tc.task.Payload.data)).Val()
 		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, tc.ttl)
 			continue
@@ -634,7 +648,7 @@ func TestEnqueueInUnique(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(uniqueKey(tc.task, tc.ttl, base.DefaultQueueName)).Val()
+		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type, tc.task.Payload.data)).Val()
 		wantTTL := time.Duration(tc.ttl.Seconds()+tc.d.Seconds()) * time.Second
 		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)
@@ -682,7 +696,7 @@ func TestEnqueueAtUnique(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(uniqueKey(tc.task, tc.ttl, base.DefaultQueueName)).Val()
+		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type, tc.task.Payload.data)).Val()
 		wantTTL := tc.at.Add(tc.ttl).Sub(time.Now())
 		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)
