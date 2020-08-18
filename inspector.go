@@ -59,7 +59,18 @@ func (i *Inspector) CurrentStats(qname string) (*Stats, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Stats(stats), nil
+	return &Stats{
+		Queue:      stats.Queue,
+		Enqueued:   stats.Enqueued,
+		InProgress: stats.InProgress,
+		Scheduled:  stats.Scheduled,
+		Retry:      stats.Retry,
+		Dead:       stats.Dead,
+		Processed:  stats.Processed,
+		Failed:     stats.Failed,
+		Paused:     stats.Paused,
+		Timestamp:  stats.Timestamp,
+	}, nil
 }
 
 // DailyStats holds aggregate data for a given day for a given queue.
