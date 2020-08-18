@@ -139,7 +139,10 @@ func TestRecoverer(t *testing.T) {
 				"default":  {h.TaskMessageAfterRetry(*t1, "deadline exceeded")},
 				"critical": {},
 			},
-			wantDead: []*base.TaskMessage{},
+			wantDead: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+			},
 		},
 		{
 			desc: "with multiple expired tasks in-progress",

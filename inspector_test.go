@@ -63,12 +63,12 @@ func TestInspectorCurrentStats(t *testing.T) {
 				"critical": {},
 				"low":      {},
 			},
-			retry: []base.Z{
+			retry: map[string][]base.Z{
 				"default":  {},
 				"critical": {},
 				"low":      {},
 			},
-			dead: []base.Z{
+			dead: map[string][]base.Z{
 				"default":  {},
 				"critical": {},
 				"low":      {},
@@ -108,11 +108,11 @@ func TestInspectorCurrentStats(t *testing.T) {
 		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
 		for qname, n := range tc.processed {
 			processedKey := base.ProcessedKey(qname, now)
-			r.client.Set(processedKey, n, 0)
+			r.Set(processedKey, n, 0)
 		}
 		for qname, n := range tc.failed {
 			failedKey := base.FailedKey(qname, now)
-			r.client.Set(failedKey, n, 0)
+			r.Set(failedKey, n, 0)
 		}
 
 		got, err := inspector.CurrentStats(tc.qname)
@@ -337,7 +337,7 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessage("task3", nil)
-	m3 := asynqtest.NewTaskMessageWithQueue("task4", nil, "custom")
+	m4 := asynqtest.NewTaskMessageWithQueue("task4", nil, "custom")
 	now := time.Now()
 	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
@@ -383,7 +383,7 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllScheduledQueues(t, r, tc.scheduled)
 
-		got, err := inspector.ListScheduledTasks()
+		got, err := inspector.ListScheduledTasks(tc.qname)
 		if err != nil {
 			t.Errorf("%s; ListScheduledTasks(%q) returned error: %v", tc.desc, tc.qname, err)
 			continue
@@ -461,7 +461,7 @@ func TestInspectorListRetryTasks(t *testing.T) {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllRetryQueues(t, r, tc.retry)
 
-		got, err := inspector.ListRetryTasks()
+		got, err := inspector.ListRetryTasks(tc.qname)
 		if err != nil {
 			t.Errorf("%s; ListRetryTasks(%q) returned error: %v", tc.desc, tc.qname, err)
 			continue
@@ -536,7 +536,7 @@ func TestInspectorListDeadTasks(t *testing.T) {
 
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
-		asynqtest.SeedAllDeadQueues(t, r, tc.retry)
+		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
 
 		got, err := inspector.ListDeadTasks(tc.qname)
 		if err != nil {
@@ -559,7 +559,7 @@ func TestInspectorListPagination(t *testing.T) {
 			asynqtest.NewTaskMessage(fmt.Sprintf("task%d", i), nil))
 	}
 	r := setup(t)
-	asynqtest.SeedEnqueuedQueue(t, r, msgs)
+	asynqtest.SeedEnqueuedQueue(t, r, msgs, base.DefaultQueueName)
 
 	inspector := NewInspector(RedisClientOpt{
 		Addr: redisAddr,
@@ -841,26 +841,56 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 			},
 		},
 		{
-			scheduled: []base.Z{z1, z2},
-			dead:      []base.Z{z3},
-			want:      2,
-			wantDead: []base.Z{
-				z3,
-				base.Z{Message: m1, Score: now.Unix()},
-				base.Z{Message: m2, Score: now.Unix()},
+			scheduled: map[string][]base.Z{
+				"default": {z1, z2},
+			},
+			dead: map[string][]base.Z{
+				"default": {z3},
+			},
+			qname: "default",
+			want:  2,
+			wantScheduled: map[string][]base.Z{
+				"default": {},
+			},
+			wantDead: map[string][]base.Z{
+				"default": {
+					z3,
+					base.Z{Message: m1, Score: now.Unix()},
+					base.Z{Message: m2, Score: now.Unix()},
+				},
 			},
 		},
 		{
-			scheduled: []base.Z(nil),
-			dead:      []base.Z(nil),
-			want:      0,
-			wantDead:  []base.Z(nil),
+			scheduled: map[string][]base.Z{
+				"default": {},
+			},
+			dead: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			want:  0,
+			wantScheduled: map[string][]base.Z{
+				"default": {},
+			},
+			wantDead: map[string][]base.Z{
+				"default": {},
+			},
 		},
 		{
-			scheduled: []base.Z(nil),
-			dead:      []base.Z{z1, z2},
-			want:      0,
-			wantDead:  []base.Z{z1, z2},
+			scheduled: map[string][]base.Z{
+				"default": {},
+			},
+			dead: map[string][]base.Z{
+				"default": {z1, z2},
+			},
+			qname: "default",
+			want:  0,
+			wantScheduled: map[string][]base.Z{
+				"default": {},
+			},
+			wantDead: map[string][]base.Z{
+				"default": {z1, z2},
+			},
 		},
 	}
 
@@ -976,7 +1006,7 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 			wantRetry: map[string][]base.Z{
 				"default": {},
 			},
-			wantdead: map[string][]base.Z{
+			wantDead: map[string][]base.Z{
 				"default": {z1, z2},
 			},
 		},
@@ -1506,7 +1536,7 @@ func TestInspectorDeleteTaskByKeyDeletesDeadTask(t *testing.T) {
 
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
-		asynqtest.SeedDAlleadQueues(t, r, tc.dead)
+		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
 
 		if err := inspector.DeleteTaskByKey(tc.qname, tc.key); err != nil {
 			t.Errorf("DeleteTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
@@ -1758,6 +1788,7 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 		scheduled     map[string][]base.Z
 		dead          map[string][]base.Z
 		qname         string
+		key           string
 		want          string
 		wantScheduled map[string][]base.Z
 		wantDead      map[string][]base.Z
@@ -1773,7 +1804,7 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 			},
 			qname: "custom",
 			key:   createScheduledTask(z2).Key(),
-			scheduled: map[string][]base.Z{
+			wantScheduled: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
 			},
@@ -1849,7 +1880,7 @@ func TestInspectorKillTaskByKeyKillsRetryTask(t *testing.T) {
 				"default": {z1},
 				"custom":  {z3},
 			},
-			wantDead: []base.Z{
+			wantDead: map[string][]base.Z{
 				"default": {},
 				"custom":  {{m2, now.Unix()}},
 			},
