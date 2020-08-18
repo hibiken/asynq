@@ -2717,6 +2717,7 @@ func TestRemoveQueueError(t *testing.T) {
 		}
 	}
 }
+*/
 
 func TestListServers(t *testing.T) {
 	r := setup(t)
@@ -2823,7 +2824,6 @@ func TestListWorkers(t *testing.T) {
 		}
 	}
 }
-*/
 
 func TestPause(t *testing.T) {
 	r := setup(t)
