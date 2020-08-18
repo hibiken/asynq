@@ -316,7 +316,7 @@ func TestInspectorListInProgressTasks(t *testing.T) {
 		}
 		ignoreOpt := cmpopts.IgnoreUnexported(Payload{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
-			t.Errorf("%s; ListInProgressTask(%wq) = %v, want %v; (-want,+got)\n%s",
+			t.Errorf("%s; ListInProgressTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
 		}
 	}
@@ -632,9 +632,10 @@ func TestInspectorDeleteAllScheduledTasks(t *testing.T) {
 	})
 
 	tests := []struct {
-		scheduled map[string][]base.Z
-		qname     string
-		want      int
+		scheduled     map[string][]base.Z
+		qname         string
+		want          int
+		wantScheduled map[string][]base.Z
 	}{
 		{
 			scheduled: map[string][]base.Z{
@@ -643,6 +644,10 @@ func TestInspectorDeleteAllScheduledTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  3,
+			wantScheduled: map[string][]base.Z{
+				"default": {},
+				"custom":  {z4},
+			},
 		},
 		{
 			scheduled: map[string][]base.Z{
@@ -650,6 +655,9 @@ func TestInspectorDeleteAllScheduledTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  0,
+			wantScheduled: map[string][]base.Z{
+				"default": {},
+			},
 		},
 	}
 
@@ -665,10 +673,11 @@ func TestInspectorDeleteAllScheduledTasks(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("DeleteAllScheduledTasks(%q) = %d, want %d", tc.qname, got, tc.want)
 		}
-		gotScheduled := asynqtest.GetScheduledEntries(t, r, tc.qname)
-		if len(gotScheduled) != 0 {
-			t.Errorf("There are still %d scheduled tasks in queue %q, want empty",
-				tc.qname, len(gotScheduled))
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := asynqtest.GetScheduledEntries(t, r, qname)
+			if diff := cmp.Diff(want, gotScheduled, asynqtest.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected scheduled tasks in queue %q: (-want, +got)\n%s", qname, diff)
+			}
 		}
 	}
 }
@@ -691,9 +700,10 @@ func TestInspectorDeleteAllRetryTasks(t *testing.T) {
 	})
 
 	tests := []struct {
-		retry map[string][]base.Z
-		qname string
-		want  int
+		retry     map[string][]base.Z
+		qname     string
+		want      int
+		wantRetry map[string][]base.Z
 	}{
 		{
 			retry: map[string][]base.Z{
@@ -702,6 +712,10 @@ func TestInspectorDeleteAllRetryTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  3,
+			wantRetry: map[string][]base.Z{
+				"default": {},
+				"custom":  {z4},
+			},
 		},
 		{
 			retry: map[string][]base.Z{
@@ -709,6 +723,9 @@ func TestInspectorDeleteAllRetryTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  0,
+			wantRetry: map[string][]base.Z{
+				"default": {},
+			},
 		},
 	}
 
@@ -724,10 +741,11 @@ func TestInspectorDeleteAllRetryTasks(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("DeleteAllRetryTasks(%q) = %d, want %d", tc.qname, got, tc.want)
 		}
-		gotRetry := asynqtest.GetRetryEntries(t, r, tc.qname)
-		if len(gotRetry) != 0 {
-			t.Errorf("There are still %d retry tasks in queue %q, want empty",
-				tc.qname, len(gotRetry))
+		for qname, want := range tc.wantRetry {
+			gotRetry := asynqtest.GetRetryEntries(t, r, qname)
+			if diff := cmp.Diff(want, gotRetry, asynqtest.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected retry tasks in queue %q: (-want, +got)\n%s", qname, diff)
+			}
 		}
 	}
 }
@@ -750,9 +768,10 @@ func TestInspectorDeleteAllDeadTasks(t *testing.T) {
 	})
 
 	tests := []struct {
-		dead  map[string][]base.Z
-		qname string
-		want  int
+		dead     map[string][]base.Z
+		qname    string
+		want     int
+		wantDead map[string][]base.Z
 	}{
 		{
 			dead: map[string][]base.Z{
@@ -761,6 +780,10 @@ func TestInspectorDeleteAllDeadTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  3,
+			wantDead: map[string][]base.Z{
+				"default": {},
+				"custom":  {z4},
+			},
 		},
 		{
 			dead: map[string][]base.Z{
@@ -768,6 +791,9 @@ func TestInspectorDeleteAllDeadTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  0,
+			wantDead: map[string][]base.Z{
+				"default": {},
+			},
 		},
 	}
 
@@ -783,10 +809,11 @@ func TestInspectorDeleteAllDeadTasks(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("DeleteAllDeadTasks(%q) = %d, want %d", tc.qname, got, tc.want)
 		}
-		gotDead := asynqtest.GetDeadEntries(t, r, tc.qname)
-		if len(gotDead) != 0 {
-			t.Errorf("There are still %d dead tasks in queue %q, want empty",
-				tc.qname, len(gotDead))
+		for qname, want := range tc.wantDead {
+			gotDead := asynqtest.GetDeadEntries(t, r, tc.qname)
+			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", qname, diff)
+			}
 		}
 	}
 }
@@ -910,7 +937,7 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := asynqtest.GetScheduledEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotScheduled, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected scheduled tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected scheduled tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 		for qname, want := range tc.wantDead {
@@ -920,7 +947,7 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 			})
 			gotDead := asynqtest.GetDeadEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt, approxOpt); diff != "" {
-				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1028,13 +1055,13 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 		for qname, want := range tc.wantRetry {
 			gotRetry := asynqtest.GetRetryEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotRetry, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected retry tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected retry tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 		for qname, want := range tc.wantDead {
 			gotDead := asynqtest.GetDeadEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1147,13 +1174,13 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := asynqtest.GetScheduledEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotScheduled, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected scheduled tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected scheduled tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 		for qname, want := range tc.wantEnqueued {
 			gotEnqueued := asynqtest.GetEnqueuedMessages(t, r, qname)
 			if diff := cmp.Diff(want, gotEnqueued, asynqtest.SortMsgOpt); diff != "" {
-				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1266,13 +1293,13 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 		for qname, want := range tc.wantRetry {
 			gotRetry := asynqtest.GetRetryEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotRetry, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected retry tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected retry tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 		for qname, want := range tc.wantEnqueued {
 			gotEnqueued := asynqtest.GetEnqueuedMessages(t, r, qname)
 			if diff := cmp.Diff(want, gotEnqueued, asynqtest.SortMsgOpt); diff != "" {
-				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1381,14 +1408,14 @@ func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
 		for qname, want := range tc.wantDead {
 			gotDead := asynqtest.GetDeadEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 
 		}
 		for qname, want := range tc.wantEnqueued {
 			gotEnqueued := asynqtest.GetEnqueuedMessages(t, r, qname)
 			if diff := cmp.Diff(want, gotEnqueued, asynqtest.SortMsgOpt); diff != "" {
-				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1440,7 +1467,7 @@ func TestInspectorDeleteTaskByKeyDeletesScheduledTask(t *testing.T) {
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := asynqtest.GetScheduledEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotScheduled, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected scheduled tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected scheduled tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 
 		}
@@ -1491,9 +1518,9 @@ func TestInspectorDeleteTaskByKeyDeletesRetryTask(t *testing.T) {
 			continue
 		}
 		for qname, want := range tc.wantRetry {
-			gotRetry := asynqtest.GetRetryEntries(t, r, tc.qname)
+			gotRetry := asynqtest.GetRetryEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotRetry, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected retry tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected retry tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1545,7 +1572,7 @@ func TestInspectorDeleteTaskByKeyDeletesDeadTask(t *testing.T) {
 		for qname, want := range tc.wantDead {
 			gotDead := asynqtest.GetDeadEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", tc.qname, diff)
+				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1609,7 +1636,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesScheduledTask(t *testing.T) {
 			gotScheduled := asynqtest.GetScheduledEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotScheduled, asynqtest.SortZSetEntryOpt); diff != "" {
 				t.Errorf("unexpected scheduled tasks in queue %q: (-want, +got)\n%s",
-					tc.qname, diff)
+					qname, diff)
 			}
 
 		}
@@ -1617,7 +1644,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesScheduledTask(t *testing.T) {
 			gotEnqueued := asynqtest.GetEnqueuedMessages(t, r, qname)
 			if diff := cmp.Diff(want, gotEnqueued, asynqtest.SortMsgOpt); diff != "" {
 				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s",
-					tc.qname, diff)
+					qname, diff)
 			}
 		}
 	}
@@ -1674,21 +1701,21 @@ func TestInspectorEnqueueTaskByKeyEnqueuesRetryTask(t *testing.T) {
 		asynqtest.SeedAllEnqueuedQueues(t, r, tc.enqueued)
 
 		if err := inspector.EnqueueTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("EnqueueTaskByKey(%q) returned error: %v", tc.qname, tc.key, err)
+			t.Errorf("EnqueueTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
 			continue
 		}
 		for qname, want := range tc.wantRetry {
 			gotRetry := asynqtest.GetRetryEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotRetry, asynqtest.SortZSetEntryOpt); diff != "" {
 				t.Errorf("unexpected retry tasks in queue %q: (-want, +got)\n%s",
-					tc.qname, diff)
+					qname, diff)
 			}
 		}
 		for qname, want := range tc.wantEnqueued {
 			gotEnqueued := asynqtest.GetEnqueuedMessages(t, r, qname)
 			if diff := cmp.Diff(want, gotEnqueued, asynqtest.SortMsgOpt); diff != "" {
 				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s",
-					tc.qname, diff)
+					qname, diff)
 			}
 		}
 	}
@@ -1756,14 +1783,14 @@ func TestInspectorEnqueueTaskByKeyEnqueuesDeadTask(t *testing.T) {
 			gotDead := asynqtest.GetDeadEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
 				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s",
-					tc.qname, diff)
+					qname, diff)
 			}
 		}
 		for qname, want := range tc.wantEnqueued {
 			gotEnqueued := asynqtest.GetEnqueuedMessages(t, r, qname)
 			if diff := cmp.Diff(want, gotEnqueued, asynqtest.SortMsgOpt); diff != "" {
 				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s",
-					tc.qname, diff)
+					qname, diff)
 			}
 		}
 	}
@@ -1821,14 +1848,14 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
 
 		if err := inspector.KillTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("KillTaskByKey(%q) returned error: %v", tc.qname, tc.key, err)
+			t.Errorf("KillTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
 			continue
 		}
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := asynqtest.GetScheduledEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotScheduled, asynqtest.SortZSetEntryOpt); diff != "" {
 				t.Errorf("unexpected scheduled tasks in queue %q: (-want, +got)\n%s",
-					tc.qname, diff)
+					qname, diff)
 			}
 
 		}
@@ -1836,7 +1863,7 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 			gotDead := asynqtest.GetDeadEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
 				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s",
-					tc.qname, diff)
+					qname, diff)
 			}
 		}
 	}
@@ -1893,21 +1920,21 @@ func TestInspectorKillTaskByKeyKillsRetryTask(t *testing.T) {
 		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
 
 		if err := inspector.KillTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("KillTaskByKey(%q) returned error: %v", tc.qname, tc.key, err)
+			t.Errorf("KillTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
 			continue
 		}
 		for qname, want := range tc.wantRetry {
 			gotRetry := asynqtest.GetRetryEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotRetry, asynqtest.SortZSetEntryOpt); diff != "" {
 				t.Errorf("unexpected retry tasks in queue %q: (-want, +got)\n%s",
-					tc.qname, diff)
+					qname, diff)
 			}
 		}
 		for qname, want := range tc.wantDead {
 			gotDead := asynqtest.GetDeadEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
 				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s",
-					tc.qname, diff)
+					qname, diff)
 			}
 		}
 	}
