@@ -447,9 +447,12 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		})
 		p.handler = HandlerFunc(handler)
 
+		t.Log("Starting Processor")
 		p.start(&sync.WaitGroup{})
 		time.Sleep(tc.wait)
+		t.Log("Terminating Processor")
 		p.terminate()
+		t.Log("Terminated Processor")
 
 		if diff := cmp.Diff(tc.wantProcessed, processed, cmp.AllowUnexported(Payload{})); diff != "" {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
