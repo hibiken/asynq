@@ -112,13 +112,13 @@ func TestClientEnqueueAt(t *testing.T) {
 
 		for qname, want := range tc.wantEnqueued {
 			gotEnqueued := h.GetEnqueuedMessages(t, r, qname)
-			if diff := cmp.Diff(want, gotEnqueued, h.IgnoreIDOpt); diff != "" {
+			if diff := cmp.Diff(want, gotEnqueued, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.QueueKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt); diff != "" {
+			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledKey(qname), diff)
 			}
 		}
@@ -459,13 +459,13 @@ func TestClientEnqueueIn(t *testing.T) {
 
 		for qname, want := range tc.wantEnqueued {
 			gotEnqueued := h.GetEnqueuedMessages(t, r, qname)
-			if diff := cmp.Diff(want, gotEnqueued, h.IgnoreIDOpt); diff != "" {
+			if diff := cmp.Diff(want, gotEnqueued, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.QueueKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt); diff != "" {
+			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledKey(qname), diff)
 			}
 		}
