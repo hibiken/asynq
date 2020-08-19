@@ -329,6 +329,7 @@ func createScheduledTask(z base.Z) *ScheduledTask {
 		ID:            msg.ID.String(),
 		Queue:         msg.Queue,
 		NextEnqueueAt: time.Unix(z.Score, 0),
+		score:         z.Score,
 	}
 }
 
@@ -406,6 +407,7 @@ func createRetryTask(z base.Z) *RetryTask {
 		MaxRetry:      msg.Retry,
 		Retried:       msg.Retried,
 		ErrorMsg:      msg.ErrorMsg,
+		score:         z.Score,
 	}
 }
 
@@ -484,6 +486,7 @@ func createDeadTask(z base.Z) *DeadTask {
 		Retried:      msg.Retried,
 		LastFailedAt: time.Unix(z.Score, 0),
 		ErrorMsg:     msg.ErrorMsg,
+		score:        z.Score,
 	}
 }
 
@@ -810,7 +813,7 @@ func TestInspectorDeleteAllDeadTasks(t *testing.T) {
 			t.Errorf("DeleteAllDeadTasks(%q) = %d, want %d", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantDead {
-			gotDead := asynqtest.GetDeadEntries(t, r, tc.qname)
+			gotDead := asynqtest.GetDeadEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
 				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
@@ -1255,8 +1258,8 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 			},
 			wantEnqueued: map[string][]*base.TaskMessage{
 				"default":  {m4, m1},
-				"critical": {m2},
-				"low":      {m3},
+				"critical": {},
+				"low":      {},
 			},
 		},
 		{
@@ -1462,7 +1465,6 @@ func TestInspectorDeleteTaskByKeyDeletesScheduledTask(t *testing.T) {
 
 		if err := inspector.DeleteTaskByKey(tc.qname, tc.key); err != nil {
 			t.Errorf("DeleteTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
-			continue
 		}
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := asynqtest.GetScheduledEntries(t, r, qname)
