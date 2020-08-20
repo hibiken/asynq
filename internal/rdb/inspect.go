@@ -615,66 +615,84 @@ func (e *ErrQueueNotFound) Error() string {
 	return fmt.Sprintf("queue %q does not exist", e.qname)
 }
 
-// ErrQueueNotEmpty indicates specified queue is not empty.
-type ErrQueueNotEmpty struct {
-	qname string
-}
-
-func (e *ErrQueueNotEmpty) Error() string {
-	return fmt.Sprintf("queue %q is not empty", e.qname)
-}
-
-/*
-// Skip checking whether queue is empty before removing.
+// Only check whether in-progress queue is empty before removing.
+// KEYS[1] -> asynq:{<qname>}
+// KEYS[2] -> asynq:{<qname>}:in_progress
+// KEYS[3] -> asynq:{<qname>}:scheduled
+// KEYS[4] -> asynq:{<qname>}:retry
+// KEYS[5] -> asynq:{<qname>}:dead
+// KEYS[6] -> asynq:{<qname>}:deadlines
 var removeQueueForceCmd = redis.NewScript(`
-local n = redis.call("SREM", KEYS[1], KEYS[2])
-if n == 0 then
-	return redis.error_reply("LIST NOT FOUND")
+local inprogress = redis.call("LLEN", KEYS[2])
+if inprogress > 0 then
+    return redis.error_reply("Queue has tasks in-progress")
 end
+redis.call("DEL", KEYS[1])
 redis.call("DEL", KEYS[2])
+redis.call("DEL", KEYS[3])
+redis.call("DEL", KEYS[4])
+redis.call("DEL", KEYS[5])
+redis.call("DEL", KEYS[6])
 return redis.status_reply("OK")`)
 
 // Checks whether queue is empty before removing.
+// KEYS[1] -> asynq:{<qname>}
+// KEYS[2] -> asynq:{<qname>}:in_progress
+// KEYS[3] -> asynq:{<qname>}:scheduled
+// KEYS[4] -> asynq:{<qname>}:retry
+// KEYS[5] -> asynq:{<qname>}:dead
+// KEYS[6] -> asynq:{<qname>}:deadlines
 var removeQueueCmd = redis.NewScript(`
-local l = redis.call("LLEN", KEYS[2]) if l > 0 then
-	return redis.error_reply("LIST NOT EMPTY")
+local enqueued = redis.call("LLEN", KEYS[1]) 
+local inprogress = redis.call("LLEN", KEYS[2])
+local scheduled = redis.call("SCARD", KEYS[3])
+local retry = redis.call("SCARD", KEYS[4])
+local dead = redis.call("SCARD", KEYS[5])
+local total = enqueued + inprogress + scheduled + retry + dead
+if total > 0 then
+	return redis.error_reply("Queue is not empty")
 end
-local n = redis.call("SREM", KEYS[1], KEYS[2])
-if n == 0 then
-	return redis.error_reply("LIST NOT FOUND")
-end
+redis.call("DEL", KEYS[1])
 redis.call("DEL", KEYS[2])
+redis.call("DEL", KEYS[3])
+redis.call("DEL", KEYS[4])
+redis.call("DEL", KEYS[5])
+redis.call("DEL", KEYS[6])
 return redis.status_reply("OK")`)
 
 // RemoveQueue removes the specified queue.
 //
 // If force is set to true, it will remove the queue regardless
-// of whether the queue is empty.
+// as long as no tasks are in-progress for the queue.
 // If force is set to false, it will only remove the queue if
-// it is empty.
+// the queue is empty.
 func (r *RDB) RemoveQueue(qname string, force bool) error {
+	exists, err := r.client.SIsMember(base.AllQueues, qname).Result()
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return &ErrQueueNotFound{qname}
+	}
 	var script *redis.Script
 	if force {
 		script = removeQueueForceCmd
 	} else {
 		script = removeQueueCmd
 	}
-	err := script.Run(r.client,
-		[]string{base.AllQueues, base.QueueKey(qname)},
-		force).Err()
-	if err != nil {
-		switch err.Error() {
-		case "LIST NOT FOUND":
-			return &ErrQueueNotFound{qname}
-		case "LIST NOT EMPTY":
-			return &ErrQueueNotEmpty{qname}
-		default:
-			return err
-		}
+	keys := []string{
+		base.QueueKey(qname),
+		base.InProgressKey(qname),
+		base.ScheduledKey(qname),
+		base.RetryKey(qname),
+		base.DeadKey(qname),
+		base.DeadlinesKey(qname),
 	}
-	return nil
+	if err := script.Run(r.client, keys).Err(); err != nil {
+		return err
+	}
+	return r.client.SRem(base.AllQueues, qname).Err()
 }
-*/
 
 // Note: Script also removes stale keys.
 var listServerKeysCmd = redis.NewScript(`
