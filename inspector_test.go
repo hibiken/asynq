@@ -77,7 +77,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 		processed  map[string]int
 		failed     map[string]int
 		qname      string
-		want       *Stats
+		want       *QueueStats
 	}{
 		{
 			enqueued: map[string][]*base.TaskMessage{
@@ -119,8 +119,9 @@ func TestInspectorCurrentStats(t *testing.T) {
 				"low":      5,
 			},
 			qname: "default",
-			want: &Stats{
+			want: &QueueStats{
 				Queue:      "default",
+				Size:       4,
 				Enqueued:   1,
 				InProgress: 1,
 				Scheduled:  2,
@@ -181,12 +182,13 @@ func TestInspectorHistory(t *testing.T) {
 	}{
 		{"default", 90},
 		{"custom", 7},
-		{"default", 0},
+		{"default", 1},
 	}
 
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 
+		r.SAdd(base.AllQueues, tc.qname)
 		// populate last n days data
 		for i := 0; i < tc.n; i++ {
 			ts := now.Add(-time.Duration(i) * 24 * time.Hour)
