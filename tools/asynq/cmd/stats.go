@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/rdb"
@@ -51,6 +52,17 @@ func init() {
 	// statsCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
+type AggregateStats struct {
+	InProgress int
+	Enqueued   int
+	Scheduled  int
+	Retry      int
+	Dead       int
+	Processed  int
+	Failed     int
+	Timestamp  time.Time
+}
+
 func stats(cmd *cobra.Command, args []string) {
 	c := redis.NewClient(&redis.Options{
 		Addr:     viper.GetString("uri"),
@@ -59,26 +71,45 @@ func stats(cmd *cobra.Command, args []string) {
 	})
 	r := rdb.NewRDB(c)
 
-	stats, err := r.CurrentStats()
+	queues, err := r.AllQueues()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
+	}
+
+	var aggStats AggregateStats
+	var stats []*rdb.Stats
+	for _, qname := range queues {
+		s, err := r.CurrentStats(qname)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		aggStats.InProgress += s.InProgress
+		aggStats.Enqueued += s.Enqueued
+		aggStats.Scheduled += s.Scheduled
+		aggStats.Retry += s.Retry
+		aggStats.Dead += s.Dead
+		aggStats.Processed += s.Processed
+		aggStats.Failed += s.Failed
+		aggStats.Timestamp = s.Timestamp
+		stats = append(stats, s)
 	}
 	info, err := r.RedisInfo()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Println("STATES")
-	printStates(stats)
+	fmt.Println("BY STATES")
+	printStatsByState(&aggStats)
 	fmt.Println()
 
-	fmt.Println("QUEUES")
-	printQueues(stats.Queues)
+	fmt.Println("BY QUEUES")
+	printStatsByQueue(stats)
 	fmt.Println()
 
-	fmt.Printf("STATS FOR %s UTC\n", stats.Timestamp.UTC().Format("2006-01-02"))
-	printStats(stats)
+	fmt.Printf("STATS FOR %s UTC\n", aggStats.Timestamp.UTC().Format("2006-01-02"))
+	printSuccessFailureStats(&aggStats)
 	fmt.Println()
 
 	fmt.Println("REDIS INFO")
@@ -86,7 +117,7 @@ func stats(cmd *cobra.Command, args []string) {
 	fmt.Println()
 }
 
-func printStates(s *rdb.Stats) {
+func printStatsByState(s *AggregateStats) {
 	format := strings.Repeat("%v\t", 5) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
 	fmt.Fprintf(tw, format, "InProgress", "Enqueued", "Scheduled", "Retry", "Dead")
@@ -95,13 +126,13 @@ func printStates(s *rdb.Stats) {
 	tw.Flush()
 }
 
-func printQueues(queues []*rdb.Queue) {
+func printStatsByQueue(stats []*rdb.Stats) {
 	var headers, seps, counts []string
-	for _, q := range queues {
-		title := queueTitle(q)
+	for _, s := range stats {
+		title := queueTitle(s)
 		headers = append(headers, title)
 		seps = append(seps, strings.Repeat("-", len(title)))
-		counts = append(counts, strconv.Itoa(q.Size))
+		counts = append(counts, strconv.Itoa(s.Size))
 	}
 	format := strings.Repeat("%v\t", len(headers)) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
@@ -111,16 +142,16 @@ func printQueues(queues []*rdb.Queue) {
 	tw.Flush()
 }
 
-func queueTitle(q *rdb.Queue) string {
+func queueTitle(s *rdb.Stats) string {
 	var b strings.Builder
-	b.WriteString(strings.Title(q.Name))
-	if q.Paused {
+	b.WriteString(strings.Title(s.Queue))
+	if s.Paused {
 		b.WriteString(" (Paused)")
 	}
 	return b.String()
 }
 
-func printStats(s *rdb.Stats) {
+func printSuccessFailureStats(s *AggregateStats) {
 	format := strings.Repeat("%v\t", 3) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
 	fmt.Fprintf(tw, format, "Processed", "Failed", "Error Rate")

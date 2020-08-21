@@ -162,30 +162,35 @@ func SeedEnqueuedQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage,
 // SeedInProgressQueue initializes the in-progress queue with the given messages.
 func SeedInProgressQueue(tb testing.TB, r *redis.Client, msgs []*base.TaskMessage, qname string) {
 	tb.Helper()
+	r.SAdd(base.AllQueues, qname)
 	seedRedisList(tb, r, base.InProgressKey(qname), msgs)
 }
 
 // SeedScheduledQueue initializes the scheduled queue with the given messages.
 func SeedScheduledQueue(tb testing.TB, r *redis.Client, entries []base.Z, qname string) {
 	tb.Helper()
+	r.SAdd(base.AllQueues, qname)
 	seedRedisZSet(tb, r, base.ScheduledKey(qname), entries)
 }
 
 // SeedRetryQueue initializes the retry queue with the given messages.
 func SeedRetryQueue(tb testing.TB, r *redis.Client, entries []base.Z, qname string) {
 	tb.Helper()
+	r.SAdd(base.AllQueues, qname)
 	seedRedisZSet(tb, r, base.RetryKey(qname), entries)
 }
 
 // SeedDeadQueue initializes the dead queue with the given messages.
 func SeedDeadQueue(tb testing.TB, r *redis.Client, entries []base.Z, qname string) {
 	tb.Helper()
+	r.SAdd(base.AllQueues, qname)
 	seedRedisZSet(tb, r, base.DeadKey(qname), entries)
 }
 
 // SeedDeadlines initializes the deadlines set with the given entries.
 func SeedDeadlines(tb testing.TB, r *redis.Client, entries []base.Z, qname string) {
 	tb.Helper()
+	r.SAdd(base.AllQueues, qname)
 	seedRedisZSet(tb, r, base.DeadlinesKey(qname), entries)
 }
 

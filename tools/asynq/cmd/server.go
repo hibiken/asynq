@@ -18,12 +18,21 @@ import (
 	"github.com/spf13/viper"
 )
 
-// serversCmd represents the servers command
-var serversCmd = &cobra.Command{
-	Use:   "servers",
-	Short: "Shows all running worker servers",
-	Long: `Servers (asynq servers) will show all running worker servers
-pulling tasks from the specified redis instance.
+func init() {
+	rootCmd.AddCommand(serverCmd)
+	serverCmd.AddCommand(serverListCmd)
+}
+
+var serverCmd = &cobra.Command{
+	Use:   "server",
+	Short: "Manage servers",
+}
+
+var serverListCmd = &cobra.Command{
+	Use:   "ls",
+	Short: "List servers",
+	Long: `Server list (asynq server ls) shows all running worker servers
+pulling tasks from the given redis instance.
 
 The command shows the following for each server:
 * Host and PID of the process in which the server is running
@@ -34,15 +43,10 @@ The command shows the following for each server:
 
 A "running" server is pulling tasks from queues and processing them.
 A "quiet" server is no longer pulling new tasks from queues`,
-	Args: cobra.NoArgs,
-	Run:  servers,
+	Run: serverList,
 }
 
-func init() {
-	rootCmd.AddCommand(serversCmd)
-}
-
-func servers(cmd *cobra.Command, args []string) {
+func serverList(cmd *cobra.Command, args []string) {
 	r := rdb.NewRDB(redis.NewClient(&redis.Options{
 		Addr:     viper.GetString("uri"),
 		DB:       viper.GetInt("db"),
@@ -81,12 +85,6 @@ func servers(cmd *cobra.Command, args []string) {
 	printTable(cols, printRows)
 }
 
-// timeAgo takes a time and returns a string of the format "<duration> ago".
-func timeAgo(since time.Time) string {
-	d := time.Since(since).Round(time.Second)
-	return fmt.Sprintf("%v ago", d)
-}
-
 func formatQueues(qmap map[string]int) string {
 	// sort queues by priority and name
 	type queue struct {
@@ -115,4 +113,10 @@ func formatQueues(qmap map[string]int) string {
 		}
 	}
 	return b.String()
+}
+
+// timeAgo takes a time and returns a string of the format "<duration> ago".
+func timeAgo(since time.Time) string {
+	d := time.Since(since).Round(time.Second)
+	return fmt.Sprintf("%v ago", d)
 }

@@ -32,10 +32,13 @@ func (i *Inspector) Queues() ([]string, error) {
 	return i.rdb.AllQueues()
 }
 
-// Stats represents a state of queues at a certain time.
-type Stats struct {
+// QueueStats represents a state of queues at a certain time.
+type QueueStats struct {
 	// Name of the queue.
 	Queue string
+	// Size is the total number of tasks in the queue.
+	// The value is the sum of Enqueued, InProgress, Scheduled, Retry, and Dead.
+	Size int
 	// Number of enqueued tasks.
 	Enqueued int
 	// Number of in-progress tasks.
@@ -59,13 +62,14 @@ type Stats struct {
 }
 
 // CurrentStats returns a current stats of the given queue.
-func (i *Inspector) CurrentStats(qname string) (*Stats, error) {
+func (i *Inspector) CurrentStats(qname string) (*QueueStats, error) {
 	stats, err := i.rdb.CurrentStats(qname)
 	if err != nil {
 		return nil, err
 	}
-	return &Stats{
+	return &QueueStats{
 		Queue:      stats.Queue,
+		Size:       stats.Size,
 		Enqueued:   stats.Enqueued,
 		InProgress: stats.InProgress,
 		Scheduled:  stats.Scheduled,

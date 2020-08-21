@@ -112,6 +112,7 @@ func TestCurrentStats(t *testing.T) {
 			want: &Stats{
 				Queue:      "default",
 				Paused:     false,
+				Size:       4,
 				Enqueued:   1,
 				InProgress: 1,
 				Scheduled:  2,
@@ -166,6 +167,7 @@ func TestCurrentStats(t *testing.T) {
 			want: &Stats{
 				Queue:      "critical",
 				Paused:     true,
+				Size:       1,
 				Enqueued:   1,
 				InProgress: 0,
 				Scheduled:  0,
@@ -232,12 +234,13 @@ func TestHistoricalStats(t *testing.T) {
 	}{
 		{"default", 90},
 		{"custom", 7},
-		{"default", 0},
+		{"default", 1},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
+		r.client.SAdd(base.AllQueues, tc.qname)
 		// populate last n days data
 		for i := 0; i < tc.n; i++ {
 			ts := now.Add(-time.Duration(i) * 24 * time.Hour)
