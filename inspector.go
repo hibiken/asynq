@@ -27,6 +27,11 @@ func NewInspector(r RedisConnOpt) *Inspector {
 	}
 }
 
+// Queues returns a list of all queue names.
+func (i *Inspector) Queues() ([]string, error) {
+	return i.rdb.AllQueues()
+}
+
 // Stats represents a state of queues at a certain time.
 type Stats struct {
 	// Name of the queue.

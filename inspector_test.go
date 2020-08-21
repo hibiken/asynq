@@ -17,6 +17,41 @@ import (
 	"github.com/hibiken/asynq/internal/base"
 )
 
+func TestInspectorQueues(t *testing.T) {
+	r := setup(t)
+	inspector := NewInspector(RedisClientOpt{
+		Addr: redisAddr,
+		DB:   redisDB,
+	})
+
+	tests := []struct {
+		queues []string
+	}{
+		{queues: []string{"default"}},
+		{queues: []string{"custom1", "custom2"}},
+		{queues: []string{"default", "custom1", "custom2"}},
+		{queues: []string{}},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		for _, qname := range tc.queues {
+			if err := r.SAdd(base.AllQueues, qname).Err(); err != nil {
+				t.Fatalf("could not initialize all queue set: %v", err)
+			}
+		}
+		got, err := inspector.Queues()
+		if err != nil {
+			t.Errorf("Queues() returned an error: %v", err)
+			continue
+		}
+		if diff := cmp.Diff(tc.queues, got, h.SortStringSliceOpt); diff != "" {
+			t.Errorf("Queues() = %v, want %v; (-want, +got)\n%s", got, tc.queues, diff)
+		}
+	}
+
+}
+
 func TestInspectorCurrentStats(t *testing.T) {
 	r := setup(t)
 	m1 := asynqtest.NewTaskMessage("task1", nil)
