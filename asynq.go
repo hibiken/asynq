@@ -37,7 +37,9 @@ func NewTask(typename string, payload map[string]interface{}) *Task {
 //
 // RedisConnOpt represents a sum of following types:
 //
-// RedisClientOpt | *RedisClientOpt | RedisFailoverClientOpt | *RedisFailoverClientOpt
+//   - RedisClientOpt
+//   - RedisFailoverClientOpt
+//   - RedisClusterClientOpt
 type RedisConnOpt interface{}
 
 // RedisClientOpt is used to create a redis client that connects
@@ -50,6 +52,7 @@ type RedisClientOpt struct {
 	// Redis server address in "host:port" format.
 	Addr string
 
+	// TODO: Add Username
 	// Redis server password.
 	Password string
 
@@ -81,6 +84,7 @@ type RedisFailoverClientOpt struct {
 	// Redis sentinel password.
 	SentinelPassword string
 
+	// TODO: Add Username
 	// Redis server password.
 	Password string
 
@@ -91,6 +95,21 @@ type RedisFailoverClientOpt struct {
 	// Maximum number of socket connections.
 	// Default is 10 connections per every CPU as reported by runtime.NumCPU.
 	PoolSize int
+
+	// TLS Config used to connect to a server.
+	// TLS will be negotiated only if this field is set.
+	TLSConfig *tls.Config
+}
+
+// RedisFailoverClientOpt is used to creates a redis client that connects to
+// redis cluster.
+type RedisClusterClientOpt struct {
+	// A seed list of host:port addresses of cluster nodes.
+	Addrs []string
+
+	// TODO: Add Username
+	// Redis server password.
+	Password string
 
 	// TLS Config used to connect to a server.
 	// TLS will be negotiated only if this field is set.
@@ -173,7 +192,7 @@ func parseRedisSentinelURI(u *url.URL) (RedisConnOpt, error) {
 // createRedisClient returns a redis client given a redis connection configuration.
 //
 // Passing an unexpected type as a RedisConnOpt argument will cause panic.
-func createRedisClient(r RedisConnOpt) *redis.Client {
+func createRedisClient(r RedisConnOpt) redis.UniversalClient {
 	switch r := r.(type) {
 	case *RedisClientOpt:
 		return redis.NewClient(&redis.Options{
@@ -212,6 +231,18 @@ func createRedisClient(r RedisConnOpt) *redis.Client {
 			DB:               r.DB,
 			PoolSize:         r.PoolSize,
 			TLSConfig:        r.TLSConfig,
+		})
+	case RedisClusterClientOpt:
+		return redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs:     r.Addrs,
+			Password:  r.Password,
+			TLSConfig: r.TLSConfig,
+		})
+	case *RedisClusterClientOpt:
+		return redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs:     r.Addrs,
+			Password:  r.Password,
+			TLSConfig: r.TLSConfig,
 		})
 	default:
 		panic(fmt.Sprintf("asynq: unexpected type %T for RedisConnOpt", r))
