@@ -7,6 +7,7 @@ package asynqtest
 
 import (
 	"encoding/json"
+	"math"
 	"sort"
 	"testing"
 
@@ -16,6 +17,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 )
+
+// EquateInt64Approx returns a Comparer option that treats int64 values
+// to be equal if they are within the given margin.
+func EquateInt64Approx(margin int64) cmp.Option {
+	return cmp.Comparer(func(a, b int64) bool {
+		return math.Abs(float64(a-b)) < float64(margin)
+	})
+}
 
 // SortMsgOpt is a cmp.Option to sort base.TaskMessage for comparing slice of task messages.
 var SortMsgOpt = cmp.Transformer("SortTaskMessages", func(in []*base.TaskMessage) []*base.TaskMessage {
