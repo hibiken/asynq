@@ -386,7 +386,7 @@ func TestProcessorRetry(t *testing.T) {
 		time.Sleep(tc.wait) // FIXME: This makes test flaky.
 		p.terminate()
 
-		cmpOpt := cmpopts.EquateApprox(0, float64(time.Second)) // allow up to a second difference in zset score
+		cmpOpt := h.EquateInt64Approx(1) // allow up to a second difference in zset score
 		gotRetry := h.GetRetryEntries(t, r, base.DefaultQueueName)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortZSetEntryOpt, cmpOpt); diff != "" {
 			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.RetryKey(base.DefaultQueueName), diff)
