@@ -18,10 +18,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		b.StopTimer() // begin setup
 		setup(b)
-		redis := &RedisClientOpt{
-			Addr: redisAddr,
-			DB:   redisDB,
-		}
+		redis := getRedisConnOpt(b)
 		client := NewClient(redis)
 		srv := NewServer(redis, Config{
 			Concurrency: 10,
@@ -61,10 +58,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		b.StopTimer() // begin setup
 		setup(b)
-		redis := &RedisClientOpt{
-			Addr: redisAddr,
-			DB:   redisDB,
-		}
+		redis := getRedisConnOpt(b)
 		client := NewClient(redis)
 		srv := NewServer(redis, Config{
 			Concurrency: 10,
@@ -127,10 +121,7 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		b.StopTimer() // begin setup
 		setup(b)
-		redis := &RedisClientOpt{
-			Addr: redisAddr,
-			DB:   redisDB,
-		}
+		redis := getRedisConnOpt(b)
 		client := NewClient(redis)
 		srv := NewServer(redis, Config{
 			Concurrency: 10,
@@ -185,10 +176,7 @@ func BenchmarkClientWhileServerRunning(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		b.StopTimer() // begin setup
 		setup(b)
-		redis := &RedisClientOpt{
-			Addr: redisAddr,
-			DB:   redisDB,
-		}
+		redis := getRedisConnOpt(b)
 		client := NewClient(redis)
 		srv := NewServer(redis, Config{
 			Concurrency: 10,

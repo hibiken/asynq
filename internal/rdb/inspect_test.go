@@ -268,7 +268,10 @@ func TestHistoricalStats(t *testing.T) {
 				Failed:    (i + 1) * 10,
 				Time:      now.Add(-time.Duration(i) * 24 * time.Hour),
 			}
-			if diff := cmp.Diff(want, got[i], timeCmpOpt); diff != "" {
+			// Allow 10 seconds difference in timestamp.
+			// When testing with Redis Cluster it could take a while to set up, and timestamp can have a few second difference.
+			cmpOpt := cmpopts.EquateApproxTime(10 * time.Second)
+			if diff := cmp.Diff(want, got[i], cmpOpt); diff != "" {
 				t.Errorf("RDB.HistoricalStats for the last %d days; got %+v, want %+v; (-want,+got):\n%s", i, got[i], want, diff)
 			}
 		}
@@ -604,7 +607,7 @@ func TestListScheduled(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, timeCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
 		}
@@ -756,7 +759,7 @@ func TestListRetry(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, timeCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
 				op, got, err, tc.want, diff)
 			continue
@@ -907,7 +910,7 @@ func TestListDead(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, timeCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
 				op, got, err, tc.want, diff)
 			continue
@@ -973,7 +976,10 @@ func TestListDeadPagination(t *testing.T) {
 	}
 }
 
-var timeCmpOpt = cmpopts.EquateApproxTime(time.Second)
+var (
+	timeCmpOpt   = cmpopts.EquateApproxTime(2 * time.Second) // allow for 2 seconds margin in time.Time
+	zScoreCmpOpt = h.EquateInt64Approx(2)                    // allow for 2 seconds margin in Z.Score
+)
 
 func TestEnqueueDeadTask(t *testing.T) {
 	r := setup(t)
@@ -1711,7 +1717,7 @@ func TestKillRetryTask(t *testing.T) {
 
 		for qname, want := range tc.wantRetry {
 			gotRetry := h.GetRetryEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.RetryKey(qname), diff)
 			}
@@ -1719,7 +1725,7 @@ func TestKillRetryTask(t *testing.T) {
 
 		for qname, want := range tc.wantDead {
 			gotDead := h.GetDeadEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.DeadKey(qname), diff)
 			}
@@ -1836,7 +1842,7 @@ func TestKillScheduledTask(t *testing.T) {
 
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ScheduledKey(qname), diff)
 			}
@@ -1844,7 +1850,7 @@ func TestKillScheduledTask(t *testing.T) {
 
 		for qname, want := range tc.wantDead {
 			gotDead := h.GetDeadEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.DeadKey(qname), diff)
 			}
@@ -1982,7 +1988,7 @@ func TestKillAllRetryTasks(t *testing.T) {
 
 		for qname, want := range tc.wantRetry {
 			gotRetry := h.GetRetryEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.RetryKey(qname), diff)
 			}
@@ -1990,7 +1996,7 @@ func TestKillAllRetryTasks(t *testing.T) {
 
 		for qname, want := range tc.wantDead {
 			gotDead := h.GetDeadEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.DeadKey(qname), diff)
 			}
@@ -2128,7 +2134,7 @@ func TestKillAllScheduledTasks(t *testing.T) {
 
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ScheduledKey(qname), diff)
 			}
@@ -2136,7 +2142,7 @@ func TestKillAllScheduledTasks(t *testing.T) {
 
 		for qname, want := range tc.wantDead {
 			gotDead := h.GetDeadEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, timeCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.DeadKey(qname), diff)
 			}
