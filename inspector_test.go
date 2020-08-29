@@ -19,10 +19,7 @@ import (
 
 func TestInspectorQueues(t *testing.T) {
 	r := setup(t)
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		queues []string
@@ -63,10 +60,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 	now := time.Now()
 	timeCmpOpt := cmpopts.EquateApproxTime(time.Second)
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		enqueued   map[string][]*base.TaskMessage
@@ -169,12 +163,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 func TestInspectorHistory(t *testing.T) {
 	r := setup(t)
 	now := time.Now().UTC()
-	timeCmpOpt := cmpopts.EquateApproxTime(time.Second)
-
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		qname string // queue of interest
@@ -215,6 +204,9 @@ func TestInspectorHistory(t *testing.T) {
 				Failed:    (i + 1) * 10,
 				Date:      now.Add(-time.Duration(i) * 24 * time.Hour),
 			}
+			// Allow 10 seconds difference in timestamp.
+			// When testing with Redis Cluster it could take a while to set up, and timestamp can have a few second difference.
+			timeCmpOpt := cmpopts.EquateApproxTime(10 * time.Second)
 			if diff := cmp.Diff(want, got[i], timeCmpOpt); diff != "" {
 				t.Errorf("Inspector.History %d days ago data; got %+v, want %+v; (-want,+got):\n%s",
 					i, got[i], want, diff)
@@ -238,10 +230,7 @@ func TestInspectorListEnqueuedTasks(t *testing.T) {
 	m3 := asynqtest.NewTaskMessage("task3", nil)
 	m4 := asynqtest.NewTaskMessage("task4", nil)
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		desc     string
@@ -309,10 +298,7 @@ func TestInspectorListInProgressTasks(t *testing.T) {
 	m3 := asynqtest.NewTaskMessage("task3", nil)
 	m4 := asynqtest.NewTaskMessage("task4", nil)
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	createInProgressTask := func(msg *base.TaskMessage) *InProgressTask {
 		return &InProgressTask{
@@ -382,10 +368,7 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		desc      string
@@ -460,10 +443,7 @@ func TestInspectorListRetryTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		desc  string
@@ -539,10 +519,7 @@ func TestInspectorListDeadTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(-2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(-2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		desc  string
@@ -601,10 +578,7 @@ func TestInspectorListPagination(t *testing.T) {
 	r := setup(t)
 	asynqtest.SeedEnqueuedQueue(t, r, msgs, base.DefaultQueueName)
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		page     int
@@ -666,10 +640,7 @@ func TestInspectorDeleteAllScheduledTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -734,10 +705,7 @@ func TestInspectorDeleteAllRetryTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry     map[string][]base.Z
@@ -802,10 +770,7 @@ func TestInspectorDeleteAllDeadTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		dead     map[string][]base.Z
@@ -870,10 +835,7 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -1005,10 +967,7 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry     map[string][]base.Z
@@ -1069,7 +1028,8 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 			dead: map[string][]base.Z{
 				"default": {z1, z2},
 			},
-			want: 0,
+			qname: "default",
+			want:  0,
 			wantRetry: map[string][]base.Z{
 				"default": {},
 			},
@@ -1098,9 +1058,10 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 				t.Errorf("unexpected retry tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
+		cmpOpt := asynqtest.EquateInt64Approx(2) // allow for 2 seconds difference in Z.Score
 		for qname, want := range tc.wantDead {
 			gotDead := asynqtest.GetDeadEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt, cmpOpt); diff != "" {
 				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
@@ -1119,10 +1080,7 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -1238,10 +1196,7 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry        map[string][]base.Z
@@ -1357,10 +1312,7 @@ func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(-2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(-2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		dead         map[string][]base.Z
@@ -1471,10 +1423,7 @@ func TestInspectorDeleteTaskByKeyDeletesScheduledTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -1523,10 +1472,7 @@ func TestInspectorDeleteTaskByKeyDeletesRetryTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry     map[string][]base.Z
@@ -1575,10 +1521,7 @@ func TestInspectorDeleteTaskByKeyDeletesDeadTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(-15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(-2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		dead     map[string][]base.Z
@@ -1627,10 +1570,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesScheduledTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -1699,10 +1639,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesRetryTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry        map[string][]base.Z
@@ -1770,10 +1707,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesDeadTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(-15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(-2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		dead         map[string][]base.Z
@@ -1845,10 +1779,7 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -1918,10 +1849,7 @@ func TestInspectorKillTaskByKeyKillsRetryTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := NewInspector(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry     map[string][]base.Z

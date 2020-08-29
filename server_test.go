@@ -21,12 +21,9 @@ func TestServer(t *testing.T) {
 	ignoreOpt := goleak.IgnoreTopFunction("github.com/go-redis/redis/v7/internal/pool.(*ConnPool).reaper")
 	defer goleak.VerifyNoLeaks(t, ignoreOpt)
 
-	r := &RedisClientOpt{
-		Addr: "localhost:6379",
-		DB:   15,
-	}
-	c := NewClient(r)
-	srv := NewServer(r, Config{
+	redisConnOpt := getRedisConnOpt(t)
+	c := NewClient(redisConnOpt)
+	srv := NewServer(redisConnOpt, Config{
 		Concurrency: 10,
 		LogLevel:    testLogLevel,
 	})
@@ -159,14 +156,15 @@ func TestServerWithFlakyBroker(t *testing.T) {
 	}()
 	r := rdb.NewRDB(setup(t))
 	testBroker := testbroker.NewTestBroker(r)
-	srv := NewServer(RedisClientOpt{Addr: redisAddr, DB: redisDB}, Config{LogLevel: testLogLevel})
+	redisConnOpt := getRedisConnOpt(t)
+	srv := NewServer(redisConnOpt, Config{LogLevel: testLogLevel})
 	srv.broker = testBroker
 	srv.scheduler.broker = testBroker
 	srv.heartbeater.broker = testBroker
 	srv.processor.broker = testBroker
 	srv.subscriber.broker = testBroker
 
-	c := NewClient(RedisClientOpt{Addr: redisAddr, DB: redisDB})
+	c := NewClient(redisConnOpt)
 
 	h := func(ctx context.Context, task *Task) error {
 		// force task retry.

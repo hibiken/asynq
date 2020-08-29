@@ -22,7 +22,7 @@ import (
 // to be equal if they are within the given margin.
 func EquateInt64Approx(margin int64) cmp.Option {
 	return cmp.Comparer(func(a, b int64) bool {
-		return math.Abs(float64(a-b)) < float64(margin)
+		return math.Abs(float64(a-b)) <= float64(margin)
 	})
 }
 
@@ -156,8 +156,21 @@ func MustUnmarshalSlice(tb testing.TB, data []string) []*base.TaskMessage {
 // FlushDB deletes all the keys of the currently selected DB.
 func FlushDB(tb testing.TB, r redis.UniversalClient) {
 	tb.Helper()
-	if err := r.FlushDB().Err(); err != nil {
-		tb.Fatal(err)
+	switch r := r.(type) {
+	case *redis.Client:
+		if err := r.FlushDB().Err(); err != nil {
+			tb.Fatal(err)
+		}
+	case *redis.ClusterClient:
+		err := r.ForEachMaster(func(c *redis.Client) error {
+			if err := c.FlushAll().Err(); err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			tb.Fatal(err)
+		}
 	}
 }
 

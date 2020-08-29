@@ -6,7 +6,9 @@ package rdb
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -19,13 +21,38 @@ import (
 	"github.com/hibiken/asynq/internal/base"
 )
 
-// TODO(hibiken): Get Redis address and db number from ENV variables.
-func setup(t *testing.T) *RDB {
+// variables used for package testing.
+var (
+	redisAddr string
+	redisDB   int
+
+	useRedisCluster   bool
+	redisClusterAddrs string // comma-separated list of host:port
+)
+
+func init() {
+	flag.StringVar(&redisAddr, "redis_addr", "localhost:6379", "redis address to use in testing")
+	flag.IntVar(&redisDB, "redis_db", 14, "redis db number to use in testing")
+	flag.BoolVar(&useRedisCluster, "redis_cluster", false, "use redis cluster as a broker in testing")
+	flag.StringVar(&redisClusterAddrs, "redis_cluster_addrs", "localhost:7000,localhost:7001,localhost:7002", "comma separated list of redis server addresses")
+}
+
+func setup(t *testing.T) (r *RDB) {
 	t.Helper()
-	r := NewRDB(redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   13,
-	}))
+	if useRedisCluster {
+		addrs := strings.Split(redisClusterAddrs, ",")
+		if len(addrs) == 0 {
+			t.Fatal("No redis cluster addresses provided. Please set addresses using --redis_cluster_addrs flag.")
+		}
+		r = NewRDB(redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs: addrs,
+		}))
+	} else {
+		r = NewRDB(redis.NewClient(&redis.Options{
+			Addr: redisAddr,
+			DB:   redisDB,
+		}))
+	}
 	// Start each test with a clean slate.
 	h.FlushDB(t, r.client)
 	return r
@@ -280,7 +307,7 @@ func TestDequeue(t *testing.T) {
 				tc.args, gotMsg, tc.wantMsg)
 			continue
 		}
-		if gotDeadline != tc.wantDeadline {
+		if !cmp.Equal(gotDeadline, tc.wantDeadline, cmpopts.EquateApproxTime(1*time.Second)) {
 			t.Errorf("(*RDB).Dequeue(%v) returned deadline %v; want %v",
 				tc.args, gotDeadline, tc.wantDeadline)
 			continue
@@ -444,7 +471,7 @@ func TestDone(t *testing.T) {
 		Payload:   nil,
 		Timeout:   1800,
 		Deadline:  0,
-		UniqueKey: "reindex:nil:default",
+		UniqueKey: "asynq:{default}:unique:reindex:nil",
 		Queue:     "default",
 	}
 	t1Deadline := now.Unix() + t1.Timeout
@@ -1147,7 +1174,7 @@ func TestKill(t *testing.T) {
 		}
 		for queue, want := range tc.wantDead {
 			gotDead := h.GetDeadEntries(t, r.client, queue)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q after calling (*RDB).Kill: (-want, +got):\n%s", base.DeadKey(queue), diff)
 			}
 		}

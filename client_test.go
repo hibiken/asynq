@@ -17,10 +17,7 @@ import (
 
 func TestClientEnqueueAt(t *testing.T) {
 	r := setup(t)
-	client := NewClient(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	client := NewClient(getRedisConnOpt(t))
 
 	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
 
@@ -127,10 +124,7 @@ func TestClientEnqueueAt(t *testing.T) {
 
 func TestClientEnqueue(t *testing.T) {
 	r := setup(t)
-	client := NewClient(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	client := NewClient(getRedisConnOpt(t))
 
 	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
 
@@ -369,10 +363,7 @@ func TestClientEnqueue(t *testing.T) {
 
 func TestClientEnqueueIn(t *testing.T) {
 	r := setup(t)
-	client := NewClient(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	client := NewClient(getRedisConnOpt(t))
 
 	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
 
@@ -551,7 +542,7 @@ func TestClientDefaultOptions(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r)
-		c := NewClient(RedisClientOpt{Addr: redisAddr, DB: redisDB})
+		c := NewClient(getRedisConnOpt(t))
 		c.SetDefaultOptions(tc.task.Type, tc.defaultOpts...)
 		gotRes, err := c.Enqueue(tc.task, tc.opts...)
 		if err != nil {
@@ -575,12 +566,9 @@ func TestClientDefaultOptions(t *testing.T) {
 	}
 }
 
-func TestEnqueueUnique(t *testing.T) {
+func TestClientEnqueueUnique(t *testing.T) {
 	r := setup(t)
-	c := NewClient(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	c := NewClient(getRedisConnOpt(t))
 
 	tests := []struct {
 		task *Task
@@ -620,12 +608,9 @@ func TestEnqueueUnique(t *testing.T) {
 	}
 }
 
-func TestEnqueueInUnique(t *testing.T) {
+func TestClientEnqueueInUnique(t *testing.T) {
 	r := setup(t)
-	c := NewClient(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	c := NewClient(getRedisConnOpt(t))
 
 	tests := []struct {
 		task *Task
@@ -668,12 +653,9 @@ func TestEnqueueInUnique(t *testing.T) {
 	}
 }
 
-func TestEnqueueAtUnique(t *testing.T) {
+func TestClientEnqueueAtUnique(t *testing.T) {
 	r := setup(t)
-	c := NewClient(RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	})
+	c := NewClient(getRedisConnOpt(t))
 
 	tests := []struct {
 		task *Task
