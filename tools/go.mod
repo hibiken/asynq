@@ -3,7 +3,7 @@ module github.com/hibiken/asynq/tools
 go 1.13
 
 require (
-	github.com/go-redis/redis/v7 v7.2.0
+	github.com/go-redis/redis/v7 v7.4.0
 	github.com/google/uuid v1.1.1
 	github.com/hibiken/asynq v0.4.0
 	github.com/mitchellh/go-homedir v1.1.0

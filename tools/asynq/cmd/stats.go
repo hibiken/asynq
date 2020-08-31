@@ -12,10 +12,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // statsCmd represents the stats command
@@ -64,12 +62,7 @@ type AggregateStats struct {
 }
 
 func stats(cmd *cobra.Command, args []string) {
-	c := redis.NewClient(&redis.Options{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
-	r := rdb.NewRDB(c)
+	r := createRDB()
 
 	queues, err := r.AllQueues()
 	if err != nil {

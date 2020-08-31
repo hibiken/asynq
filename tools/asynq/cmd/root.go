@@ -11,7 +11,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/go-redis/redis/v7"
+	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -20,10 +23,15 @@ import (
 
 var cfgFile string
 
-// Flags
-var uri string
-var db int
-var password string
+// Global flag variables
+var (
+	uri      string
+	db       int
+	password string
+
+	useRedisCluster bool
+	clusterAddrs    string
+)
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -62,9 +70,16 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "redis server URI")
 	rootCmd.PersistentFlags().IntVarP(&db, "db", "n", 0, "redis database number (default is 0)")
 	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "password to use when connecting to redis server")
+	rootCmd.PersistentFlags().BoolVar(&useRedisCluster, "cluster", false, "connect to redis cluster")
+	rootCmd.PersistentFlags().StringVar(&clusterAddrs, "cluster_addrs",
+		"127.0.0.1:7000,127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003,127.0.0.1:7004,127.0.0.1:7005",
+		"list of comma-separated redis server addresses")
+	// Bind flags with config.
 	viper.BindPFlag("uri", rootCmd.PersistentFlags().Lookup("uri"))
 	viper.BindPFlag("db", rootCmd.PersistentFlags().Lookup("db"))
 	viper.BindPFlag("password", rootCmd.PersistentFlags().Lookup("password"))
+	viper.BindPFlag("cluster", rootCmd.PersistentFlags().Lookup("cluster"))
+	viper.BindPFlag("cluster_addrs", rootCmd.PersistentFlags().Lookup("cluster_addrs"))
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -91,6 +106,44 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Println("Using config file:", viper.ConfigFileUsed())
 	}
+}
+
+// createRDB creates a RDB instance using flag values and returns it.
+func createRDB() *rdb.RDB {
+	var c redis.UniversalClient
+	if useRedisCluster {
+		addrs := strings.Split(viper.GetString("cluster_addrs"), ",")
+		c = redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs:    addrs,
+			Password: viper.GetString("password"),
+		})
+	} else {
+		c = redis.NewClient(&redis.Options{
+			Addr:     viper.GetString("uri"),
+			DB:       viper.GetInt("db"),
+			Password: viper.GetString("password"),
+		})
+	}
+	return rdb.NewRDB(c)
+}
+
+// createRDB creates a Inspector instance using flag values and returns it.
+func createInspector() *asynq.Inspector {
+	var connOpt asynq.RedisConnOpt
+	if useRedisCluster {
+		addrs := strings.Split(viper.GetString("cluster_addrs"), ",")
+		connOpt = asynq.RedisClusterClientOpt{
+			Addrs:    addrs,
+			Password: viper.GetString("password"),
+		}
+	} else {
+		connOpt = asynq.RedisClientOpt{
+			Addr:     viper.GetString("uri"),
+			DB:       viper.GetInt("db"),
+			Password: viper.GetString("password"),
+		}
+	}
+	return asynq.NewInspector(connOpt)
 }
 
 // printTable is a helper function to print data in table format.

@@ -10,11 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq"
-	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func init() {
@@ -185,11 +182,7 @@ func taskList(cmd *cobra.Command, args []string) {
 }
 
 func listInProgressTasks(qname string, pageNum, pageSize int) {
-	i := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	i := createInspector()
 	tasks, err := i.ListInProgressTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
@@ -210,11 +203,7 @@ func listInProgressTasks(qname string, pageNum, pageSize int) {
 }
 
 func listEnqueuedTasks(qname string, pageNum, pageSize int) {
-	i := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	i := createInspector()
 	tasks, err := i.ListEnqueuedTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
@@ -235,11 +224,7 @@ func listEnqueuedTasks(qname string, pageNum, pageSize int) {
 }
 
 func listScheduledTasks(qname string, pageNum, pageSize int) {
-	i := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	i := createInspector()
 	tasks, err := i.ListScheduledTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
@@ -262,11 +247,7 @@ func listScheduledTasks(qname string, pageNum, pageSize int) {
 }
 
 func listRetryTasks(qname string, pageNum, pageSize int) {
-	i := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	i := createInspector()
 	tasks, err := i.ListRetryTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
@@ -293,11 +274,7 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 }
 
 func listDeadTasks(qname string, pageNum, pageSize int) {
-	i := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	i := createInspector()
 	tasks, err := i.ListDeadTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
@@ -317,12 +294,7 @@ func listDeadTasks(qname string, pageNum, pageSize int) {
 }
 
 func taskCancel(cmd *cobra.Command, args []string) {
-	r := rdb.NewRDB(redis.NewClient(&redis.Options{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	}))
-
+	r := createRDB()
 	for _, id := range args {
 		err := r.PublishCancelation(id)
 		if err != nil {
@@ -345,11 +317,7 @@ func taskKill(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	i := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	i := createInspector()
 	err = i.KillTaskByKey(qname, key)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
@@ -370,11 +338,7 @@ func taskDelete(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	i := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	i := createInspector()
 	err = i.DeleteTaskByKey(qname, key)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
@@ -395,11 +359,7 @@ func taskRun(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	i := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	i := createInspector()
 	err = i.EnqueueTaskByKey(qname, key)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
@@ -420,11 +380,7 @@ func taskKillAll(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	i := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	i := createInspector()
 	var n int
 	switch state {
 	case "scheduled":
@@ -454,11 +410,7 @@ func taskDeleteAll(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	i := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	i := createInspector()
 	var n int
 	switch state {
 	case "scheduled":
@@ -490,11 +442,7 @@ func taskRunAll(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	i := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	i := createInspector()
 	var n int
 	switch state {
 	case "scheduled":

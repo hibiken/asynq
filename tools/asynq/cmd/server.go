@@ -12,10 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v7"
-	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func init() {
@@ -47,11 +44,7 @@ A "quiet" server is no longer pulling new tasks from queues`,
 }
 
 func serverList(cmd *cobra.Command, args []string) {
-	r := rdb.NewRDB(redis.NewClient(&redis.Options{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	}))
+	r := createRDB()
 
 	servers, err := r.ListServers()
 	if err != nil {
