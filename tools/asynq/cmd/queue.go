@@ -9,11 +9,9 @@ import (
 	"io"
 	"os"
 
-	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 const separator = "================================================="
@@ -80,12 +78,8 @@ var queueRemoveCmd = &cobra.Command{
 }
 
 func queueList(cmd *cobra.Command, args []string) {
-	i := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
-	queues, err := i.Queues()
+	inspector := createInspector()
+	queues, err := inspector.Queues()
 	if err != nil {
 		fmt.Printf("error: Could not fetch list of queues: %v\n", err)
 		os.Exit(1)
@@ -96,11 +90,7 @@ func queueList(cmd *cobra.Command, args []string) {
 }
 
 func queueInspect(cmd *cobra.Command, args []string) {
-	inspector := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	inspector := createInspector()
 	for i, qname := range args {
 		if i > 0 {
 			fmt.Printf("\n%s\n", separator)
@@ -147,11 +137,7 @@ func queueHistory(cmd *cobra.Command, args []string) {
 		fmt.Printf("error: Internal error: %v\n", err)
 		os.Exit(1)
 	}
-	inspector := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	inspector := createInspector()
 	for i, qname := range args {
 		if i > 0 {
 			fmt.Printf("\n%s\n", separator)
@@ -184,11 +170,7 @@ func printDailyStats(stats []*asynq.DailyStats) {
 }
 
 func queuePause(cmd *cobra.Command, args []string) {
-	inspector := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	inspector := createInspector()
 	for _, qname := range args {
 		err := inspector.PauseQueue(qname)
 		if err != nil {
@@ -200,11 +182,7 @@ func queuePause(cmd *cobra.Command, args []string) {
 }
 
 func queueUnpause(cmd *cobra.Command, args []string) {
-	inspector := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
+	inspector := createInspector()
 	for _, qname := range args {
 		err := inspector.UnpauseQueue(qname)
 		if err != nil {
@@ -223,12 +201,7 @@ func queueRemove(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	c := redis.NewClient(&redis.Options{
-		Addr:     viper.GetString("uri"),
-		DB:       viper.GetInt("db"),
-		Password: viper.GetString("password"),
-	})
-	r := rdb.NewRDB(c)
+	r := createRDB()
 	for _, qname := range args {
 		err = r.RemoveQueue(qname, force)
 		if err != nil {
