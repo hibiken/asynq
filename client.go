@@ -115,7 +115,11 @@ type option struct {
 	uniqueTTL time.Duration
 }
 
-func composeOptions(opts ...Option) option {
+// composeOptions merges user provided options into the default options
+// and returns the composed option.
+// It also validates the user provided options and returns an error if any of
+// the user provided options fail the validations.
+func composeOptions(opts ...Option) (option, error) {
 	res := option{
 		retry:    defaultMaxRetry,
 		queue:    base.DefaultQueueName,
@@ -127,7 +131,11 @@ func composeOptions(opts ...Option) option {
 		case retryOption:
 			res.retry = int(opt)
 		case queueOption:
-			res.queue = string(opt)
+			trimmed := strings.TrimSpace(string(opt))
+			if len(trimmed) == 0 {
+				return option{}, fmt.Errorf("queue name must contain one or more characters")
+			}
+			res.queue = trimmed
 		case timeoutOption:
 			res.timeout = time.Duration(opt)
 		case deadlineOption:
@@ -138,7 +146,7 @@ func composeOptions(opts ...Option) option {
 			// ignore unexpected option
 		}
 	}
-	return res
+	return res, nil
 }
 
 const (
@@ -239,7 +247,10 @@ func (c *Client) enqueueAt(t time.Time, task *Task, opts ...Option) (*Result, er
 	if defaults, ok := c.opts[task.Type]; ok {
 		opts = append(defaults, opts...)
 	}
-	opt := composeOptions(opts...)
+	opt, err := composeOptions(opts...)
+	if err != nil {
+		return nil, err
+	}
 	deadline := noDeadline
 	if !opt.deadline.IsZero() {
 		deadline = opt.deadline
@@ -266,7 +277,6 @@ func (c *Client) enqueueAt(t time.Time, task *Task, opts ...Option) (*Result, er
 		Timeout:   int64(timeout.Seconds()),
 		UniqueKey: uniqueKey,
 	}
-	var err error
 	now := time.Now()
 	if t.Before(now) || t.Equal(now) {
 		err = c.enqueue(msg, opt.uniqueTTL)

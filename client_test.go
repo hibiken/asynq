@@ -463,6 +463,36 @@ func TestClientEnqueueIn(t *testing.T) {
 	}
 }
 
+func TestClientEnqueueError(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+
+	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
+
+	tests := []struct {
+		desc string
+		task *Task
+		opts []Option
+	}{
+		{
+			desc: "With empty queue name",
+			task: task,
+			opts: []Option{
+				Queue(""),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+
+		_, err := client.Enqueue(tc.task, tc.opts...)
+		if err == nil {
+			t.Errorf("%s; client.Enqueue(task, opts...) did not return non-nil error", tc.desc)
+		}
+	}
+}
+
 func TestClientDefaultOptions(t *testing.T) {
 	r := setup(t)
 
