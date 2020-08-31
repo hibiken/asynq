@@ -132,8 +132,8 @@ func composeOptions(opts ...Option) (option, error) {
 			res.retry = int(opt)
 		case queueOption:
 			trimmed := strings.TrimSpace(string(opt))
-			if len(trimmed) == 0 {
-				return option{}, fmt.Errorf("queue name must contain one or more characters")
+			if err := validateQueueName(trimmed); err != nil {
+				return option{}, err
 			}
 			res.queue = trimmed
 		case timeoutOption:
@@ -147,6 +147,13 @@ func composeOptions(opts ...Option) (option, error) {
 		}
 	}
 	return res, nil
+}
+
+func validateQueueName(qname string) error {
+	if len(qname) == 0 {
+		return fmt.Errorf("queue name must contain one or more characters")
+	}
+	return nil
 }
 
 const (
