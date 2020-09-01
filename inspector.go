@@ -573,3 +573,30 @@ func (i *Inspector) UnpauseQueue(qname string) error {
 	}
 	return i.rdb.Unpause(qname)
 }
+
+// ClusterKeySlot returns an integer identifying the hash slot the given queue hashes to.
+func (i *Inspector) ClusterKeySlot(qname string) (int64, error) {
+	return i.rdb.ClusterKeySlot(qname)
+}
+
+// ClusterNode describes a node in redis cluster.
+type ClusterNode struct {
+	// Node ID in the cluster.
+	ID string
+
+	// Address of the node.
+	Addr string
+}
+
+// ClusterNode returns a list of nodes the given queue belongs to.
+func (i *Inspector) ClusterNodes(qname string) ([]ClusterNode, error) {
+	nodes, err := i.rdb.ClusterNodes(qname)
+	if err != nil {
+		return nil, err
+	}
+	var res []ClusterNode
+	for _, node := range nodes {
+		res = append(res, ClusterNode{ID: node.ID, Addr: node.Addr})
+	}
+	return res, nil
+}

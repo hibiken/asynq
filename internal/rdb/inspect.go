@@ -830,3 +830,27 @@ func (r *RDB) Unpause(qname string) error {
 	}
 	return nil
 }
+
+// ClusterKeySlot returns an integer identifying the hash slot the given queue hashes to.
+func (r *RDB) ClusterKeySlot(qname string) (int64, error) {
+	key := base.QueueKey(qname)
+	return r.client.ClusterKeySlot(key).Result()
+}
+
+// ClusterNodes returns a list of nodes the given queue belongs to.
+func (r *RDB) ClusterNodes(qname string) ([]redis.ClusterNode, error) {
+	keyslot, err := r.ClusterKeySlot(qname)
+	if err != nil {
+		return nil, err
+	}
+	clusterSlots, err := r.client.ClusterSlots().Result()
+	if err != nil {
+		return nil, err
+	}
+	for _, slotRange := range clusterSlots {
+		if int64(slotRange.Start) <= keyslot && keyslot <= int64(slotRange.End) {
+			return slotRange.Nodes, nil
+		}
+	}
+	return nil, fmt.Errorf("nodes not found")
+}
