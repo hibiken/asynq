@@ -28,7 +28,7 @@ func TestHeartbeater(t *testing.T) {
 		queues      map[string]int
 		concurrency int
 	}{
-		{time.Second, "localhost", 45678, map[string]int{"default": 1}, 10},
+		{2 * time.Second, "localhost", 45678, map[string]int{"default": 1}, 10},
 	}
 
 	timeCmpOpt := cmpopts.EquateApproxTime(10 * time.Millisecond)
@@ -68,7 +68,7 @@ func TestHeartbeater(t *testing.T) {
 		}
 
 		// allow for heartbeater to write to redis
-		time.Sleep(tc.interval * 2)
+		time.Sleep(tc.interval)
 
 		ss, err := rdbClient.ListServers()
 		if err != nil {
