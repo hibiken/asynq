@@ -78,14 +78,49 @@ var queueRemoveCmd = &cobra.Command{
 }
 
 func queueList(cmd *cobra.Command, args []string) {
+	type queueInfo struct {
+		name    string
+		keyslot int64
+		nodes   []asynq.ClusterNode
+	}
 	inspector := createInspector()
 	queues, err := inspector.Queues()
 	if err != nil {
 		fmt.Printf("error: Could not fetch list of queues: %v\n", err)
 		os.Exit(1)
 	}
+	var qs []queueInfo
 	for _, qname := range queues {
-		fmt.Println(qname)
+		q := queueInfo{name: qname}
+		if useRedisCluster {
+			keyslot, err := inspector.ClusterKeySlot(qname)
+			if err != nil {
+				fmt.Errorf("error: Could not get cluster keyslot for %q\n", qname)
+				continue
+			}
+			q.keyslot = keyslot
+			nodes, err := inspector.ClusterNodes(qname)
+			if err != nil {
+				fmt.Errorf("error: Could not get cluster nodes for %q\n", qname)
+				continue
+			}
+			q.nodes = nodes
+		}
+		qs = append(qs, q)
+	}
+	if useRedisCluster {
+		printTable(
+			[]string{"Queue", "Cluster KeySlot", "Cluster Nodes"},
+			func(w io.Writer, tmpl string) {
+				for _, q := range qs {
+					fmt.Fprintf(w, tmpl, q.name, q.keyslot, q.nodes)
+				}
+			},
+		)
+	} else {
+		for _, q := range qs {
+			fmt.Println(q.name)
+		}
 	}
 }
 
