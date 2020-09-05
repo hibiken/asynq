@@ -76,7 +76,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 		}
 		for i := 0; i < count; i++ {
 			t := NewTask(fmt.Sprintf("scheduled%d", i), map[string]interface{}{"data": i})
-			if _, err := client.EnqueueAt(time.Now().Add(time.Second), t); err != nil {
+			if _, err := client.Enqueue(t, ProcessIn(1*time.Second)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
@@ -195,7 +195,7 @@ func BenchmarkClientWhileServerRunning(b *testing.B) {
 		// Schedule 10,000 tasks.
 		for i := 0; i < count; i++ {
 			t := NewTask(fmt.Sprintf("scheduled%d", i), map[string]interface{}{"data": i})
-			if _, err := client.EnqueueAt(time.Now().Add(time.Second), t); err != nil {
+			if _, err := client.Enqueue(t, ProcessIn(1*time.Second)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}

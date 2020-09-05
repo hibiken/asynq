@@ -42,11 +42,13 @@ type Option interface{}
 
 // Internal option representations.
 type (
-	retryOption    int
-	queueOption    string
-	timeoutOption  time.Duration
-	deadlineOption time.Time
-	uniqueOption   time.Duration
+	retryOption     int
+	queueOption     string
+	timeoutOption   time.Duration
+	deadlineOption  time.Time
+	uniqueOption    time.Duration
+	processAtOption time.Time
+	processInOption time.Duration
 )
 
 // MaxRetry returns an option to specify the max number of times
@@ -102,6 +104,20 @@ func Unique(ttl time.Duration) Option {
 	return uniqueOption(ttl)
 }
 
+// ProcessAt returns an option to specify when to process the given task.
+//
+// If there's a conflicting ProcessIn option, the last option passed to Enqueue overrides the others.
+func ProcessAt(t time.Time) Option {
+	return processAtOption(t)
+}
+
+// ProcessIn returns an option to specify when to process the given task relative to the current time.
+//
+// If there's a conflicting ProcessAt option, the last option passed to Enqueue overrides the others.
+func ProcessIn(d time.Duration) Option {
+	return processInOption(d)
+}
+
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
@@ -113,6 +129,7 @@ type option struct {
 	timeout   time.Duration
 	deadline  time.Time
 	uniqueTTL time.Duration
+	processAt time.Time
 }
 
 // composeOptions merges user provided options into the default options
@@ -121,10 +138,11 @@ type option struct {
 // the user provided options fail the validations.
 func composeOptions(opts ...Option) (option, error) {
 	res := option{
-		retry:    defaultMaxRetry,
-		queue:    base.DefaultQueueName,
-		timeout:  0, // do not set to deafultTimeout here
-		deadline: time.Time{},
+		retry:     defaultMaxRetry,
+		queue:     base.DefaultQueueName,
+		timeout:   0, // do not set to deafultTimeout here
+		deadline:  time.Time{},
+		processAt: time.Now(),
 	}
 	for _, opt := range opts {
 		switch opt := opt.(type) {
@@ -142,6 +160,10 @@ func composeOptions(opts ...Option) (option, error) {
 			res.deadline = time.Time(opt)
 		case uniqueOption:
 			res.uniqueTTL = time.Duration(opt)
+		case processAtOption:
+			res.processAt = time.Time(opt)
+		case processInOption:
+			res.processAt = time.Now().Add(time.Duration(opt))
 		default:
 			// ignore unexpected option
 		}
@@ -186,6 +208,9 @@ type Result struct {
 	// ID is a unique identifier for the task.
 	ID string
 
+	// ProcessAt indicates when the task should be processed.
+	ProcessAt time.Time
+
 	// Retry is the maximum number of retry for the task.
 	Retry int
 
@@ -210,50 +235,25 @@ type Result struct {
 	Deadline time.Time
 }
 
-// EnqueueAt schedules task to be enqueued at the specified time.
-//
-// EnqueueAt returns nil if the task is scheduled successfully, otherwise returns a non-nil error.
-//
-// The argument opts specifies the behavior of task processing.
-// If there are conflicting Option values the last one overrides others.
-// By deafult, max retry is set to 25 and timeout is set to 30 minutes.
-func (c *Client) EnqueueAt(t time.Time, task *Task, opts ...Option) (*Result, error) {
-	return c.enqueueAt(t, task, opts...)
+// Close closes the connection with redis server.
+func (c *Client) Close() error {
+	return c.rdb.Close()
 }
 
-// Enqueue enqueues task to be processed immediately.
+// Enqueue enqueues the given task to be processed asynchronously.
 //
 // Enqueue returns nil if the task is enqueued successfully, otherwise returns a non-nil error.
 //
 // The argument opts specifies the behavior of task processing.
 // If there are conflicting Option values the last one overrides others.
 // By deafult, max retry is set to 25 and timeout is set to 30 minutes.
+// If no ProcessAt or ProcessIn options are passed, the task will be processed immediately.
 func (c *Client) Enqueue(task *Task, opts ...Option) (*Result, error) {
-	return c.enqueueAt(time.Now(), task, opts...)
-}
-
-// EnqueueIn schedules task to be enqueued after the specified delay.
-//
-// EnqueueIn returns nil if the task is scheduled successfully, otherwise returns a non-nil error.
-//
-// The argument opts specifies the behavior of task processing.
-// If there are conflicting Option values the last one overrides others.
-// By deafult, max retry is set to 25 and timeout is set to 30 minutes.
-func (c *Client) EnqueueIn(d time.Duration, task *Task, opts ...Option) (*Result, error) {
-	return c.enqueueAt(time.Now().Add(d), task, opts...)
-}
-
-// Close closes the connection with redis server.
-func (c *Client) Close() error {
-	return c.rdb.Close()
-}
-
-func (c *Client) enqueueAt(t time.Time, task *Task, opts ...Option) (*Result, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if defaults, ok := c.opts[task.Type]; ok {
 		opts = append(defaults, opts...)
 	}
+	c.mu.Unlock()
 	opt, err := composeOptions(opts...)
 	if err != nil {
 		return nil, err
@@ -285,10 +285,11 @@ func (c *Client) enqueueAt(t time.Time, task *Task, opts ...Option) (*Result, er
 		UniqueKey: uniqueKey,
 	}
 	now := time.Now()
-	if t.Before(now) || t.Equal(now) {
+	if opt.processAt.Before(now) || opt.processAt.Equal(now) {
+		opt.processAt = now
 		err = c.enqueue(msg, opt.uniqueTTL)
 	} else {
-		err = c.schedule(msg, t, opt.uniqueTTL)
+		err = c.schedule(msg, opt.processAt, opt.uniqueTTL)
 	}
 	switch {
 	case err == rdb.ErrDuplicateTask:
@@ -297,11 +298,12 @@ func (c *Client) enqueueAt(t time.Time, task *Task, opts ...Option) (*Result, er
 		return nil, err
 	}
 	return &Result{
-		ID:       msg.ID.String(),
-		Queue:    msg.Queue,
-		Retry:    msg.Retry,
-		Timeout:  timeout,
-		Deadline: deadline,
+		ID:        msg.ID.String(),
+		ProcessAt: opt.processAt,
+		Queue:     msg.Queue,
+		Retry:     msg.Retry,
+		Timeout:   timeout,
+		Deadline:  deadline,
 	}, nil
 }
 
