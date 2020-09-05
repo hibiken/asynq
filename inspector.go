@@ -37,10 +37,10 @@ type QueueStats struct {
 	// Name of the queue.
 	Queue string
 	// Size is the total number of tasks in the queue.
-	// The value is the sum of Enqueued, InProgress, Scheduled, Retry, and Dead.
+	// The value is the sum of Pending, InProgress, Scheduled, Retry, and Dead.
 	Size int
-	// Number of enqueued tasks.
-	Enqueued int
+	// Number of pending tasks.
+	Pending int
 	// Number of in-progress tasks.
 	InProgress int
 	// Number of scheduled tasks.
@@ -73,7 +73,7 @@ func (i *Inspector) CurrentStats(qname string) (*QueueStats, error) {
 	return &QueueStats{
 		Queue:      stats.Queue,
 		Size:       stats.Size,
-		Enqueued:   stats.Enqueued,
+		Pending:    stats.Pending,
 		InProgress: stats.InProgress,
 		Scheduled:  stats.Scheduled,
 		Retry:      stats.Retry,
@@ -119,8 +119,8 @@ func (i *Inspector) History(qname string, n int) ([]*DailyStats, error) {
 	return res, nil
 }
 
-// EnqueuedTask is a task in a queue and is ready to be processed.
-type EnqueuedTask struct {
+// PendingTask is a task in a queue and is ready to be processed.
+type PendingTask struct {
 	*Task
 	ID    string
 	Queue string
@@ -269,22 +269,22 @@ func Page(n int) ListOption {
 	return pageNumOpt(n)
 }
 
-// ListEnqueuedTasks retrieves enqueued tasks from the specified queue.
+// ListPendingTasks retrieves pending tasks from the specified queue.
 //
 // By default, it retrieves the first 30 tasks.
-func (i *Inspector) ListEnqueuedTasks(qname string, opts ...ListOption) ([]*EnqueuedTask, error) {
+func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*PendingTask, error) {
 	if err := validateQueueName(qname); err != nil {
 		return nil, err
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	msgs, err := i.rdb.ListEnqueued(qname, pgn)
+	msgs, err := i.rdb.ListPending(qname, pgn)
 	if err != nil {
 		return nil, err
 	}
-	var tasks []*EnqueuedTask
+	var tasks []*PendingTask
 	for _, m := range msgs {
-		tasks = append(tasks, &EnqueuedTask{
+		tasks = append(tasks, &PendingTask{
 			Task:  NewTask(m.Type, m.Payload),
 			ID:    m.ID.String(),
 			Queue: m.Queue,

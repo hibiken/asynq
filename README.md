@@ -132,6 +132,7 @@ func NewImageProcessor() *ImageProcessor {
 ```
 
 In your web application code, import the above package and use [`Client`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Client) to put tasks on the queue.  
+// TODO: This description needs to be updated.
 A task will be processed asynchronously by a background worker as soon as the task gets enqueued.  
 Scheduled tasks will be stored in Redis and will be enqueued at the specified time.
 

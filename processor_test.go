@@ -57,25 +57,25 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 	t4 := NewTask(m4.Type, m4.Payload)
 
 	tests := []struct {
-		enqueued      []*base.TaskMessage // initial default queue state
+		pending       []*base.TaskMessage // initial default queue state
 		incoming      []*base.TaskMessage // tasks to be enqueued during run
 		wantProcessed []*Task             // tasks to be processed at the end
 	}{
 		{
-			enqueued:      []*base.TaskMessage{m1},
+			pending:       []*base.TaskMessage{m1},
 			incoming:      []*base.TaskMessage{m2, m3, m4},
 			wantProcessed: []*Task{t1, t2, t3, t4},
 		},
 		{
-			enqueued:      []*base.TaskMessage{},
+			pending:       []*base.TaskMessage{},
 			incoming:      []*base.TaskMessage{m1},
 			wantProcessed: []*Task{t1},
 		},
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r)                                               // clean up db before each test case.
-		h.SeedEnqueuedQueue(t, r, tc.enqueued, base.DefaultQueueName) // initialize default queue.
+		h.FlushDB(t, r)                                             // clean up db before each test case.
+		h.SeedPendingQueue(t, r, tc.pending, base.DefaultQueueName) // initialize default queue.
 
 		// instantiate a new processor
 		var mu sync.Mutex
@@ -117,7 +117,7 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		time.Sleep(2 * time.Second) // wait for two second to allow all enqueued tasks to be processed.
+		time.Sleep(2 * time.Second) // wait for two second to allow all pending tasks to be processed.
 		if l := r.LLen(base.InProgressKey(base.DefaultQueueName)).Val(); l != 0 {
 			t.Errorf("%q has %d tasks, want 0", base.InProgressKey(base.DefaultQueueName), l)
 		}
@@ -148,12 +148,12 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 	)
 
 	tests := []struct {
-		enqueued      map[string][]*base.TaskMessage
+		pending       map[string][]*base.TaskMessage
 		queues        []string // list of queues to consume the tasks from
 		wantProcessed []*Task  // tasks to be processed at the end
 	}{
 		{
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 				"high":    {m3},
 				"low":     {m4},
@@ -166,7 +166,7 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 	for _, tc := range tests {
 		// Set up test case.
 		h.FlushDB(t, r)
-		h.SeedAllEnqueuedQueues(t, r, tc.enqueued)
+		h.SeedAllPendingQueues(t, r, tc.pending)
 
 		// Instantiate a new processor.
 		var mu sync.Mutex
@@ -205,7 +205,7 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 		p.handler = HandlerFunc(handler)
 
 		p.start(&sync.WaitGroup{})
-		// Wait for two second to allow all enqueued tasks to be processed.
+		// Wait for two second to allow all pending tasks to be processed.
 		time.Sleep(2 * time.Second)
 		// Make sure no messages are stuck in in-progress list.
 		for _, qname := range tc.queues {
@@ -232,18 +232,18 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 	t1 := NewTask(m1.Type, m1.Payload)
 
 	tests := []struct {
-		enqueued      []*base.TaskMessage // initial default queue state
+		pending       []*base.TaskMessage // initial default queue state
 		wantProcessed []*Task             // tasks to be processed at the end
 	}{
 		{
-			enqueued:      []*base.TaskMessage{m1},
+			pending:       []*base.TaskMessage{m1},
 			wantProcessed: []*Task{t1},
 		},
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r)                                               // clean up db before each test case.
-		h.SeedEnqueuedQueue(t, r, tc.enqueued, base.DefaultQueueName) // initialize default queue.
+		h.FlushDB(t, r)                                             // clean up db before each test case.
+		h.SeedPendingQueue(t, r, tc.pending, base.DefaultQueueName) // initialize default queue.
 
 		var mu sync.Mutex
 		var processed []*Task
@@ -282,7 +282,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 		p.handler = HandlerFunc(handler)
 
 		p.start(&sync.WaitGroup{})
-		time.Sleep(2 * time.Second) // wait for two second to allow all enqueued tasks to be processed.
+		time.Sleep(2 * time.Second) // wait for two second to allow all pending tasks to be processed.
 		if l := r.LLen(base.InProgressKey(base.DefaultQueueName)).Val(); l != 0 {
 			t.Errorf("%q has %d tasks, want 0", base.InProgressKey(base.DefaultQueueName), l)
 		}
@@ -310,7 +310,7 @@ func TestProcessorRetry(t *testing.T) {
 	now := time.Now()
 
 	tests := []struct {
-		enqueued     []*base.TaskMessage // initial default queue state
+		pending      []*base.TaskMessage // initial default queue state
 		incoming     []*base.TaskMessage // tasks to be enqueued during run
 		delay        time.Duration       // retry delay duration
 		handler      Handler             // task handler
@@ -320,7 +320,7 @@ func TestProcessorRetry(t *testing.T) {
 		wantErrCount int                 // number of times error handler should be called
 	}{
 		{
-			enqueued: []*base.TaskMessage{m1, m2},
+			pending:  []*base.TaskMessage{m1, m2},
 			incoming: []*base.TaskMessage{m3, m4},
 			delay:    time.Minute,
 			handler: HandlerFunc(func(ctx context.Context, task *Task) error {
@@ -338,8 +338,8 @@ func TestProcessorRetry(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r)                                               // clean up db before each test case.
-		h.SeedEnqueuedQueue(t, r, tc.enqueued, base.DefaultQueueName) // initialize default queue.
+		h.FlushDB(t, r)                                             // clean up db before each test case.
+		h.SeedPendingQueue(t, r, tc.pending, base.DefaultQueueName) // initialize default queue.
 
 		// instantiate a new processor
 		delayFunc := func(n int, e error, t *Task) time.Duration {
@@ -486,13 +486,13 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 	)
 
 	tests := []struct {
-		enqueued      map[string][]*base.TaskMessage // initial queues state
+		pending       map[string][]*base.TaskMessage // initial queues state
 		queues        []string                       // list of queues to consume tasks from
 		wait          time.Duration                  // wait duration between starting and stopping processor for this test case
 		wantProcessed []*Task                        // tasks to be processed at the end
 	}{
 		{
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {m4, m5},
 				"critical":            {m1, m2, m3},
 				"low":                 {m6, m7},
@@ -505,8 +505,8 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r) // clean up db before each test case.
-		for qname, msgs := range tc.enqueued {
-			h.SeedEnqueuedQueue(t, r, msgs, qname)
+		for qname, msgs := range tc.pending {
+			h.SeedPendingQueue(t, r, msgs, qname)
 		}
 
 		// instantiate a new processor

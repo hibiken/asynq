@@ -63,7 +63,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		enqueued   map[string][]*base.TaskMessage
+		pending    map[string][]*base.TaskMessage
 		inProgress map[string][]*base.TaskMessage
 		scheduled  map[string][]base.Z
 		retry      map[string][]base.Z
@@ -74,7 +74,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 		want       *QueueStats
 	}{
 		{
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default":  {m1},
 				"critical": {m5},
 				"low":      {m6},
@@ -116,7 +116,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 			want: &QueueStats{
 				Queue:      "default",
 				Size:       4,
-				Enqueued:   1,
+				Pending:    1,
 				InProgress: 1,
 				Scheduled:  2,
 				Retry:      0,
@@ -131,7 +131,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
-		asynqtest.SeedAllEnqueuedQueues(t, r, tc.enqueued)
+		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 		asynqtest.SeedAllInProgressQueues(t, r, tc.inProgress)
 		asynqtest.SeedAllScheduledQueues(t, r, tc.scheduled)
 		asynqtest.SeedAllRetryQueues(t, r, tc.retry)
@@ -215,15 +215,15 @@ func TestInspectorHistory(t *testing.T) {
 	}
 }
 
-func createEnqueuedTask(msg *base.TaskMessage) *EnqueuedTask {
-	return &EnqueuedTask{
+func createPendingTask(msg *base.TaskMessage) *PendingTask {
+	return &PendingTask{
 		Task:  NewTask(msg.Type, msg.Payload),
 		ID:    msg.ID.String(),
 		Queue: msg.Queue,
 	}
 }
 
-func TestInspectorListEnqueuedTasks(t *testing.T) {
+func TestInspectorListPendingTasks(t *testing.T) {
 	r := setup(t)
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
@@ -233,59 +233,59 @@ func TestInspectorListEnqueuedTasks(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		desc     string
-		enqueued map[string][]*base.TaskMessage
-		qname    string
-		want     []*EnqueuedTask
+		desc    string
+		pending map[string][]*base.TaskMessage
+		qname   string
+		want    []*PendingTask
 	}{
 		{
 			desc: "with default queue",
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 			},
 			qname: "default",
-			want: []*EnqueuedTask{
-				createEnqueuedTask(m1),
-				createEnqueuedTask(m2),
+			want: []*PendingTask{
+				createPendingTask(m1),
+				createPendingTask(m2),
 			},
 		},
 		{
 			desc: "with named queue",
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default":  {m1, m2},
 				"critical": {m3},
 				"low":      {m4},
 			},
 			qname: "critical",
-			want: []*EnqueuedTask{
-				createEnqueuedTask(m3),
+			want: []*PendingTask{
+				createPendingTask(m3),
 			},
 		},
 		{
 			desc: "with empty queue",
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			qname: "default",
-			want:  []*EnqueuedTask(nil),
+			want:  []*PendingTask(nil),
 		},
 	}
 
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
-		for q, msgs := range tc.enqueued {
-			asynqtest.SeedEnqueuedQueue(t, r, msgs, q)
+		for q, msgs := range tc.pending {
+			asynqtest.SeedPendingQueue(t, r, msgs, q)
 		}
 
-		got, err := inspector.ListEnqueuedTasks(tc.qname)
+		got, err := inspector.ListPendingTasks(tc.qname)
 		if err != nil {
-			t.Errorf("%s; ListEnqueuedTasks(%q) returned error: %v",
+			t.Errorf("%s; ListPendingTasks(%q) returned error: %v",
 				tc.desc, tc.qname, err)
 			continue
 		}
 		ignoreOpt := cmpopts.IgnoreUnexported(Payload{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
-			t.Errorf("%s; ListEnqueuedTasks(%q) = %v, want %v; (-want,+got)\n%s",
+			t.Errorf("%s; ListPendingTasks(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
 		}
 	}
@@ -576,53 +576,53 @@ func TestInspectorListPagination(t *testing.T) {
 			asynqtest.NewTaskMessage(fmt.Sprintf("task%d", i), nil))
 	}
 	r := setup(t)
-	asynqtest.SeedEnqueuedQueue(t, r, msgs, base.DefaultQueueName)
+	asynqtest.SeedPendingQueue(t, r, msgs, base.DefaultQueueName)
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		page     int
 		pageSize int
-		want     []*EnqueuedTask
+		want     []*PendingTask
 	}{
 		{
 			page:     1,
 			pageSize: 5,
-			want: []*EnqueuedTask{
-				createEnqueuedTask(msgs[0]),
-				createEnqueuedTask(msgs[1]),
-				createEnqueuedTask(msgs[2]),
-				createEnqueuedTask(msgs[3]),
-				createEnqueuedTask(msgs[4]),
+			want: []*PendingTask{
+				createPendingTask(msgs[0]),
+				createPendingTask(msgs[1]),
+				createPendingTask(msgs[2]),
+				createPendingTask(msgs[3]),
+				createPendingTask(msgs[4]),
 			},
 		},
 		{
 			page:     3,
 			pageSize: 10,
-			want: []*EnqueuedTask{
-				createEnqueuedTask(msgs[20]),
-				createEnqueuedTask(msgs[21]),
-				createEnqueuedTask(msgs[22]),
-				createEnqueuedTask(msgs[23]),
-				createEnqueuedTask(msgs[24]),
-				createEnqueuedTask(msgs[25]),
-				createEnqueuedTask(msgs[26]),
-				createEnqueuedTask(msgs[27]),
-				createEnqueuedTask(msgs[28]),
-				createEnqueuedTask(msgs[29]),
+			want: []*PendingTask{
+				createPendingTask(msgs[20]),
+				createPendingTask(msgs[21]),
+				createPendingTask(msgs[22]),
+				createPendingTask(msgs[23]),
+				createPendingTask(msgs[24]),
+				createPendingTask(msgs[25]),
+				createPendingTask(msgs[26]),
+				createPendingTask(msgs[27]),
+				createPendingTask(msgs[28]),
+				createPendingTask(msgs[29]),
 			},
 		},
 	}
 
 	for _, tc := range tests {
-		got, err := inspector.ListEnqueuedTasks("default", Page(tc.page), PageSize(tc.pageSize))
+		got, err := inspector.ListPendingTasks("default", Page(tc.page), PageSize(tc.pageSize))
 		if err != nil {
-			t.Errorf("ListEnqueuedTask('default') returned error: %v", err)
+			t.Errorf("ListPendingTask('default') returned error: %v", err)
 			continue
 		}
 		ignoreOpt := cmpopts.IgnoreUnexported(Payload{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
-			t.Errorf("ListEnqueuedTask('default') = %v, want %v; (-want,+got)\n%s",
+			t.Errorf("ListPendingTask('default') = %v, want %v; (-want,+got)\n%s",
 				got, tc.want, diff)
 		}
 	}
@@ -1084,11 +1084,11 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
-		enqueued      map[string][]*base.TaskMessage
+		pending       map[string][]*base.TaskMessage
 		qname         string
 		want          int
 		wantScheduled map[string][]base.Z
-		wantEnqueued  map[string][]*base.TaskMessage
+		wantPending   map[string][]*base.TaskMessage
 	}{
 		{
 			scheduled: map[string][]base.Z{
@@ -1096,7 +1096,7 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 				"critical": {z2},
 				"low":      {z3},
 			},
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
 				"low":      {},
@@ -1108,7 +1108,7 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 				"critical": {z2},
 				"low":      {z3},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default":  {m1, m4},
 				"critical": {},
 				"low":      {},
@@ -1120,7 +1120,7 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 				"critical": {z2},
 				"low":      {z3},
 			},
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default":  {m4},
 				"critical": {},
 				"low":      {},
@@ -1132,7 +1132,7 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 				"critical": {z2},
 				"low":      {z3},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default":  {m4, m1},
 				"critical": {},
 				"low":      {},
@@ -1142,7 +1142,7 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 			scheduled: map[string][]base.Z{
 				"default": {},
 			},
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {m1, m4},
 			},
 			qname: "default",
@@ -1150,7 +1150,7 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 			wantScheduled: map[string][]base.Z{
 				"default": {},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1, m4},
 			},
 		},
@@ -1159,7 +1159,7 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllScheduledQueues(t, r, tc.scheduled)
-		asynqtest.SeedAllEnqueuedQueues(t, r, tc.enqueued)
+		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
 		got, err := inspector.EnqueueAllScheduledTasks(tc.qname)
 		if err != nil {
@@ -1175,10 +1175,10 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 				t.Errorf("unexpected scheduled tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := asynqtest.GetEnqueuedMessages(t, r, qname)
-			if diff := cmp.Diff(want, gotEnqueued, asynqtest.SortMsgOpt); diff != "" {
-				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s", qname, diff)
+		for qname, want := range tc.wantPending {
+			gotPending := asynqtest.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, asynqtest.SortMsgOpt); diff != "" {
+				t.Errorf("unexpected pending tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1199,12 +1199,12 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		retry        map[string][]base.Z
-		enqueued     map[string][]*base.TaskMessage
-		qname        string
-		want         int
-		wantRetry    map[string][]base.Z
-		wantEnqueued map[string][]*base.TaskMessage
+		retry       map[string][]base.Z
+		pending     map[string][]*base.TaskMessage
+		qname       string
+		want        int
+		wantRetry   map[string][]base.Z
+		wantPending map[string][]*base.TaskMessage
 	}{
 		{
 			retry: map[string][]base.Z{
@@ -1212,7 +1212,7 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 				"critical": {z2},
 				"low":      {z3},
 			},
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
 				"low":      {},
@@ -1224,7 +1224,7 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 				"critical": {z2},
 				"low":      {z3},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default":  {m1, m4},
 				"critical": {},
 				"low":      {},
@@ -1236,7 +1236,7 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 				"critical": {z2},
 				"low":      {z3},
 			},
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default":  {m4},
 				"critical": {},
 				"low":      {},
@@ -1248,7 +1248,7 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 				"critical": {z2},
 				"low":      {z3},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default":  {m4, m1},
 				"critical": {},
 				"low":      {},
@@ -1258,7 +1258,7 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 			retry: map[string][]base.Z{
 				"default": {},
 			},
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {m1, m4},
 			},
 			qname: "default",
@@ -1266,7 +1266,7 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 			wantRetry: map[string][]base.Z{
 				"default": {},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1, m4},
 			},
 		},
@@ -1275,7 +1275,7 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllRetryQueues(t, r, tc.retry)
-		asynqtest.SeedAllEnqueuedQueues(t, r, tc.enqueued)
+		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
 		got, err := inspector.EnqueueAllRetryTasks(tc.qname)
 		if err != nil {
@@ -1291,10 +1291,10 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 				t.Errorf("unexpected retry tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := asynqtest.GetEnqueuedMessages(t, r, qname)
-			if diff := cmp.Diff(want, gotEnqueued, asynqtest.SortMsgOpt); diff != "" {
-				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s", qname, diff)
+		for qname, want := range tc.wantPending {
+			gotPending := asynqtest.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, asynqtest.SortMsgOpt); diff != "" {
+				t.Errorf("unexpected pending tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1315,12 +1315,12 @@ func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		dead         map[string][]base.Z
-		enqueued     map[string][]*base.TaskMessage
-		qname        string
-		want         int
-		wantDead     map[string][]base.Z
-		wantEnqueued map[string][]*base.TaskMessage
+		dead        map[string][]base.Z
+		pending     map[string][]*base.TaskMessage
+		qname       string
+		want        int
+		wantDead    map[string][]base.Z
+		wantPending map[string][]*base.TaskMessage
 	}{
 		{
 			dead: map[string][]base.Z{
@@ -1328,7 +1328,7 @@ func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
 				"critical": {z2},
 				"low":      {z3},
 			},
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
 				"low":      {},
@@ -1340,7 +1340,7 @@ func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
 				"critical": {z2},
 				"low":      {z3},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default":  {m1, m4},
 				"critical": {},
 				"low":      {},
@@ -1351,7 +1351,7 @@ func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
 				"default":  {z1},
 				"critical": {z2},
 			},
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default":  {m4},
 				"critical": {},
 			},
@@ -1361,7 +1361,7 @@ func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
 				"default":  {},
 				"critical": {z2},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default":  {m4, m1},
 				"critical": {},
 			},
@@ -1370,7 +1370,7 @@ func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
 			dead: map[string][]base.Z{
 				"default": {},
 			},
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {m1, m4},
 			},
 			qname: "default",
@@ -1378,7 +1378,7 @@ func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
 			wantDead: map[string][]base.Z{
 				"default": {},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1, m4},
 			},
 		},
@@ -1387,7 +1387,7 @@ func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
-		asynqtest.SeedAllEnqueuedQueues(t, r, tc.enqueued)
+		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
 		got, err := inspector.EnqueueAllDeadTasks(tc.qname)
 		if err != nil {
@@ -1404,10 +1404,10 @@ func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
 			}
 
 		}
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := asynqtest.GetEnqueuedMessages(t, r, qname)
-			if diff := cmp.Diff(want, gotEnqueued, asynqtest.SortMsgOpt); diff != "" {
-				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s", qname, diff)
+		for qname, want := range tc.wantPending {
+			gotPending := asynqtest.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, asynqtest.SortMsgOpt); diff != "" {
+				t.Errorf("unexpected pending tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1574,18 +1574,18 @@ func TestInspectorEnqueueTaskByKeyEnqueuesScheduledTask(t *testing.T) {
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
-		enqueued      map[string][]*base.TaskMessage
+		pending       map[string][]*base.TaskMessage
 		qname         string
 		key           string
 		wantScheduled map[string][]base.Z
-		wantEnqueued  map[string][]*base.TaskMessage
+		wantPending   map[string][]*base.TaskMessage
 	}{
 		{
 			scheduled: map[string][]base.Z{
 				"default": {z1, z2},
 				"custom":  {z3},
 			},
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {},
 				"custom":  {},
 			},
@@ -1595,7 +1595,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesScheduledTask(t *testing.T) {
 				"default": {z1},
 				"custom":  {z3},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {m2},
 				"custom":  {},
 			},
@@ -1605,7 +1605,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesScheduledTask(t *testing.T) {
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllScheduledQueues(t, r, tc.scheduled)
-		asynqtest.SeedAllEnqueuedQueues(t, r, tc.enqueued)
+		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
 		if err := inspector.EnqueueTaskByKey(tc.qname, tc.key); err != nil {
 			t.Errorf("EnqueueTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
@@ -1619,10 +1619,10 @@ func TestInspectorEnqueueTaskByKeyEnqueuesScheduledTask(t *testing.T) {
 			}
 
 		}
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := asynqtest.GetEnqueuedMessages(t, r, qname)
-			if diff := cmp.Diff(want, gotEnqueued, asynqtest.SortMsgOpt); diff != "" {
-				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s",
+		for qname, want := range tc.wantPending {
+			gotPending := asynqtest.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, asynqtest.SortMsgOpt); diff != "" {
+				t.Errorf("unexpected pending tasks in queue %q: (-want, +got)\n%s",
 					qname, diff)
 			}
 		}
@@ -1642,19 +1642,19 @@ func TestInspectorEnqueueTaskByKeyEnqueuesRetryTask(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		retry        map[string][]base.Z
-		enqueued     map[string][]*base.TaskMessage
-		qname        string
-		key          string
-		wantRetry    map[string][]base.Z
-		wantEnqueued map[string][]*base.TaskMessage
+		retry       map[string][]base.Z
+		pending     map[string][]*base.TaskMessage
+		qname       string
+		key         string
+		wantRetry   map[string][]base.Z
+		wantPending map[string][]*base.TaskMessage
 	}{
 		{
 			retry: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z2, z3},
 			},
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {},
 				"custom":  {},
 			},
@@ -1664,7 +1664,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesRetryTask(t *testing.T) {
 				"default": {z1},
 				"custom":  {z3},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 				"custom":  {m2},
 			},
@@ -1674,7 +1674,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesRetryTask(t *testing.T) {
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllRetryQueues(t, r, tc.retry)
-		asynqtest.SeedAllEnqueuedQueues(t, r, tc.enqueued)
+		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
 		if err := inspector.EnqueueTaskByKey(tc.qname, tc.key); err != nil {
 			t.Errorf("EnqueueTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
@@ -1687,10 +1687,10 @@ func TestInspectorEnqueueTaskByKeyEnqueuesRetryTask(t *testing.T) {
 					qname, diff)
 			}
 		}
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := asynqtest.GetEnqueuedMessages(t, r, qname)
-			if diff := cmp.Diff(want, gotEnqueued, asynqtest.SortMsgOpt); diff != "" {
-				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s",
+		for qname, want := range tc.wantPending {
+			gotPending := asynqtest.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, asynqtest.SortMsgOpt); diff != "" {
+				t.Errorf("unexpected pending tasks in queue %q: (-want, +got)\n%s",
 					qname, diff)
 			}
 		}
@@ -1710,12 +1710,12 @@ func TestInspectorEnqueueTaskByKeyEnqueuesDeadTask(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		dead         map[string][]base.Z
-		enqueued     map[string][]*base.TaskMessage
-		qname        string
-		key          string
-		wantDead     map[string][]base.Z
-		wantEnqueued map[string][]*base.TaskMessage
+		dead        map[string][]base.Z
+		pending     map[string][]*base.TaskMessage
+		qname       string
+		key         string
+		wantDead    map[string][]base.Z
+		wantPending map[string][]*base.TaskMessage
 	}{
 		{
 			dead: map[string][]base.Z{
@@ -1723,7 +1723,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesDeadTask(t *testing.T) {
 				"critical": {z2},
 				"low":      {z3},
 			},
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
 				"low":      {},
@@ -1735,7 +1735,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesDeadTask(t *testing.T) {
 				"critical": {},
 				"low":      {z3},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {m2},
 				"low":      {},
@@ -1746,7 +1746,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesDeadTask(t *testing.T) {
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
-		asynqtest.SeedAllEnqueuedQueues(t, r, tc.enqueued)
+		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
 		if err := inspector.EnqueueTaskByKey(tc.qname, tc.key); err != nil {
 			t.Errorf("EnqueueTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
@@ -1759,10 +1759,10 @@ func TestInspectorEnqueueTaskByKeyEnqueuesDeadTask(t *testing.T) {
 					qname, diff)
 			}
 		}
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := asynqtest.GetEnqueuedMessages(t, r, qname)
-			if diff := cmp.Diff(want, gotEnqueued, asynqtest.SortMsgOpt); diff != "" {
-				t.Errorf("unexpected enqueued tasks in queue %q: (-want, +got)\n%s",
+		for qname, want := range tc.wantPending {
+			gotPending := asynqtest.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, asynqtest.SortMsgOpt); diff != "" {
+				t.Errorf("unexpected pending tasks in queue %q: (-want, +got)\n%s",
 					qname, diff)
 			}
 		}

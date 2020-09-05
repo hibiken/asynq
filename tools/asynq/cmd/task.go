@@ -75,7 +75,7 @@ var taskListCmd = &cobra.Command{
 
 The value for the state flag should be one of:
 - in-progress
-- enqueued
+- pending
 - scheduled
 - retry
 - dead
@@ -85,11 +85,11 @@ By default, the command fetches the first 30 tasks.
 Use --page and --size flags to specify the page number and size.
 
 Example: 
-To list enqueued tasks from "default" queue, run
-  asynq task ls --queue=default --state=enqueued
+To list pending tasks from "default" queue, run
+  asynq task ls --queue=default --state=pending
 
 To list the tasks from the second page, run
-  asynq task ls --queue=default --state=enqueued --page=1`,
+  asynq task ls --queue=default --state=pending --page=1`,
 	Run: taskList,
 }
 
@@ -167,8 +167,8 @@ func taskList(cmd *cobra.Command, args []string) {
 	switch state {
 	case "in-progress":
 		listInProgressTasks(qname, pageNum, pageSize)
-	case "enqueued":
-		listEnqueuedTasks(qname, pageNum, pageSize)
+	case "pending":
+		listPendingTasks(qname, pageNum, pageSize)
 	case "scheduled":
 		listScheduledTasks(qname, pageNum, pageSize)
 	case "retry":
@@ -202,15 +202,15 @@ func listInProgressTasks(qname string, pageNum, pageSize int) {
 	)
 }
 
-func listEnqueuedTasks(qname string, pageNum, pageSize int) {
+func listPendingTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListEnqueuedTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
+	tasks, err := i.ListPendingTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	if len(tasks) == 0 {
-		fmt.Printf("No enqueued tasks in %q queue\n", qname)
+		fmt.Printf("No pending tasks in %q queue\n", qname)
 		return
 	}
 	printTable(

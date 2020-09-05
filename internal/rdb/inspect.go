@@ -31,7 +31,7 @@ type Stats struct {
 	// Size is the total number of tasks in the queue.
 	Size int
 	// Number of tasks in each state.
-	Enqueued   int
+	Pending    int
 	InProgress int
 	Scheduled  int
 	Retry      int
@@ -133,7 +133,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		val := cast.ToInt(data[i+1])
 		switch key {
 		case base.QueueKey(qname):
-			stats.Enqueued = val
+			stats.Pending = val
 			size += val
 		case base.InProgressKey(qname):
 			stats.InProgress = val
@@ -258,8 +258,8 @@ func (p Pagination) stop() int64 {
 	return int64(p.Size*p.Page + p.Size - 1)
 }
 
-// ListEnqueued returns enqueued tasks that are ready to be processed.
-func (r *RDB) ListEnqueued(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
+// ListPending returns pending tasks that are ready to be processed.
+func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
 		return nil, fmt.Errorf("queue %q does not exist", qname)
 	}
@@ -680,12 +680,12 @@ return redis.status_reply("OK")`)
 // KEYS[5] -> asynq:{<qname>}:dead
 // KEYS[6] -> asynq:{<qname>}:deadlines
 var removeQueueCmd = redis.NewScript(`
-local enqueued = redis.call("LLEN", KEYS[1]) 
+local pending = redis.call("LLEN", KEYS[1]) 
 local inprogress = redis.call("LLEN", KEYS[2])
 local scheduled = redis.call("SCARD", KEYS[3])
 local retry = redis.call("SCARD", KEYS[4])
 local dead = redis.call("SCARD", KEYS[5])
-local total = enqueued + inprogress + scheduled + retry + dead
+local total = pending + inprogress + scheduled + retry + dead
 if total > 0 then
 	return redis.error_reply("QUEUE NOT EMPTY")
 end
