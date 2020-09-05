@@ -138,7 +138,7 @@ type ScheduledTask struct {
 	*Task
 	ID            string
 	Queue         string
-	NextEnqueueAt time.Time
+	NextProcessAt time.Time
 
 	score int64
 }
@@ -148,7 +148,7 @@ type RetryTask struct {
 	*Task
 	ID            string
 	Queue         string
-	NextEnqueueAt time.Time
+	NextProcessAt time.Time
 	MaxRetry      int
 	Retried       int
 	ErrorMsg      string
@@ -318,7 +318,7 @@ func (i *Inspector) ListInProgressTasks(qname string, opts ...ListOption) ([]*In
 }
 
 // ListScheduledTasks retrieves scheduled tasks from the specified queue.
-// Tasks are sorted by NextEnqueueAt field in ascending order.
+// Tasks are sorted by NextProcessAt field in ascending order.
 //
 // By default, it retrieves the first 30 tasks.
 func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*ScheduledTask, error) {
@@ -333,13 +333,13 @@ func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*Sch
 	}
 	var tasks []*ScheduledTask
 	for _, z := range zs {
-		enqueueAt := time.Unix(z.Score, 0)
+		processAt := time.Unix(z.Score, 0)
 		t := NewTask(z.Message.Type, z.Message.Payload)
 		tasks = append(tasks, &ScheduledTask{
 			Task:          t,
 			ID:            z.Message.ID.String(),
 			Queue:         z.Message.Queue,
-			NextEnqueueAt: enqueueAt,
+			NextProcessAt: processAt,
 			score:         z.Score,
 		})
 	}
@@ -347,7 +347,7 @@ func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*Sch
 }
 
 // ListRetryTasks retrieves retry tasks from the specified queue.
-// Tasks are sorted by NextEnqueueAt field in ascending order.
+// Tasks are sorted by NextProcessAt field in ascending order.
 //
 // By default, it retrieves the first 30 tasks.
 func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*RetryTask, error) {
@@ -362,13 +362,13 @@ func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*RetryTa
 	}
 	var tasks []*RetryTask
 	for _, z := range zs {
-		enqueueAt := time.Unix(z.Score, 0)
+		processAt := time.Unix(z.Score, 0)
 		t := NewTask(z.Message.Type, z.Message.Payload)
 		tasks = append(tasks, &RetryTask{
 			Task:          t,
 			ID:            z.Message.ID.String(),
 			Queue:         z.Message.Queue,
-			NextEnqueueAt: enqueueAt,
+			NextProcessAt: processAt,
 			MaxRetry:      z.Message.Retry,
 			Retried:       z.Message.Retried,
 			// TODO: LastFailedAt: z.Message.LastFailedAt

@@ -351,7 +351,7 @@ func createScheduledTask(z base.Z) *ScheduledTask {
 		Task:          NewTask(msg.Type, msg.Payload),
 		ID:            msg.ID.String(),
 		Queue:         msg.Queue,
-		NextEnqueueAt: time.Unix(z.Score, 0),
+		NextProcessAt: time.Unix(z.Score, 0),
 		score:         z.Score,
 	}
 }
@@ -383,7 +383,7 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 				"custom":  {z4},
 			},
 			qname: "default",
-			// Should be sorted by NextEnqueuedAt.
+			// Should be sorted by NextProcessAt.
 			want: []*ScheduledTask{
 				createScheduledTask(z3),
 				createScheduledTask(z1),
@@ -423,7 +423,7 @@ func createRetryTask(z base.Z) *RetryTask {
 		Task:          NewTask(msg.Type, msg.Payload),
 		ID:            msg.ID.String(),
 		Queue:         msg.Queue,
-		NextEnqueueAt: time.Unix(z.Score, 0),
+		NextProcessAt: time.Unix(z.Score, 0),
 		MaxRetry:      msg.Retry,
 		Retried:       msg.Retried,
 		ErrorMsg:      msg.ErrorMsg,
@@ -458,7 +458,7 @@ func TestInspectorListRetryTasks(t *testing.T) {
 				"custom":  {z4},
 			},
 			qname: "default",
-			// Should be sorted by NextEnqueuedAt.
+			// Should be sorted by NextProcessAt.
 			want: []*RetryTask{
 				createRetryTask(z3),
 				createRetryTask(z1),
