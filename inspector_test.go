@@ -1068,7 +1068,7 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 	}
 }
 
-func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
+func TestInspectorRunAllScheduledTasks(t *testing.T) {
 	r := setup(t)
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "critical")
@@ -1161,13 +1161,13 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 		asynqtest.SeedAllScheduledQueues(t, r, tc.scheduled)
 		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
-		got, err := inspector.EnqueueAllScheduledTasks(tc.qname)
+		got, err := inspector.RunAllScheduledTasks(tc.qname)
 		if err != nil {
-			t.Errorf("EnqueueAllScheduledTasks(%q) returned error: %v", tc.qname, err)
+			t.Errorf("RunAllScheduledTasks(%q) returned error: %v", tc.qname, err)
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("EnqueueAllScheduledTasks(%q) = %d, want %d", tc.qname, got, tc.want)
+			t.Errorf("RunAllScheduledTasks(%q) = %d, want %d", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := asynqtest.GetScheduledEntries(t, r, qname)
@@ -1184,7 +1184,7 @@ func TestInspectorEnqueueAllScheduledTasks(t *testing.T) {
 	}
 }
 
-func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
+func TestInspectorRunAllRetryTasks(t *testing.T) {
 	r := setup(t)
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "critical")
@@ -1277,13 +1277,13 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 		asynqtest.SeedAllRetryQueues(t, r, tc.retry)
 		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
-		got, err := inspector.EnqueueAllRetryTasks(tc.qname)
+		got, err := inspector.RunAllRetryTasks(tc.qname)
 		if err != nil {
-			t.Errorf("EnqueueAllRetryTasks(%q) returned error: %v", tc.qname, err)
+			t.Errorf("RunAllRetryTasks(%q) returned error: %v", tc.qname, err)
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("EnqueueAllRetryTasks(%q) = %d, want %d", tc.qname, got, tc.want)
+			t.Errorf("RunAllRetryTasks(%q) = %d, want %d", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantRetry {
 			gotRetry := asynqtest.GetRetryEntries(t, r, qname)
@@ -1300,7 +1300,7 @@ func TestInspectorEnqueueAllRetryTasks(t *testing.T) {
 	}
 }
 
-func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
+func TestInspectorRunAllDeadTasks(t *testing.T) {
 	r := setup(t)
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "critical")
@@ -1389,13 +1389,13 @@ func TestInspectorEnqueueAllDeadTasks(t *testing.T) {
 		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
 		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
-		got, err := inspector.EnqueueAllDeadTasks(tc.qname)
+		got, err := inspector.RunAllDeadTasks(tc.qname)
 		if err != nil {
-			t.Errorf("EnqueueAllDeadTasks(%q) returned error: %v", tc.qname, err)
+			t.Errorf("RunAllDeadTasks(%q) returned error: %v", tc.qname, err)
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("EnqueueAllDeadTasks(%q) = %d, want %d", tc.qname, got, tc.want)
+			t.Errorf("RunAllDeadTasks(%q) = %d, want %d", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantDead {
 			gotDead := asynqtest.GetDeadEntries(t, r, qname)
@@ -1560,7 +1560,7 @@ func TestInspectorDeleteTaskByKeyDeletesDeadTask(t *testing.T) {
 	}
 }
 
-func TestInspectorEnqueueTaskByKeyEnqueuesScheduledTask(t *testing.T) {
+func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
 	r := setup(t)
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
@@ -1607,8 +1607,8 @@ func TestInspectorEnqueueTaskByKeyEnqueuesScheduledTask(t *testing.T) {
 		asynqtest.SeedAllScheduledQueues(t, r, tc.scheduled)
 		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
-		if err := inspector.EnqueueTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("EnqueueTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.RunTaskByKey(tc.qname, tc.key); err != nil {
+			t.Errorf("RunTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
 			continue
 		}
 		for qname, want := range tc.wantScheduled {
@@ -1629,7 +1629,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesScheduledTask(t *testing.T) {
 	}
 }
 
-func TestInspectorEnqueueTaskByKeyEnqueuesRetryTask(t *testing.T) {
+func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
 	r := setup(t)
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "custom")
@@ -1676,8 +1676,8 @@ func TestInspectorEnqueueTaskByKeyEnqueuesRetryTask(t *testing.T) {
 		asynqtest.SeedAllRetryQueues(t, r, tc.retry)
 		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
-		if err := inspector.EnqueueTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("EnqueueTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.RunTaskByKey(tc.qname, tc.key); err != nil {
+			t.Errorf("RunTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
 			continue
 		}
 		for qname, want := range tc.wantRetry {
@@ -1697,7 +1697,7 @@ func TestInspectorEnqueueTaskByKeyEnqueuesRetryTask(t *testing.T) {
 	}
 }
 
-func TestInspectorEnqueueTaskByKeyEnqueuesDeadTask(t *testing.T) {
+func TestInspectorRunTaskByKeyRunsDeadTask(t *testing.T) {
 	r := setup(t)
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "critical")
@@ -1748,8 +1748,8 @@ func TestInspectorEnqueueTaskByKeyEnqueuesDeadTask(t *testing.T) {
 		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
 		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
-		if err := inspector.EnqueueTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("EnqueueTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.RunTaskByKey(tc.qname, tc.key); err != nil {
+			t.Errorf("RunTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
 			continue
 		}
 		for qname, want := range tc.wantDead {

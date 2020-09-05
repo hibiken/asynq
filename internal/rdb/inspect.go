@@ -345,11 +345,11 @@ func (r *RDB) listZSetEntries(key string, pgn Pagination) ([]base.Z, error) {
 	return res, nil
 }
 
-// EnqueueDeadTask finds a dead task that matches the given id and score from
+// RunDeadTask finds a dead task that matches the given id and score from
 // the given queue and enqueues it for processing.
 //If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) EnqueueDeadTask(qname string, id uuid.UUID, score int64) error {
-	n, err := r.removeAndEnqueue(base.DeadKey(qname), base.QueueKey(qname), id.String(), float64(score))
+func (r *RDB) RunDeadTask(qname string, id uuid.UUID, score int64) error {
+	n, err := r.removeAndRun(base.DeadKey(qname), base.QueueKey(qname), id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -359,11 +359,11 @@ func (r *RDB) EnqueueDeadTask(qname string, id uuid.UUID, score int64) error {
 	return nil
 }
 
-// EnqueueRetryTask finds a retry task that matches the given id and score from
+// RunRetryTask finds a retry task that matches the given id and score from
 // the given queue and enqueues it for processing.
 // If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) EnqueueRetryTask(qname string, id uuid.UUID, score int64) error {
-	n, err := r.removeAndEnqueue(base.RetryKey(qname), base.QueueKey(qname), id.String(), float64(score))
+func (r *RDB) RunRetryTask(qname string, id uuid.UUID, score int64) error {
+	n, err := r.removeAndRun(base.RetryKey(qname), base.QueueKey(qname), id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -373,11 +373,11 @@ func (r *RDB) EnqueueRetryTask(qname string, id uuid.UUID, score int64) error {
 	return nil
 }
 
-// EnqueueScheduledTask finds a scheduled task that matches the given id and score from
+// RunScheduledTask finds a scheduled task that matches the given id and score from
 // from the given queue and enqueues it for processing.
 // If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) EnqueueScheduledTask(qname string, id uuid.UUID, score int64) error {
-	n, err := r.removeAndEnqueue(base.ScheduledKey(qname), base.QueueKey(qname), id.String(), float64(score))
+func (r *RDB) RunScheduledTask(qname string, id uuid.UUID, score int64) error {
+	n, err := r.removeAndRun(base.ScheduledKey(qname), base.QueueKey(qname), id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -387,25 +387,25 @@ func (r *RDB) EnqueueScheduledTask(qname string, id uuid.UUID, score int64) erro
 	return nil
 }
 
-// EnqueueAllScheduledTasks enqueues all scheduled tasks from the given queue
+// RunAllScheduledTasks enqueues all scheduled tasks from the given queue
 // and returns the number of tasks enqueued.
-func (r *RDB) EnqueueAllScheduledTasks(qname string) (int64, error) {
-	return r.removeAndEnqueueAll(base.ScheduledKey(qname), base.QueueKey(qname))
+func (r *RDB) RunAllScheduledTasks(qname string) (int64, error) {
+	return r.removeAndRunAll(base.ScheduledKey(qname), base.QueueKey(qname))
 }
 
-// EnqueueAllRetryTasks enqueues all retry tasks from the given queue
+// RunAllRetryTasks enqueues all retry tasks from the given queue
 // and returns the number of tasks enqueued.
-func (r *RDB) EnqueueAllRetryTasks(qname string) (int64, error) {
-	return r.removeAndEnqueueAll(base.RetryKey(qname), base.QueueKey(qname))
+func (r *RDB) RunAllRetryTasks(qname string) (int64, error) {
+	return r.removeAndRunAll(base.RetryKey(qname), base.QueueKey(qname))
 }
 
-// EnqueueAllDeadTasks enqueues all tasks from dead queue
+// RunAllDeadTasks enqueues all tasks from dead queue
 // and returns the number of tasks enqueued.
-func (r *RDB) EnqueueAllDeadTasks(qname string) (int64, error) {
-	return r.removeAndEnqueueAll(base.DeadKey(qname), base.QueueKey(qname))
+func (r *RDB) RunAllDeadTasks(qname string) (int64, error) {
+	return r.removeAndRunAll(base.DeadKey(qname), base.QueueKey(qname))
 }
 
-var removeAndEnqueueCmd = redis.NewScript(`
+var removeAndRunCmd = redis.NewScript(`
 local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
 for _, msg in ipairs(msgs) do
 	local decoded = cjson.decode(msg)
@@ -417,8 +417,8 @@ for _, msg in ipairs(msgs) do
 end
 return 0`)
 
-func (r *RDB) removeAndEnqueue(zset, qkey, id string, score float64) (int64, error) {
-	res, err := removeAndEnqueueCmd.Run(r.client, []string{zset, qkey}, score, id).Result()
+func (r *RDB) removeAndRun(zset, qkey, id string, score float64) (int64, error) {
+	res, err := removeAndRunCmd.Run(r.client, []string{zset, qkey}, score, id).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -429,7 +429,7 @@ func (r *RDB) removeAndEnqueue(zset, qkey, id string, score float64) (int64, err
 	return n, nil
 }
 
-var removeAndEnqueueAllCmd = redis.NewScript(`
+var removeAndRunAllCmd = redis.NewScript(`
 local msgs = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, msg in ipairs(msgs) do
 	redis.call("LPUSH", KEYS[2], msg)
@@ -437,8 +437,8 @@ for _, msg in ipairs(msgs) do
 end
 return table.getn(msgs)`)
 
-func (r *RDB) removeAndEnqueueAll(zset, qkey string) (int64, error) {
-	res, err := removeAndEnqueueAllCmd.Run(r.client, []string{zset, qkey}).Result()
+func (r *RDB) removeAndRunAll(zset, qkey string) (int64, error) {
+	res, err := removeAndRunAllCmd.Run(r.client, []string{zset, qkey}).Result()
 	if err != nil {
 		return 0, err
 	}

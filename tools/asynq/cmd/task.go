@@ -360,7 +360,7 @@ func taskRun(cmd *cobra.Command, args []string) {
 	}
 
 	i := createInspector()
-	err = i.EnqueueTaskByKey(qname, key)
+	err = i.RunTaskByKey(qname, key)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
@@ -446,11 +446,11 @@ func taskRunAll(cmd *cobra.Command, args []string) {
 	var n int
 	switch state {
 	case "scheduled":
-		n, err = i.EnqueueAllScheduledTasks(qname)
+		n, err = i.RunAllScheduledTasks(qname)
 	case "retry":
-		n, err = i.EnqueueAllRetryTasks(qname)
+		n, err = i.RunAllRetryTasks(qname)
 	case "dead":
-		n, err = i.EnqueueAllDeadTasks(qname)
+		n, err = i.RunAllDeadTasks(qname)
 	default:
 		fmt.Printf("error: unsupported state %q\n", state)
 		os.Exit(1)
