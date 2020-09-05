@@ -31,11 +31,11 @@ type Stats struct {
 	// Size is the total number of tasks in the queue.
 	Size int
 	// Number of tasks in each state.
-	Pending    int
-	InProgress int
-	Scheduled  int
-	Retry      int
-	Dead       int
+	Pending   int
+	Active    int
+	Scheduled int
+	Retry     int
+	Dead      int
 	// Total number of tasks processed during the current date.
 	// The number includes both succeeded and failed tasks.
 	Processed int
@@ -59,7 +59,7 @@ type DailyStats struct {
 }
 
 // KEYS[1] -> asynq:<qname>
-// KEYS[2] -> asynq:<qname>:in_progress
+// KEYS[2] -> asynq:<qname>:active
 // KEYS[3] -> asynq:<qname>:scheduled
 // KEYS[4] -> asynq:<qname>:retry
 // KEYS[5] -> asynq:<qname>:dead
@@ -108,7 +108,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 	now := time.Now()
 	res, err := currentStatsCmd.Run(r.client, []string{
 		base.QueueKey(qname),
-		base.InProgressKey(qname),
+		base.ActiveKey(qname),
 		base.ScheduledKey(qname),
 		base.RetryKey(qname),
 		base.DeadKey(qname),
@@ -135,8 +135,8 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		case base.QueueKey(qname):
 			stats.Pending = val
 			size += val
-		case base.InProgressKey(qname):
-			stats.InProgress = val
+		case base.ActiveKey(qname):
+			stats.Active = val
 			size += val
 		case base.ScheduledKey(qname):
 			stats.Scheduled = val
@@ -266,12 +266,12 @@ func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskMessage, er
 	return r.listMessages(base.QueueKey(qname), pgn)
 }
 
-// ListInProgress returns all tasks that are currently being processed for the given queue.
-func (r *RDB) ListInProgress(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
+// ListActive returns all tasks that are currently being processed for the given queue.
+func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
 		return nil, fmt.Errorf("queue %q does not exist", qname)
 	}
-	return r.listMessages(base.InProgressKey(qname), pgn)
+	return r.listMessages(base.ActiveKey(qname), pgn)
 }
 
 // listMessages returns a list of TaskMessage in Redis list with the given key.
@@ -652,17 +652,17 @@ func (e *ErrQueueNotEmpty) Error() string {
 	return fmt.Sprintf("queue %q is not empty", e.qname)
 }
 
-// Only check whether in-progress queue is empty before removing.
+// Only check whether active queue is empty before removing.
 // KEYS[1] -> asynq:{<qname>}
-// KEYS[2] -> asynq:{<qname>}:in_progress
+// KEYS[2] -> asynq:{<qname>}:active
 // KEYS[3] -> asynq:{<qname>}:scheduled
 // KEYS[4] -> asynq:{<qname>}:retry
 // KEYS[5] -> asynq:{<qname>}:dead
 // KEYS[6] -> asynq:{<qname>}:deadlines
 var removeQueueForceCmd = redis.NewScript(`
-local inprogress = redis.call("LLEN", KEYS[2])
-if inprogress > 0 then
-    return redis.error_reply("Queue has tasks in-progress")
+local active = redis.call("LLEN", KEYS[2])
+if active > 0 then
+    return redis.error_reply("Queue has tasks active")
 end
 redis.call("DEL", KEYS[1])
 redis.call("DEL", KEYS[2])
@@ -674,18 +674,18 @@ return redis.status_reply("OK")`)
 
 // Checks whether queue is empty before removing.
 // KEYS[1] -> asynq:{<qname>}
-// KEYS[2] -> asynq:{<qname>}:in_progress
+// KEYS[2] -> asynq:{<qname>}:active
 // KEYS[3] -> asynq:{<qname>}:scheduled
 // KEYS[4] -> asynq:{<qname>}:retry
 // KEYS[5] -> asynq:{<qname>}:dead
 // KEYS[6] -> asynq:{<qname>}:deadlines
 var removeQueueCmd = redis.NewScript(`
 local pending = redis.call("LLEN", KEYS[1]) 
-local inprogress = redis.call("LLEN", KEYS[2])
+local active = redis.call("LLEN", KEYS[2])
 local scheduled = redis.call("SCARD", KEYS[3])
 local retry = redis.call("SCARD", KEYS[4])
 local dead = redis.call("SCARD", KEYS[5])
-local total = pending + inprogress + scheduled + retry + dead
+local total = pending + active + scheduled + retry + dead
 if total > 0 then
 	return redis.error_reply("QUEUE NOT EMPTY")
 end
@@ -700,7 +700,7 @@ return redis.status_reply("OK")`)
 // RemoveQueue removes the specified queue.
 //
 // If force is set to true, it will remove the queue regardless
-// as long as no tasks are in-progress for the queue.
+// as long as no tasks are active for the queue.
 // If force is set to false, it will only remove the queue if
 // the queue is empty.
 func (r *RDB) RemoveQueue(qname string, force bool) error {
@@ -719,7 +719,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 	}
 	keys := []string{
 		base.QueueKey(qname),
-		base.InProgressKey(qname),
+		base.ActiveKey(qname),
 		base.ScheduledKey(qname),
 		base.RetryKey(qname),
 		base.DeadKey(qname),

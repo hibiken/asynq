@@ -40,10 +40,9 @@ func QueueKey(qname string) string {
 	return fmt.Sprintf("asynq:{%s}", qname)
 }
 
-// TODO: Should we rename this to "active"?
-// InProgressKey returns a redis key for the in-progress tasks.
-func InProgressKey(qname string) string {
-	return fmt.Sprintf("asynq:{%s}:in_progress", qname)
+// ActiveKey returns a redis key for the active tasks.
+func ActiveKey(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:active", qname)
 }
 
 // ScheduledKey returns a redis key for the scheduled tasks.
@@ -274,7 +273,7 @@ type WorkerInfo struct {
 	Started time.Time
 }
 
-// Cancelations is a collection that holds cancel functions for all in-progress tasks.
+// Cancelations is a collection that holds cancel functions for all active tasks.
 //
 // Cancelations are safe for concurrent use by multipel goroutines.
 type Cancelations struct {

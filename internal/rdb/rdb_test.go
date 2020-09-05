@@ -167,14 +167,14 @@ func TestDequeue(t *testing.T) {
 	t3Deadline := now.Unix() + t3.Timeout // use whichever is earliest
 
 	tests := []struct {
-		pending        map[string][]*base.TaskMessage
-		args           []string // list of queues to query
-		wantMsg        *base.TaskMessage
-		wantDeadline   time.Time
-		err            error
-		wantPending    map[string][]*base.TaskMessage
-		wantInProgress map[string][]*base.TaskMessage
-		wantDeadlines  map[string][]base.Z
+		pending       map[string][]*base.TaskMessage
+		args          []string // list of queues to query
+		wantMsg       *base.TaskMessage
+		wantDeadline  time.Time
+		err           error
+		wantPending   map[string][]*base.TaskMessage
+		wantActive    map[string][]*base.TaskMessage
+		wantDeadlines map[string][]base.Z
 	}{
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -187,7 +187,7 @@ func TestDequeue(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
 			wantDeadlines: map[string][]base.Z{
@@ -205,7 +205,7 @@ func TestDequeue(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			wantDeadlines: map[string][]base.Z{
@@ -227,7 +227,7 @@ func TestDequeue(t *testing.T) {
 				"critical": {},
 				"low":      {t3},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {t2},
 				"low":      {},
@@ -253,7 +253,7 @@ func TestDequeue(t *testing.T) {
 				"critical": {},
 				"low":      {t2, t1},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default":  {t3},
 				"critical": {},
 				"low":      {},
@@ -279,7 +279,7 @@ func TestDequeue(t *testing.T) {
 				"critical": {},
 				"low":      {},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
 				"low":      {},
@@ -319,10 +319,10 @@ func TestDequeue(t *testing.T) {
 				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.QueueKey(queue), diff)
 			}
 		}
-		for queue, want := range tc.wantInProgress {
-			gotInProgress := h.GetInProgressMessages(t, r.client, queue)
-			if diff := cmp.Diff(want, gotInProgress, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.InProgressKey(queue), diff)
+		for queue, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.ActiveKey(queue), diff)
 			}
 		}
 		for queue, want := range tc.wantDeadlines {
@@ -354,13 +354,13 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 	}
 
 	tests := []struct {
-		paused         []string // list of paused queues
-		pending        map[string][]*base.TaskMessage
-		args           []string // list of queues to query
-		wantMsg        *base.TaskMessage
-		err            error
-		wantPending    map[string][]*base.TaskMessage
-		wantInProgress map[string][]*base.TaskMessage
+		paused      []string // list of paused queues
+		pending     map[string][]*base.TaskMessage
+		args        []string // list of queues to query
+		wantMsg     *base.TaskMessage
+		err         error
+		wantPending map[string][]*base.TaskMessage
+		wantActive  map[string][]*base.TaskMessage
 	}{
 		{
 			paused: []string{"default"},
@@ -375,7 +375,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 				"default":  {t1},
 				"critical": {},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {t2},
 			},
@@ -391,7 +391,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 		},
@@ -408,7 +408,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 				"default":  {t1},
 				"critical": {t2},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
 			},
@@ -437,10 +437,10 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.QueueKey(queue), diff)
 			}
 		}
-		for queue, want := range tc.wantInProgress {
-			gotInProgress := h.GetInProgressMessages(t, r.client, queue)
-			if diff := cmp.Diff(want, gotInProgress, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.InProgressKey(queue), diff)
+		for queue, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.ActiveKey(queue), diff)
 			}
 		}
 	}
@@ -479,12 +479,12 @@ func TestDone(t *testing.T) {
 	t3Deadline := now.Unix() + t3.Deadline
 
 	tests := []struct {
-		desc           string
-		inProgress     map[string][]*base.TaskMessage // initial state of the in-progress list
-		deadlines      map[string][]base.Z            // initial state of deadlines set
-		target         *base.TaskMessage              // task to remove
-		wantInProgress map[string][]*base.TaskMessage // final state of the in-progress list
-		wantDeadlines  map[string][]base.Z            // final state of the deadline set
+		desc          string
+		inProgress    map[string][]*base.TaskMessage // initial state of the active list
+		deadlines     map[string][]base.Z            // initial state of deadlines set
+		target        *base.TaskMessage              // task to remove
+		wantActive    map[string][]*base.TaskMessage // final state of the active list
+		wantDeadlines map[string][]base.Z            // final state of the deadline set
 	}{
 		{
 			desc: "removes message from the correct queue",
@@ -497,7 +497,7 @@ func TestDone(t *testing.T) {
 				"custom":  {{Message: t2, Score: t2Deadline}},
 			},
 			target: t1,
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {},
 				"custom":  {t2},
 			},
@@ -515,7 +515,7 @@ func TestDone(t *testing.T) {
 				"default": {{Message: t1, Score: t1Deadline}},
 			},
 			target: t1,
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			wantDeadlines: map[string][]base.Z{
@@ -533,7 +533,7 @@ func TestDone(t *testing.T) {
 				"custom":  {{Message: t2, Score: t2Deadline}},
 			},
 			target: t3,
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {t1},
 				"custom":  {t2},
 			},
@@ -547,7 +547,7 @@ func TestDone(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
-		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
 		for _, msgs := range tc.inProgress {
 			for _, msg := range msgs {
 				// Set uniqueness lock if unique key is present.
@@ -566,10 +566,10 @@ func TestDone(t *testing.T) {
 			continue
 		}
 
-		for queue, want := range tc.wantInProgress {
-			gotInProgress := h.GetInProgressMessages(t, r.client, queue)
-			if diff := cmp.Diff(want, gotInProgress, h.SortMsgOpt); diff != "" {
-				t.Errorf("%s; mismatch found in %q: (-want, +got):\n%s", tc.desc, base.InProgressKey(queue), diff)
+		for queue, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q: (-want, +got):\n%s", tc.desc, base.ActiveKey(queue), diff)
 				continue
 			}
 		}
@@ -627,13 +627,13 @@ func TestRequeue(t *testing.T) {
 	t3Deadline := now.Unix() + t3.Timeout
 
 	tests := []struct {
-		pending        map[string][]*base.TaskMessage // initial state of queues
-		inProgress     map[string][]*base.TaskMessage // initial state of the in-progress list
-		deadlines      map[string][]base.Z            // initial state of the deadlines set
-		target         *base.TaskMessage              // task to requeue
-		wantPending    map[string][]*base.TaskMessage // final state of queues
-		wantInProgress map[string][]*base.TaskMessage // final state of the in-progress list
-		wantDeadlines  map[string][]base.Z            // final state of the deadlines set
+		pending       map[string][]*base.TaskMessage // initial state of queues
+		inProgress    map[string][]*base.TaskMessage // initial state of the active list
+		deadlines     map[string][]base.Z            // initial state of the deadlines set
+		target        *base.TaskMessage              // task to requeue
+		wantPending   map[string][]*base.TaskMessage // final state of queues
+		wantActive    map[string][]*base.TaskMessage // final state of the active list
+		wantDeadlines map[string][]base.Z            // final state of the deadlines set
 	}{
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -652,7 +652,7 @@ func TestRequeue(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {t2},
 			},
 			wantDeadlines: map[string][]base.Z{
@@ -677,7 +677,7 @@ func TestRequeue(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			wantDeadlines: map[string][]base.Z{
@@ -702,7 +702,7 @@ func TestRequeue(t *testing.T) {
 				"default":  {t1},
 				"critical": {t3},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default":  {t2},
 				"critical": {},
 			},
@@ -716,7 +716,7 @@ func TestRequeue(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
 
 		err := r.Requeue(tc.target)
@@ -731,10 +731,10 @@ func TestRequeue(t *testing.T) {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.QueueKey(qname), diff)
 			}
 		}
-		for qname, want := range tc.wantInProgress {
-			gotInProgress := h.GetInProgressMessages(t, r.client, qname)
-			if diff := cmp.Diff(want, gotInProgress, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.InProgressKey(qname), diff)
+		for qname, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.ActiveKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantDeadlines {
@@ -877,15 +877,15 @@ func TestRetry(t *testing.T) {
 	errMsg := "SMTP server is not responding"
 
 	tests := []struct {
-		inProgress     map[string][]*base.TaskMessage
-		deadlines      map[string][]base.Z
-		retry          map[string][]base.Z
-		msg            *base.TaskMessage
-		processAt      time.Time
-		errMsg         string
-		wantInProgress map[string][]*base.TaskMessage
-		wantDeadlines  map[string][]base.Z
-		wantRetry      map[string][]base.Z
+		inProgress    map[string][]*base.TaskMessage
+		deadlines     map[string][]base.Z
+		retry         map[string][]base.Z
+		msg           *base.TaskMessage
+		processAt     time.Time
+		errMsg        string
+		wantActive    map[string][]*base.TaskMessage
+		wantDeadlines map[string][]base.Z
+		wantRetry     map[string][]base.Z
 	}{
 		{
 			inProgress: map[string][]*base.TaskMessage{
@@ -900,7 +900,7 @@ func TestRetry(t *testing.T) {
 			msg:       t1,
 			processAt: now.Add(5 * time.Minute),
 			errMsg:    errMsg,
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {t2},
 			},
 			wantDeadlines: map[string][]base.Z{
@@ -929,7 +929,7 @@ func TestRetry(t *testing.T) {
 			msg:       t4,
 			processAt: now.Add(5 * time.Minute),
 			errMsg:    errMsg,
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 				"custom":  {},
 			},
@@ -948,7 +948,7 @@ func TestRetry(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
@@ -958,10 +958,10 @@ func TestRetry(t *testing.T) {
 			continue
 		}
 
-		for queue, want := range tc.wantInProgress {
-			gotInProgress := h.GetInProgressMessages(t, r.client, queue)
-			if diff := cmp.Diff(want, gotInProgress, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.InProgressKey(queue), diff)
+		for queue, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ActiveKey(queue), diff)
 			}
 		}
 		for queue, want := range tc.wantDeadlines {
@@ -1046,13 +1046,13 @@ func TestKill(t *testing.T) {
 
 	// TODO(hibiken): add test cases for trimming
 	tests := []struct {
-		inProgress     map[string][]*base.TaskMessage
-		deadlines      map[string][]base.Z
-		dead           map[string][]base.Z
-		target         *base.TaskMessage // task to kill
-		wantInProgress map[string][]*base.TaskMessage
-		wantDeadlines  map[string][]base.Z
-		wantDead       map[string][]base.Z
+		inProgress    map[string][]*base.TaskMessage
+		deadlines     map[string][]base.Z
+		dead          map[string][]base.Z
+		target        *base.TaskMessage // task to kill
+		wantActive    map[string][]*base.TaskMessage
+		wantDeadlines map[string][]base.Z
+		wantDead      map[string][]base.Z
 	}{
 		{
 			inProgress: map[string][]*base.TaskMessage{
@@ -1070,7 +1070,7 @@ func TestKill(t *testing.T) {
 				},
 			},
 			target: t1,
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {t2},
 			},
 			wantDeadlines: map[string][]base.Z{
@@ -1098,7 +1098,7 @@ func TestKill(t *testing.T) {
 				"default": {},
 			},
 			target: t1,
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {t2, t3},
 			},
 			wantDeadlines: map[string][]base.Z{
@@ -1131,7 +1131,7 @@ func TestKill(t *testing.T) {
 				"custom":  {},
 			},
 			target: t4,
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {t1},
 				"custom":  {},
 			},
@@ -1150,7 +1150,7 @@ func TestKill(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
 		h.SeedAllDeadQueues(t, r.client, tc.dead)
 
@@ -1160,10 +1160,10 @@ func TestKill(t *testing.T) {
 			continue
 		}
 
-		for queue, want := range tc.wantInProgress {
-			gotInProgress := h.GetInProgressMessages(t, r.client, queue)
-			if diff := cmp.Diff(want, gotInProgress, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q: (-want, +got)\n%s", base.InProgressKey(queue), diff)
+		for queue, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want, +got)\n%s", base.ActiveKey(queue), diff)
 			}
 		}
 		for queue, want := range tc.wantDeadlines {
@@ -1363,7 +1363,7 @@ func TestListDeadlineExceeded(t *testing.T) {
 		want      []*base.TaskMessage
 	}{
 		{
-			desc: "with one task in-progress",
+			desc: "with a single active task",
 			deadlines: map[string][]base.Z{
 				"default": {{Message: t1, Score: fiveMinutesAgo.Unix()}},
 			},
@@ -1372,7 +1372,7 @@ func TestListDeadlineExceeded(t *testing.T) {
 			want:   []*base.TaskMessage{t1},
 		},
 		{
-			desc: "with multiple tasks in-progress, and one expired",
+			desc: "with multiple active tasks, and one expired",
 			deadlines: map[string][]base.Z{
 				"default": {
 					{Message: t1, Score: oneHourAgo.Unix()},
@@ -1387,7 +1387,7 @@ func TestListDeadlineExceeded(t *testing.T) {
 			want:   []*base.TaskMessage{t1},
 		},
 		{
-			desc: "with multiple expired tasks in-progress",
+			desc: "with multiple expired active tasks",
 			deadlines: map[string][]base.Z{
 				"default": {
 					{Message: t1, Score: oneHourAgo.Unix()},
@@ -1402,7 +1402,7 @@ func TestListDeadlineExceeded(t *testing.T) {
 			want:   []*base.TaskMessage{t1, t3},
 		},
 		{
-			desc: "with empty in-progress queue",
+			desc: "with empty active queue",
 			deadlines: map[string][]base.Z{
 				"default":  {},
 				"critical": {},

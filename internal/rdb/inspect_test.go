@@ -110,17 +110,17 @@ func TestCurrentStats(t *testing.T) {
 			paused: []string{},
 			qname:  "default",
 			want: &Stats{
-				Queue:      "default",
-				Paused:     false,
-				Size:       4,
-				Pending:    1,
-				InProgress: 1,
-				Scheduled:  2,
-				Retry:      0,
-				Dead:       0,
-				Processed:  120,
-				Failed:     2,
-				Timestamp:  now,
+				Queue:     "default",
+				Paused:    false,
+				Size:      4,
+				Pending:   1,
+				Active:    1,
+				Scheduled: 2,
+				Retry:     0,
+				Dead:      0,
+				Processed: 120,
+				Failed:    2,
+				Timestamp: now,
 			},
 		},
 		{
@@ -165,17 +165,17 @@ func TestCurrentStats(t *testing.T) {
 			paused: []string{"critical", "low"},
 			qname:  "critical",
 			want: &Stats{
-				Queue:      "critical",
-				Paused:     true,
-				Size:       1,
-				Pending:    1,
-				InProgress: 0,
-				Scheduled:  0,
-				Retry:      0,
-				Dead:       0,
-				Processed:  100,
-				Failed:     0,
-				Timestamp:  now,
+				Queue:     "critical",
+				Paused:    true,
+				Size:      1,
+				Pending:   1,
+				Active:    0,
+				Scheduled: 0,
+				Retry:     0,
+				Dead:      0,
+				Processed: 100,
+				Failed:    0,
+				Timestamp: now,
 			},
 		},
 	}
@@ -188,7 +188,7 @@ func TestCurrentStats(t *testing.T) {
 			}
 		}
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllDeadQueues(t, r.client, tc.dead)
@@ -433,7 +433,7 @@ func TestListPendingPagination(t *testing.T) {
 	}
 }
 
-func TestListInProgress(t *testing.T) {
+func TestListActive(t *testing.T) {
 	r := setup(t)
 
 	m1 := h.NewTaskMessage("task1", nil)
@@ -466,10 +466,10 @@ func TestListInProgress(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
 
-		got, err := r.ListInProgress(tc.qname, Pagination{Size: 20, Page: 0})
-		op := fmt.Sprintf("r.ListInProgress(%q, Pagination{Size: 20, Page: 0})", tc.qname)
+		got, err := r.ListActive(tc.qname, Pagination{Size: 20, Page: 0})
+		op := fmt.Sprintf("r.ListActive(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.inProgress)
 			continue
@@ -481,14 +481,14 @@ func TestListInProgress(t *testing.T) {
 	}
 }
 
-func TestListInProgressPagination(t *testing.T) {
+func TestListActivePagination(t *testing.T) {
 	r := setup(t)
 	var msgs []*base.TaskMessage
 	for i := 0; i < 100; i++ {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
 		msgs = append(msgs, msg)
 	}
-	h.SeedInProgressQueue(t, r.client, msgs, "default")
+	h.SeedActiveQueue(t, r.client, msgs, "default")
 
 	tests := []struct {
 		desc      string
@@ -507,8 +507,8 @@ func TestListInProgressPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListInProgress(tc.qname, Pagination{Size: tc.size, Page: tc.page})
-		op := fmt.Sprintf("r.ListInProgress(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
+		got, err := r.ListActive(tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListActive(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
 			continue
@@ -2669,7 +2669,7 @@ func TestRemoveQueue(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllDeadQueues(t, r.client, tc.dead)
@@ -2686,7 +2686,7 @@ func TestRemoveQueue(t *testing.T) {
 
 		keys := []string{
 			base.QueueKey(tc.qname),
-			base.InProgressKey(tc.qname),
+			base.ActiveKey(tc.qname),
 			base.DeadlinesKey(tc.qname),
 			base.ScheduledKey(tc.qname),
 			base.RetryKey(tc.qname),
@@ -2768,7 +2768,7 @@ func TestRemoveQueueError(t *testing.T) {
 			force: false,
 		},
 		{
-			desc: "force removing queue with tasks in-progress",
+			desc: "force removing queue with active tasks",
 			pending: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 				"custom":  {m3},
@@ -2790,7 +2790,7 @@ func TestRemoveQueueError(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			// Even with force=true, it should error if there are tasks in-progress.
+			// Even with force=true, it should error if there are active tasks.
 			force: true,
 		},
 	}
@@ -2798,7 +2798,7 @@ func TestRemoveQueueError(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllDeadQueues(t, r.client, tc.dead)
@@ -2817,9 +2817,9 @@ func TestRemoveQueueError(t *testing.T) {
 			}
 		}
 		for qname, want := range tc.inProgress {
-			gotInProgress := h.GetInProgressMessages(t, r.client, qname)
-			if diff := cmp.Diff(want, gotInProgress, h.SortMsgOpt); diff != "" {
-				t.Errorf("%s;mismatch found in %q; (-want,+got):\n%s", tc.desc, base.InProgressKey(qname), diff)
+			gotActive := h.GetActiveMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("%s;mismatch found in %q; (-want,+got):\n%s", tc.desc, base.ActiveKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.scheduled {

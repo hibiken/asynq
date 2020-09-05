@@ -181,11 +181,11 @@ func SeedPendingQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskM
 	seedRedisList(tb, r, base.QueueKey(qname), msgs)
 }
 
-// SeedInProgressQueue initializes the in-progress queue with the given messages.
-func SeedInProgressQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname string) {
+// SeedActiveQueue initializes the active queue with the given messages.
+func SeedActiveQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname string) {
 	tb.Helper()
 	r.SAdd(base.AllQueues, qname)
-	seedRedisList(tb, r, base.InProgressKey(qname), msgs)
+	seedRedisList(tb, r, base.ActiveKey(qname), msgs)
 }
 
 // SeedScheduledQueue initializes the scheduled queue with the given messages.
@@ -225,10 +225,10 @@ func SeedAllPendingQueues(tb testing.TB, r redis.UniversalClient, pending map[st
 	}
 }
 
-// SeedAllInProgressQueues initializes all of the specified in-progress queues with the given messages.
-func SeedAllInProgressQueues(tb testing.TB, r redis.UniversalClient, inprogress map[string][]*base.TaskMessage) {
-	for q, msgs := range inprogress {
-		SeedInProgressQueue(tb, r, msgs, q)
+// SeedAllActiveQueues initializes all of the specified active queues with the given messages.
+func SeedAllActiveQueues(tb testing.TB, r redis.UniversalClient, active map[string][]*base.TaskMessage) {
+	for q, msgs := range active {
+		SeedActiveQueue(tb, r, msgs, q)
 	}
 }
 
@@ -284,10 +284,10 @@ func GetPendingMessages(tb testing.TB, r redis.UniversalClient, qname string) []
 	return getListMessages(tb, r, base.QueueKey(qname))
 }
 
-// GetInProgressMessages returns all in-progress messages in the given queue.
-func GetInProgressMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
+// GetActiveMessages returns all active messages in the given queue.
+func GetActiveMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getListMessages(tb, r, base.InProgressKey(qname))
+	return getListMessages(tb, r, base.ActiveKey(qname))
 }
 
 // GetScheduledMessages returns all scheduled task messages in the given queue.
