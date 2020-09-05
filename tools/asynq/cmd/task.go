@@ -239,7 +239,7 @@ func listScheduledTasks(qname string, pageNum, pageSize int) {
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
 				processIn := fmt.Sprintf("%.0f seconds",
-					t.NextEnqueueAt.Sub(time.Now()).Seconds())
+					t.NextProcessAt.Sub(time.Now()).Seconds())
 				fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload, processIn)
 			}
 		},
@@ -262,7 +262,7 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
 				var nextRetry string
-				if d := t.NextEnqueueAt.Sub(time.Now()); d > 0 {
+				if d := t.NextProcessAt.Sub(time.Now()); d > 0 {
 					nextRetry = fmt.Sprintf("in %v", d.Round(time.Second))
 				} else {
 					nextRetry = "right now"
