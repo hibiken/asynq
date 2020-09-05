@@ -74,7 +74,7 @@ var taskListCmd = &cobra.Command{
 	Long: `List tasks of the given state from the specified queue.
 
 The value for the state flag should be one of:
-- in-progress
+- active
 - pending
 - scheduled
 - retry
@@ -95,7 +95,7 @@ To list the tasks from the second page, run
 
 var taskCancelCmd = &cobra.Command{
 	Use:   "cancel TASK_ID [TASK_ID...]",
-	Short: "Cancel one or more in-progress tasks",
+	Short: "Cancel one or more active tasks",
 	Args:  cobra.MinimumNArgs(1),
 	Run:   taskCancel,
 }
@@ -165,8 +165,8 @@ func taskList(cmd *cobra.Command, args []string) {
 	}
 
 	switch state {
-	case "in-progress":
-		listInProgressTasks(qname, pageNum, pageSize)
+	case "active":
+		listActiveTasks(qname, pageNum, pageSize)
 	case "pending":
 		listPendingTasks(qname, pageNum, pageSize)
 	case "scheduled":
@@ -181,15 +181,15 @@ func taskList(cmd *cobra.Command, args []string) {
 	}
 }
 
-func listInProgressTasks(qname string, pageNum, pageSize int) {
+func listActiveTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListInProgressTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
+	tasks, err := i.ListActiveTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	if len(tasks) == 0 {
-		fmt.Printf("No in-progress tasks in %q queue\n", qname)
+		fmt.Printf("No active tasks in %q queue\n", qname)
 		return
 	}
 	printTable(

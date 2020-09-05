@@ -114,17 +114,17 @@ func TestInspectorCurrentStats(t *testing.T) {
 			},
 			qname: "default",
 			want: &QueueStats{
-				Queue:      "default",
-				Size:       4,
-				Pending:    1,
-				InProgress: 1,
-				Scheduled:  2,
-				Retry:      0,
-				Dead:       0,
-				Processed:  120,
-				Failed:     2,
-				Paused:     false,
-				Timestamp:  now,
+				Queue:     "default",
+				Size:      4,
+				Pending:   1,
+				Active:    1,
+				Scheduled: 2,
+				Retry:     0,
+				Dead:      0,
+				Processed: 120,
+				Failed:    2,
+				Paused:    false,
+				Timestamp: now,
 			},
 		},
 	}
@@ -132,7 +132,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
-		asynqtest.SeedAllInProgressQueues(t, r, tc.inProgress)
+		asynqtest.SeedAllActiveQueues(t, r, tc.inProgress)
 		asynqtest.SeedAllScheduledQueues(t, r, tc.scheduled)
 		asynqtest.SeedAllRetryQueues(t, r, tc.retry)
 		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
@@ -291,7 +291,7 @@ func TestInspectorListPendingTasks(t *testing.T) {
 	}
 }
 
-func TestInspectorListInProgressTasks(t *testing.T) {
+func TestInspectorListActiveTasks(t *testing.T) {
 	r := setup(t)
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
@@ -300,8 +300,8 @@ func TestInspectorListInProgressTasks(t *testing.T) {
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
-	createInProgressTask := func(msg *base.TaskMessage) *InProgressTask {
-		return &InProgressTask{
+	createActiveTask := func(msg *base.TaskMessage) *ActiveTask {
+		return &ActiveTask{
 			Task:  NewTask(msg.Type, msg.Payload),
 			ID:    msg.ID.String(),
 			Queue: msg.Queue,
@@ -312,34 +312,34 @@ func TestInspectorListInProgressTasks(t *testing.T) {
 		desc       string
 		inProgress map[string][]*base.TaskMessage
 		qname      string
-		want       []*InProgressTask
+		want       []*ActiveTask
 	}{
 		{
-			desc: "with a few in-progress tasks",
+			desc: "with a few active tasks",
 			inProgress: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 				"custom":  {m3, m4},
 			},
 			qname: "default",
-			want: []*InProgressTask{
-				createInProgressTask(m1),
-				createInProgressTask(m2),
+			want: []*ActiveTask{
+				createActiveTask(m1),
+				createActiveTask(m2),
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
-		asynqtest.SeedAllInProgressQueues(t, r, tc.inProgress)
+		asynqtest.SeedAllActiveQueues(t, r, tc.inProgress)
 
-		got, err := inspector.ListInProgressTasks(tc.qname)
+		got, err := inspector.ListActiveTasks(tc.qname)
 		if err != nil {
-			t.Errorf("%s; ListInProgressTasks(%q) returned error: %v", tc.qname, tc.desc, err)
+			t.Errorf("%s; ListActiveTasks(%q) returned error: %v", tc.qname, tc.desc, err)
 			continue
 		}
 		ignoreOpt := cmpopts.IgnoreUnexported(Payload{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
-			t.Errorf("%s; ListInProgressTask(%q) = %v, want %v; (-want,+got)\n%s",
+			t.Errorf("%s; ListActiveTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
 		}
 	}

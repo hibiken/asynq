@@ -37,12 +37,12 @@ type QueueStats struct {
 	// Name of the queue.
 	Queue string
 	// Size is the total number of tasks in the queue.
-	// The value is the sum of Pending, InProgress, Scheduled, Retry, and Dead.
+	// The value is the sum of Pending, Active, Scheduled, Retry, and Dead.
 	Size int
 	// Number of pending tasks.
 	Pending int
-	// Number of in-progress tasks.
-	InProgress int
+	// Number of active tasks.
+	Active int
 	// Number of scheduled tasks.
 	Scheduled int
 	// Number of retry tasks.
@@ -71,17 +71,17 @@ func (i *Inspector) CurrentStats(qname string) (*QueueStats, error) {
 		return nil, err
 	}
 	return &QueueStats{
-		Queue:      stats.Queue,
-		Size:       stats.Size,
-		Pending:    stats.Pending,
-		InProgress: stats.InProgress,
-		Scheduled:  stats.Scheduled,
-		Retry:      stats.Retry,
-		Dead:       stats.Dead,
-		Processed:  stats.Processed,
-		Failed:     stats.Failed,
-		Paused:     stats.Paused,
-		Timestamp:  stats.Timestamp,
+		Queue:     stats.Queue,
+		Size:      stats.Size,
+		Pending:   stats.Pending,
+		Active:    stats.Active,
+		Scheduled: stats.Scheduled,
+		Retry:     stats.Retry,
+		Dead:      stats.Dead,
+		Processed: stats.Processed,
+		Failed:    stats.Failed,
+		Paused:    stats.Paused,
+		Timestamp: stats.Timestamp,
 	}, nil
 }
 
@@ -126,8 +126,8 @@ type PendingTask struct {
 	Queue string
 }
 
-// InProgressTask is a task that's currently being processed.
-type InProgressTask struct {
+// ActiveTask is a task that's currently being processed.
+type ActiveTask struct {
 	*Task
 	ID    string
 	Queue string
@@ -293,22 +293,22 @@ func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*Pendi
 	return tasks, err
 }
 
-// ListInProgressTasks retrieves in-progress tasks from the specified queue.
+// ListActiveTasks retrieves active tasks from the specified queue.
 //
 // By default, it retrieves the first 30 tasks.
-func (i *Inspector) ListInProgressTasks(qname string, opts ...ListOption) ([]*InProgressTask, error) {
+func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*ActiveTask, error) {
 	if err := validateQueueName(qname); err != nil {
 		return nil, err
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	msgs, err := i.rdb.ListInProgress(qname, pgn)
+	msgs, err := i.rdb.ListActive(qname, pgn)
 	if err != nil {
 		return nil, err
 	}
-	var tasks []*InProgressTask
+	var tasks []*ActiveTask
 	for _, m := range msgs {
-		tasks = append(tasks, &InProgressTask{
+		tasks = append(tasks, &ActiveTask{
 			Task:  NewTask(m.Type, m.Payload),
 			ID:    m.ID.String(),
 			Queue: m.Queue,

@@ -51,14 +51,14 @@ func init() {
 }
 
 type AggregateStats struct {
-	InProgress int
-	Pending    int
-	Scheduled  int
-	Retry      int
-	Dead       int
-	Processed  int
-	Failed     int
-	Timestamp  time.Time
+	Active    int
+	Pending   int
+	Scheduled int
+	Retry     int
+	Dead      int
+	Processed int
+	Failed    int
+	Timestamp time.Time
 }
 
 func stats(cmd *cobra.Command, args []string) {
@@ -78,7 +78,7 @@ func stats(cmd *cobra.Command, args []string) {
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		aggStats.InProgress += s.InProgress
+		aggStats.Active += s.Active
 		aggStats.Pending += s.Pending
 		aggStats.Scheduled += s.Scheduled
 		aggStats.Retry += s.Retry
@@ -113,9 +113,9 @@ func stats(cmd *cobra.Command, args []string) {
 func printStatsByState(s *AggregateStats) {
 	format := strings.Repeat("%v\t", 5) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	fmt.Fprintf(tw, format, "InProgress", "Pending", "Scheduled", "Retry", "Dead")
+	fmt.Fprintf(tw, format, "Active", "Pending", "Scheduled", "Retry", "Dead")
 	fmt.Fprintf(tw, format, "----------", "--------", "---------", "-----", "----")
-	fmt.Fprintf(tw, format, s.InProgress, s.Pending, s.Scheduled, s.Retry, s.Dead)
+	fmt.Fprintf(tw, format, s.Active, s.Pending, s.Scheduled, s.Retry, s.Dead)
 	tw.Flush()
 }
 

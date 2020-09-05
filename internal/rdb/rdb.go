@@ -120,7 +120,7 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, deadline time.Ti
 
 // KEYS[1] -> asynq:{<qname>}
 // KEYS[2] -> asynq:{<qname>}:paused
-// KEYS[3] -> asynq:{<qname>}:in_progress
+// KEYS[3] -> asynq:{<qname>}:active
 // KEYS[4] -> asynq:{<qname>}:deadlines
 // ARGV[1]  -> current time in Unix time
 //
@@ -156,7 +156,7 @@ func (r *RDB) dequeue(qnames ...string) (msgjson string, deadline int64, err err
 		keys := []string{
 			base.QueueKey(qname),
 			base.PausedKey(qname),
-			base.InProgressKey(qname),
+			base.ActiveKey(qname),
 			base.DeadlinesKey(qname),
 		}
 		res, err := dequeueCmd.Run(r.client, keys, time.Now().Unix()).Result()
@@ -183,7 +183,7 @@ func (r *RDB) dequeue(qnames ...string) (msgjson string, deadline int64, err err
 	return "", 0, ErrNoProcessableTask
 }
 
-// KEYS[1] -> asynq:{<qname>}:in_progress
+// KEYS[1] -> asynq:{<qname>}:active
 // KEYS[2] -> asynq:{<qname>}:deadlines
 // KEYS[3] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // ARGV[1] -> base.TaskMessage value
@@ -202,7 +202,7 @@ end
 return redis.status_reply("OK")
 `)
 
-// KEYS[1] -> asynq:{<qname>}:in_progress
+// KEYS[1] -> asynq:{<qname>}:active
 // KEYS[2] -> asynq:{<qname>}:deadlines
 // KEYS[3] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[4] -> unique key
@@ -226,7 +226,7 @@ end
 return redis.status_reply("OK")
 `)
 
-// Done removes the task from in-progress queue to mark the task as done.
+// Done removes the task from active queue to mark the task as done.
 // It removes a uniqueness lock acquired by the task, if any.
 func (r *RDB) Done(msg *base.TaskMessage) error {
 	encoded, err := base.EncodeMessage(msg)
@@ -236,7 +236,7 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 	now := time.Now()
 	expireAt := now.Add(statsTTL)
 	keys := []string{
-		base.InProgressKey(msg.Queue),
+		base.ActiveKey(msg.Queue),
 		base.DeadlinesKey(msg.Queue),
 		base.ProcessedKey(msg.Queue, now),
 	}
@@ -249,7 +249,7 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 	return doneCmd.Run(r.client, keys, args...).Err()
 }
 
-// KEYS[1] -> asynq:{<qname>}:in_progress
+// KEYS[1] -> asynq:{<qname>}:active
 // KEYS[2] -> asynq:{<qname>}:deadlines
 // KEYS[3] -> asynq:{<qname>}
 // ARGV[1] -> base.TaskMessage value
@@ -264,14 +264,14 @@ end
 redis.call("RPUSH", KEYS[3], ARGV[1])
 return redis.status_reply("OK")`)
 
-// Requeue moves the task from in-progress queue to the specified queue.
+// Requeue moves the task from active queue to the specified queue.
 func (r *RDB) Requeue(msg *base.TaskMessage) error {
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
 		return err
 	}
 	return requeueCmd.Run(r.client,
-		[]string{base.InProgressKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.QueueKey(msg.Queue)},
+		[]string{base.ActiveKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.QueueKey(msg.Queue)},
 		encoded).Err()
 }
 
@@ -330,12 +330,12 @@ func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl tim
 	return nil
 }
 
-// KEYS[1] -> asynq:{<qname>}:in_progress
+// KEYS[1] -> asynq:{<qname>}:active
 // KEYS[2] -> asynq:{<qname>}:deadlines
 // KEYS[3] -> asynq:{<qname>}:retry
 // KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[5] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
-// ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
+// ARGV[1] -> base.TaskMessage value to remove from base.ActiveQueue queue
 // ARGV[2] -> base.TaskMessage value to add to Retry queue
 // ARGV[3] -> retry_at UNIX timestamp
 // ARGV[4] -> stats expiration timestamp
@@ -357,7 +357,7 @@ if tonumber(m) == 1 then
 end
 return redis.status_reply("OK")`)
 
-// Retry moves the task from in-progress to retry queue, incrementing retry count
+// Retry moves the task from active to retry queue, incrementing retry count
 // and assigning error message to the task message.
 func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) error {
 	msgToRemove, err := base.EncodeMessage(msg)
@@ -376,7 +376,7 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) e
 	failedKey := base.FailedKey(msg.Queue, now)
 	expireAt := now.Add(statsTTL)
 	return retryCmd.Run(r.client,
-		[]string{base.InProgressKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.RetryKey(msg.Queue), processedKey, failedKey},
+		[]string{base.ActiveKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.RetryKey(msg.Queue), processedKey, failedKey},
 		msgToRemove, msgToAdd, processAt.Unix(), expireAt.Unix()).Err()
 }
 
@@ -385,12 +385,12 @@ const (
 	deadExpirationInDays = 90
 )
 
-// KEYS[1] -> asynq:{<qname>}:in_progress
+// KEYS[1] -> asynq:{<qname>}:active
 // KEYS[2] -> asynq:{<qname>}:deadlines
 // KEYS[3] -> asynq:{<qname>}:dead
 // KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[5] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
-// ARGV[1] -> base.TaskMessage value to remove from base.InProgressQueue queue
+// ARGV[1] -> base.TaskMessage value to remove from base.ActiveQueue queue
 // ARGV[2] -> base.TaskMessage value to add to Dead queue
 // ARGV[3] -> died_at UNIX timestamp
 // ARGV[4] -> cutoff timestamp (e.g., 90 days ago)
@@ -416,7 +416,7 @@ if tonumber(m) == 1 then
 end
 return redis.status_reply("OK")`)
 
-// Kill sends the task to "dead" queue from in-progress queue, assigning
+// Kill sends the task to "dead" queue from active queue, assigning
 // the error message to the task.
 // It also trims the set by timestamp and set size.
 func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
@@ -436,7 +436,7 @@ func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 	failedKey := base.FailedKey(msg.Queue, now)
 	expireAt := now.Add(statsTTL)
 	return killCmd.Run(r.client,
-		[]string{base.InProgressKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.DeadKey(msg.Queue), processedKey, failedKey},
+		[]string{base.ActiveKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.DeadKey(msg.Queue), processedKey, failedKey},
 		msgToRemove, msgToAdd, now.Unix(), limit, maxDeadTasks, expireAt.Unix()).Err()
 }
 

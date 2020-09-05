@@ -118,8 +118,8 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 			}
 		}
 		time.Sleep(2 * time.Second) // wait for two second to allow all pending tasks to be processed.
-		if l := r.LLen(base.InProgressKey(base.DefaultQueueName)).Val(); l != 0 {
-			t.Errorf("%q has %d tasks, want 0", base.InProgressKey(base.DefaultQueueName), l)
+		if l := r.LLen(base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), l)
 		}
 		p.terminate()
 
@@ -207,10 +207,10 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 		p.start(&sync.WaitGroup{})
 		// Wait for two second to allow all pending tasks to be processed.
 		time.Sleep(2 * time.Second)
-		// Make sure no messages are stuck in in-progress list.
+		// Make sure no messages are stuck in active list.
 		for _, qname := range tc.queues {
-			if l := r.LLen(base.InProgressKey(qname)).Val(); l != 0 {
-				t.Errorf("%q has %d tasks, want 0", base.InProgressKey(qname), l)
+			if l := r.LLen(base.ActiveKey(qname)).Val(); l != 0 {
+				t.Errorf("%q has %d tasks, want 0", base.ActiveKey(qname), l)
 			}
 		}
 		p.terminate()
@@ -283,8 +283,8 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 
 		p.start(&sync.WaitGroup{})
 		time.Sleep(2 * time.Second) // wait for two second to allow all pending tasks to be processed.
-		if l := r.LLen(base.InProgressKey(base.DefaultQueueName)).Val(); l != 0 {
-			t.Errorf("%q has %d tasks, want 0", base.InProgressKey(base.DefaultQueueName), l)
+		if l := r.LLen(base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), l)
 		}
 		p.terminate()
 
@@ -397,8 +397,8 @@ func TestProcessorRetry(t *testing.T) {
 			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.DeadKey(base.DefaultQueueName), diff)
 		}
 
-		if l := r.LLen(base.InProgressKey(base.DefaultQueueName)).Val(); l != 0 {
-			t.Errorf("%q has %d tasks, want 0", base.InProgressKey(base.DefaultQueueName), l)
+		if l := r.LLen(base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
+			t.Errorf("%q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), l)
 		}
 
 		if n != tc.wantErrCount {
@@ -548,10 +548,10 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 
 		p.start(&sync.WaitGroup{})
 		time.Sleep(tc.wait)
-		// Make sure no tasks are stuck in in-progress list.
+		// Make sure no tasks are stuck in active list.
 		for _, qname := range tc.queues {
-			if l := r.LLen(base.InProgressKey(qname)).Val(); l != 0 {
-				t.Errorf("%q has %d tasks, want 0", base.InProgressKey(qname), l)
+			if l := r.LLen(base.ActiveKey(qname)).Val(); l != 0 {
+				t.Errorf("%q has %d tasks, want 0", base.ActiveKey(qname), l)
 			}
 		}
 		p.terminate()

@@ -20,7 +20,7 @@ type subscriber struct {
 	// channel to communicate back to the long running "subscriber" goroutine.
 	done chan struct{}
 
-	// cancelations hold cancel functions for all in-progress tasks.
+	// cancelations hold cancel functions for all active tasks.
 	cancelations *base.Cancelations
 
 	// time to wait before retrying to connect to redis.

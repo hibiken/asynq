@@ -32,18 +32,18 @@ func TestRecoverer(t *testing.T) {
 	oneHourAgo := now.Add(-1 * time.Hour)
 
 	tests := []struct {
-		desc           string
-		inProgress     map[string][]*base.TaskMessage
-		deadlines      map[string][]base.Z
-		retry          map[string][]base.Z
-		dead           map[string][]base.Z
-		wantInProgress map[string][]*base.TaskMessage
-		wantDeadlines  map[string][]base.Z
-		wantRetry      map[string][]*base.TaskMessage
-		wantDead       map[string][]*base.TaskMessage
+		desc          string
+		inProgress    map[string][]*base.TaskMessage
+		deadlines     map[string][]base.Z
+		retry         map[string][]base.Z
+		dead          map[string][]base.Z
+		wantActive    map[string][]*base.TaskMessage
+		wantDeadlines map[string][]base.Z
+		wantRetry     map[string][]*base.TaskMessage
+		wantDead      map[string][]*base.TaskMessage
 	}{
 		{
-			desc: "with one task in-progress",
+			desc: "with one active task",
 			inProgress: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
@@ -56,7 +56,7 @@ func TestRecoverer(t *testing.T) {
 			dead: map[string][]base.Z{
 				"default": {},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			wantDeadlines: map[string][]base.Z{
@@ -87,7 +87,7 @@ func TestRecoverer(t *testing.T) {
 				"default":  {},
 				"critical": {},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
 			},
@@ -105,7 +105,7 @@ func TestRecoverer(t *testing.T) {
 			},
 		},
 		{
-			desc: "with multiple tasks in-progress, and one expired",
+			desc: "with multiple active tasks, and one expired",
 			inProgress: map[string][]*base.TaskMessage{
 				"default":  {t1, t2},
 				"critical": {t3},
@@ -127,7 +127,7 @@ func TestRecoverer(t *testing.T) {
 				"default":  {},
 				"critical": {},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default":  {t2},
 				"critical": {t3},
 			},
@@ -145,7 +145,7 @@ func TestRecoverer(t *testing.T) {
 			},
 		},
 		{
-			desc: "with multiple expired tasks in-progress",
+			desc: "with multiple expired active tasks",
 			inProgress: map[string][]*base.TaskMessage{
 				"default":  {t1, t2},
 				"critical": {t3},
@@ -167,7 +167,7 @@ func TestRecoverer(t *testing.T) {
 				"default": {},
 				"cricial": {},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default":  {t2},
 				"critical": {},
 			},
@@ -184,7 +184,7 @@ func TestRecoverer(t *testing.T) {
 			},
 		},
 		{
-			desc: "with empty in-progress queue",
+			desc: "with empty active queue",
 			inProgress: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
@@ -201,7 +201,7 @@ func TestRecoverer(t *testing.T) {
 				"default":  {},
 				"critical": {},
 			},
-			wantInProgress: map[string][]*base.TaskMessage{
+			wantActive: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
 			},
@@ -222,7 +222,7 @@ func TestRecoverer(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r)
-		h.SeedAllInProgressQueues(t, r, tc.inProgress)
+		h.SeedAllActiveQueues(t, r, tc.inProgress)
 		h.SeedAllDeadlines(t, r, tc.deadlines)
 		h.SeedAllRetryQueues(t, r, tc.retry)
 		h.SeedAllDeadQueues(t, r, tc.dead)
@@ -240,10 +240,10 @@ func TestRecoverer(t *testing.T) {
 		time.Sleep(2 * time.Second)
 		recoverer.terminate()
 
-		for qname, want := range tc.wantInProgress {
-			gotInProgress := h.GetInProgressMessages(t, r, qname)
-			if diff := cmp.Diff(want, gotInProgress, h.SortMsgOpt); diff != "" {
-				t.Errorf("%s; mismatch found in %q; (-want,+got)\n%s", tc.desc, base.InProgressKey(qname), diff)
+		for qname, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q; (-want,+got)\n%s", tc.desc, base.ActiveKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantDeadlines {

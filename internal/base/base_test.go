@@ -32,19 +32,19 @@ func TestQueueKey(t *testing.T) {
 	}
 }
 
-func TestInProgressKey(t *testing.T) {
+func TestActiveKey(t *testing.T) {
 	tests := []struct {
 		qname string
 		want  string
 	}{
-		{"default", "asynq:{default}:in_progress"},
-		{"custom", "asynq:{custom}:in_progress"},
+		{"default", "asynq:{default}:active"},
+		{"custom", "asynq:{custom}:active"},
 	}
 
 	for _, tc := range tests {
-		got := InProgressKey(tc.qname)
+		got := ActiveKey(tc.qname)
 		if got != tc.want {
-			t.Errorf("InProgressKey(%q) = %q, want %q", tc.qname, got, tc.want)
+			t.Errorf("ActiveKey(%q) = %q, want %q", tc.qname, got, tc.want)
 		}
 	}
 }
