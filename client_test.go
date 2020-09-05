@@ -32,7 +32,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 		processAt     time.Time // value for ProcessAt option
 		opts          []Option  // other options
 		wantRes       *Result
-		wantEnqueued  map[string][]*base.TaskMessage
+		wantPending   map[string][]*base.TaskMessage
 		wantScheduled map[string][]base.Z
 	}{
 		{
@@ -47,7 +47,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 				Timeout:   defaultTimeout,
 				Deadline:  noDeadline,
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
 						Type:     task.Type,
@@ -75,7 +75,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 				Timeout:   defaultTimeout,
 				Deadline:  noDeadline,
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			wantScheduled: map[string][]base.Z{
@@ -114,9 +114,9 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 				tc.desc, gotRes, tc.wantRes, diff)
 		}
 
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := h.GetEnqueuedMessages(t, r, qname)
-			if diff := cmp.Diff(want, gotEnqueued, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.QueueKey(qname), diff)
 			}
 		}
@@ -137,11 +137,11 @@ func TestClientEnqueue(t *testing.T) {
 	now := time.Now()
 
 	tests := []struct {
-		desc         string
-		task         *Task
-		opts         []Option
-		wantRes      *Result
-		wantEnqueued map[string][]*base.TaskMessage
+		desc        string
+		task        *Task
+		opts        []Option
+		wantRes     *Result
+		wantPending map[string][]*base.TaskMessage
 	}{
 		{
 			desc: "Process task immediately with a custom retry count",
@@ -156,7 +156,7 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout:   defaultTimeout,
 				Deadline:  noDeadline,
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
 						Type:     task.Type,
@@ -182,7 +182,7 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout:   defaultTimeout,
 				Deadline:  noDeadline,
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
 						Type:     task.Type,
@@ -209,7 +209,7 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout:   defaultTimeout,
 				Deadline:  noDeadline,
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
 						Type:     task.Type,
@@ -235,7 +235,7 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout:   defaultTimeout,
 				Deadline:  noDeadline,
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"custom": {
 					{
 						Type:     task.Type,
@@ -261,7 +261,7 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout:   defaultTimeout,
 				Deadline:  noDeadline,
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"high": {
 					{
 						Type:     task.Type,
@@ -287,7 +287,7 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout:   20 * time.Second,
 				Deadline:  noDeadline,
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
 						Type:     task.Type,
@@ -313,7 +313,7 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout:   noTimeout,
 				Deadline:  time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC),
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
 						Type:     task.Type,
@@ -340,7 +340,7 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout:   20 * time.Second,
 				Deadline:  time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC),
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
 						Type:     task.Type,
@@ -372,8 +372,8 @@ func TestClientEnqueue(t *testing.T) {
 				tc.desc, gotRes, tc.wantRes, diff)
 		}
 
-		for qname, want := range tc.wantEnqueued {
-			got := h.GetEnqueuedMessages(t, r, qname)
+		for qname, want := range tc.wantPending {
+			got := h.GetPendingMessages(t, r, qname)
 			if diff := cmp.Diff(want, got, h.IgnoreIDOpt); diff != "" {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.QueueKey(qname), diff)
 			}
@@ -394,11 +394,11 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 		delay         time.Duration // value for ProcessIn option
 		opts          []Option      // other options
 		wantRes       *Result
-		wantEnqueued  map[string][]*base.TaskMessage
+		wantPending   map[string][]*base.TaskMessage
 		wantScheduled map[string][]base.Z
 	}{
 		{
-			desc:  "schedule a task to be enqueued in one hour",
+			desc:  "schedule a task to be processed in one hour",
 			task:  task,
 			delay: 1 * time.Hour,
 			opts:  []Option{},
@@ -409,7 +409,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 				Timeout:   defaultTimeout,
 				Deadline:  noDeadline,
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			wantScheduled: map[string][]base.Z{
@@ -440,7 +440,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 				Timeout:   defaultTimeout,
 				Deadline:  noDeadline,
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
 						Type:     task.Type,
@@ -476,9 +476,9 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 				tc.desc, gotRes, tc.wantRes, diff)
 		}
 
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := h.GetEnqueuedMessages(t, r, qname)
-			if diff := cmp.Diff(want, gotEnqueued, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.QueueKey(qname), diff)
 			}
 		}
@@ -619,15 +619,15 @@ func TestClientDefaultOptions(t *testing.T) {
 			t.Errorf("%s;\nEnqueue(task, opts...) returned %v, want %v; (-want,+got)\n%s",
 				tc.desc, gotRes, tc.wantRes, diff)
 		}
-		enqueued := h.GetEnqueuedMessages(t, r, tc.queue)
-		if len(enqueued) != 1 {
+		pending := h.GetPendingMessages(t, r, tc.queue)
+		if len(pending) != 1 {
 			t.Errorf("%s;\nexpected queue %q to have one message; got %d messages in the queue.",
-				tc.desc, tc.queue, len(enqueued))
+				tc.desc, tc.queue, len(pending))
 			continue
 		}
-		got := enqueued[0]
+		got := pending[0]
 		if diff := cmp.Diff(tc.want, got, h.IgnoreIDOpt); diff != "" {
-			t.Errorf("%s;\nmismatch found in enqueued task message; (-want,+got)\n%s",
+			t.Errorf("%s;\nmismatch found in pending task message; (-want,+got)\n%s",
 				tc.desc, diff)
 		}
 	}

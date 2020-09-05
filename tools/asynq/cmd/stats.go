@@ -52,7 +52,7 @@ func init() {
 
 type AggregateStats struct {
 	InProgress int
-	Enqueued   int
+	Pending    int
 	Scheduled  int
 	Retry      int
 	Dead       int
@@ -79,7 +79,7 @@ func stats(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 		aggStats.InProgress += s.InProgress
-		aggStats.Enqueued += s.Enqueued
+		aggStats.Pending += s.Pending
 		aggStats.Scheduled += s.Scheduled
 		aggStats.Retry += s.Retry
 		aggStats.Dead += s.Dead
@@ -113,9 +113,9 @@ func stats(cmd *cobra.Command, args []string) {
 func printStatsByState(s *AggregateStats) {
 	format := strings.Repeat("%v\t", 5) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	fmt.Fprintf(tw, format, "InProgress", "Enqueued", "Scheduled", "Retry", "Dead")
+	fmt.Fprintf(tw, format, "InProgress", "Pending", "Scheduled", "Retry", "Dead")
 	fmt.Fprintf(tw, format, "----------", "--------", "---------", "-----", "----")
-	fmt.Fprintf(tw, format, s.InProgress, s.Enqueued, s.Scheduled, s.Retry, s.Dead)
+	fmt.Fprintf(tw, format, s.InProgress, s.Pending, s.Scheduled, s.Retry, s.Dead)
 	tw.Flush()
 }
 

@@ -57,7 +57,7 @@ func TestCurrentStats(t *testing.T) {
 	now := time.Now()
 
 	tests := []struct {
-		enqueued   map[string][]*base.TaskMessage
+		pending    map[string][]*base.TaskMessage
 		inProgress map[string][]*base.TaskMessage
 		scheduled  map[string][]base.Z
 		retry      map[string][]base.Z
@@ -69,7 +69,7 @@ func TestCurrentStats(t *testing.T) {
 		want       *Stats
 	}{
 		{
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default":  {m1},
 				"critical": {m5},
 				"low":      {m6},
@@ -113,7 +113,7 @@ func TestCurrentStats(t *testing.T) {
 				Queue:      "default",
 				Paused:     false,
 				Size:       4,
-				Enqueued:   1,
+				Pending:    1,
 				InProgress: 1,
 				Scheduled:  2,
 				Retry:      0,
@@ -124,7 +124,7 @@ func TestCurrentStats(t *testing.T) {
 			},
 		},
 		{
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default":  {m1},
 				"critical": {m5},
 				"low":      {m6},
@@ -168,7 +168,7 @@ func TestCurrentStats(t *testing.T) {
 				Queue:      "critical",
 				Paused:     true,
 				Size:       1,
-				Enqueued:   1,
+				Pending:    1,
 				InProgress: 0,
 				Scheduled:  0,
 				Retry:      0,
@@ -187,7 +187,7 @@ func TestCurrentStats(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		h.SeedAllEnqueuedQueues(t, r.client, tc.enqueued)
+		h.SeedAllPendingQueues(t, r.client, tc.pending)
 		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
@@ -303,7 +303,7 @@ func TestRedisInfo(t *testing.T) {
 	}
 }
 
-func TestListEnqueued(t *testing.T) {
+func TestListPending(t *testing.T) {
 	r := setup(t)
 
 	m1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
@@ -312,26 +312,26 @@ func TestListEnqueued(t *testing.T) {
 	m4 := h.NewTaskMessageWithQueue("minor_notification", nil, "low")
 
 	tests := []struct {
-		enqueued map[string][]*base.TaskMessage
-		qname    string
-		want     []*base.TaskMessage
+		pending map[string][]*base.TaskMessage
+		qname   string
+		want    []*base.TaskMessage
 	}{
 		{
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {m1, m2},
 			},
 			qname: base.DefaultQueueName,
 			want:  []*base.TaskMessage{m1, m2},
 		},
 		{
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: nil,
 			},
 			qname: base.DefaultQueueName,
 			want:  []*base.TaskMessage(nil),
 		},
 		{
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {m1, m2},
 				"critical":            {m3},
 				"low":                 {m4},
@@ -340,7 +340,7 @@ func TestListEnqueued(t *testing.T) {
 			want:  []*base.TaskMessage{m1, m2},
 		},
 		{
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {m1, m2},
 				"critical":            {m3},
 				"low":                 {m4},
@@ -352,10 +352,10 @@ func TestListEnqueued(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllEnqueuedQueues(t, r.client, tc.enqueued)
+		h.SeedAllPendingQueues(t, r.client, tc.pending)
 
-		got, err := r.ListEnqueued(tc.qname, Pagination{Size: 20, Page: 0})
-		op := fmt.Sprintf("r.ListEnqueued(%q, Pagination{Size: 20, Page: 0})", tc.qname)
+		got, err := r.ListPending(tc.qname, Pagination{Size: 20, Page: 0})
+		op := fmt.Sprintf("r.ListPending(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
@@ -367,7 +367,7 @@ func TestListEnqueued(t *testing.T) {
 	}
 }
 
-func TestListEnqueuedPagination(t *testing.T) {
+func TestListPendingPagination(t *testing.T) {
 	r := setup(t)
 	var msgs []*base.TaskMessage
 	for i := 0; i < 100; i++ {
@@ -375,7 +375,7 @@ func TestListEnqueuedPagination(t *testing.T) {
 		msgs = append(msgs, msg)
 	}
 	// create 100 tasks in default queue
-	h.SeedEnqueuedQueue(t, r.client, msgs, "default")
+	h.SeedPendingQueue(t, r.client, msgs, "default")
 
 	msgs = []*base.TaskMessage(nil) // empty list
 	for i := 0; i < 100; i++ {
@@ -383,7 +383,7 @@ func TestListEnqueuedPagination(t *testing.T) {
 		msgs = append(msgs, msg)
 	}
 	// create 100 tasks in custom queue
-	h.SeedEnqueuedQueue(t, r.client, msgs, "custom")
+	h.SeedPendingQueue(t, r.client, msgs, "custom")
 
 	tests := []struct {
 		desc      string
@@ -403,8 +403,8 @@ func TestListEnqueuedPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListEnqueued(tc.qname, Pagination{Size: tc.size, Page: tc.page})
-		op := fmt.Sprintf("r.ListEnqueued(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
+		got, err := r.ListPending(tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListPending(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
 			continue
@@ -990,13 +990,13 @@ func TestEnqueueDeadTask(t *testing.T) {
 	s2 := time.Now().Add(-time.Hour).Unix()
 
 	tests := []struct {
-		dead         map[string][]base.Z
-		qname        string
-		score        int64
-		id           uuid.UUID
-		want         error // expected return value from calling EnqueueDeadTask
-		wantDead     map[string][]*base.TaskMessage
-		wantEnqueued map[string][]*base.TaskMessage
+		dead        map[string][]base.Z
+		qname       string
+		score       int64
+		id          uuid.UUID
+		want        error // expected return value from calling EnqueueDeadTask
+		wantDead    map[string][]*base.TaskMessage
+		wantPending map[string][]*base.TaskMessage
 	}{
 		{
 			dead: map[string][]base.Z{
@@ -1012,7 +1012,7 @@ func TestEnqueueDeadTask(t *testing.T) {
 			wantDead: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {t2},
 			},
 		},
@@ -1030,7 +1030,7 @@ func TestEnqueueDeadTask(t *testing.T) {
 			wantDead: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 		},
@@ -1052,7 +1052,7 @@ func TestEnqueueDeadTask(t *testing.T) {
 				"default":  {t1, t2},
 				"critical": {},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {t3},
 			},
@@ -1069,9 +1069,9 @@ func TestEnqueueDeadTask(t *testing.T) {
 			continue
 		}
 
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
-			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.QueueKey(qname), diff)
 			}
 		}
@@ -1094,13 +1094,13 @@ func TestEnqueueRetryTask(t *testing.T) {
 	s1 := time.Now().Add(-5 * time.Minute).Unix()
 	s2 := time.Now().Add(-time.Hour).Unix()
 	tests := []struct {
-		retry        map[string][]base.Z
-		qname        string
-		score        int64
-		id           uuid.UUID
-		want         error // expected return value from calling EnqueueRetryTask
-		wantRetry    map[string][]*base.TaskMessage
-		wantEnqueued map[string][]*base.TaskMessage
+		retry       map[string][]base.Z
+		qname       string
+		score       int64
+		id          uuid.UUID
+		want        error // expected return value from calling EnqueueRetryTask
+		wantRetry   map[string][]*base.TaskMessage
+		wantPending map[string][]*base.TaskMessage
 	}{
 		{
 			retry: map[string][]base.Z{
@@ -1116,7 +1116,7 @@ func TestEnqueueRetryTask(t *testing.T) {
 			wantRetry: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {t2},
 			},
 		},
@@ -1134,7 +1134,7 @@ func TestEnqueueRetryTask(t *testing.T) {
 			wantRetry: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 		},
@@ -1156,7 +1156,7 @@ func TestEnqueueRetryTask(t *testing.T) {
 				"default": {t1, t2},
 				"low":     {},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 				"low":     {t3},
 			},
@@ -1173,9 +1173,9 @@ func TestEnqueueRetryTask(t *testing.T) {
 			continue
 		}
 
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
-			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.QueueKey(qname), diff)
 			}
 		}
@@ -1204,7 +1204,7 @@ func TestEnqueueScheduledTask(t *testing.T) {
 		id            uuid.UUID
 		want          error // expected return value from calling EnqueueScheduledTask
 		wantScheduled map[string][]*base.TaskMessage
-		wantEnqueued  map[string][]*base.TaskMessage
+		wantPending   map[string][]*base.TaskMessage
 	}{
 		{
 			scheduled: map[string][]base.Z{
@@ -1220,7 +1220,7 @@ func TestEnqueueScheduledTask(t *testing.T) {
 			wantScheduled: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {t2},
 			},
 		},
@@ -1238,7 +1238,7 @@ func TestEnqueueScheduledTask(t *testing.T) {
 			wantScheduled: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 		},
@@ -1260,7 +1260,7 @@ func TestEnqueueScheduledTask(t *testing.T) {
 				"default":       {t1, t2},
 				"notifications": {},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default":       {},
 				"notifications": {t3},
 			},
@@ -1277,9 +1277,9 @@ func TestEnqueueScheduledTask(t *testing.T) {
 			continue
 		}
 
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
-			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.QueueKey(qname), diff)
 			}
 		}
@@ -1306,7 +1306,7 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 		scheduled     map[string][]base.Z
 		qname         string
 		want          int64
-		wantEnqueued  map[string][]*base.TaskMessage
+		wantPending   map[string][]*base.TaskMessage
 		wantScheduled map[string][]*base.TaskMessage
 	}{
 		{
@@ -1320,7 +1320,7 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  3,
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {t1, t2, t3},
 			},
 			wantScheduled: map[string][]*base.TaskMessage{
@@ -1334,7 +1334,7 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  0,
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			wantScheduled: map[string][]*base.TaskMessage{
@@ -1356,7 +1356,7 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 			},
 			qname: "custom",
 			want:  2,
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 				"custom":  {t4, t5},
 			},
@@ -1383,9 +1383,9 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 				tc.desc, tc.qname, got, err, tc.want)
 		}
 
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
-			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.QueueKey(qname), diff)
 			}
 		}
@@ -1407,12 +1407,12 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 	t5 := h.NewTaskMessageWithQueue("minor_notification", nil, "custom")
 
 	tests := []struct {
-		desc         string
-		retry        map[string][]base.Z
-		qname        string
-		want         int64
-		wantEnqueued map[string][]*base.TaskMessage
-		wantRetry    map[string][]*base.TaskMessage
+		desc        string
+		retry       map[string][]base.Z
+		qname       string
+		want        int64
+		wantPending map[string][]*base.TaskMessage
+		wantRetry   map[string][]*base.TaskMessage
 	}{
 		{
 			desc: "with tasks in retry queue",
@@ -1425,7 +1425,7 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  3,
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {t1, t2, t3},
 			},
 			wantRetry: map[string][]*base.TaskMessage{
@@ -1439,7 +1439,7 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  0,
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			wantRetry: map[string][]*base.TaskMessage{
@@ -1461,7 +1461,7 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 			},
 			qname: "custom",
 			want:  2,
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 				"custom":  {t4, t5},
 			},
@@ -1488,9 +1488,9 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 				tc.desc, tc.qname, got, err, tc.want)
 		}
 
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
-			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.QueueKey(qname), diff)
 			}
 		}
@@ -1512,12 +1512,12 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 	t5 := h.NewTaskMessageWithQueue("minor_notification", nil, "custom")
 
 	tests := []struct {
-		desc         string
-		dead         map[string][]base.Z
-		qname        string
-		want         int64
-		wantEnqueued map[string][]*base.TaskMessage
-		wantDead     map[string][]*base.TaskMessage
+		desc        string
+		dead        map[string][]base.Z
+		qname       string
+		want        int64
+		wantPending map[string][]*base.TaskMessage
+		wantDead    map[string][]*base.TaskMessage
 	}{
 		{
 			desc: "with tasks in dead queue",
@@ -1530,7 +1530,7 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  3,
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {t1, t2, t3},
 			},
 			wantDead: map[string][]*base.TaskMessage{
@@ -1544,7 +1544,7 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  0,
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			wantDead: map[string][]*base.TaskMessage{
@@ -1566,7 +1566,7 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 			},
 			qname: "custom",
 			want:  2,
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 				"custom":  {t4, t5},
 			},
@@ -1593,9 +1593,9 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 				tc.desc, tc.qname, got, err, tc.want)
 		}
 
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
-			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.QueueKey(qname), diff)
 			}
 		}
@@ -2608,7 +2608,7 @@ func TestRemoveQueue(t *testing.T) {
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 
 	tests := []struct {
-		enqueued   map[string][]*base.TaskMessage
+		pending    map[string][]*base.TaskMessage
 		inProgress map[string][]*base.TaskMessage
 		scheduled  map[string][]base.Z
 		retry      map[string][]base.Z
@@ -2617,7 +2617,7 @@ func TestRemoveQueue(t *testing.T) {
 		force      bool
 	}{
 		{
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 				"custom":  {},
 			},
@@ -2641,7 +2641,7 @@ func TestRemoveQueue(t *testing.T) {
 			force: false,
 		},
 		{
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 				"custom":  {m3},
 			},
@@ -2668,7 +2668,7 @@ func TestRemoveQueue(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		h.SeedAllEnqueuedQueues(t, r.client, tc.enqueued)
+		h.SeedAllPendingQueues(t, r.client, tc.pending)
 		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
@@ -2709,7 +2709,7 @@ func TestRemoveQueueError(t *testing.T) {
 
 	tests := []struct {
 		desc       string
-		enqueued   map[string][]*base.TaskMessage
+		pending    map[string][]*base.TaskMessage
 		inProgress map[string][]*base.TaskMessage
 		scheduled  map[string][]base.Z
 		retry      map[string][]base.Z
@@ -2719,7 +2719,7 @@ func TestRemoveQueueError(t *testing.T) {
 	}{
 		{
 			desc: "removing non-existent queue",
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 				"custom":  {m3},
 			},
@@ -2744,7 +2744,7 @@ func TestRemoveQueueError(t *testing.T) {
 		},
 		{
 			desc: "removing non-empty queue",
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 				"custom":  {m3},
 			},
@@ -2769,7 +2769,7 @@ func TestRemoveQueueError(t *testing.T) {
 		},
 		{
 			desc: "force removing queue with tasks in-progress",
-			enqueued: map[string][]*base.TaskMessage{
+			pending: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 				"custom":  {m3},
 			},
@@ -2797,7 +2797,7 @@ func TestRemoveQueueError(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		h.SeedAllEnqueuedQueues(t, r.client, tc.enqueued)
+		h.SeedAllPendingQueues(t, r.client, tc.pending)
 		h.SeedAllInProgressQueues(t, r.client, tc.inProgress)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
@@ -2810,9 +2810,9 @@ func TestRemoveQueueError(t *testing.T) {
 		}
 
 		// Make sure that nothing changed
-		for qname, want := range tc.enqueued {
-			gotEnqueued := h.GetEnqueuedMessages(t, r.client, qname)
-			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+		for qname, want := range tc.pending {
+			gotPending := h.GetPendingMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("%s;mismatch found in %q; (-want,+got):\n%s", tc.desc, base.QueueKey(qname), diff)
 			}
 		}

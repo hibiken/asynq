@@ -174,8 +174,8 @@ func FlushDB(tb testing.TB, r redis.UniversalClient) {
 	}
 }
 
-// SeedEnqueuedQueue initializes the specified queue with the given messages.
-func SeedEnqueuedQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname string) {
+// SeedPendingQueue initializes the specified queue with the given messages.
+func SeedPendingQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname string) {
 	tb.Helper()
 	r.SAdd(base.AllQueues, qname)
 	seedRedisList(tb, r, base.QueueKey(qname), msgs)
@@ -216,12 +216,12 @@ func SeedDeadlines(tb testing.TB, r redis.UniversalClient, entries []base.Z, qna
 	seedRedisZSet(tb, r, base.DeadlinesKey(qname), entries)
 }
 
-// SeedAllEnqueuedQueues initializes all of the specified queues with the given messages.
+// SeedAllPendingQueues initializes all of the specified queues with the given messages.
 //
-// enqueued maps a queue name to a list of messages.
-func SeedAllEnqueuedQueues(tb testing.TB, r redis.UniversalClient, enqueued map[string][]*base.TaskMessage) {
-	for q, msgs := range enqueued {
-		SeedEnqueuedQueue(tb, r, msgs, q)
+// pending maps a queue name to a list of messages.
+func SeedAllPendingQueues(tb testing.TB, r redis.UniversalClient, pending map[string][]*base.TaskMessage) {
+	for q, msgs := range pending {
+		SeedPendingQueue(tb, r, msgs, q)
 	}
 }
 
@@ -278,8 +278,8 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string, items []b
 	}
 }
 
-// GetEnqueuedMessages returns all enqueued messages in the given queue.
-func GetEnqueuedMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
+// GetPendingMessages returns all pending messages in the given queue.
+func GetPendingMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
 	return getListMessages(tb, r, base.QueueKey(qname))
 }

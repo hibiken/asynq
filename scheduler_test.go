@@ -34,11 +34,11 @@ func TestScheduler(t *testing.T) {
 	tests := []struct {
 		initScheduled map[string][]base.Z            // scheduled queue initial state
 		initRetry     map[string][]base.Z            // retry queue initial state
-		initEnqueued  map[string][]*base.TaskMessage // default queue initial state
+		initPending   map[string][]*base.TaskMessage // default queue initial state
 		wait          time.Duration                  // wait duration before checking for final state
 		wantScheduled map[string][]*base.TaskMessage // schedule queue final state
 		wantRetry     map[string][]*base.TaskMessage // retry queue final state
-		wantEnqueued  map[string][]*base.TaskMessage // default queue final state
+		wantPending   map[string][]*base.TaskMessage // default queue final state
 	}{
 		{
 			initScheduled: map[string][]base.Z{
@@ -49,7 +49,7 @@ func TestScheduler(t *testing.T) {
 				"default":  {{Message: t3, Score: time.Now().Add(-500 * time.Millisecond).Unix()}},
 				"critical": {},
 			},
-			initEnqueued: map[string][]*base.TaskMessage{
+			initPending: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {t4},
 			},
@@ -62,7 +62,7 @@ func TestScheduler(t *testing.T) {
 				"default":  {},
 				"critical": {},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default":  {t3},
 				"critical": {t2, t4},
 			},
@@ -81,7 +81,7 @@ func TestScheduler(t *testing.T) {
 				"default":  {},
 				"critical": {},
 			},
-			initEnqueued: map[string][]*base.TaskMessage{
+			initPending: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {t4},
 			},
@@ -94,7 +94,7 @@ func TestScheduler(t *testing.T) {
 				"default":  {},
 				"critical": {},
 			},
-			wantEnqueued: map[string][]*base.TaskMessage{
+			wantPending: map[string][]*base.TaskMessage{
 				"default":  {t1, t3},
 				"critical": {t2, t4},
 			},
@@ -105,7 +105,7 @@ func TestScheduler(t *testing.T) {
 		h.FlushDB(t, r)                                  // clean up db before each test case.
 		h.SeedAllScheduledQueues(t, r, tc.initScheduled) // initialize scheduled queue
 		h.SeedAllRetryQueues(t, r, tc.initRetry)         // initialize retry queue
-		h.SeedAllEnqueuedQueues(t, r, tc.initEnqueued)   // initialize default queue
+		h.SeedAllPendingQueues(t, r, tc.initPending)     // initialize default queue
 
 		var wg sync.WaitGroup
 		s.start(&wg)
@@ -126,9 +126,9 @@ func TestScheduler(t *testing.T) {
 			}
 		}
 
-		for qname, want := range tc.wantEnqueued {
-			gotEnqueued := h.GetEnqueuedMessages(t, r, qname)
-			if diff := cmp.Diff(want, gotEnqueued, h.SortMsgOpt); diff != "" {
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q after running scheduler: (-want, +got)\n%s", base.QueueKey(qname), diff)
 			}
 		}

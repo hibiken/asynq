@@ -145,9 +145,9 @@ func printQueueStats(s *asynq.QueueStats) {
 	fmt.Printf("Paused: %t\n\n", s.Paused)
 	fmt.Println("Task Breakdown:")
 	printTable(
-		[]string{"InProgress", "Enqueued", "Scheduled", "Retry", "Dead"},
+		[]string{"InProgress", "Pending", "Scheduled", "Retry", "Dead"},
 		func(w io.Writer, tmpl string) {
-			fmt.Fprintf(w, tmpl, s.InProgress, s.Enqueued, s.Scheduled, s.Retry, s.Dead)
+			fmt.Fprintf(w, tmpl, s.InProgress, s.Pending, s.Scheduled, s.Retry, s.Dead)
 		},
 	)
 	fmt.Println()
