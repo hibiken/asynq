@@ -981,7 +981,7 @@ var (
 	zScoreCmpOpt = h.EquateInt64Approx(2)                    // allow for 2 seconds margin in Z.Score
 )
 
-func TestEnqueueDeadTask(t *testing.T) {
+func TestRunDeadTask(t *testing.T) {
 	r := setup(t)
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
@@ -994,7 +994,7 @@ func TestEnqueueDeadTask(t *testing.T) {
 		qname       string
 		score       int64
 		id          uuid.UUID
-		want        error // expected return value from calling EnqueueDeadTask
+		want        error // expected return value from calling RunDeadTask
 		wantDead    map[string][]*base.TaskMessage
 		wantPending map[string][]*base.TaskMessage
 	}{
@@ -1063,9 +1063,9 @@ func TestEnqueueDeadTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllDeadQueues(t, r.client, tc.dead)
 
-		got := r.EnqueueDeadTask(tc.qname, tc.id, tc.score)
+		got := r.RunDeadTask(tc.qname, tc.id, tc.score)
 		if got != tc.want {
-			t.Errorf("r.EnqueueDeadTask(%q, %s, %d) = %v, want %v", tc.qname, tc.id, tc.score, got, tc.want)
+			t.Errorf("r.RunDeadTask(%q, %s, %d) = %v, want %v", tc.qname, tc.id, tc.score, got, tc.want)
 			continue
 		}
 
@@ -1085,7 +1085,7 @@ func TestEnqueueDeadTask(t *testing.T) {
 	}
 }
 
-func TestEnqueueRetryTask(t *testing.T) {
+func TestRunRetryTask(t *testing.T) {
 	r := setup(t)
 
 	t1 := h.NewTaskMessage("send_email", nil)
@@ -1098,7 +1098,7 @@ func TestEnqueueRetryTask(t *testing.T) {
 		qname       string
 		score       int64
 		id          uuid.UUID
-		want        error // expected return value from calling EnqueueRetryTask
+		want        error // expected return value from calling RunRetryTask
 		wantRetry   map[string][]*base.TaskMessage
 		wantPending map[string][]*base.TaskMessage
 	}{
@@ -1167,9 +1167,9 @@ func TestEnqueueRetryTask(t *testing.T) {
 		h.FlushDB(t, r.client)                      // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry) // initialize retry queue
 
-		got := r.EnqueueRetryTask(tc.qname, tc.id, tc.score)
+		got := r.RunRetryTask(tc.qname, tc.id, tc.score)
 		if got != tc.want {
-			t.Errorf("r.EnqueueRetryTask(%q, %s, %d) = %v, want %v", tc.qname, tc.id, tc.score, got, tc.want)
+			t.Errorf("r.RunRetryTask(%q, %s, %d) = %v, want %v", tc.qname, tc.id, tc.score, got, tc.want)
 			continue
 		}
 
@@ -1189,7 +1189,7 @@ func TestEnqueueRetryTask(t *testing.T) {
 	}
 }
 
-func TestEnqueueScheduledTask(t *testing.T) {
+func TestRunScheduledTask(t *testing.T) {
 	r := setup(t)
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
@@ -1202,7 +1202,7 @@ func TestEnqueueScheduledTask(t *testing.T) {
 		qname         string
 		score         int64
 		id            uuid.UUID
-		want          error // expected return value from calling EnqueueScheduledTask
+		want          error // expected return value from calling RunScheduledTask
 		wantScheduled map[string][]*base.TaskMessage
 		wantPending   map[string][]*base.TaskMessage
 	}{
@@ -1271,9 +1271,9 @@ func TestEnqueueScheduledTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got := r.EnqueueScheduledTask(tc.qname, tc.id, tc.score)
+		got := r.RunScheduledTask(tc.qname, tc.id, tc.score)
 		if got != tc.want {
-			t.Errorf("r.EnqueueRetryTask(%q, %s, %d) = %v, want %v", tc.qname, tc.id, tc.score, got, tc.want)
+			t.Errorf("r.RunRetryTask(%q, %s, %d) = %v, want %v", tc.qname, tc.id, tc.score, got, tc.want)
 			continue
 		}
 
@@ -1293,7 +1293,7 @@ func TestEnqueueScheduledTask(t *testing.T) {
 	}
 }
 
-func TestEnqueueAllScheduledTasks(t *testing.T) {
+func TestRunAllScheduledTasks(t *testing.T) {
 	r := setup(t)
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
@@ -1371,15 +1371,15 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got, err := r.EnqueueAllScheduledTasks(tc.qname)
+		got, err := r.RunAllScheduledTasks(tc.qname)
 		if err != nil {
-			t.Errorf("%s; r.EnqueueAllScheduledTasks(%q) = %v, %v; want %v, nil",
+			t.Errorf("%s; r.RunAllScheduledTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
 			continue
 		}
 
 		if got != tc.want {
-			t.Errorf("%s; r.EnqueueAllScheduledTasks(%q) = %v, %v; want %v, nil",
+			t.Errorf("%s; r.RunAllScheduledTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
 		}
 
@@ -1398,7 +1398,7 @@ func TestEnqueueAllScheduledTasks(t *testing.T) {
 	}
 }
 
-func TestEnqueueAllRetryTasks(t *testing.T) {
+func TestRunAllRetryTasks(t *testing.T) {
 	r := setup(t)
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
@@ -1476,15 +1476,15 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		got, err := r.EnqueueAllRetryTasks(tc.qname)
+		got, err := r.RunAllRetryTasks(tc.qname)
 		if err != nil {
-			t.Errorf("%s; r.EnqueueAllRetryTasks(%q) = %v, %v; want %v, nil",
+			t.Errorf("%s; r.RunAllRetryTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
 			continue
 		}
 
 		if got != tc.want {
-			t.Errorf("%s; r.EnqueueAllRetryTasks(%q) = %v, %v; want %v, nil",
+			t.Errorf("%s; r.RunAllRetryTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
 		}
 
@@ -1503,7 +1503,7 @@ func TestEnqueueAllRetryTasks(t *testing.T) {
 	}
 }
 
-func TestEnqueueAllDeadTasks(t *testing.T) {
+func TestRunAllDeadTasks(t *testing.T) {
 	r := setup(t)
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
@@ -1581,15 +1581,15 @@ func TestEnqueueAllDeadTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllDeadQueues(t, r.client, tc.dead)
 
-		got, err := r.EnqueueAllDeadTasks(tc.qname)
+		got, err := r.RunAllDeadTasks(tc.qname)
 		if err != nil {
-			t.Errorf("%s; r.EnqueueAllDeadTasks(%q) = %v, %v; want %v, nil",
+			t.Errorf("%s; r.RunAllDeadTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
 			continue
 		}
 
 		if got != tc.want {
-			t.Errorf("%s; r.EnqueueAllDeadTasks(%q) = %v, %v; want %v, nil",
+			t.Errorf("%s; r.RunAllDeadTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
 		}
 

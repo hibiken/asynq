@@ -171,17 +171,17 @@ type DeadTask struct {
 	score int64
 }
 
-// Key returns a key used to delete, enqueue, and kill the task.
+// Key returns a key used to delete, run, and kill the task.
 func (t *ScheduledTask) Key() string {
 	return fmt.Sprintf("s:%v:%v", t.ID, t.score)
 }
 
-// Key returns a key used to delete, enqueue, and kill the task.
+// Key returns a key used to delete, run, and kill the task.
 func (t *RetryTask) Key() string {
 	return fmt.Sprintf("r:%v:%v", t.ID, t.score)
 }
 
-// Key returns a key used to delete, enqueue, and kill the task.
+// Key returns a key used to delete, run, and kill the task.
 func (t *DeadTask) Key() string {
 	return fmt.Sprintf("d:%v:%v", t.ID, t.score)
 }
@@ -463,39 +463,38 @@ func (i *Inspector) DeleteTaskByKey(qname, key string) error {
 	}
 }
 
-// TODO(hibiken): Use different verb here. Idea: Run or Stage
-// EnqueueAllScheduledTasks enqueues all scheduled tasks for immediate processing within the given queue,
-// and reports the number of tasks enqueued.
-func (i *Inspector) EnqueueAllScheduledTasks(qname string) (int, error) {
+// RunAllScheduledTasks transition all scheduled tasks to pending state within the given queue,
+// and reports the number of tasks transitioned.
+func (i *Inspector) RunAllScheduledTasks(qname string) (int, error) {
 	if err := validateQueueName(qname); err != nil {
 		return 0, err
 	}
-	n, err := i.rdb.EnqueueAllScheduledTasks(qname)
+	n, err := i.rdb.RunAllScheduledTasks(qname)
 	return int(n), err
 }
 
-// EnqueueAllRetryTasks enqueues all retry tasks for immediate processing within the given queue,
-// and reports the number of tasks enqueued.
-func (i *Inspector) EnqueueAllRetryTasks(qname string) (int, error) {
+// RunAllRetryTasks transition all retry tasks to pending state within the given queue,
+// and reports the number of tasks transitioned.
+func (i *Inspector) RunAllRetryTasks(qname string) (int, error) {
 	if err := validateQueueName(qname); err != nil {
 		return 0, err
 	}
-	n, err := i.rdb.EnqueueAllRetryTasks(qname)
+	n, err := i.rdb.RunAllRetryTasks(qname)
 	return int(n), err
 }
 
-// EnqueueAllDeadTasks enqueues all dead tasks for immediate processing within the given queue,
-// and reports the number of tasks enqueued.
-func (i *Inspector) EnqueueAllDeadTasks(qname string) (int, error) {
+// RunAllDeadTasks transition all dead tasks to pending state within the given queue,
+// and reports the number of tasks transitioned.
+func (i *Inspector) RunAllDeadTasks(qname string) (int, error) {
 	if err := validateQueueName(qname); err != nil {
 		return 0, err
 	}
-	n, err := i.rdb.EnqueueAllDeadTasks(qname)
+	n, err := i.rdb.RunAllDeadTasks(qname)
 	return int(n), err
 }
 
-// EnqueueTaskByKey enqueues a task with the given key in the given queue.
-func (i *Inspector) EnqueueTaskByKey(qname, key string) error {
+// RunTaskByKey transition a task to pending state given task key and queue name.
+func (i *Inspector) RunTaskByKey(qname, key string) error {
 	if err := validateQueueName(qname); err != nil {
 		return err
 	}
@@ -505,11 +504,11 @@ func (i *Inspector) EnqueueTaskByKey(qname, key string) error {
 	}
 	switch state {
 	case "s":
-		return i.rdb.EnqueueScheduledTask(qname, id, score)
+		return i.rdb.RunScheduledTask(qname, id, score)
 	case "r":
-		return i.rdb.EnqueueRetryTask(qname, id, score)
+		return i.rdb.RunRetryTask(qname, id, score)
 	case "d":
-		return i.rdb.EnqueueDeadTask(qname, id, score)
+		return i.rdb.RunDeadTask(qname, id, score)
 	default:
 		return fmt.Errorf("invalid key")
 	}
