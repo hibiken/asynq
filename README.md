@@ -9,7 +9,7 @@
 
 ## Overview
 
-Asynq is a Go library for queueing tasks and processing them in the background with workers. It is backed by Redis and it is designed to have a low barrier to entry. It should be integrated in your web stack easily.
+Asynq is a Go library for queueing tasks and processing them asynchronously with workers. It's backed by Redis and is designed to be scalable yet easy to get started.
 
 Highlevel overview of how Asynq works:
 
@@ -42,7 +42,8 @@ A system can consist of multiple worker servers and brokers, giving way to high 
 - Allow [timeout and deadline per task](https://github.com/hibiken/asynq/wiki/Task-Timeout-and-Cancelation)
 - [Flexible handler interface with support for middlewares](https://github.com/hibiken/asynq/wiki/Handler-Deep-Dive)
 - [Ability to pause queue](/tools/asynq/README.md#pause) to stop processing tasks from the queue
-- [Support Redis Sentinels](https://github.com/hibiken/asynq/wiki/Automatic-Failover) for HA
+- [Support Redis Cluster](https://github.com/hibiken/asynq/wiki/Redis-Cluster) for automatic sharding and high availability
+- [Support Redis Sentinels](https://github.com/hibiken/asynq/wiki/Automatic-Failover) for high availability
 - [CLI](#command-line-tool) to inspect and remote-control queues and tasks
 
 ## Quickstart
@@ -66,8 +67,8 @@ import (
 
 // A list of task types.
 const (
-    EmailDelivery   = "email:deliver"
-    ImageProcessing = "image:process"
+    TypeEmailDelivery   = "email:deliver"
+    TypeImageResize     = "image:resize"
 )
 
 //----------------------------------------------
@@ -77,19 +78,19 @@ const (
 
 func NewEmailDeliveryTask(userID int, tmplID string) *asynq.Task {
     payload := map[string]interface{}{"user_id": userID, "template_id": tmplID}
-    return asynq.NewTask(EmailDelivery, payload)
+    return asynq.NewTask(TypeEmailDelivery, payload)
 }
 
-func NewImageProcessingTask(src, dst string) *asynq.Task {
-    payload := map[string]interface{}{"src": src, "dst": dst}
-    return asynq.NewTask(ImageProcessing, payload)
+func NewImageResizeTask(src string) *asynq.Task {
+    payload := map[string]interface{}{"src": src}
+    return asynq.NewTask(TypeImageResize, payload)
 }
 
 //---------------------------------------------------------------
 // Write a function HandleXXXTask to handle the input task.
 // Note that it satisfies the asynq.HandlerFunc interface.
-// 
-// Handler doesn't need to be a function. You can define a type 
+//
+// Handler doesn't need to be a function. You can define a type
 // that satisfies asynq.Handler interface. See examples below.
 //---------------------------------------------------------------
 
@@ -103,7 +104,7 @@ func HandleEmailDeliveryTask(ctx context.Context, t *asynq.Task) error {
         return err
     }
     fmt.Printf("Send Email to User: user_id = %d, template_id = %s\n", userID, tmplID)
-    // Email delivery logic ...
+    // Email delivery code ...
     return nil
 }
 
@@ -117,12 +118,8 @@ func (p *ImageProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
     if err != nil {
         return err
     }
-    dst, err := t.Payload.GetString("dst")
-    if err != nil {
-        return err
-    }
-    fmt.Printf("Process image: src = %s, dst = %s\n", src, dst)
-    // Image processing logic ...
+    fmt.Printf("Resize image: src = %s\n", src)
+    // Image resizing code ...
     return nil
 }
 
@@ -131,10 +128,7 @@ func NewImageProcessor() *ImageProcessor {
 }
 ```
 
-In your web application code, import the above package and use [`Client`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Client) to put tasks on the queue.  
-// TODO: This description needs to be updated.
-A task will be processed asynchronously by a background worker as soon as the task gets enqueued.  
-Scheduled tasks will be stored in Redis and will be enqueued at the specified time.
+In your application code, import the above package and use [`Client`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Client) to put tasks on the queue.
 
 ```go
 package main
@@ -168,11 +162,11 @@ func main() {
 
     // ------------------------------------------------------------
     // Example 2: Schedule task to be processed in the future.
-    //            Use (*Client).EnqueueIn or (*Client).EnqueueAt.
+    //            Use ProcessIn or ProcessAt option.
     // ------------------------------------------------------------
 
     t = tasks.NewEmailDeliveryTask(42, "other:template:id")
-    res, err = c.EnqueueIn(24*time.Hour, t)
+    res, err = c.Enqueue(t, asynq.ProcessIn(24*time.Hour))
     if err != nil {
         log.Fatal("could not schedule task: %v", err)
     }
@@ -180,13 +174,13 @@ func main() {
 
 
     // ----------------------------------------------------------------------------
-    // Example 3: Set options to tune task processing behavior.
+    // Example 3: Set other options to tune task processing behavior.
     //            Options include MaxRetry, Queue, Timeout, Deadline, Unique etc.
     // ----------------------------------------------------------------------------
 
-    c.SetDefaultOptions(tasks.ImageProcessing, asynq.MaxRetry(10), asynq.Timeout(time.Minute))
+    c.SetDefaultOptions(tasks.ImageProcessing, asynq.MaxRetry(10), asynq.Timeout(3*time.Minute))
 
-    t = tasks.NewImageProcessingTask("some/blobstore/url", "other/blobstore/url")
+    t = tasks.NewImageResizeTask("some/blobstore/path")
     res, err = c.Enqueue(t)
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
@@ -198,7 +192,7 @@ func main() {
     //            Options passed at enqueue time override default ones, if any.
     // ---------------------------------------------------------------------------
 
-    t = tasks.NewImageProcessingTask("some/blobstore/url", "other/blobstore/url")
+    t = tasks.NewImageResizeTask("some/blobstore/path")
     res, err = c.Enqueue(t, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
@@ -207,7 +201,7 @@ func main() {
 }
 ```
 
-Next, create a worker server to process these tasks in the background.  
+Next, start a worker server to process these tasks in the background.  
 To start the background workers, use [`Server`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Server) and provide your [`Handler`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Handler) to process the tasks.
 
 You can optionally use [`ServeMux`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#ServeMux) to create a handler, just as you would with [`"net/http"`](https://golang.org/pkg/net/http/) Handler.
@@ -241,8 +235,8 @@ func main() {
 
     // mux maps a type to a handler
     mux := asynq.NewServeMux()
-    mux.HandleFunc(tasks.EmailDelivery, tasks.HandleEmailDeliveryTask)
-    mux.Handle(tasks.ImageProcessing, tasks.NewImageProcessor())
+    mux.HandleFunc(tasks.TypeEmailDelivery, tasks.HandleEmailDeliveryTask)
+    mux.Handle(tasks.TypeImageResize, tasks.NewImageProcessor())
     // ...register other handlers...
 
     if err := srv.Run(mux); err != nil {
@@ -283,7 +277,7 @@ go get -u github.com/hibiken/asynq/tools/asynq
 
 | Dependency                 | Version |
 | -------------------------- | ------- |
-| [Redis](https://redis.io/) | v2.8+   |
+| [Redis](https://redis.io/) | v3.0+   |
 | [Go](https://golang.org/)  | v1.13+  |
 
 ## Contributing
