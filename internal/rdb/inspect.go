@@ -222,8 +222,21 @@ func (r *RDB) RedisInfo() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseInfo(res)
+}
+
+// RedisClusterInfo returns a map of redis cluster info.
+func (r *RDB) RedisClusterInfo() (map[string]string, error) {
+	res, err := r.client.ClusterInfo().Result()
+	if err != nil {
+		return nil, err
+	}
+	return parseInfo(res)
+}
+
+func parseInfo(infoStr string) (map[string]string, error) {
 	info := make(map[string]string)
-	lines := strings.Split(res, "\r\n")
+	lines := strings.Split(infoStr, "\r\n")
 	for _, l := range lines {
 		kv := strings.Split(l, ":")
 		if len(kv) == 2 {

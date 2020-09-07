@@ -6,6 +6,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -88,7 +89,12 @@ func stats(cmd *cobra.Command, args []string) {
 		aggStats.Timestamp = s.Timestamp
 		stats = append(stats, s)
 	}
-	info, err := r.RedisInfo()
+	var info map[string]string
+	if useRedisCluster {
+		info, err = r.RedisClusterInfo()
+	} else {
+		info, err = r.RedisInfo()
+	}
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -105,8 +111,13 @@ func stats(cmd *cobra.Command, args []string) {
 	printSuccessFailureStats(&aggStats)
 	fmt.Println()
 
-	fmt.Println("REDIS INFO")
-	printInfo(info)
+	if useRedisCluster {
+		fmt.Println("REDIS CLUSTER INFO")
+		printClusterInfo(info)
+	} else {
+		fmt.Println("REDIS INFO")
+		printInfo(info)
+	}
 	fmt.Println()
 }
 
@@ -172,6 +183,19 @@ func printInfo(info map[string]string) {
 		fmt.Sprintf("%sB", info["used_memory_peak_human"]),
 	)
 	tw.Flush()
+}
+
+func printClusterInfo(info map[string]string) {
+	printTable(
+		[]string{"State", "Known Nodes", "Cluster Size"},
+		func(w io.Writer, tmpl string) {
+			fmt.Fprintf(w, tmpl,
+				strings.ToUpper(info["cluster_state"]),
+				info["cluster_known_nodes"],
+				info["cluster_size"],
+			)
+		},
+	)
 }
 
 func toInterfaceSlice(strs []string) []interface{} {
