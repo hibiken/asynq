@@ -3,23 +3,23 @@
 // that can be found in the LICENSE file.
 
 /*
-Package asynq provides a framework for asynchronous task processing.
+Package asynq provides a framework for Redis based distrubted task queue.
 
-Asynq uses Redis as a message broker. To connect to redis server,
-specify the options using one of RedisConnOpt types.
+Asynq uses Redis as a message broker. To connect to redis,
+specify the connection using one of RedisConnOpt types.
 
-    redis = &asynq.RedisClientOpt{
+    redisConnOpt = asynq.RedisClientOpt{
         Addr:     "127.0.0.1:6379",
         Password: "xxxxx",
         DB:       3,
     }
 
-The Client is used to enqueue a task to be processed at the specified time.
+The Client is used to enqueue a task.
 
-Task is created with two parameters: its type and payload.
 
-    client := asynq.NewClient(redis)
+    client := asynq.NewClient(redisConnOpt)
 
+    // Task is created with two parameters: its type and payload.
     t := asynq.NewTask(
         "send_email",
         map[string]interface{}{"user_id": 42})
@@ -28,15 +28,17 @@ Task is created with two parameters: its type and payload.
     res, err := client.Enqueue(t)
 
     // Schedule the task to be processed after one minute.
-    res, err = client.EnqueueIn(time.Minute, t)
+    res, err = client.Enqueue(t, asynq.ProcessIn(1*time.Minute))
 
-The Server is used to run the background task processing with a given
+The Server is used to run the task processing workers with a given
 handler.
-    srv := asynq.NewServer(redis, asynq.Config{
+    srv := asynq.NewServer(redisConnOpt, asynq.Config{
         Concurrency: 10,
     })
 
-    srv.Run(handler)
+    if err := srv.Run(handler); err != nil {
+        log.Fatal(err)
+    }
 
 Handler is an interface type with a method which
 takes a task and returns an error. Handler should return nil if
