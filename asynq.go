@@ -52,8 +52,12 @@ type RedisClientOpt struct {
 	// Redis server address in "host:port" format.
 	Addr string
 
-	// TODO: Add Username
-	// Redis server password.
+	// Username to authenticate the current connection when Redis ACLs are used.
+	// See: https://redis.io/commands/auth.
+	Username string
+
+	// Password to authenticate the current connection.
+	// See: https://redis.io/commands/auth.
 	Password string
 
 	// Redis DB to select after connecting to a server.
@@ -84,8 +88,12 @@ type RedisFailoverClientOpt struct {
 	// Redis sentinel password.
 	SentinelPassword string
 
-	// TODO: Add Username
-	// Redis server password.
+	// Username to authenticate the current connection when Redis ACLs are used.
+	// See: https://redis.io/commands/auth.
+	Username string
+
+	// Password to authenticate the current connection.
+	// See: https://redis.io/commands/auth.
 	Password string
 
 	// Redis DB to select after connecting to a server.
@@ -107,8 +115,12 @@ type RedisClusterClientOpt struct {
 	// A seed list of host:port addresses of cluster nodes.
 	Addrs []string
 
-	// TODO: Add Username
-	// Redis server password.
+	// Username to authenticate the current connection when Redis ACLs are used.
+	// See: https://redis.io/commands/auth.
+	Username string
+
+	// Password to authenticate the current connection.
+	// See: https://redis.io/commands/auth.
 	Password string
 
 	// TLS Config used to connect to a server.
@@ -198,6 +210,7 @@ func createRedisClient(r RedisConnOpt) redis.UniversalClient {
 		return redis.NewClient(&redis.Options{
 			Network:   r.Network,
 			Addr:      r.Addr,
+			Username:  r.Username,
 			Password:  r.Password,
 			DB:        r.DB,
 			PoolSize:  r.PoolSize,
@@ -207,6 +220,7 @@ func createRedisClient(r RedisConnOpt) redis.UniversalClient {
 		return redis.NewClient(&redis.Options{
 			Network:   r.Network,
 			Addr:      r.Addr,
+			Username:  r.Username,
 			Password:  r.Password,
 			DB:        r.DB,
 			PoolSize:  r.PoolSize,
@@ -217,6 +231,7 @@ func createRedisClient(r RedisConnOpt) redis.UniversalClient {
 			MasterName:       r.MasterName,
 			SentinelAddrs:    r.SentinelAddrs,
 			SentinelPassword: r.SentinelPassword,
+			Username:         r.Username,
 			Password:         r.Password,
 			DB:               r.DB,
 			PoolSize:         r.PoolSize,
@@ -227,6 +242,7 @@ func createRedisClient(r RedisConnOpt) redis.UniversalClient {
 			MasterName:       r.MasterName,
 			SentinelAddrs:    r.SentinelAddrs,
 			SentinelPassword: r.SentinelPassword,
+			Username:         r.Username,
 			Password:         r.Password,
 			DB:               r.DB,
 			PoolSize:         r.PoolSize,
@@ -235,12 +251,14 @@ func createRedisClient(r RedisConnOpt) redis.UniversalClient {
 	case RedisClusterClientOpt:
 		return redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs:     r.Addrs,
+			Username:  r.Username,
 			Password:  r.Password,
 			TLSConfig: r.TLSConfig,
 		})
 	case *RedisClusterClientOpt:
 		return redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs:     r.Addrs,
+			Username:  r.Username,
 			Password:  r.Password,
 			TLSConfig: r.TLSConfig,
 		})
