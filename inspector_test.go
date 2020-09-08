@@ -19,6 +19,7 @@ import (
 
 func TestInspectorQueues(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
@@ -51,6 +52,7 @@ func TestInspectorQueues(t *testing.T) {
 
 func TestInspectorCurrentStats(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessage("task3", nil)
@@ -162,6 +164,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 
 func TestInspectorHistory(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	now := time.Now().UTC()
 	inspector := NewInspector(getRedisConnOpt(t))
 
@@ -225,6 +228,7 @@ func createPendingTask(msg *base.TaskMessage) *PendingTask {
 
 func TestInspectorListPendingTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessage("task3", nil)
@@ -293,6 +297,7 @@ func TestInspectorListPendingTasks(t *testing.T) {
 
 func TestInspectorListActiveTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessage("task3", nil)
@@ -358,6 +363,7 @@ func createScheduledTask(z base.Z) *ScheduledTask {
 
 func TestInspectorListScheduledTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessage("task3", nil)
@@ -433,6 +439,7 @@ func createRetryTask(z base.Z) *RetryTask {
 
 func TestInspectorListRetryTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessage("task3", nil)
@@ -509,6 +516,7 @@ func createDeadTask(z base.Z) *DeadTask {
 
 func TestInspectorListDeadTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessage("task3", nil)
@@ -576,6 +584,7 @@ func TestInspectorListPagination(t *testing.T) {
 			asynqtest.NewTaskMessage(fmt.Sprintf("task%d", i), nil))
 	}
 	r := setup(t)
+	defer r.Close()
 	asynqtest.SeedPendingQueue(t, r, msgs, base.DefaultQueueName)
 
 	inspector := NewInspector(getRedisConnOpt(t))
@@ -630,6 +639,7 @@ func TestInspectorListPagination(t *testing.T) {
 
 func TestInspectorDeleteAllScheduledTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessage("task3", nil)
@@ -695,6 +705,7 @@ func TestInspectorDeleteAllScheduledTasks(t *testing.T) {
 
 func TestInspectorDeleteAllRetryTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessage("task3", nil)
@@ -760,6 +771,7 @@ func TestInspectorDeleteAllRetryTasks(t *testing.T) {
 
 func TestInspectorDeleteAllDeadTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessage("task3", nil)
@@ -825,6 +837,7 @@ func TestInspectorDeleteAllDeadTasks(t *testing.T) {
 
 func TestInspectorKillAllScheduledTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessage("task3", nil)
@@ -957,6 +970,7 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 
 func TestInspectorKillAllRetryTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessage("task3", nil)
@@ -1070,6 +1084,7 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 
 func TestInspectorRunAllScheduledTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "critical")
 	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "low")
@@ -1186,6 +1201,7 @@ func TestInspectorRunAllScheduledTasks(t *testing.T) {
 
 func TestInspectorRunAllRetryTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "critical")
 	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "low")
@@ -1302,6 +1318,7 @@ func TestInspectorRunAllRetryTasks(t *testing.T) {
 
 func TestInspectorRunAllDeadTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "critical")
 	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "low")
@@ -1415,6 +1432,7 @@ func TestInspectorRunAllDeadTasks(t *testing.T) {
 
 func TestInspectorDeleteTaskByKeyDeletesScheduledTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -1464,6 +1482,7 @@ func TestInspectorDeleteTaskByKeyDeletesScheduledTask(t *testing.T) {
 
 func TestInspectorDeleteTaskByKeyDeletesRetryTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -1513,6 +1532,7 @@ func TestInspectorDeleteTaskByKeyDeletesRetryTask(t *testing.T) {
 
 func TestInspectorDeleteTaskByKeyDeletesDeadTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -1562,6 +1582,7 @@ func TestInspectorDeleteTaskByKeyDeletesDeadTask(t *testing.T) {
 
 func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessage("task2", nil)
 	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -1631,6 +1652,7 @@ func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
 
 func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "custom")
 	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -1699,6 +1721,7 @@ func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
 
 func TestInspectorRunTaskByKeyRunsDeadTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "critical")
 	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "low")
@@ -1771,6 +1794,7 @@ func TestInspectorRunTaskByKeyRunsDeadTask(t *testing.T) {
 
 func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "custom")
 	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -1841,6 +1865,7 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 
 func TestInspectorKillTaskByKeyKillsRetryTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
 	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "custom")
 	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "custom")

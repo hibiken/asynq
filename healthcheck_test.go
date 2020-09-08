@@ -15,6 +15,7 @@ import (
 
 func TestHealthChecker(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	rdbClient := rdb.NewRDB(r)
 
 	var (
@@ -62,6 +63,7 @@ func TestHealthCheckerWhenRedisDown(t *testing.T) {
 		}
 	}()
 	r := rdb.NewRDB(setup(t))
+	defer r.Close()
 	testBroker := testbroker.NewTestBroker(r)
 	var (
 		// mu guards called and e variables.

@@ -17,6 +17,7 @@ import (
 
 func TestRecoverer(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	rdbClient := rdb.NewRDB(r)
 
 	t1 := h.NewTaskMessageWithQueue("task1", nil, "default")

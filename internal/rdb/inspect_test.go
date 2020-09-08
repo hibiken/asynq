@@ -18,6 +18,7 @@ import (
 
 func TestAllQueues(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 
 	tests := []struct {
 		queues []string
@@ -48,6 +49,7 @@ func TestAllQueues(t *testing.T) {
 
 func TestCurrentStats(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
 	m2 := h.NewTaskMessage("reindex", nil)
 	m3 := h.NewTaskMessage("gen_thumbnail", map[string]interface{}{"src": "some/path/to/img"})
@@ -216,6 +218,7 @@ func TestCurrentStats(t *testing.T) {
 
 func TestCurrentStatsWithNonExistentQueue(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 
 	qname := "non-existent"
 	got, err := r.CurrentStats(qname)
@@ -226,6 +229,7 @@ func TestCurrentStatsWithNonExistentQueue(t *testing.T) {
 
 func TestHistoricalStats(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	now := time.Now().UTC()
 
 	tests := []struct {
@@ -281,6 +285,7 @@ func TestHistoricalStats(t *testing.T) {
 
 func TestRedisInfo(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 
 	info, err := r.RedisInfo()
 	if err != nil {
@@ -305,6 +310,7 @@ func TestRedisInfo(t *testing.T) {
 
 func TestListPending(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 
 	m1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
 	m2 := h.NewTaskMessage("reindex", nil)
@@ -369,6 +375,7 @@ func TestListPending(t *testing.T) {
 
 func TestListPendingPagination(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	var msgs []*base.TaskMessage
 	for i := 0; i < 100; i++ {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
@@ -435,6 +442,7 @@ func TestListPendingPagination(t *testing.T) {
 
 func TestListActive(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
@@ -483,6 +491,7 @@ func TestListActive(t *testing.T) {
 
 func TestListActivePagination(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	var msgs []*base.TaskMessage
 	for i := 0; i < 100; i++ {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
@@ -539,6 +548,7 @@ func TestListActivePagination(t *testing.T) {
 
 func TestListScheduled(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessage("task3", nil)
@@ -616,6 +626,7 @@ func TestListScheduled(t *testing.T) {
 
 func TestListScheduledPagination(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	// create 100 tasks with an increasing number of wait time.
 	for i := 0; i < 100; i++ {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
@@ -673,6 +684,7 @@ func TestListScheduledPagination(t *testing.T) {
 
 func TestListRetry(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := &base.TaskMessage{
 		ID:       uuid.New(),
 		Type:     "task1",
@@ -769,6 +781,7 @@ func TestListRetry(t *testing.T) {
 
 func TestListRetryPagination(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	// create 100 tasks with an increasing number of wait time.
 	now := time.Now()
 	var seed []base.Z
@@ -830,6 +843,7 @@ func TestListRetryPagination(t *testing.T) {
 
 func TestListDead(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := &base.TaskMessage{
 		ID:       uuid.New(),
 		Type:     "task1",
@@ -920,6 +934,7 @@ func TestListDead(t *testing.T) {
 
 func TestListDeadPagination(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	var entries []base.Z
 	for i := 0; i < 100; i++ {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
@@ -983,6 +998,7 @@ var (
 
 func TestRunDeadTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
 	t3 := h.NewTaskMessageWithQueue("send_notification", nil, "critical")
@@ -1087,6 +1103,7 @@ func TestRunDeadTask(t *testing.T) {
 
 func TestRunRetryTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
@@ -1191,6 +1208,7 @@ func TestRunRetryTask(t *testing.T) {
 
 func TestRunScheduledTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
 	t3 := h.NewTaskMessageWithQueue("send_notification", nil, "notifications")
@@ -1295,6 +1313,7 @@ func TestRunScheduledTask(t *testing.T) {
 
 func TestRunAllScheduledTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
 	t3 := h.NewTaskMessage("reindex", nil)
@@ -1400,6 +1419,7 @@ func TestRunAllScheduledTasks(t *testing.T) {
 
 func TestRunAllRetryTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
 	t3 := h.NewTaskMessage("reindex", nil)
@@ -1505,6 +1525,7 @@ func TestRunAllRetryTasks(t *testing.T) {
 
 func TestRunAllDeadTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("gen_thumbnail", nil)
 	t3 := h.NewTaskMessage("reindex", nil)
@@ -1610,6 +1631,7 @@ func TestRunAllDeadTasks(t *testing.T) {
 
 func TestKillRetryTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -1735,6 +1757,7 @@ func TestKillRetryTask(t *testing.T) {
 
 func TestKillScheduledTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -1860,6 +1883,7 @@ func TestKillScheduledTask(t *testing.T) {
 
 func TestKillAllRetryTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -2006,6 +2030,7 @@ func TestKillAllRetryTasks(t *testing.T) {
 
 func TestKillAllScheduledTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -2152,6 +2177,7 @@ func TestKillAllScheduledTasks(t *testing.T) {
 
 func TestDeleteDeadTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -2251,6 +2277,7 @@ func TestDeleteDeadTask(t *testing.T) {
 
 func TestDeleteRetryTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -2335,6 +2362,7 @@ func TestDeleteRetryTask(t *testing.T) {
 
 func TestDeleteScheduledTask(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -2419,6 +2447,7 @@ func TestDeleteScheduledTask(t *testing.T) {
 
 func TestDeleteAllDeadTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -2480,6 +2509,7 @@ func TestDeleteAllDeadTasks(t *testing.T) {
 
 func TestDeleteAllRetryTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -2541,6 +2571,7 @@ func TestDeleteAllRetryTasks(t *testing.T) {
 
 func TestDeleteAllScheduledTasks(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -2602,6 +2633,7 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 
 func TestRemoveQueue(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -2702,6 +2734,7 @@ func TestRemoveQueue(t *testing.T) {
 
 func TestRemoveQueueError(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
@@ -2845,6 +2878,7 @@ func TestRemoveQueueError(t *testing.T) {
 
 func TestListServers(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 
 	started1 := time.Now().Add(-time.Hour)
 	info1 := &base.ServerInfo{
@@ -2906,6 +2940,7 @@ func TestListServers(t *testing.T) {
 
 func TestListWorkers(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 
 	var (
 		host = "127.0.0.1"

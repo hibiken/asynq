@@ -22,6 +22,7 @@ func TestSyncer(t *testing.T) {
 		h.NewTaskMessage("gen_thumbnail", nil),
 	}
 	r := setup(t)
+	defer r.Close()
 	rdbClient := rdb.NewRDB(r)
 	h.SeedActiveQueue(t, r, inProgress, base.DefaultQueueName)
 
