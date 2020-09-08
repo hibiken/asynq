@@ -19,6 +19,7 @@ import (
 
 func TestHeartbeater(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	rdbClient := rdb.NewRDB(r)
 
 	tests := []struct {
@@ -128,6 +129,7 @@ func TestHeartbeaterWithRedisDown(t *testing.T) {
 		}
 	}()
 	r := rdb.NewRDB(setup(t))
+	defer r.Close()
 	testBroker := testbroker.NewTestBroker(r)
 	hb := newHeartbeater(heartbeaterParams{
 		logger:         testLogger,

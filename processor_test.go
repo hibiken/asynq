@@ -484,6 +484,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		t6 = NewTask(m6.Type, m6.Payload)
 		t7 = NewTask(m7.Type, m7.Payload)
 	)
+	defer r.Close()
 
 	tests := []struct {
 		pending       map[string][]*base.TaskMessage // initial queues state

@@ -18,6 +18,7 @@ import (
 func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 	r := setup(t)
 	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
 
 	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
 
@@ -132,6 +133,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 func TestClientEnqueue(t *testing.T) {
 	r := setup(t)
 	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
 
 	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
 	now := time.Now()
@@ -384,6 +386,7 @@ func TestClientEnqueue(t *testing.T) {
 func TestClientEnqueueWithProcessInOption(t *testing.T) {
 	r := setup(t)
 	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
 
 	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
 	now := time.Now()
@@ -494,6 +497,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 func TestClientEnqueueError(t *testing.T) {
 	r := setup(t)
 	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
 
 	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
 
@@ -606,6 +610,7 @@ func TestClientDefaultOptions(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 		c := NewClient(getRedisConnOpt(t))
+		defer c.Close()
 		c.SetDefaultOptions(tc.task.Type, tc.defaultOpts...)
 		gotRes, err := c.Enqueue(tc.task, tc.opts...)
 		if err != nil {
@@ -636,6 +641,7 @@ func TestClientDefaultOptions(t *testing.T) {
 func TestClientEnqueueUnique(t *testing.T) {
 	r := setup(t)
 	c := NewClient(getRedisConnOpt(t))
+	defer c.Close()
 
 	tests := []struct {
 		task *Task
@@ -678,6 +684,7 @@ func TestClientEnqueueUnique(t *testing.T) {
 func TestClientEnqueueUniqueWithProcessInOption(t *testing.T) {
 	r := setup(t)
 	c := NewClient(getRedisConnOpt(t))
+	defer c.Close()
 
 	tests := []struct {
 		task *Task
@@ -723,6 +730,7 @@ func TestClientEnqueueUniqueWithProcessInOption(t *testing.T) {
 func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 	r := setup(t)
 	c := NewClient(getRedisConnOpt(t))
+	defer c.Close()
 
 	tests := []struct {
 		task *Task

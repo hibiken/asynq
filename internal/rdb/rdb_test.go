@@ -60,6 +60,7 @@ func setup(t *testing.T) (r *RDB) {
 
 func TestEnqueue(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	t1 := h.NewTaskMessage("send_email", map[string]interface{}{"to": "exampleuser@gmail.com", "from": "noreply@example.com"})
 	t2 := h.NewTaskMessageWithQueue("generate_csv", map[string]interface{}{}, "csv")
 	t3 := h.NewTaskMessageWithQueue("sync", nil, "low")
@@ -96,6 +97,7 @@ func TestEnqueue(t *testing.T) {
 
 func TestEnqueueUnique(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := base.TaskMessage{
 		ID:        uuid.New(),
 		Type:      "email",
@@ -140,6 +142,7 @@ func TestEnqueueUnique(t *testing.T) {
 
 func TestDequeue(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	now := time.Now()
 	t1 := &base.TaskMessage{
 		ID:       uuid.New(),
@@ -336,6 +339,7 @@ func TestDequeue(t *testing.T) {
 
 func TestDequeueIgnoresPausedQueues(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	t1 := &base.TaskMessage{
 		ID:       uuid.New(),
 		Type:     "send_email",
@@ -448,6 +452,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 
 func TestDone(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	now := time.Now()
 	t1 := &base.TaskMessage{
 		ID:       uuid.New(),
@@ -600,6 +605,7 @@ func TestDone(t *testing.T) {
 
 func TestRequeue(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	now := time.Now()
 	t1 := &base.TaskMessage{
 		ID:      uuid.New(),
@@ -748,6 +754,7 @@ func TestRequeue(t *testing.T) {
 
 func TestSchedule(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	t1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
 	tests := []struct {
 		msg       *base.TaskMessage
@@ -785,6 +792,7 @@ func TestSchedule(t *testing.T) {
 
 func TestScheduleUnique(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	m1 := base.TaskMessage{
 		ID:        uuid.New(),
 		Type:      "email",
@@ -841,6 +849,7 @@ func TestScheduleUnique(t *testing.T) {
 
 func TestRetry(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	now := time.Now()
 	t1 := &base.TaskMessage{
 		ID:      uuid.New(),
@@ -1001,6 +1010,7 @@ func TestRetry(t *testing.T) {
 
 func TestKill(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	now := time.Now()
 	t1 := &base.TaskMessage{
 		ID:      uuid.New(),
@@ -1203,6 +1213,7 @@ func TestKill(t *testing.T) {
 
 func TestCheckAndEnqueue(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("generate_csv", nil)
 	t3 := h.NewTaskMessage("gen_thumbnail", nil)
@@ -1414,6 +1425,7 @@ func TestListDeadlineExceeded(t *testing.T) {
 	}
 
 	r := setup(t)
+	defer r.Close()
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
@@ -1433,6 +1445,7 @@ func TestListDeadlineExceeded(t *testing.T) {
 
 func TestWriteServerState(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 
 	var (
 		host     = "localhost"
@@ -1499,6 +1512,7 @@ func TestWriteServerState(t *testing.T) {
 
 func TestWriteServerStateWithWorkers(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 
 	var (
 		host     = "127.0.0.1"
@@ -1607,6 +1621,7 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 
 func TestClearServerState(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 
 	var (
 		host     = "127.0.0.1"
@@ -1707,6 +1722,7 @@ func TestClearServerState(t *testing.T) {
 
 func TestCancelationPubSub(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 
 	pubsub, err := r.CancelationPubSub()
 	if err != nil {

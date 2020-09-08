@@ -17,6 +17,7 @@ import (
 
 func TestScheduler(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	rdbClient := rdb.NewRDB(r)
 	const pollInterval = time.Second
 	s := newScheduler(schedulerParams{

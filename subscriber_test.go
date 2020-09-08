@@ -16,6 +16,7 @@ import (
 
 func TestSubscriber(t *testing.T) {
 	r := setup(t)
+	defer r.Close()
 	rdbClient := rdb.NewRDB(r)
 
 	tests := []struct {
@@ -76,6 +77,7 @@ func TestSubscriberWithRedisDown(t *testing.T) {
 		}
 	}()
 	r := rdb.NewRDB(setup(t))
+	defer r.Close()
 	testBroker := testbroker.NewTestBroker(r)
 
 	cancelations := base.NewCancelations()

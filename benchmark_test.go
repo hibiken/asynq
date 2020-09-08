@@ -34,6 +34,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
+		client.Close()
 
 		var wg sync.WaitGroup
 		wg.Add(count)
@@ -80,6 +81,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
+		client.Close()
 
 		var wg sync.WaitGroup
 		wg.Add(count * 2)
@@ -151,6 +153,7 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
+		client.Close()
 
 		var wg sync.WaitGroup
 		wg.Add(highCount + defaultCount + lowCount)
@@ -221,6 +224,7 @@ func BenchmarkClientWhileServerRunning(b *testing.B) {
 
 		b.StopTimer() // begin teardown
 		srv.Stop()
+		client.Close()
 		b.StartTimer() // end teardown
 	}
 }
