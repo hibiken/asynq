@@ -235,7 +235,7 @@ type Result struct {
 	Deadline time.Time
 }
 
-// Close closes the connection with redis server.
+// Close closes the connection with redis.
 func (c *Client) Close() error {
 	return c.rdb.Close()
 }
