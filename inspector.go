@@ -27,6 +27,11 @@ func NewInspector(r RedisConnOpt) *Inspector {
 	}
 }
 
+// Close closes the connection with redis.
+func (i *Inspector) Close() error {
+	return i.rdb.Close()
+}
+
 // Queues returns a list of all queue names.
 func (i *Inspector) Queues() ([]string, error) {
 	return i.rdb.AllQueues()
