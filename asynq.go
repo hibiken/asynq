@@ -115,6 +115,11 @@ type RedisClusterClientOpt struct {
 	// A seed list of host:port addresses of cluster nodes.
 	Addrs []string
 
+	// The maximum number of retries before giving up.
+	// Command is retried on network errors and MOVED/ASK redirects.
+	// Default is 8 retries.
+	MaxRedirects int
+
 	// Username to authenticate the current connection when Redis ACLs are used.
 	// See: https://redis.io/commands/auth.
 	Username string
@@ -250,17 +255,19 @@ func createRedisClient(r RedisConnOpt) redis.UniversalClient {
 		})
 	case RedisClusterClientOpt:
 		return redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:     r.Addrs,
-			Username:  r.Username,
-			Password:  r.Password,
-			TLSConfig: r.TLSConfig,
+			Addrs:        r.Addrs,
+			MaxRedirects: r.MaxRedirects,
+			Username:     r.Username,
+			Password:     r.Password,
+			TLSConfig:    r.TLSConfig,
 		})
 	case *RedisClusterClientOpt:
 		return redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:     r.Addrs,
-			Username:  r.Username,
-			Password:  r.Password,
-			TLSConfig: r.TLSConfig,
+			Addrs:        r.Addrs,
+			MaxRedirects: r.MaxRedirects,
+			Username:     r.Username,
+			Password:     r.Password,
+			TLSConfig:    r.TLSConfig,
 		})
 	default:
 		panic(fmt.Sprintf("asynq: unexpected type %T for RedisConnOpt", r))
