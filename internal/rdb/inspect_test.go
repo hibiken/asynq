@@ -272,9 +272,8 @@ func TestHistoricalStats(t *testing.T) {
 				Failed:    (i + 1) * 10,
 				Time:      now.Add(-time.Duration(i) * 24 * time.Hour),
 			}
-			// Allow 10 seconds difference in timestamp.
-			// When testing with Redis Cluster it could take a while to set up, and timestamp can have a few second difference.
-			cmpOpt := cmpopts.EquateApproxTime(10 * time.Second)
+			// Allow 2 seconds difference in timestamp.
+			cmpOpt := cmpopts.EquateApproxTime(2 * time.Second)
 			if diff := cmp.Diff(want, got[i], cmpOpt); diff != "" {
 				t.Errorf("RDB.HistoricalStats for the last %d days; got %+v, want %+v; (-want,+got):\n%s", i, got[i], want, diff)
 			}
