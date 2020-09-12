@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**IMPORTANT**: If you are upgrading from a previous version, please install the latest version of the CLI `go get -u github.com/hibiken/asynq/tools/asynq` and run `asynq migrate` command. No process should be writing to Redis while you run the migration command. 
+
+## The semantics of queue have changed
+Previously, we called tasks that are ready to be processed *"Enqueued tasks"*, and other tasks that are scheduled to be processed in the future *"Scheduled tasks"*, etc.
+We changed the semantics of *"Enqueue"* slightly; All tasks that client pushes to Redis are *Enqueued* to a queue. Within a queue, tasks will transition from one state to another. 
+Possible task states are:
+- `Pending`: task is ready to be processed (previously called "Enqueued")
+- `Active`: tasks is currently being processed (previously called "InProgress")
+- `Scheduled`: task is scheduled to be processed in the future
+- `Retry`: task failed to be processed and will be retried again in the future
+- `Dead`: task has exhausted all of its retries and stored for manual inspection purpose
+
+**These semantics change is reflected in the new `Inspector` API and CLI commands.**
+
+---
+
+### Changed
+#### `Client`
+Use `ProcessIn` or `ProcessAt` option to schedule a task instead of `EnqueueIn` or `EnqueueAt`.
+
+| Previously                  | v0.12.0                                    |
+|-----------------------------|--------------------------------------------|
+| `client.EnqueueAt(t, task)` | `client.Enqueue(task, asynq.ProcessAt(t))` |  
+| `client.EnqueueIn(d, task)` | `client.Enqueue(task, asynq.ProcessIn(d))` |  
+
+#### `Inspector`
+All Inspector methods are scoped to a queue, and the methods take `qname (string)` as the first argument.  
+`EnqueuedTask` is renamed to `PendingTask` and its corresponding methods.  
+`InProgressTask` is renamed to `ActiveTask` and its corresponding methods.  
+Command "Enqueue" is replaced by the verb "Run" (e.g. `EnqueueAllScheduledTasks` --> `RunAllScheduledTasks`)
+
+#### `CLI`
+CLI commands are restructured to use subcommands. Commands are organized into a few management commands:
+To view details on any command, use `asynq help <command> <subcommand>`.
+- `asynq stats`
+- `asynq queue [ls inspect history rm pause unpause]`
+- `asynq task [ls cancel delete kill run delete-all kill-all run-all]`
+- `asynq server [ls]`
+
+### Added
+
+#### `RedisConnOpt`
+- `RedisClusterClientOpt` is added to connect to Redis Cluster.
+- `Username` field is added to all `RedisConnOpt` types in order to authenticate connection when Redis ACLs are used.
+
+#### `Client`
+- `ProcessIn(d time.Duration) Option` and `ProcessAt(t time.Time) Option` are added to replace `EnqueueIn` and `EnqueueAt` functionality.
+
+#### `Inspector`
+- `Queues() ([]string, error)` method is added to get all queue names.
+- `ClusterKeySlot(qname string) (int64, error)` method is added to get queue's hash slot in Redis cluster.
+- `ClusterNodes(qname string) ([]ClusterNode, error)` method is added to get a list of Redis cluster nodes for the given queue. 
+- `Close() error` method is added to close connection with redis.
+
+### `Handler` 
+- `GetQueueName(ctx context.Context) (string, bool)` helper is added to extract queue name from a context.
+
 ## [0.11.0] - 2020-07-28
 
 ### Added
