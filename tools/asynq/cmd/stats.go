@@ -13,6 +13,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
 )
@@ -99,23 +100,24 @@ func stats(cmd *cobra.Command, args []string) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Println("BY STATES")
+	bold := color.New(color.Bold)
+	bold.Println("Task Count by State")
 	printStatsByState(&aggStats)
 	fmt.Println()
 
-	fmt.Println("BY QUEUES")
+	bold.Println("Task Count by Queue")
 	printStatsByQueue(stats)
 	fmt.Println()
 
-	fmt.Printf("STATS FOR %s UTC\n", aggStats.Timestamp.UTC().Format("2006-01-02"))
+	bold.Printf("Daily Stats %s UTC\n", aggStats.Timestamp.UTC().Format("2006-01-02"))
 	printSuccessFailureStats(&aggStats)
 	fmt.Println()
 
 	if useRedisCluster {
-		fmt.Println("REDIS CLUSTER INFO")
+		bold.Println("Redis Cluster Info")
 		printClusterInfo(info)
 	} else {
-		fmt.Println("REDIS INFO")
+		bold.Println("Redis Info")
 		printInfo(info)
 	}
 	fmt.Println()
@@ -124,7 +126,7 @@ func stats(cmd *cobra.Command, args []string) {
 func printStatsByState(s *AggregateStats) {
 	format := strings.Repeat("%v\t", 5) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	fmt.Fprintf(tw, format, "Active", "Pending", "Scheduled", "Retry", "Dead")
+	fmt.Fprintf(tw, format, "active", "pending", "scheduled", "retry", "dead")
 	fmt.Fprintf(tw, format, "----------", "--------", "---------", "-----", "----")
 	fmt.Fprintf(tw, format, s.Active, s.Pending, s.Scheduled, s.Retry, s.Dead)
 	tw.Flush()
@@ -148,9 +150,9 @@ func printStatsByQueue(stats []*rdb.Stats) {
 
 func queueTitle(s *rdb.Stats) string {
 	var b strings.Builder
-	b.WriteString(strings.Title(s.Queue))
+	b.WriteString(s.Queue)
 	if s.Paused {
-		b.WriteString(" (Paused)")
+		b.WriteString(" (paused)")
 	}
 	return b.String()
 }
@@ -158,7 +160,7 @@ func queueTitle(s *rdb.Stats) string {
 func printSuccessFailureStats(s *AggregateStats) {
 	format := strings.Repeat("%v\t", 3) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	fmt.Fprintf(tw, format, "Processed", "Failed", "Error Rate")
+	fmt.Fprintf(tw, format, "processed", "failed", "error rate")
 	fmt.Fprintf(tw, format, "---------", "------", "----------")
 	var errrate string
 	if s.Processed == 0 {
@@ -173,7 +175,7 @@ func printSuccessFailureStats(s *AggregateStats) {
 func printInfo(info map[string]string) {
 	format := strings.Repeat("%v\t", 5) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	fmt.Fprintf(tw, format, "Version", "Uptime", "Connections", "Memory Usage", "Peak Memory Usage")
+	fmt.Fprintf(tw, format, "version", "uptime", "connections", "memory usage", "peak memory usage")
 	fmt.Fprintf(tw, format, "-------", "------", "-----------", "------------", "-----------------")
 	fmt.Fprintf(tw, format,
 		info["redis_version"],

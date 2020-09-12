@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/fatih/color"
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
@@ -130,7 +131,7 @@ func queueInspect(cmd *cobra.Command, args []string) {
 		if i > 0 {
 			fmt.Printf("\n%s\n", separator)
 		}
-		fmt.Printf("\nQueue: %s\n\n", qname)
+		fmt.Println()
 		stats, err := inspector.CurrentStats(qname)
 		if err != nil {
 			fmt.Printf("error: %v\n", err)
@@ -141,19 +142,22 @@ func queueInspect(cmd *cobra.Command, args []string) {
 }
 
 func printQueueStats(s *asynq.QueueStats) {
-	fmt.Printf("Size: %d\n", s.Size)
+	bold := color.New(color.Bold)
+	bold.Println("Queue Info")
+	fmt.Printf("Name:   %s\n", s.Queue)
+	fmt.Printf("Size:   %d\n", s.Size)
 	fmt.Printf("Paused: %t\n\n", s.Paused)
-	fmt.Println("Task Breakdown:")
+	bold.Println("Task Count by State")
 	printTable(
-		[]string{"Active", "Pending", "Scheduled", "Retry", "Dead"},
+		[]string{"active", "pending", "scheduled", "retry", "dead"},
 		func(w io.Writer, tmpl string) {
 			fmt.Fprintf(w, tmpl, s.Active, s.Pending, s.Scheduled, s.Retry, s.Dead)
 		},
 	)
 	fmt.Println()
-	fmt.Printf("%s Stats:\n", s.Timestamp.UTC().Format("2006-01-02"))
+	bold.Printf("Daily Stats %s UTC\n", s.Timestamp.UTC().Format("2006-01-02"))
 	printTable(
-		[]string{"Processed", "Failed", "Error Rate"},
+		[]string{"processed", "failed", "error rate"},
 		func(w io.Writer, tmpl string) {
 			var errRate string
 			if s.Processed == 0 {
@@ -189,7 +193,7 @@ func queueHistory(cmd *cobra.Command, args []string) {
 
 func printDailyStats(stats []*asynq.DailyStats) {
 	printTable(
-		[]string{"Date (UTC)", "Processed", "Failed", "Error Rate"},
+		[]string{"date (UTC)", "processed", "failed", "error rate"},
 		func(w io.Writer, tmpl string) {
 			for _, s := range stats {
 				var errRate string
