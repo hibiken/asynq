@@ -75,11 +75,13 @@ type Config struct {
 	// Priority is treated as follows to avoid starving low priority queues.
 	//
 	// Example:
-	// Queues: map[string]int{
-	//     "critical": 6,
-	//     "default":  3,
-	//     "low":      1,
-	// }
+	//
+	//     Queues: map[string]int{
+	//         "critical": 6,
+	//         "default":  3,
+	//         "low":      1,
+	//     }
+	//
 	// With the above config and given that all queues are not empty, the tasks
 	// in "critical", "default", "low" should be processed 60%, 30%, 10% of
 	// the time respectively.
@@ -99,14 +101,17 @@ type Config struct {
 	// HandleError is invoked only if the task handler returns a non-nil error.
 	//
 	// Example:
-	// func reportError(task *asynq.Task, err error, retried, maxRetry int) {
-	// 	   if retried >= maxRetry {
-	//         err = fmt.Errorf("retry exhausted for task %s: %w", task.Type, err)
-	// 	   }
-	//     errorReportingService.Notify(err)
-	// })
 	//
-	// ErrorHandler: asynq.ErrorHandlerFunc(reportError)
+	//     func reportError(ctx context, task *asynq.Task, err error) {
+	//         retried, _ := asynq.GetRetryCount(ctx)
+	//         maxRetry, _ := asynq.GetMaxRetry(ctx)
+	//     	   if retried >= maxRetry {
+	//             err = fmt.Errorf("retry exhausted for task %s: %w", task.Type, err)
+	//     	   }
+	//         errorReportingService.Notify(err)
+	//     })
+	//
+	//     ErrorHandler: asynq.ErrorHandlerFunc(reportError)
 	ErrorHandler ErrorHandler
 
 	// Logger specifies the logger used by the server instance.
