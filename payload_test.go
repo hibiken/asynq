@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -643,5 +644,32 @@ func TestPayloadHas(t *testing.T) {
 	}
 	if payload.Has("name") {
 		t.Errorf("Payload.Has(%q) = true, want false", "name")
+	}
+}
+
+func TestPayloadDebuggingStrings(t *testing.T) {
+	data := map[string]interface{}{
+		"foo": 123,
+		"bar": "hello",
+		"baz": false,
+	}
+	payload := Payload{data: data}
+
+	if payload.String() != fmt.Sprint(data) {
+		t.Errorf("Payload.String() = %q, want %q",
+			payload.String(), fmt.Sprint(data))
+	}
+
+	got, err := payload.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := json.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(got, want); diff != "" {
+		t.Errorf("Payload.MarhsalJSON() = %s, want %s; (-want,+got)\n%s",
+			got, want, diff)
 	}
 }
