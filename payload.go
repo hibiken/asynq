@@ -44,6 +44,16 @@ func toInt(v interface{}) (int, error) {
 	}
 }
 
+// String returns a string representation of payload data.
+func (p Payload) String() string {
+	return fmt.Sprint(p.data)
+}
+
+// MarshalJSON returns the JSON encoding of payload data.
+func (p Payload) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.data)
+}
+
 // GetString returns a string value if a string type is associated with
 // the key, otherwise reports an error.
 func (p Payload) GetString(key string) (string, error) {
