@@ -575,6 +575,45 @@ func (r *RDB) ClearServerState(host string, pid int, serverID string) error {
 	return clearServerStateCmd.Run(r.client, []string{skey, wkey}).Err()
 }
 
+// KEYS[1]  -> asynq:schedulers:{<schedulerID>}
+// ARGV[1]  -> TTL in seconds
+// ARGV[2:] -> schedler entries
+var writeSchedulerEntriesCmd = redis.NewScript(`
+redis.call("DEL", KEYS[1])
+for i = 2, #ARGV do
+	redis.call("LPUSH", KEYS[1], ARGV[i])
+end
+redis.call("EXPIRE", KEYS[1], ARGV[1])
+return redis.status_reply("OK")`)
+
+// WriteSchedulerEntries writes scheduler entries data to redis with expiration set to the value ttl.
+func (r *RDB) WriteSchedulerEntries(schedulerID string, entries []*base.SchedulerEntry, ttl time.Duration) error {
+	args := []interface{}{ttl.Seconds()}
+	for _, e := range entries {
+		bytes, err := json.Marshal(e)
+		if err != nil {
+			continue // skip bad data
+		}
+		args = append(args, bytes)
+	}
+	exp := time.Now().Add(ttl).UTC()
+	key := base.SchedulerEntriesKey(schedulerID)
+	err := r.client.ZAdd(base.AllSchedulers, &redis.Z{Score: float64(exp.Unix()), Member: key}).Err()
+	if err != nil {
+		return err
+	}
+	return writeSchedulerEntriesCmd.Run(r.client, []string{key}, args...).Err()
+}
+
+// ClearSchedulerEntries deletes scheduler entries data from redis.
+func (r *RDB) ClearSchedulerEntries(scheduelrID string) error {
+	key := base.SchedulerEntriesKey(scheduelrID)
+	if err := r.client.ZRem(base.AllSchedulers, key).Err(); err != nil {
+		return err
+	}
+	return r.client.Del(key).Err()
+}
+
 // CancelationPubSub returns a pubsub for cancelation messages.
 func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
 	pubsub := r.client.Subscribe(base.CancelChannel)
@@ -589,4 +628,27 @@ func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
 // The message is the ID for the task to be canceled.
 func (r *RDB) PublishCancelation(id string) error {
 	return r.client.Publish(base.CancelChannel, id).Err()
+}
+
+// KEYS[1] -> asynq:scheduler_history:<entryID>
+// ARGV[1] -> enqueued_at timestamp
+// ARGV[2] -> serialized SchedulerEnqueueEvent data
+// ARGV[3] -> max number of events to be persisted
+var recordSchedulerEnqueueEventCmd = redis.NewScript(`
+redis.call("ZADD", KEYS[1], ARGV[1], ARGV[2])
+redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[3])
+return redis.status_reply("OK")`)
+
+// Maximum number of enqueue events to store per entry.
+const maxEvents = 10000
+
+// RecordSchedulerEnqueueEvent records the time when the given task was enqueued.
+func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerEnqueueEvent) error {
+	key := base.SchedulerHistoryKey(entryID)
+	data, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	return recordSchedulerEnqueueEventCmd.Run(
+		r.client, []string{key}, event.EnqueuedAt.Unix(), data, maxEvents).Err()
 }

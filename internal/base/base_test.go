@@ -212,6 +212,41 @@ func TestWorkersKey(t *testing.T) {
 	}
 }
 
+func TestSchedulerEntriesKey(t *testing.T) {
+	tests := []struct {
+		schedulerID string
+		want        string
+	}{
+		{"localhost:9876:scheduler123", "asynq:schedulers:{localhost:9876:scheduler123}"},
+		{"127.0.0.1:1234:scheduler987", "asynq:schedulers:{127.0.0.1:1234:scheduler987}"},
+	}
+
+	for _, tc := range tests {
+		got := SchedulerEntriesKey(tc.schedulerID)
+		if got != tc.want {
+			t.Errorf("SchedulerEntriesKey(%q) = %q, want %q", tc.schedulerID, got, tc.want)
+		}
+	}
+}
+
+func TestSchedulerHistoryKey(t *testing.T) {
+	tests := []struct {
+		entryID string
+		want    string
+	}{
+		{"entry876", "asynq:scheduler_history:entry876"},
+		{"entry345", "asynq:scheduler_history:entry345"},
+	}
+
+	for _, tc := range tests {
+		got := SchedulerHistoryKey(tc.entryID)
+		if got != tc.want {
+			t.Errorf("SchedulerHistoryKey(%q) = %q, want %q",
+				tc.entryID, got, tc.want)
+		}
+	}
+}
+
 func TestUniqueKey(t *testing.T) {
 	tests := []struct {
 		desc     string

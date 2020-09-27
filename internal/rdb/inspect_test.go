@@ -2983,6 +2983,103 @@ func TestListWorkers(t *testing.T) {
 	}
 }
 
+func TestWriteListClearSchedulerEntries(t *testing.T) {
+	r := setup(t)
+	now := time.Now().UTC()
+	schedulerID := "127.0.0.1:9876:abc123"
+
+	data := []*base.SchedulerEntry{
+		&base.SchedulerEntry{
+			Spec:    "* * * * *",
+			Type:    "foo",
+			Payload: nil,
+			Opts:    "",
+			Next:    now.Add(5 * time.Hour),
+			Prev:    now.Add(-2 * time.Hour),
+		},
+		&base.SchedulerEntry{
+			Spec:    "@every 20m",
+			Type:    "bar",
+			Payload: map[string]interface{}{"fiz": "baz"},
+			Opts:    "",
+			Next:    now.Add(1 * time.Minute),
+			Prev:    now.Add(-19 * time.Minute),
+		},
+	}
+
+	if err := r.WriteSchedulerEntries(schedulerID, data, 30*time.Second); err != nil {
+		t.Fatalf("WriteSchedulerEnties failed: %v", err)
+	}
+	entries, err := r.ListSchedulerEntries()
+	if err != nil {
+		t.Fatalf("ListSchedulerEntries failed: %v", err)
+	}
+	if diff := cmp.Diff(data, entries, h.SortSchedulerEntryOpt); diff != "" {
+		t.Errorf("ListSchedulerEntries() = %v, want %v; (-want,+got)\n%s", entries, data, diff)
+	}
+	if err := r.ClearSchedulerEntries(schedulerID); err != nil {
+		t.Fatalf("ClearSchedulerEntries failed: %v", err)
+	}
+	entries, err = r.ListSchedulerEntries()
+	if err != nil {
+		t.Fatalf("ListSchedulerEntries() after clear failed: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("found %d entries, want 0 after clearing", len(entries))
+	}
+}
+
+func TestSchedulerEnqueueEvents(t *testing.T) {
+	r := setup(t)
+
+	var (
+		now        = time.Now()
+		oneDayAgo  = now.Add(-24 * time.Hour)
+		oneHourAgo = now.Add(-1 * time.Hour)
+	)
+
+	type event struct {
+		entryID    string
+		taskID     string
+		enqueuedAt time.Time
+	}
+
+	tests := []struct {
+		entryID string
+		events  []*base.SchedulerEnqueueEvent
+	}{
+		{
+			entryID: "entry123",
+			events:  []*base.SchedulerEnqueueEvent{{"task123", oneDayAgo}, {"task456", oneHourAgo}},
+		},
+		{
+			entryID: "entry123",
+			events:  []*base.SchedulerEnqueueEvent{},
+		},
+	}
+
+loop:
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+
+		for _, e := range tc.events {
+			if err := r.RecordSchedulerEnqueueEvent(tc.entryID, e); err != nil {
+				t.Errorf("RecordSchedulerEnqueueEvent(%q, %v) failed: %v", tc.entryID, e, err)
+				continue loop
+			}
+		}
+		got, err := r.ListSchedulerEnqueueEvents(tc.entryID)
+		if err != nil {
+			t.Errorf("ListSchedulerEnqueueEvents(%q) failed: %v", tc.entryID, err)
+			continue
+		}
+		if diff := cmp.Diff(tc.events, got, h.SortSchedulerEnqueueEventOpt, timeCmpOpt); diff != "" {
+			t.Errorf("ListSchedulerEnqueueEvent(%q) = %v, want %v; (-want,+got)\n%s",
+				tc.entryID, got, tc.events, diff)
+		}
+	}
+}
+
 func TestPause(t *testing.T) {
 	r := setup(t)
 

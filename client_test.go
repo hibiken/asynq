@@ -42,11 +42,12 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 			processAt: now,
 			opts:      []Option{},
 			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "default",
-				Retry:     defaultMaxRetry,
-				Timeout:   defaultTimeout,
-				Deadline:  noDeadline,
+				EnqueuedAt: now.UTC(),
+				ProcessAt:  now,
+				Queue:      "default",
+				Retry:      defaultMaxRetry,
+				Timeout:    defaultTimeout,
+				Deadline:   noDeadline,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -70,11 +71,12 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 			processAt: oneHourLater,
 			opts:      []Option{},
 			wantRes: &Result{
-				ProcessAt: oneHourLater,
-				Queue:     "default",
-				Retry:     defaultMaxRetry,
-				Timeout:   defaultTimeout,
-				Deadline:  noDeadline,
+				EnqueuedAt: now.UTC(),
+				ProcessAt:  oneHourLater,
+				Queue:      "default",
+				Retry:      defaultMaxRetry,
+				Timeout:    defaultTimeout,
+				Deadline:   noDeadline,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
@@ -111,8 +113,8 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 			cmpopts.EquateApproxTime(500 * time.Millisecond),
 		}
 		if diff := cmp.Diff(tc.wantRes, gotRes, cmpOptions...); diff != "" {
-			t.Errorf("%s;\nEnqueueAt(processAt, task) returned %v, want %v; (-want,+got)\n%s",
-				tc.desc, gotRes, tc.wantRes, diff)
+			t.Errorf("%s;\nEnqueue(task, ProcessAt(%v)) returned %v, want %v; (-want,+got)\n%s",
+				tc.desc, tc.processAt, gotRes, tc.wantRes, diff)
 		}
 
 		for qname, want := range tc.wantPending {
@@ -366,7 +368,7 @@ func TestClientEnqueue(t *testing.T) {
 			continue
 		}
 		cmpOptions := []cmp.Option{
-			cmpopts.IgnoreFields(Result{}, "ID"),
+			cmpopts.IgnoreFields(Result{}, "ID", "EnqueuedAt"),
 			cmpopts.EquateApproxTime(500 * time.Millisecond),
 		}
 		if diff := cmp.Diff(tc.wantRes, gotRes, cmpOptions...); diff != "" {
@@ -471,12 +473,12 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 			continue
 		}
 		cmpOptions := []cmp.Option{
-			cmpopts.IgnoreFields(Result{}, "ID"),
+			cmpopts.IgnoreFields(Result{}, "ID", "EnqueuedAt"),
 			cmpopts.EquateApproxTime(500 * time.Millisecond),
 		}
 		if diff := cmp.Diff(tc.wantRes, gotRes, cmpOptions...); diff != "" {
-			t.Errorf("%s;\nEnqueueIn(delay, task) returned %v, want %v; (-want,+got)\n%s",
-				tc.desc, gotRes, tc.wantRes, diff)
+			t.Errorf("%s;\nEnqueue(task, ProcessIn(%v)) returned %v, want %v; (-want,+got)\n%s",
+				tc.desc, tc.delay, gotRes, tc.wantRes, diff)
 		}
 
 		for qname, want := range tc.wantPending {
@@ -617,7 +619,7 @@ func TestClientDefaultOptions(t *testing.T) {
 			t.Fatal(err)
 		}
 		cmpOptions := []cmp.Option{
-			cmpopts.IgnoreFields(Result{}, "ID"),
+			cmpopts.IgnoreFields(Result{}, "ID", "EnqueuedAt"),
 			cmpopts.EquateApproxTime(500 * time.Millisecond),
 		}
 		if diff := cmp.Diff(tc.wantRes, gotRes, cmpOptions...); diff != "" {
