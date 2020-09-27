@@ -28,7 +28,7 @@ type Client struct {
 	rdb  *rdb.RDB
 }
 
-// NewClient and returns a new Client given a redis connection option.
+// NewClient returns a new Client instance given a redis connection option.
 func NewClient(r RedisConnOpt) *Client {
 	rdb := rdb.NewRDB(createRedisClient(r))
 	return &Client{
@@ -208,6 +208,9 @@ type Result struct {
 	// ID is a unique identifier for the task.
 	ID string
 
+	// EnqueuedAt is the time the task was enqueued in UTC.
+	EnqueuedAt time.Time
+
 	// ProcessAt indicates when the task should be processed.
 	ProcessAt time.Time
 
@@ -298,12 +301,13 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*Result, error) {
 		return nil, err
 	}
 	return &Result{
-		ID:        msg.ID.String(),
-		ProcessAt: opt.processAt,
-		Queue:     msg.Queue,
-		Retry:     msg.Retry,
-		Timeout:   timeout,
-		Deadline:  deadline,
+		ID:         msg.ID.String(),
+		EnqueuedAt: time.Now().UTC(),
+		ProcessAt:  opt.processAt,
+		Queue:      msg.Queue,
+		Retry:      msg.Retry,
+		Timeout:    timeout,
+		Deadline:   deadline,
 	}, nil
 }
 

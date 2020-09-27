@@ -758,7 +758,7 @@ return keys`)
 
 // ListServers returns the list of server info.
 func (r *RDB) ListServers() ([]*base.ServerInfo, error) {
-	now := time.Now().UTC()
+	now := time.Now()
 	res, err := listServerKeysCmd.Run(r.client, []string{base.AllServers}, now.Unix()).Result()
 	if err != nil {
 		return nil, err
@@ -791,7 +791,7 @@ return keys`)
 
 // ListWorkers returns the list of worker stats.
 func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
-	now := time.Now().UTC()
+	now := time.Now()
 	res, err := listWorkerKeysCmd.Run(r.client, []string{base.AllWorkers}, now.Unix()).Result()
 	if err != nil {
 		return nil, err
@@ -816,6 +816,63 @@ func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
 		}
 	}
 	return workers, nil
+}
+
+// Note: Script also removes stale keys.
+var listSchedulerKeysCmd = redis.NewScript(`
+local now = tonumber(ARGV[1])
+local keys = redis.call("ZRANGEBYSCORE", KEYS[1], now, "+inf")
+redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
+return keys`)
+
+// ListSchedulerEntries returns the list of scheduler entries.
+func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
+	now := time.Now()
+	res, err := listSchedulerKeysCmd.Run(r.client, []string{base.AllSchedulers}, now.Unix()).Result()
+	if err != nil {
+		return nil, err
+	}
+	keys, err := cast.ToStringSliceE(res)
+	if err != nil {
+		return nil, err
+	}
+	var entries []*base.SchedulerEntry
+	for _, key := range keys {
+		data, err := r.client.LRange(key, 0, -1).Result()
+		if err != nil {
+			continue // skip bad data
+		}
+		for _, s := range data {
+			var e base.SchedulerEntry
+			if err := json.Unmarshal([]byte(s), &e); err != nil {
+				continue // skip bad data
+			}
+			entries = append(entries, &e)
+		}
+	}
+	return entries, nil
+}
+
+// ListSchedulerEnqueueEvents returns the list of scheduler enqueue events.
+func (r *RDB) ListSchedulerEnqueueEvents(entryID string) ([]*base.SchedulerEnqueueEvent, error) {
+	key := base.SchedulerHistoryKey(entryID)
+	zs, err := r.client.ZRangeWithScores(key, 0, -1).Result()
+	if err != nil {
+		return nil, err
+	}
+	var events []*base.SchedulerEnqueueEvent
+	for _, z := range zs {
+		data, err := cast.ToStringE(z.Member)
+		if err != nil {
+			return nil, err
+		}
+		var e base.SchedulerEnqueueEvent
+		if err := json.Unmarshal([]byte(data), &e); err != nil {
+			return nil, err
+		}
+		events = append(events, &e)
+	}
+	return events, nil
 }
 
 // Pause pauses processing of tasks from the given queue.

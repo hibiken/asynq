@@ -41,7 +41,7 @@ type Server struct {
 
 	// wait group to wait for all goroutines to finish.
 	wg            sync.WaitGroup
-	scheduler     *scheduler
+	forwarder     *forwarder
 	processor     *processor
 	syncer        *syncer
 	heartbeater   *heartbeater
@@ -333,7 +333,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		starting:       starting,
 		finished:       finished,
 	})
-	scheduler := newScheduler(schedulerParams{
+	forwarder := newForwarder(forwarderParams{
 		logger:   logger,
 		broker:   rdb,
 		queues:   qnames,
@@ -375,7 +375,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		logger:        logger,
 		broker:        rdb,
 		status:        status,
-		scheduler:     scheduler,
+		forwarder:     forwarder,
 		processor:     processor,
 		syncer:        syncer,
 		heartbeater:   heartbeater,
@@ -453,7 +453,7 @@ func (srv *Server) Start(handler Handler) error {
 	srv.subscriber.start(&srv.wg)
 	srv.syncer.start(&srv.wg)
 	srv.recoverer.start(&srv.wg)
-	srv.scheduler.start(&srv.wg)
+	srv.forwarder.start(&srv.wg)
 	srv.processor.start(&srv.wg)
 	return nil
 }
@@ -474,7 +474,7 @@ func (srv *Server) Stop() {
 	// Sender goroutines should be terminated before the receiver goroutines.
 	// processor -> syncer (via syncCh)
 	// processor -> heartbeater (via starting, finished channels)
-	srv.scheduler.terminate()
+	srv.forwarder.terminate()
 	srv.processor.terminate()
 	srv.recoverer.terminate()
 	srv.syncer.terminate()

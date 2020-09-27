@@ -20,3 +20,10 @@ func (srv *Server) waitForSignals() {
 	signal.Notify(sigs, windows.SIGTERM, windows.SIGINT)
 	<-sigs
 }
+
+func (s *Scheduler) waitForSignals() {
+	s.logger.Info("Send signal TERM or INT to stop the scheduler")
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, windows.SIGTERM, windows.SIGINT)
+	<-sigs
+}
