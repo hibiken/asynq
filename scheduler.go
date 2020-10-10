@@ -7,7 +7,6 @@ package asynq
 import (
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -222,27 +221,10 @@ func (s *Scheduler) beat() {
 	}
 }
 
-func stringifyOptions(opts []Option) string {
+func stringifyOptions(opts []Option) []string {
 	var res []string
 	for _, opt := range opts {
-		switch opt := opt.(type) {
-		case retryOption:
-			res = append(res, fmt.Sprintf("MaxRetry(%d)", int(opt)))
-		case queueOption:
-			res = append(res, fmt.Sprintf("Queue(%q)", string(opt)))
-		case timeoutOption:
-			res = append(res, fmt.Sprintf("Timeout(%v)", time.Duration(opt)))
-		case deadlineOption:
-			res = append(res, fmt.Sprintf("Deadline(%v)", time.Time(opt)))
-		case uniqueOption:
-			res = append(res, fmt.Sprintf("Unique(%v)", time.Duration(opt)))
-		case processAtOption:
-			res = append(res, fmt.Sprintf("ProcessAt(%v)", time.Time(opt)))
-		case processInOption:
-			res = append(res, fmt.Sprintf("ProcessIn(%v)", time.Duration(opt)))
-		default:
-			// ignore unexpected option
-		}
+		res = append(res, opt.String())
 	}
-	return strings.Join(res, ", ")
+	return res
 }

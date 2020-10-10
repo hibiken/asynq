@@ -299,7 +299,7 @@ type SchedulerEntry struct {
 	Payload map[string]interface{}
 
 	// Opts is the options for the periodic task.
-	Opts string
+	Opts []string
 
 	// Next shows the next time the task will be enqueued.
 	Next time.Time
