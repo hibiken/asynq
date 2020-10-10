@@ -37,8 +37,29 @@ func NewClient(r RedisConnOpt) *Client {
 	}
 }
 
+type OptionType int
+
+const (
+	MaxRetryOpt OptionType = iota
+	QueueOpt
+	TimeoutOpt
+	DeadlineOpt
+	UniqueOpt
+	ProcessAtOpt
+	ProcessInOpt
+)
+
 // Option specifies the task processing behavior.
-type Option interface{}
+type Option interface {
+	// String returns a string representation of the option.
+	String() string
+
+	// Type describes the type of the option.
+	Type() OptionType
+
+	// Value returns a value used to create this option.
+	Value() interface{}
+}
 
 // Internal option representations.
 type (
@@ -62,12 +83,20 @@ func MaxRetry(n int) Option {
 	return retryOption(n)
 }
 
+func (n retryOption) String() string     { return fmt.Sprintf("MaxRetry(%d)", int(n)) }
+func (n retryOption) Type() OptionType   { return MaxRetryOpt }
+func (n retryOption) Value() interface{} { return n }
+
 // Queue returns an option to specify the queue to enqueue the task into.
 //
 // Queue name is case-insensitive and the lowercased version is used.
-func Queue(name string) Option {
-	return queueOption(strings.ToLower(name))
+func Queue(qname string) Option {
+	return queueOption(strings.ToLower(qname))
 }
+
+func (qname queueOption) String() string     { return fmt.Sprintf("Queue(%q)", string(qname)) }
+func (qname queueOption) Type() OptionType   { return QueueOpt }
+func (qname queueOption) Value() interface{} { return qname }
 
 // Timeout returns an option to specify how long a task may run.
 // If the timeout elapses before the Handler returns, then the task
@@ -81,6 +110,10 @@ func Timeout(d time.Duration) Option {
 	return timeoutOption(d)
 }
 
+func (d timeoutOption) String() string     { return fmt.Sprintf("Timeout(%v)", time.Duration(d)) }
+func (d timeoutOption) Type() OptionType   { return TimeoutOpt }
+func (d timeoutOption) Value() interface{} { return d }
+
 // Deadline returns an option to specify the deadline for the given task.
 // If it reaches the deadline before the Handler returns, then the task
 // will be retried.
@@ -90,6 +123,10 @@ func Timeout(d time.Duration) Option {
 func Deadline(t time.Time) Option {
 	return deadlineOption(t)
 }
+
+func (t deadlineOption) String() string     { return fmt.Sprintf("Deadline(%v)", time.Time(t)) }
+func (t deadlineOption) Type() OptionType   { return DeadlineOpt }
+func (t deadlineOption) Value() interface{} { return t }
 
 // Unique returns an option to enqueue a task only if the given task is unique.
 // Task enqueued with this option is guaranteed to be unique within the given ttl.
@@ -104,6 +141,10 @@ func Unique(ttl time.Duration) Option {
 	return uniqueOption(ttl)
 }
 
+func (ttl uniqueOption) String() string     { return fmt.Sprintf("Unique(%v)", time.Duration(ttl)) }
+func (ttl uniqueOption) Type() OptionType   { return UniqueOpt }
+func (ttl uniqueOption) Value() interface{} { return ttl }
+
 // ProcessAt returns an option to specify when to process the given task.
 //
 // If there's a conflicting ProcessIn option, the last option passed to Enqueue overrides the others.
@@ -111,12 +152,20 @@ func ProcessAt(t time.Time) Option {
 	return processAtOption(t)
 }
 
+func (t processAtOption) String() string     { return fmt.Sprintf("ProcessAt(%v)", time.Time(t)) }
+func (t processAtOption) Type() OptionType   { return ProcessAtOpt }
+func (t processAtOption) Value() interface{} { return t }
+
 // ProcessIn returns an option to specify when to process the given task relative to the current time.
 //
 // If there's a conflicting ProcessAt option, the last option passed to Enqueue overrides the others.
 func ProcessIn(d time.Duration) Option {
 	return processInOption(d)
 }
+
+func (d processInOption) String() string     { return fmt.Sprintf("ProcessIn(%v)", time.Duration(d)) }
+func (d processInOption) Type() OptionType   { return ProcessInOpt }
+func (d processInOption) Value() interface{} { return d }
 
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //

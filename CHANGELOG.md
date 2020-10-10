@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- interface `Option` has changed. See the godoc for the new interface.
+  This change would have no impact as long as you are using exported functions (e.g. `MaxRetry`, `Queue`, etc)
+  to create `Option`s.
+
 ### Added
 
 - `Payload.String() string`  method is added
