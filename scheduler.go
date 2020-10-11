@@ -19,15 +19,16 @@ import (
 
 // A Scheduler kicks off tasks at regular intervals based on the user defined schedule.
 type Scheduler struct {
-	id       string
-	status   *base.ServerStatus
-	logger   *log.Logger
-	client   *Client
-	rdb      *rdb.RDB
-	cron     *cron.Cron
-	location *time.Location
-	done     chan struct{}
-	wg       sync.WaitGroup
+	id         string
+	status     *base.ServerStatus
+	logger     *log.Logger
+	client     *Client
+	rdb        *rdb.RDB
+	cron       *cron.Cron
+	location   *time.Location
+	done       chan struct{}
+	wg         sync.WaitGroup
+	errHandler func(task *Task, opts []Option, err error)
 }
 
 // NewScheduler returns a new Scheduler instance given the redis connection option.
@@ -50,14 +51,15 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 	}
 
 	return &Scheduler{
-		id:       generateSchedulerID(),
-		status:   base.NewServerStatus(base.StatusIdle),
-		logger:   logger,
-		client:   NewClient(r),
-		rdb:      rdb.NewRDB(createRedisClient(r)),
-		cron:     cron.New(cron.WithLocation(loc)),
-		location: loc,
-		done:     make(chan struct{}),
+		id:         generateSchedulerID(),
+		status:     base.NewServerStatus(base.StatusIdle),
+		logger:     logger,
+		client:     NewClient(r),
+		rdb:        rdb.NewRDB(createRedisClient(r)),
+		cron:       cron.New(cron.WithLocation(loc)),
+		location:   loc,
+		done:       make(chan struct{}),
+		errHandler: opts.EnqueueErrorHandler,
 	}
 }
 
@@ -86,25 +88,31 @@ type SchedulerOpts struct {
 	// If unset, the UTC time zone (time.UTC) is used.
 	Location *time.Location
 
-	// TODO: Add ErrorHandler
+	// EnqueueErrorHandler gets called when scheduler cannot enqueue a registered task
+	// due to an error.
+	EnqueueErrorHandler func(task *Task, opts []Option, err error)
 }
 
 // enqueueJob encapsulates the job of enqueing a task and recording the event.
 type enqueueJob struct {
-	id       uuid.UUID
-	cronspec string
-	task     *Task
-	opts     []Option
-	location *time.Location
-	logger   *log.Logger
-	client   *Client
-	rdb      *rdb.RDB
+	id         uuid.UUID
+	cronspec   string
+	task       *Task
+	opts       []Option
+	location   *time.Location
+	logger     *log.Logger
+	client     *Client
+	rdb        *rdb.RDB
+	errHandler func(task *Task, opts []Option, err error)
 }
 
 func (j *enqueueJob) Run() {
 	res, err := j.client.Enqueue(j.task, j.opts...)
 	if err != nil {
 		j.logger.Errorf("scheduler could not enqueue a task %+v: %v", j.task, err)
+		if j.errHandler != nil {
+			j.errHandler(j.task, j.opts, err)
+		}
 		return
 	}
 	j.logger.Infof("scheduler enqueued a task: %+v", res)
@@ -122,14 +130,15 @@ func (j *enqueueJob) Run() {
 // It returns an ID of the newly registered entry.
 func (s *Scheduler) Register(cronspec string, task *Task, opts ...Option) (entryID string, err error) {
 	job := &enqueueJob{
-		id:       uuid.New(),
-		cronspec: cronspec,
-		task:     task,
-		opts:     opts,
-		location: s.location,
-		client:   s.client,
-		rdb:      s.rdb,
-		logger:   s.logger,
+		id:         uuid.New(),
+		cronspec:   cronspec,
+		task:       task,
+		opts:       opts,
+		location:   s.location,
+		client:     s.client,
+		rdb:        s.rdb,
+		logger:     s.logger,
+		errHandler: s.errHandler,
 	}
 	if _, err = s.cron.AddJob(cronspec, job); err != nil {
 		return "", err
