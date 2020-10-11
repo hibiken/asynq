@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -75,4 +76,43 @@ func TestScheduler(t *testing.T) {
 			t.Errorf("mismatch found in queue %q: (-want,+got)\n%s", tc.queue, diff)
 		}
 	}
+}
+
+func TestSchedulerWhenRedisDown(t *testing.T) {
+	var (
+		mu      sync.Mutex
+		counter int
+	)
+	errorHandler := func(task *Task, opts []Option, err error) {
+		mu.Lock()
+		counter++
+		mu.Unlock()
+	}
+
+	// Connect to non-existent redis instance to simulate a redis server being down.
+	scheduler := NewScheduler(
+		RedisClientOpt{Addr: ":9876"},
+		&SchedulerOpts{EnqueueErrorHandler: errorHandler},
+	)
+
+	task := NewTask("test", nil)
+
+	if _, err := scheduler.Register("@every 3s", task); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scheduler.Start(); err != nil {
+		t.Fatal(err)
+	}
+	// Scheduler should attempt to enqueue the task three times (every 3s).
+	time.Sleep(10 * time.Second)
+	if err := scheduler.Stop(); err != nil {
+		t.Fatal(err)
+	}
+
+	mu.Lock()
+	if counter != 3 {
+		t.Errorf("EnqueueErrorHandler was called %d times, want 3", counter)
+	}
+	mu.Unlock()
 }
