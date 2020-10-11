@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -59,10 +60,28 @@ func cronList(cmd *cobra.Command, args []string) {
 	cols := []string{"EntryID", "Spec", "Type", "Payload", "Options", "Next", "Prev"}
 	printRows := func(w io.Writer, tmpl string) {
 		for _, e := range entries {
-			fmt.Fprintf(w, tmpl, e.ID, e.Spec, e.Type, e.Payload, e.Opts, e.Next, e.Prev)
+			fmt.Fprintf(w, tmpl, e.ID, e.Spec, e.Type, e.Payload, e.Opts,
+				nextEnqueue(e.Next), prevEnqueue(e.Prev))
 		}
 	}
 	printTable(cols, printRows)
+}
+
+// Returns a string describing when the next enqueue will happen.
+func nextEnqueue(nextEnqueueAt time.Time) string {
+	d := nextEnqueueAt.Sub(time.Now()).Round(time.Second)
+	if d < 0 {
+		return "Now"
+	}
+	return fmt.Sprintf("In %v", d)
+}
+
+// Returns a string describing when the previous enqueue was.
+func prevEnqueue(prevEnqueuedAt time.Time) string {
+	if prevEnqueuedAt.IsZero() {
+		return "N/A"
+	}
+	return fmt.Sprintf("%v ago", time.Since(prevEnqueuedAt).Round(time.Second))
 }
 
 func cronHistory(cmd *cobra.Command, args []string) {
