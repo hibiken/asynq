@@ -42,6 +42,7 @@ A system can consist of multiple worker servers and brokers, giving way to high 
 - Allow [timeout and deadline per task](https://github.com/hibiken/asynq/wiki/Task-Timeout-and-Cancelation)
 - [Flexible handler interface with support for middlewares](https://github.com/hibiken/asynq/wiki/Handler-Deep-Dive)
 - [Ability to pause queue](/tools/asynq/README.md#pause) to stop processing tasks from the queue
+- [Periodic Tasks](https://github.com/hibiken/asynq/wiki/Periodic-Tasks)
 - [Support Redis Cluster](https://github.com/hibiken/asynq/wiki/Redis-Cluster) for automatic sharding and high availability
 - [Support Redis Sentinels](https://github.com/hibiken/asynq/wiki/Automatic-Failover) for high availability
 - [CLI](#command-line-tool) to inspect and remote-control queues and tasks

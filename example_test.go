@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"golang.org/x/sys/unix"
@@ -76,6 +77,25 @@ func ExampleServer_Quiet() {
 	}
 
 	srv.Stop()
+}
+
+func ExampleScheduler() {
+	scheduler := asynq.NewScheduler(
+		asynq.RedisClientOpt{Addr: ":6379"},
+		&asynq.SchedulerOpts{Location: time.Local},
+	)
+
+	if _, err := scheduler.Register("* * * * *", asynq.NewTask("task1", nil)); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := scheduler.Register("@every 30s", asynq.NewTask("task2", nil)); err != nil {
+		log.Fatal(err)
+	}
+
+	// Run blocks and waits for os signal to terminate the program.
+	if err := scheduler.Run(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func ExampleParseRedisURI() {
