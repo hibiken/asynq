@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Scheduler` type is added to enable periodic tasks. See the godoc for its APIs and [wiki](https://github.com/hibiken/asynq/wiki/Periodic-Tasks) for the getting-started guide.
+
 ### Changed
+
 - interface `Option` has changed. See the godoc for the new interface.
   This change would have no impact as long as you are using exported functions (e.g. `MaxRetry`, `Queue`, etc)
   to create `Option`s.

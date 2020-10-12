@@ -84,6 +84,7 @@ func prevEnqueue(prevEnqueuedAt time.Time) string {
 	return fmt.Sprintf("%v ago", time.Since(prevEnqueuedAt).Round(time.Second))
 }
 
+// TODO: Paginate the result set.
 func cronHistory(cmd *cobra.Command, args []string) {
 	r := createRDB()
 	for i, entryID := range args {
