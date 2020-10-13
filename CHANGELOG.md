@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2020-10-13
+
 ### Added
 
 - `Scheduler` type is added to enable periodic tasks. See the godoc for its APIs and [wiki](https://github.com/hibiken/asynq/wiki/Periodic-Tasks) for the getting-started guide.
