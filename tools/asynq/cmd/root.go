@@ -5,6 +5,7 @@
 package cmd
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"os"
@@ -31,6 +32,7 @@ var (
 
 	useRedisCluster bool
 	clusterAddrs    string
+	tlsServerName   string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -74,12 +76,15 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&clusterAddrs, "cluster_addrs",
 		"127.0.0.1:7000,127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003,127.0.0.1:7004,127.0.0.1:7005",
 		"list of comma-separated redis server addresses")
+	rootCmd.PersistentFlags().StringVar(&tlsServerName, "tls_server",
+		"", "server name for TLS validation")
 	// Bind flags with config.
 	viper.BindPFlag("uri", rootCmd.PersistentFlags().Lookup("uri"))
 	viper.BindPFlag("db", rootCmd.PersistentFlags().Lookup("db"))
 	viper.BindPFlag("password", rootCmd.PersistentFlags().Lookup("password"))
 	viper.BindPFlag("cluster", rootCmd.PersistentFlags().Lookup("cluster"))
 	viper.BindPFlag("cluster_addrs", rootCmd.PersistentFlags().Lookup("cluster_addrs"))
+	viper.BindPFlag("tls_server", rootCmd.PersistentFlags().Lookup("tls_server"))
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -114,14 +119,16 @@ func createRDB() *rdb.RDB {
 	if useRedisCluster {
 		addrs := strings.Split(viper.GetString("cluster_addrs"), ",")
 		c = redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:    addrs,
-			Password: viper.GetString("password"),
+			Addrs:     addrs,
+			Password:  viper.GetString("password"),
+			TLSConfig: getTLSConfig(),
 		})
 	} else {
 		c = redis.NewClient(&redis.Options{
-			Addr:     viper.GetString("uri"),
-			DB:       viper.GetInt("db"),
-			Password: viper.GetString("password"),
+			Addr:      viper.GetString("uri"),
+			DB:        viper.GetInt("db"),
+			Password:  viper.GetString("password"),
+			TLSConfig: getTLSConfig(),
 		})
 	}
 	return rdb.NewRDB(c)
@@ -133,17 +140,27 @@ func createInspector() *asynq.Inspector {
 	if useRedisCluster {
 		addrs := strings.Split(viper.GetString("cluster_addrs"), ",")
 		connOpt = asynq.RedisClusterClientOpt{
-			Addrs:    addrs,
-			Password: viper.GetString("password"),
+			Addrs:     addrs,
+			Password:  viper.GetString("password"),
+			TLSConfig: getTLSConfig(),
 		}
 	} else {
 		connOpt = asynq.RedisClientOpt{
-			Addr:     viper.GetString("uri"),
-			DB:       viper.GetInt("db"),
-			Password: viper.GetString("password"),
+			Addr:      viper.GetString("uri"),
+			DB:        viper.GetInt("db"),
+			Password:  viper.GetString("password"),
+			TLSConfig: getTLSConfig(),
 		}
 	}
 	return asynq.NewInspector(connOpt)
+}
+
+func getTLSConfig() *tls.Config {
+	tlsServer := viper.GetString("tls_server")
+	if tlsServer == "" {
+		return nil
+	}
+	return &tls.Config{ServerName: tlsServer}
 }
 
 // printTable is a helper function to print data in table format.
