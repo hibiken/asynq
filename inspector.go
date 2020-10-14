@@ -40,30 +40,30 @@ func (i *Inspector) Queues() ([]string, error) {
 // QueueStats represents a state of queues at a certain time.
 type QueueStats struct {
 	// Name of the queue.
-	Queue string
+	Queue string `json:"queue"`
 	// Size is the total number of tasks in the queue.
 	// The value is the sum of Pending, Active, Scheduled, Retry, and Dead.
-	Size int
+	Size int `json:"size"`
 	// Number of pending tasks.
-	Pending int
+	Pending int `json:"pending"`
 	// Number of active tasks.
-	Active int
+	Active int `json:"active"`
 	// Number of scheduled tasks.
-	Scheduled int
+	Scheduled int `json:"scheduled"`
 	// Number of retry tasks.
-	Retry int
+	Retry int `json:"retry"`
 	// Number of dead tasks.
-	Dead int
+	Dead int `json:"dead"`
 	// Total number of tasks being processed during the given date.
 	// The number includes both succeeded and failed tasks.
-	Processed int
+	Processed int `json:"processed"`
 	// Total number of tasks failed to be processed during the given date.
-	Failed int
+	Failed int `json:"failed"`
 	// Paused indicates whether the queue is paused.
 	// If true, tasks in the queue will not be processed.
-	Paused bool
+	Paused bool `json:"paused"`
 	// Time when this stats was taken.
-	Timestamp time.Time
+	Timestamp time.Time `json:"timestamp"`
 }
 
 // CurrentStats returns a current stats of the given queue.
@@ -93,14 +93,14 @@ func (i *Inspector) CurrentStats(qname string) (*QueueStats, error) {
 // DailyStats holds aggregate data for a given day for a given queue.
 type DailyStats struct {
 	// Name of the queue.
-	Queue string
+	Queue string `json:"queue"`
 	// Total number of tasks being processed during the given date.
 	// The number includes both succeeded and failed tasks.
-	Processed int
+	Processed int `json:"processed"`
 	// Total number of tasks failed to be processed during the given date.
-	Failed int
+	Failed int `json:"failed"`
 	// Date this stats was taken.
-	Date time.Time
+	Date time.Time `json:"date"`
 }
 
 // History returns a list of stats from the last n days.
@@ -127,23 +127,23 @@ func (i *Inspector) History(qname string, n int) ([]*DailyStats, error) {
 // PendingTask is a task in a queue and is ready to be processed.
 type PendingTask struct {
 	*Task
-	ID    string
-	Queue string
+	ID    string `json:"id"`
+	Queue string `json:"queue"`
 }
 
 // ActiveTask is a task that's currently being processed.
 type ActiveTask struct {
 	*Task
-	ID    string
-	Queue string
+	ID    string `json:"id"`
+	Queue string `json:"queue"`
 }
 
 // ScheduledTask is a task scheduled to be processed in the future.
 type ScheduledTask struct {
 	*Task
-	ID            string
-	Queue         string
-	NextProcessAt time.Time
+	ID            string    `json:"id"`
+	Queue         string    `json:"queue"`
+	NextProcessAt time.Time `json:"next_process_at"`
 
 	score int64
 }
@@ -151,12 +151,12 @@ type ScheduledTask struct {
 // RetryTask is a task scheduled to be retried in the future.
 type RetryTask struct {
 	*Task
-	ID            string
-	Queue         string
-	NextProcessAt time.Time
-	MaxRetry      int
-	Retried       int
-	ErrorMsg      string
+	ID            string    `json:"id"`
+	Queue         string    `json:"queue"`
+	NextProcessAt time.Time `json:"next_process_at"`
+	MaxRetry      int       `json:"max_retry"`
+	Retried       int       `json:"retried"`
+	ErrorMsg      string    `json:"error_message"`
 	// TODO: LastFailedAt  time.Time
 
 	score int64
@@ -166,12 +166,12 @@ type RetryTask struct {
 // DeadTask won't be retried automatically.
 type DeadTask struct {
 	*Task
-	ID           string
-	Queue        string
-	MaxRetry     int
-	Retried      int
-	LastFailedAt time.Time
-	ErrorMsg     string
+	ID           string    `json:"id"`
+	Queue        string    `json:"queue"`
+	MaxRetry     int       `json:"max_retry"`
+	Retried      int       `json:"retried"`
+	LastFailedAt time.Time `json:"last_failed_at"`
+	ErrorMsg     string    `json:"error_message"`
 
 	score int64
 }

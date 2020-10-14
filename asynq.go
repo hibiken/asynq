@@ -17,10 +17,10 @@ import (
 // Task represents a unit of work to be performed.
 type Task struct {
 	// Type indicates the type of task to be performed.
-	Type string
+	Type string `json:"type"`
 
 	// Payload holds data needed to perform the task.
-	Payload Payload
+	Payload Payload `json:"payload"`
 }
 
 // NewTask returns a new Task given a type name and payload data.
