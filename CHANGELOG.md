@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Unregister` method is added to `Scheduler` to remove a registered entry.
+
 ## [0.15.0] - 2021-01-31
 
 **IMPORTATNT**: All `Inspector` related code are moved to subpackage "github.com/hibiken/asynq/inspeq"
@@ -15,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Inspector` related code are moved to subpackage "github.com/hibken/asynq/inspeq".
 - `RedisConnOpt` interface has changed slightly. If you have been passing `RedisClientOpt`, `RedisFailoverClientOpt`, or `RedisClusterClientOpt` as a pointer,
-   update your code to pass as a value.
+  update your code to pass as a value.
 - `ErrorMsg` field in `RetryTask` and `ArchivedTask` was renamed to `LastError`.
 
 ### Added
