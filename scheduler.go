@@ -30,6 +30,10 @@ type Scheduler struct {
 	done       chan struct{}
 	wg         sync.WaitGroup
 	errHandler func(task *Task, opts []Option, err error)
+	// idmap maps Scheduler's entry ID to cron.EntryID
+	// to avoid using cron.EntryID as the public API of
+	// the Scheduler.
+	idmap map[string]cron.EntryID
 }
 
 // NewScheduler returns a new Scheduler instance given the redis connection option.
@@ -65,6 +69,7 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 		location:   loc,
 		done:       make(chan struct{}),
 		errHandler: opts.EnqueueErrorHandler,
+		idmap:      make(map[string]cron.EntryID),
 	}
 }
 
@@ -145,10 +150,23 @@ func (s *Scheduler) Register(cronspec string, task *Task, opts ...Option) (entry
 		logger:     s.logger,
 		errHandler: s.errHandler,
 	}
-	if _, err = s.cron.AddJob(cronspec, job); err != nil {
+	cronID, err := s.cron.AddJob(cronspec, job)
+	if err != nil {
 		return "", err
 	}
+	s.idmap[job.id.String()] = cronID
 	return job.id.String(), nil
+}
+
+// Unregister removes a registered entry by entry ID.
+// Unregister returns a non-nil error if no entries were found for the given entryID.
+func (s *Scheduler) Unregister(entryID string) error {
+	cronID, ok := s.idmap[entryID]
+	if !ok {
+		return fmt.Errorf("asynq: no scheduler entry found")
+	}
+	s.cron.Remove(cronID)
+	return nil
 }
 
 // Run starts the scheduler until an os signal to exit the program is received.

@@ -14,7 +14,7 @@ import (
 	"github.com/hibiken/asynq/internal/base"
 )
 
-func TestScheduler(t *testing.T) {
+func TestSchedulerRegister(t *testing.T) {
 	tests := []struct {
 		cronspec string
 		task     *Task
@@ -115,4 +115,48 @@ func TestSchedulerWhenRedisDown(t *testing.T) {
 		t.Errorf("EnqueueErrorHandler was called %d times, want 3", counter)
 	}
 	mu.Unlock()
+}
+
+func TestSchedulerUnregister(t *testing.T) {
+	tests := []struct {
+		cronspec string
+		task     *Task
+		opts     []Option
+		wait     time.Duration
+		queue    string
+	}{
+		{
+			cronspec: "@every 3s",
+			task:     NewTask("task1", nil),
+			opts:     []Option{MaxRetry(10)},
+			wait:     10 * time.Second,
+			queue:    "default",
+		},
+	}
+
+	r := setup(t)
+
+	for _, tc := range tests {
+		scheduler := NewScheduler(getRedisConnOpt(t), nil)
+		entryID, err := scheduler.Register(tc.cronspec, tc.task, tc.opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := scheduler.Unregister(entryID); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := scheduler.Start(); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(tc.wait)
+		if err := scheduler.Stop(); err != nil {
+			t.Fatal(err)
+		}
+
+		got := asynqtest.GetPendingMessages(t, r, tc.queue)
+		if len(got) != 0 {
+			t.Errorf("%d tasks were enqueued, want zero", len(got))
+		}
+	}
 }
