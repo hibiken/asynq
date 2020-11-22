@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2020-11-22
+
 ### Fixed
 
 - Fixed processor to wait for specified time duration before forcefully shutdown workers.
