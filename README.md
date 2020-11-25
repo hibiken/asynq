@@ -110,7 +110,7 @@ func HandleEmailDeliveryTask(ctx context.Context, t *asynq.Task) error {
 }
 
 // ImageProcessor implements asynq.Handler interface.
-type ImageProcesser struct {
+type ImageProcessor struct {
     // ... fields for struct
 }
 
