@@ -32,7 +32,7 @@ var cronListCmd = &cobra.Command{
 }
 
 var cronHistoryCmd = &cobra.Command{
-	Use:   "history",
+	Use:   "history [ENTRY_ID...]",
 	Short: "Show history of each cron tasks",
 	Args:  cobra.MinimumNArgs(1),
 	Run:   cronHistory,
