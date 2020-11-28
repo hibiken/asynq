@@ -745,7 +745,6 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 			return err
 		}
 	}
-
 	return r.client.SRem(base.AllQueues, qname).Err()
 }
 

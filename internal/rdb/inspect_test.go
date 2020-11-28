@@ -2707,10 +2707,10 @@ func TestRemoveQueue(t *testing.T) {
 
 		err := r.RemoveQueue(tc.qname, tc.force)
 		if err != nil {
-			t.Errorf("(*RDB).RemoveQueue(%q) = %v, want nil", tc.qname, err)
+			t.Errorf("(*RDB).RemoveQueue(%q, %t) = %v, want nil",
+				tc.qname, tc.force, err)
 			continue
 		}
-
 		if r.client.SIsMember(base.AllQueues, tc.qname).Val() {
 			t.Errorf("%q is a member of %q", tc.qname, base.AllQueues)
 		}

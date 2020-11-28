@@ -50,6 +50,207 @@ func TestInspectorQueues(t *testing.T) {
 
 }
 
+func TestInspectorDeleteQueue(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	inspector := NewInspector(getRedisConnOpt(t))
+	defer inspector.Close()
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
+
+	tests := []struct {
+		pending   map[string][]*base.TaskMessage
+		active    map[string][]*base.TaskMessage
+		scheduled map[string][]base.Z
+		retry     map[string][]base.Z
+		dead      map[string][]base.Z
+		qname     string // queue to remove
+		force     bool
+	}{
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+				"custom":  {},
+			},
+			active: map[string][]*base.TaskMessage{
+				"default": {},
+				"custom":  {},
+			},
+			scheduled: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			retry: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			dead: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			qname: "custom",
+			force: false,
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+				"custom":  {m3},
+			},
+			active: map[string][]*base.TaskMessage{
+				"default": {},
+				"custom":  {},
+			},
+			scheduled: map[string][]base.Z{
+				"default": {},
+				"custom":  {{Message: m4, Score: time.Now().Unix()}},
+			},
+			retry: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			dead: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			qname: "custom",
+			force: true, // allow removing non-empty queue
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		h.SeedAllPendingQueues(t, r, tc.pending)
+		h.SeedAllActiveQueues(t, r, tc.active)
+		h.SeedAllScheduledQueues(t, r, tc.scheduled)
+		h.SeedAllRetryQueues(t, r, tc.retry)
+		h.SeedAllDeadQueues(t, r, tc.dead)
+
+		err := inspector.DeleteQueue(tc.qname, tc.force)
+		if err != nil {
+			t.Errorf("DeleteQueue(%q, %t) = %v, want nil",
+				tc.qname, tc.force, err)
+			continue
+		}
+		if r.SIsMember(base.AllQueues, tc.qname).Val() {
+			t.Errorf("%q is a member of %q", tc.qname, base.AllQueues)
+		}
+	}
+}
+
+func TestInspectorDeleteQueueErrorQueueNotEmpty(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	inspector := NewInspector(getRedisConnOpt(t))
+	defer inspector.Close()
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
+
+	tests := []struct {
+		pending   map[string][]*base.TaskMessage
+		active    map[string][]*base.TaskMessage
+		scheduled map[string][]base.Z
+		retry     map[string][]base.Z
+		dead      map[string][]base.Z
+		qname     string // queue to remove
+		force     bool
+	}{
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+			},
+			active: map[string][]*base.TaskMessage{
+				"default": {m3, m4},
+			},
+			scheduled: map[string][]base.Z{
+				"default": {},
+			},
+			retry: map[string][]base.Z{
+				"default": {},
+			},
+			dead: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			force: false,
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		h.SeedAllPendingQueues(t, r, tc.pending)
+		h.SeedAllActiveQueues(t, r, tc.active)
+		h.SeedAllScheduledQueues(t, r, tc.scheduled)
+		h.SeedAllRetryQueues(t, r, tc.retry)
+		h.SeedAllDeadQueues(t, r, tc.dead)
+
+		err := inspector.DeleteQueue(tc.qname, tc.force)
+		if _, ok := err.(*ErrQueueNotEmpty); !ok {
+			t.Errorf("DeleteQueue(%v, %t) did not return ErrQueueNotEmpty",
+				tc.qname, tc.force)
+		}
+	}
+}
+
+func TestInspectorDeleteQueueErrorQueueNotFound(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	inspector := NewInspector(getRedisConnOpt(t))
+	defer inspector.Close()
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
+
+	tests := []struct {
+		pending   map[string][]*base.TaskMessage
+		active    map[string][]*base.TaskMessage
+		scheduled map[string][]base.Z
+		retry     map[string][]base.Z
+		dead      map[string][]base.Z
+		qname     string // queue to remove
+		force     bool
+	}{
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+			},
+			active: map[string][]*base.TaskMessage{
+				"default": {m3, m4},
+			},
+			scheduled: map[string][]base.Z{
+				"default": {},
+			},
+			retry: map[string][]base.Z{
+				"default": {},
+			},
+			dead: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "nonexistent",
+			force: false,
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		h.SeedAllPendingQueues(t, r, tc.pending)
+		h.SeedAllActiveQueues(t, r, tc.active)
+		h.SeedAllScheduledQueues(t, r, tc.scheduled)
+		h.SeedAllRetryQueues(t, r, tc.retry)
+		h.SeedAllDeadQueues(t, r, tc.dead)
+
+		err := inspector.DeleteQueue(tc.qname, tc.force)
+		if _, ok := err.(*ErrQueueNotFound); !ok {
+			t.Errorf("DeleteQueue(%v, %t) did not return ErrQueueNotFound",
+				tc.qname, tc.force)
+		}
+	}
+}
+
 func TestInspectorCurrentStats(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -65,15 +266,15 @@ func TestInspectorCurrentStats(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		pending    map[string][]*base.TaskMessage
-		inProgress map[string][]*base.TaskMessage
-		scheduled  map[string][]base.Z
-		retry      map[string][]base.Z
-		dead       map[string][]base.Z
-		processed  map[string]int
-		failed     map[string]int
-		qname      string
-		want       *QueueStats
+		pending   map[string][]*base.TaskMessage
+		active    map[string][]*base.TaskMessage
+		scheduled map[string][]base.Z
+		retry     map[string][]base.Z
+		dead      map[string][]base.Z
+		processed map[string]int
+		failed    map[string]int
+		qname     string
+		want      *QueueStats
 	}{
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -81,7 +282,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 				"critical": {m5},
 				"low":      {m6},
 			},
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default":  {m2},
 				"critical": {},
 				"low":      {},
@@ -134,7 +335,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
-		asynqtest.SeedAllActiveQueues(t, r, tc.inProgress)
+		asynqtest.SeedAllActiveQueues(t, r, tc.active)
 		asynqtest.SeedAllScheduledQueues(t, r, tc.scheduled)
 		asynqtest.SeedAllRetryQueues(t, r, tc.retry)
 		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
@@ -313,14 +514,14 @@ func TestInspectorListActiveTasks(t *testing.T) {
 	}
 
 	tests := []struct {
-		desc       string
-		inProgress map[string][]*base.TaskMessage
-		qname      string
-		want       []*ActiveTask
+		desc   string
+		active map[string][]*base.TaskMessage
+		qname  string
+		want   []*ActiveTask
 	}{
 		{
 			desc: "with a few active tasks",
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 				"custom":  {m3, m4},
 			},
@@ -334,7 +535,7 @@ func TestInspectorListActiveTasks(t *testing.T) {
 
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
-		asynqtest.SeedAllActiveQueues(t, r, tc.inProgress)
+		asynqtest.SeedAllActiveQueues(t, r, tc.active)
 
 		got, err := inspector.ListActiveTasks(tc.qname)
 		if err != nil {

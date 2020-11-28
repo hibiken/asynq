@@ -124,6 +124,45 @@ func (i *Inspector) History(qname string, n int) ([]*DailyStats, error) {
 	return res, nil
 }
 
+// ErrQueueNotFound indicates that the specified queue does not exist.
+type ErrQueueNotFound struct {
+	qname string
+}
+
+func (e *ErrQueueNotFound) Error() string {
+	return fmt.Sprintf("queue %q does not exist", e.qname)
+}
+
+// ErrQueueNotEmpty indicates that the specified queue is not empty.
+type ErrQueueNotEmpty struct {
+	qname string
+}
+
+func (e *ErrQueueNotEmpty) Error() string {
+	return fmt.Sprintf("queue %q is not empty", e.qname)
+}
+
+// DeleteQueue removes the specified queue.
+//
+// If force is set to true, DeleteQueue will remove the queue regardless of
+// the queue size as long as no tasks are active in the queue.
+// If force is set to false, DeleteQueue will remove the queue only if
+// the queue is empty.
+//
+// If the specified queue does not exist, DeleteQueue returns ErrQueueNotFound.
+// If force is set to false and the specified queue is not empty, DeleteQueue
+// returns ErrQueueNotEmpty.
+func (i *Inspector) DeleteQueue(qname string, force bool) error {
+	err := i.rdb.RemoveQueue(qname, force)
+	if _, ok := err.(*rdb.ErrQueueNotFound); ok {
+		return &ErrQueueNotFound{qname}
+	}
+	if _, ok := err.(*rdb.ErrQueueNotEmpty); ok {
+		return &ErrQueueNotEmpty{qname}
+	}
+	return err
+}
+
 // PendingTask is a task in a queue and is ready to be processed.
 type PendingTask struct {
 	*Task
