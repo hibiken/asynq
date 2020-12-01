@@ -304,7 +304,7 @@ type SchedulerEntry struct {
 	// Next shows the next time the task will be enqueued.
 	Next time.Time
 
-	// Prev shows the last  time the task was enqueued.
+	// Prev shows the last time the task was enqueued.
 	// Zero time if task was never enqueued.
 	Prev time.Time
 }
