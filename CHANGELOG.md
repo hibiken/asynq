@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `SchedulerEntries` method is added to `Inspector`.
+- `DeleteQueue` method is added to `Inspector`.
+
 ## [0.13.1] - 2020-11-22
 
 ### Fixed
