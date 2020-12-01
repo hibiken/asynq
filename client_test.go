@@ -774,3 +774,71 @@ func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 		}
 	}
 }
+
+func TestParseOption(t *testing.T) {
+	oneHourFromNow := time.Now().Add(1 * time.Hour)
+	tests := []struct {
+		s        string
+		wantType OptionType
+		wantVal  interface{}
+	}{
+		{`MaxRetry(10)`, MaxRetryOpt, 10},
+		{`Queue("email")`, QueueOpt, "email"},
+		{`Timeout(3m)`, TimeoutOpt, 3 * time.Minute},
+		{Deadline(oneHourFromNow).String(), DeadlineOpt, oneHourFromNow},
+		{`Unique(1h)`, UniqueOpt, 1 * time.Hour},
+		{ProcessAt(oneHourFromNow).String(), ProcessAtOpt, oneHourFromNow},
+		{`ProcessIn(10m)`, ProcessInOpt, 10 * time.Minute},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.s, func(t *testing.T) {
+			got, err := parseOption(tc.s)
+			if err != nil {
+				t.Fatalf("returned error: %v", err)
+			}
+			if got == nil {
+				t.Fatal("returned nil")
+			}
+			if got.Type() != tc.wantType {
+				t.Fatalf("got type %v, want type %v ", got.Type(), tc.wantType)
+			}
+			switch tc.wantType {
+			case QueueOpt:
+				gotVal, ok := got.Value().(string)
+				if !ok {
+					t.Fatal("returned Option with non-string value")
+				}
+				if gotVal != tc.wantVal.(string) {
+					t.Fatalf("got value %v, want %v", gotVal, tc.wantVal)
+				}
+			case MaxRetryOpt:
+				gotVal, ok := got.Value().(int)
+				if !ok {
+					t.Fatal("returned Option with non-int value")
+				}
+				if gotVal != tc.wantVal.(int) {
+					t.Fatalf("got value %v, want %v", gotVal, tc.wantVal)
+				}
+			case TimeoutOpt, UniqueOpt, ProcessInOpt:
+				gotVal, ok := got.Value().(time.Duration)
+				if !ok {
+					t.Fatal("returned Option with non duration value")
+				}
+				if gotVal != tc.wantVal.(time.Duration) {
+					t.Fatalf("got value %v, want %v", gotVal, tc.wantVal)
+				}
+			case DeadlineOpt, ProcessAtOpt:
+				gotVal, ok := got.Value().(time.Time)
+				if !ok {
+					t.Fatal("returned Option with non time value")
+				}
+				if cmp.Equal(gotVal, tc.wantVal.(time.Time)) {
+					t.Fatalf("got value %v, want %v", gotVal, tc.wantVal)
+				}
+			default:
+				t.Fatalf("returned Option with unexpected type: %v", got.Type())
+			}
+		})
+	}
+}
