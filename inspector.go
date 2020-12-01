@@ -642,3 +642,54 @@ func (i *Inspector) ClusterNodes(qname string) ([]ClusterNode, error) {
 	}
 	return res, nil
 }
+
+// SchedulerEntry holds information about a periodic task registered with a scheduler.
+type SchedulerEntry struct {
+	// Identifier of this entry.
+	ID string
+
+	// Spec describes the schedule of this entry.
+	Spec string
+
+	// Periodic Task registered for this entry.
+	Task *Task
+
+	// Opts is the options for the periodic task.
+	Opts []Option
+
+	// Next shows the next time the task will be enqueued.
+	Next time.Time
+
+	// Prev shows the last time the task was enqueued.
+	// Zero time if task was never enqueued.
+	Prev time.Time
+}
+
+// SchedulerEntries returns a list of all entries registered with
+// currently running schedulers.
+func (i *Inspector) SchedulerEntries() ([]*SchedulerEntry, error) {
+	var entries []*SchedulerEntry
+	res, err := i.rdb.ListSchedulerEntries()
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range res {
+		task := NewTask(e.Type, e.Payload)
+		var opts []Option
+		for _, s := range e.Opts {
+			if o, err := parseOption(s); err == nil {
+				// ignore bad data
+				opts = append(opts, o)
+			}
+		}
+		entries = append(entries, &SchedulerEntry{
+			ID:   e.ID,
+			Spec: e.Spec,
+			Task: task,
+			Opts: opts,
+			Next: e.Next,
+			Prev: e.Prev,
+		})
+	}
+	return entries, nil
+}

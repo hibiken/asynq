@@ -7,6 +7,7 @@ package asynq
 import (
 	"fmt"
 	"math"
+	"sort"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/hibiken/asynq/internal/asynqtest"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/rdb"
 )
 
 func TestInspectorQueues(t *testing.T) {
@@ -2138,6 +2140,83 @@ func TestInspectorKillTaskByKeyKillsRetryTask(t *testing.T) {
 				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s",
 					qname, diff)
 			}
+		}
+	}
+}
+
+var sortSchedulerEntry = cmp.Transformer("SortSchedulerEntry", func(in []*SchedulerEntry) []*SchedulerEntry {
+	out := append([]*SchedulerEntry(nil), in...)
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Spec < out[j].Spec
+	})
+	return out
+})
+
+func TestInspectorSchedulerEntries(t *testing.T) {
+	r := setup(t)
+	rdbClient := rdb.NewRDB(r)
+	inspector := NewInspector(getRedisConnOpt(t))
+
+	now := time.Now().UTC()
+	schedulerID := "127.0.0.1:9876:abc123"
+
+	tests := []struct {
+		data []*base.SchedulerEntry // data to seed redis
+		want []*SchedulerEntry
+	}{
+		{
+			data: []*base.SchedulerEntry{
+				&base.SchedulerEntry{
+					Spec:    "* * * * *",
+					Type:    "foo",
+					Payload: nil,
+					Opts:    nil,
+					Next:    now.Add(5 * time.Hour),
+					Prev:    now.Add(-2 * time.Hour),
+				},
+				&base.SchedulerEntry{
+					Spec:    "@every 20m",
+					Type:    "bar",
+					Payload: map[string]interface{}{"fiz": "baz"},
+					Opts:    []string{`Queue("bar")`, `MaxRetry(20)`},
+					Next:    now.Add(1 * time.Minute),
+					Prev:    now.Add(-19 * time.Minute),
+				},
+			},
+			want: []*SchedulerEntry{
+				&SchedulerEntry{
+					Spec: "* * * * *",
+					Task: NewTask("foo", nil),
+					Opts: nil,
+					Next: now.Add(5 * time.Hour),
+					Prev: now.Add(-2 * time.Hour),
+				},
+				&SchedulerEntry{
+					Spec: "@every 20m",
+					Task: NewTask("bar", map[string]interface{}{"fiz": "baz"}),
+					Opts: []Option{Queue("bar"), MaxRetry(20)},
+					Next: now.Add(1 * time.Minute),
+					Prev: now.Add(-19 * time.Minute),
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		asynqtest.FlushDB(t, r)
+		err := rdbClient.WriteSchedulerEntries(schedulerID, tc.data, time.Minute)
+		if err != nil {
+			t.Fatalf("could not write data: %v", err)
+		}
+		got, err := inspector.SchedulerEntries()
+		if err != nil {
+			t.Errorf("SchedulerEntries() returned error: %v", err)
+			continue
+		}
+		ignoreOpt := cmpopts.IgnoreUnexported(Payload{})
+		if diff := cmp.Diff(tc.want, got, sortSchedulerEntry, ignoreOpt); diff != "" {
+			t.Errorf("SchedulerEntries() = %v, want %v; (-want,+got)\n%s",
+				got, tc.want, diff)
 		}
 	}
 }
