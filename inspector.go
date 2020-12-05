@@ -598,6 +598,14 @@ func (i *Inspector) KillTaskByKey(qname, key string) error {
 	}
 }
 
+// CancelActiveTask sends a signal to cancel processing of the task with
+// the given id. CancelActiveTask is best-effort, which means that it does not
+// guarantee that the task with the given id will be canceled. The return
+// value only indicates whether the cancelation signal has been sent.
+func (i *Inspector) CancelActiveTask(id string) error {
+	return i.rdb.PublishCancelation(id)
+}
+
 // PauseQueue pauses task processing on the specified queue.
 // If the queue is already paused, it will return a non-nil error.
 func (i *Inspector) PauseQueue(qname string) error {
