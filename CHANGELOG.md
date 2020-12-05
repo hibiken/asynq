@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `CancelActiveTask` method is added to `Inspector`.
 - `SchedulerEntries` method is added to `Inspector`.
 - `DeleteQueue` method is added to `Inspector`.
 
