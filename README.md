@@ -181,7 +181,7 @@ func main() {
     //            Options include MaxRetry, Queue, Timeout, Deadline, Unique etc.
     // ----------------------------------------------------------------------------
 
-    c.SetDefaultOptions(tasks.ImageProcessor, asynq.MaxRetry(10), asynq.Timeout(3*time.Minute))
+    c.SetDefaultOptions(tasks.TypeImageResize, asynq.MaxRetry(10), asynq.Timeout(3*time.Minute))
 
     t = tasks.NewImageResizeTask("some/blobstore/path")
     res, err = c.Enqueue(t)
