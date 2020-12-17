@@ -135,6 +135,8 @@ In your application code, import the above package and use [`Client`](https://pk
 package main
 
 import (
+    "fmt"
+    "log"
     "time"
 
     "github.com/hibiken/asynq"
@@ -179,7 +181,7 @@ func main() {
     //            Options include MaxRetry, Queue, Timeout, Deadline, Unique etc.
     // ----------------------------------------------------------------------------
 
-    c.SetDefaultOptions(tasks.ImageProcessing, asynq.MaxRetry(10), asynq.Timeout(3*time.Minute))
+    c.SetDefaultOptions(tasks.TypeImageResize, asynq.MaxRetry(10), asynq.Timeout(3*time.Minute))
 
     t = tasks.NewImageResizeTask("some/blobstore/path")
     res, err = c.Enqueue(t)
