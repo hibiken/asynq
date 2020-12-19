@@ -353,7 +353,7 @@ func (r *RDB) listZSetEntries(key string, pgn Pagination) ([]base.Z, error) {
 		if err != nil {
 			continue // bad data, ignore and continue
 		}
-		res = append(res, base.Z{msg, int64(z.Score)})
+		res = append(res, base.Z{Message: msg, Score: int64(z.Score)})
 	}
 	return res, nil
 }

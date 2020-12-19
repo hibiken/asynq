@@ -1830,7 +1830,12 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 			},
 			wantDead: map[string][]base.Z{
 				"default": {},
-				"custom":  {{m2, now.Unix()}},
+				"custom": {
+					{
+						Message: m2,
+						Score:   now.Unix(),
+					},
+				},
 			},
 		},
 	}
@@ -1900,7 +1905,12 @@ func TestInspectorKillTaskByKeyKillsRetryTask(t *testing.T) {
 			},
 			wantDead: map[string][]base.Z{
 				"default": {},
-				"custom":  {{m2, now.Unix()}},
+				"custom": {
+					{
+						Message: m2,
+						Score:   now.Unix(),
+					},
+				},
 			},
 		},
 	}

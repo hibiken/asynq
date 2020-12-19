@@ -414,7 +414,6 @@ func (i *Inspector) ListDeadTasks(qname string, opts ...ListOption) ([]*DeadTask
 		})
 	}
 	return tasks, nil
-	return nil, nil
 }
 
 // DeleteAllScheduledTasks deletes all scheduled tasks from the specified queue,
