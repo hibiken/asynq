@@ -3050,7 +3050,15 @@ func TestSchedulerEnqueueEvents(t *testing.T) {
 	}{
 		{
 			entryID: "entry123",
-			events:  []*base.SchedulerEnqueueEvent{{"task123", oneDayAgo}, {"task456", oneHourAgo}},
+			events: []*base.SchedulerEnqueueEvent{
+				{
+					TaskID:     "task123",
+					EnqueuedAt: oneDayAgo,
+				}, {
+					TaskID:     "task456",
+					EnqueuedAt: oneHourAgo,
+				},
+			},
 		},
 		{
 			entryID: "entry123",

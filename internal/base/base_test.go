@@ -363,14 +363,14 @@ func TestStatusConcurrentAccess(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		status.Get()
-		status.String()
+		_ = status.String()
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		status.Set(StatusStopped)
-		status.String()
+		_ = status.String()
 	}()
 
 	wg.Wait()
