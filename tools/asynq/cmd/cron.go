@@ -118,12 +118,6 @@ func cronHistory(cmd *cobra.Command, args []string) {
 			continue
 		}
 
-		// Sort entries by enqueuedAt timestamp.
-		sort.Slice(events, func(i, j int) bool {
-			x, y := events[i], events[j]
-			return x.EnqueuedAt.Unix() > y.EnqueuedAt.Unix()
-		})
-
 		cols := []string{"TaskID", "EnqueuedAt"}
 		printRows := func(w io.Writer, tmpl string) {
 			for _, e := range events {

@@ -855,7 +855,7 @@ func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
 // ListSchedulerEnqueueEvents returns the list of scheduler enqueue events.
 func (r *RDB) ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*base.SchedulerEnqueueEvent, error) {
 	key := base.SchedulerHistoryKey(entryID)
-	zs, err := r.client.ZRangeWithScores(key, pgn.start(), pgn.stop()).Result()
+	zs, err := r.client.ZRevRangeWithScores(key, pgn.start(), pgn.stop()).Result()
 	if err != nil {
 		return nil, err
 	}
