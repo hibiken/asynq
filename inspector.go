@@ -701,3 +701,29 @@ func (i *Inspector) SchedulerEntries() ([]*SchedulerEntry, error) {
 	}
 	return entries, nil
 }
+
+// SchedulerEnqueueEvent holds information about an enqueue event by a scheduler.
+type SchedulerEnqueueEvent struct {
+	// ID of the task that was enqueued.
+	TaskID string
+
+	// Time the task was enqueued.
+	EnqueuedAt time.Time
+}
+
+// ListSchedulerEnqueueEvents retrieves a list of enqueue events from the specified scheduler entry.
+//
+// By default, it retrieves the first 30 tasks.
+func (i *Inspector) ListSchedulerEnqueueEvents(entryID string, opts ...ListOption) ([]*SchedulerEnqueueEvent, error) {
+	opt := composeListOptions(opts...)
+	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
+	data, err := i.rdb.ListSchedulerEnqueueEvents(entryID, pgn)
+	if err != nil {
+		return nil, err
+	}
+	var events []*SchedulerEnqueueEvent
+	for _, e := range data {
+		events = append(events, &SchedulerEnqueueEvent{TaskID: e.TaskID, EnqueuedAt: e.EnqueuedAt})
+	}
+	return events, nil
+}
