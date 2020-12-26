@@ -3033,9 +3033,10 @@ func TestSchedulerEnqueueEvents(t *testing.T) {
 	r := setup(t)
 
 	var (
-		now        = time.Now()
-		oneDayAgo  = now.Add(-24 * time.Hour)
-		oneHourAgo = now.Add(-1 * time.Hour)
+		now          = time.Now()
+		oneDayAgo    = now.Add(-24 * time.Hour)
+		fiveHoursAgo = now.Add(-5 * time.Hour)
+		oneHourAgo   = now.Add(-1 * time.Hour)
 	)
 
 	type event struct {
@@ -3047,22 +3048,26 @@ func TestSchedulerEnqueueEvents(t *testing.T) {
 	tests := []struct {
 		entryID string
 		events  []*base.SchedulerEnqueueEvent
+		want    []*base.SchedulerEnqueueEvent
 	}{
 		{
 			entryID: "entry123",
-			events: []*base.SchedulerEnqueueEvent{
-				{
-					TaskID:     "task123",
-					EnqueuedAt: oneDayAgo,
-				}, {
-					TaskID:     "task456",
-					EnqueuedAt: oneHourAgo,
-				},
+			events:  []*base.SchedulerEnqueueEvent{
+				{TaskID: "task123", EnqueuedAt:  oneDayAgo},
+				{TaskID: "task789", EnqueuedAt:  oneHourAgo},
+				{TaskID: "task456", EnqueuedAt: fiveHoursAgo},
+			},
+			// Recent events first
+			want: []*base.SchedulerEnqueueEvent{
+				{TaskID: "task789", EnqueuedAt: oneHourAgo},
+				{TaskID: "task456", EnqueuedAt: fiveHoursAgo},
+				{TaskID: "task123", EnqueuedAt: oneDayAgo},
 			},
 		},
 		{
-			entryID: "entry123",
-			events:  []*base.SchedulerEnqueueEvent{},
+			entryID: "entry456",
+			events:  nil,
+			want:    nil,
 		},
 	}
 
@@ -3076,14 +3081,14 @@ loop:
 				continue loop
 			}
 		}
-		got, err := r.ListSchedulerEnqueueEvents(tc.entryID)
+		got, err := r.ListSchedulerEnqueueEvents(tc.entryID, Pagination{Size: 20, Page: 0})
 		if err != nil {
 			t.Errorf("ListSchedulerEnqueueEvents(%q) failed: %v", tc.entryID, err)
 			continue
 		}
-		if diff := cmp.Diff(tc.events, got, h.SortSchedulerEnqueueEventOpt, timeCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, timeCmpOpt); diff != "" {
 			t.Errorf("ListSchedulerEnqueueEvent(%q) = %v, want %v; (-want,+got)\n%s",
-				tc.entryID, got, tc.events, diff)
+				tc.entryID, got, tc.want, diff)
 		}
 	}
 }
