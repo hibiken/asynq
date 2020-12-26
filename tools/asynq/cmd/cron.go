@@ -11,6 +11,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 )
 
@@ -18,6 +19,8 @@ func init() {
 	rootCmd.AddCommand(cronCmd)
 	cronCmd.AddCommand(cronListCmd)
 	cronCmd.AddCommand(cronHistoryCmd)
+	cronHistoryCmd.Flags().Int("page", 1, "page number")
+	cronHistoryCmd.Flags().Int("size", 30, "page size")
 }
 
 var cronCmd = &cobra.Command{
@@ -39,9 +42,9 @@ var cronHistoryCmd = &cobra.Command{
 }
 
 func cronList(cmd *cobra.Command, args []string) {
-	r := createRDB()
+	inspector := createInspector()
 
-	entries, err := r.ListSchedulerEntries()
+	entries, err := inspector.SchedulerEntries()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -60,7 +63,7 @@ func cronList(cmd *cobra.Command, args []string) {
 	cols := []string{"EntryID", "Spec", "Type", "Payload", "Options", "Next", "Prev"}
 	printRows := func(w io.Writer, tmpl string) {
 		for _, e := range entries {
-			fmt.Fprintf(w, tmpl, e.ID, e.Spec, e.Type, e.Payload, e.Opts,
+			fmt.Fprintf(w, tmpl, e.ID, e.Spec, e.Task.Type, e.Task.Payload, e.Opts,
 				nextEnqueue(e.Next), prevEnqueue(e.Prev))
 		}
 	}
@@ -84,9 +87,18 @@ func prevEnqueue(prevEnqueuedAt time.Time) string {
 	return fmt.Sprintf("%v ago", time.Since(prevEnqueuedAt).Round(time.Second))
 }
 
-// TODO: Paginate the result set.
 func cronHistory(cmd *cobra.Command, args []string) {
-	r := createRDB()
+	pageNum, err := cmd.Flags().GetInt("page")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	pageSize, err := cmd.Flags().GetInt("size")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	inspector := createInspector()
 	for i, entryID := range args {
 		if i > 0 {
 			fmt.Printf("\n%s\n", separator)
@@ -95,7 +107,8 @@ func cronHistory(cmd *cobra.Command, args []string) {
 
 		fmt.Printf("Entry: %s\n\n", entryID)
 
-		events, err := r.ListSchedulerEnqueueEvents(entryID)
+		events, err := inspector.ListSchedulerEnqueueEvents(
+			entryID, asynq.PageSize(pageSize), asynq.Page(pageNum))
 		if err != nil {
 			fmt.Printf("error: %v\n", err)
 			continue
