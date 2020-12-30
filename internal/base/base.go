@@ -275,13 +275,14 @@ type ServerInfo struct {
 
 // WorkerInfo holds information about a running worker.
 type WorkerInfo struct {
-	Host    string
-	PID     int
-	ID      string
-	Type    string
-	Queue   string
-	Payload map[string]interface{}
-	Started time.Time
+	Host     string
+	PID      int
+	ServerID string
+	ID       string
+	Type     string
+	Queue    string
+	Payload  map[string]interface{}
+	Started  time.Time
 }
 
 // SchedulerEntry holds information about a periodic task registered with a scheduler.

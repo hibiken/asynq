@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Servers` method is added to `Inspector`
 - `CancelActiveTask` method is added to `Inspector`.
 - `ListSchedulerEnqueueEvents` method is added to `Inspector`.
 - `SchedulerEntries` method is added to `Inspector`.

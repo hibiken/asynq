@@ -2942,8 +2942,9 @@ func TestListWorkers(t *testing.T) {
 	defer r.Close()
 
 	var (
-		host = "127.0.0.1"
-		pid  = 4567
+		host     = "127.0.0.1"
+		pid      = 4567
+		serverID = "server123"
 
 		m1 = h.NewTaskMessage("send_email", map[string]interface{}{"user_id": "abc123"})
 		m2 = h.NewTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/image/file"})
@@ -2955,9 +2956,36 @@ func TestListWorkers(t *testing.T) {
 	}{
 		{
 			data: []*base.WorkerInfo{
-				{Host: host, PID: pid, ID: m1.ID.String(), Type: m1.Type, Queue: m1.Queue, Payload: m1.Payload, Started: time.Now().Add(-1 * time.Second)},
-				{Host: host, PID: pid, ID: m2.ID.String(), Type: m2.Type, Queue: m2.Queue, Payload: m2.Payload, Started: time.Now().Add(-5 * time.Second)},
-				{Host: host, PID: pid, ID: m3.ID.String(), Type: m3.Type, Queue: m3.Queue, Payload: m3.Payload, Started: time.Now().Add(-30 * time.Second)},
+				{
+					Host:     host,
+					PID:      pid,
+					ServerID: serverID,
+					ID:       m1.ID.String(),
+					Type:     m1.Type,
+					Queue:    m1.Queue,
+					Payload:  m1.Payload,
+					Started:  time.Now().Add(-1 * time.Second),
+				},
+				{
+					Host:     host,
+					PID:      pid,
+					ServerID: serverID,
+					ID:       m2.ID.String(),
+					Type:     m2.Type,
+					Queue:    m2.Queue,
+					Payload:  m2.Payload,
+					Started:  time.Now().Add(-5 * time.Second),
+				},
+				{
+					Host:     host,
+					PID:      pid,
+					ServerID: serverID,
+					ID:       m3.ID.String(),
+					Type:     m3.Type,
+					Queue:    m3.Queue,
+					Payload:  m3.Payload,
+					Started:  time.Now().Add(-30 * time.Second),
+				},
 			},
 		},
 	}

@@ -147,13 +147,14 @@ func (h *heartbeater) beat() {
 	var ws []*base.WorkerInfo
 	for id, stat := range h.workers {
 		ws = append(ws, &base.WorkerInfo{
-			Host:    h.host,
-			PID:     h.pid,
-			ID:      id,
-			Type:    stat.msg.Type,
-			Queue:   stat.msg.Queue,
-			Payload: stat.msg.Payload,
-			Started: stat.started,
+			Host:     h.host,
+			PID:      h.pid,
+			ServerID: h.serverID,
+			ID:       id,
+			Type:     stat.msg.Type,
+			Queue:    stat.msg.Queue,
+			Payload:  stat.msg.Payload,
+			Started:  stat.started,
 		})
 	}
 
