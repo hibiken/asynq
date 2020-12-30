@@ -624,6 +624,84 @@ func (i *Inspector) UnpauseQueue(qname string) error {
 	return i.rdb.Unpause(qname)
 }
 
+// Servers return a list of running servers' information.
+func (i *Inspector) Servers() ([]*ServerInfo, error) {
+	servers, err := i.rdb.ListServers()
+	if err != nil {
+		return nil, err
+	}
+	workers, err := i.rdb.ListWorkers()
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]*ServerInfo) // ServerInfo keyed by serverID
+	for _, s := range servers {
+		m[s.ServerID] = &ServerInfo{
+			ID:             s.ServerID,
+			Host:           s.Host,
+			PID:            s.PID,
+			Concurrency:    s.Concurrency,
+			Queues:         s.Queues,
+			StrictPriority: s.StrictPriority,
+			Started:        s.Started,
+			Status:         s.Status,
+			ActiveWorkers:  make([]*WorkerInfo, 0),
+		}
+	}
+	for _, w := range workers {
+		srvInfo, ok := m[w.ServerID]
+		if !ok {
+			continue
+		}
+		wrkInfo := &WorkerInfo{
+			Started: w.Started,
+			Task: &ActiveTask{
+				Task:  NewTask(w.Type, w.Payload),
+				ID:    w.ID,
+				Queue: w.Queue,
+			},
+		}
+		srvInfo.ActiveWorkers = append(srvInfo.ActiveWorkers, wrkInfo)
+	}
+	var out []*ServerInfo
+	for _, srvInfo := range m {
+		out = append(out, srvInfo)
+	}
+	return out, nil
+}
+
+// ServerInfo describes a running Server instance.
+type ServerInfo struct {
+	// Unique Identifier for the server.
+	ID string
+	// Host machine on which the server is running.
+	Host string
+	// PID of the process in which the server is running.
+	PID int
+
+	// Server configuration details.
+	// See Config doc for field descriptions.
+	Concurrency    int
+	Queues         map[string]int
+	StrictPriority bool
+
+	// Time the server started.
+	Started time.Time
+	// Status indicates the status of the server.
+	// TODO: Update comment with more details.
+	Status string
+	// A List of active workers currently processing tasks.
+	ActiveWorkers []*WorkerInfo
+}
+
+// WorkerInfo describes a running worker processing a task.
+type WorkerInfo struct {
+	// The task the worker is processing.
+	Task *ActiveTask
+	// Time the worker started processing the task.
+	Started time.Time
+}
+
 // ClusterKeySlot returns an integer identifying the hash slot the given queue hashes to.
 func (i *Inspector) ClusterKeySlot(qname string) (int64, error) {
 	return i.rdb.ClusterKeySlot(qname)
