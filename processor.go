@@ -8,8 +8,10 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"runtime"
 	"runtime/debug"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -345,7 +347,19 @@ func (p *processor) perform(ctx context.Context, task *Task) (err error) {
 	defer func() {
 		if x := recover(); x != nil {
 			p.logger.Errorf("recovering from panic. See the stack trace below for details:\n%s", string(debug.Stack()))
-			err = fmt.Errorf("panic: %v", x)
+			_, file, line, ok := runtime.Caller(1) // skip the first frame (panic itself)
+			if ok && strings.Contains(file, "runtime/") {
+				// The panic came from the runtime, most likely due to incorrect
+				// map/slice usage. The parent frame should have the real trigger.
+				_, file, line, ok = runtime.Caller(2)
+			}
+
+			// Include the file and line number info in the error, if runtime.Caller returned ok.
+			if ok {
+				err = fmt.Errorf("panic [%s:%d]: %v", file, line, x)
+			} else {
+				err = fmt.Errorf("panic: %v", x)
+			}
 		}
 	}()
 	return p.handler.ProcessTask(ctx, task)
