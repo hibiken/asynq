@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"runtime/debug"
 	"sort"
 	"sync"
 	"time"
@@ -203,7 +204,7 @@ func (p *processor) exec() {
 
 			resCh := make(chan error, 1)
 			go func() {
-				resCh <- perform(ctx, NewTask(msg.Type, msg.Payload), p.handler)
+				resCh <- p.perform(ctx, NewTask(msg.Type, msg.Payload))
 			}()
 
 			select {
@@ -340,13 +341,14 @@ func (p *processor) queues() []string {
 // perform calls the handler with the given task.
 // If the call returns without panic, it simply returns the value,
 // otherwise, it recovers from panic and returns an error.
-func perform(ctx context.Context, task *Task, h Handler) (err error) {
+func (p *processor) perform(ctx context.Context, task *Task) (err error) {
 	defer func() {
 		if x := recover(); x != nil {
+			p.logger.Errorf("recovering from panic. See the stack trace below for details:\n%s", string(debug.Stack()))
 			err = fmt.Errorf("panic: %v", x)
 		}
 	}()
-	return h.ProcessTask(ctx, task)
+	return p.handler.ProcessTask(ctx, task)
 }
 
 // uniq dedupes elements and returns a slice of unique names of length l.

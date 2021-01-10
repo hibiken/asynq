@@ -564,7 +564,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 	}
 }
 
-func TestPerform(t *testing.T) {
+func TestProcessorPerform(t *testing.T) {
 	tests := []struct {
 		desc    string
 		handler HandlerFunc
@@ -596,9 +596,16 @@ func TestPerform(t *testing.T) {
 			wantErr: true,
 		},
 	}
+	// Note: We don't need to fully initialize the processor since we are only testing
+	// perform method.
+	p := newProcessor(processorParams{
+		logger: testLogger,
+		queues: defaultQueueConfig,
+	})
 
 	for _, tc := range tests {
-		got := perform(context.Background(), tc.task, tc.handler)
+		p.handler = tc.handler
+		got := p.perform(context.Background(), tc.task)
 		if !tc.wantErr && got != nil {
 			t.Errorf("%s: perform() = %v, want nil", tc.desc, got)
 			continue
