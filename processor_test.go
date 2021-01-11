@@ -307,9 +307,11 @@ func TestProcessorRetry(t *testing.T) {
 	m4 := h.NewTaskMessage("sync", nil)
 
 	errMsg := "something went wrong"
+	wrappedSkipRetry := fmt.Errorf("%s:%w", errMsg, SkipRetry)
 	now := time.Now()
 
 	tests := []struct {
+		desc         string              // test description
 		pending      []*base.TaskMessage // initial default queue state
 		incoming     []*base.TaskMessage // tasks to be enqueued during run
 		delay        time.Duration       // retry delay duration
@@ -320,6 +322,7 @@ func TestProcessorRetry(t *testing.T) {
 		wantErrCount int                 // number of times error handler should be called
 	}{
 		{
+			desc:     "Should automatically retry errored tasks",
 			pending:  []*base.TaskMessage{m1, m2},
 			incoming: []*base.TaskMessage{m3, m4},
 			delay:    time.Minute,
@@ -334,6 +337,38 @@ func TestProcessorRetry(t *testing.T) {
 			},
 			wantDead:     []*base.TaskMessage{h.TaskMessageWithError(*m1, errMsg)},
 			wantErrCount: 4,
+		},
+		{
+			desc:     "Should skip retry errored tasks",
+			pending:  []*base.TaskMessage{m1, m2},
+			incoming: []*base.TaskMessage{},
+			delay:    time.Minute,
+			handler: HandlerFunc(func(ctx context.Context, task *Task) error {
+				return SkipRetry // return SkipRetry without wrapping
+			}),
+			wait:      2 * time.Second,
+			wantRetry: []base.Z{},
+			wantDead: []*base.TaskMessage{
+				h.TaskMessageWithError(*m1, SkipRetry.Error()),
+				h.TaskMessageWithError(*m2, SkipRetry.Error()),
+			},
+			wantErrCount: 2, // ErrorHandler should still be called with SkipRetry error
+		},
+		{
+			desc:     "Should skip retry errored tasks (with error wrapping)",
+			pending:  []*base.TaskMessage{m1, m2},
+			incoming: []*base.TaskMessage{},
+			delay:    time.Minute,
+			handler: HandlerFunc(func(ctx context.Context, task *Task) error {
+				return wrappedSkipRetry
+			}),
+			wait:      2 * time.Second,
+			wantRetry: []base.Z{},
+			wantDead: []*base.TaskMessage{
+				h.TaskMessageWithError(*m1, wrappedSkipRetry.Error()),
+				h.TaskMessageWithError(*m2, wrappedSkipRetry.Error()),
+			},
+			wantErrCount: 2, // ErrorHandler should still be called with SkipRetry error
 		},
 	}
 
@@ -389,16 +424,16 @@ func TestProcessorRetry(t *testing.T) {
 		cmpOpt := h.EquateInt64Approx(1) // allow up to a second difference in zset score
 		gotRetry := h.GetRetryEntries(t, r, base.DefaultQueueName)
 		if diff := cmp.Diff(tc.wantRetry, gotRetry, h.SortZSetEntryOpt, cmpOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.RetryKey(base.DefaultQueueName), diff)
+			t.Errorf("%s: mismatch found in %q after running processor; (-want, +got)\n%s", tc.desc, base.RetryKey(base.DefaultQueueName), diff)
 		}
 
 		gotDead := h.GetDeadMessages(t, r, base.DefaultQueueName)
 		if diff := cmp.Diff(tc.wantDead, gotDead, h.SortMsgOpt); diff != "" {
-			t.Errorf("mismatch found in %q after running processor; (-want, +got)\n%s", base.DeadKey(base.DefaultQueueName), diff)
+			t.Errorf("%s: mismatch found in %q after running processor; (-want, +got)\n%s", tc.desc, base.DeadKey(base.DefaultQueueName), diff)
 		}
 
 		if l := r.LLen(base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
-			t.Errorf("%q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), l)
+			t.Errorf("%s: %q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), tc.desc, l)
 		}
 
 		if n != tc.wantErrCount {

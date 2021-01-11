@@ -392,6 +392,9 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 //
 // If ProcessTask return a non-nil error or panics, the task
 // will be retried after delay.
+// One exception to this rule is when ProcessTask returns SkipRetry error.
+// If the returned error is SkipRetry or the error wraps SkipRetry, retry is
+// skipped and task will be archived instead.
 type Handler interface {
 	ProcessTask(context.Context, *Task) error
 }

@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"runtime"
@@ -261,11 +262,15 @@ func (p *processor) markAsDone(ctx context.Context, msg *base.TaskMessage) {
 	}
 }
 
+// SkipRetry is used as a return value from Handler.ProcessTask to indicate that
+// the task should not be retried and should be archived instead.
+var SkipRetry = errors.New("skip retry for the task")
+
 func (p *processor) retryOrKill(ctx context.Context, msg *base.TaskMessage, err error) {
 	if p.errHandler != nil {
 		p.errHandler.HandleError(ctx, NewTask(msg.Type, msg.Payload), err)
 	}
-	if msg.Retried >= msg.Retry {
+	if msg.Retried >= msg.Retry || errors.Is(err, SkipRetry) {
 		p.logger.Warnf("Retry exhausted for task id=%s", msg.ID)
 		p.kill(ctx, msg, err)
 	} else {
