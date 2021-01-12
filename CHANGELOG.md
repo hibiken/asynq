@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**IMPORTATNT**: Please run `asynq migrate` command to migrate from the previous versions.
+
+### Changed
+
+- Renamed `DeadTask` to `ArchivedTask`.
+- Renamed the operation `Kill` to `Archive` in `Inpsector`.
+- Print stack track when Handler panics.
+- Include a file name and a line number in error message when recovering from a panic.
+
 ### Added
 
 - `SkipRetry` error is added to be used as a return value from `Handler`.
@@ -22,7 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed processor to wait for specified time duration before forcefully shutdown workers.
 
-
 ## [0.13.0] - 2020-10-13
 
 ### Added
@@ -37,17 +45,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `Payload.String() string`  method is added
+- `Payload.String() string` method is added
 - `Payload.MarshalJSON() ([]byte, error)` method is added
 
 ## [0.12.0] - 2020-09-12
 
-**IMPORTANT**: If you are upgrading from a previous version, please install the latest version of the CLI `go get -u github.com/hibiken/asynq/tools/asynq` and run `asynq migrate` command. No process should be writing to Redis while you run the migration command. 
+**IMPORTANT**: If you are upgrading from a previous version, please install the latest version of the CLI `go get -u github.com/hibiken/asynq/tools/asynq` and run `asynq migrate` command. No process should be writing to Redis while you run the migration command.
 
 ## The semantics of queue have changed
-Previously, we called tasks that are ready to be processed *"Enqueued tasks"*, and other tasks that are scheduled to be processed in the future *"Scheduled tasks"*, etc.
-We changed the semantics of *"Enqueue"* slightly; All tasks that client pushes to Redis are *Enqueued* to a queue. Within a queue, tasks will transition from one state to another. 
+
+Previously, we called tasks that are ready to be processed _"Enqueued tasks"_, and other tasks that are scheduled to be processed in the future _"Scheduled tasks"_, etc.
+We changed the semantics of _"Enqueue"_ slightly; All tasks that client pushes to Redis are _Enqueued_ to a queue. Within a queue, tasks will transition from one state to another.
 Possible task states are:
+
 - `Pending`: task is ready to be processed (previously called "Enqueued")
 - `Active`: tasks is currently being processed (previously called "InProgress")
 - `Scheduled`: task is scheduled to be processed in the future
@@ -59,23 +69,28 @@ Possible task states are:
 ---
 
 ### Changed
+
 #### `Client`
+
 Use `ProcessIn` or `ProcessAt` option to schedule a task instead of `EnqueueIn` or `EnqueueAt`.
 
 | Previously                  | v0.12.0                                    |
-|-----------------------------|--------------------------------------------|
-| `client.EnqueueAt(t, task)` | `client.Enqueue(task, asynq.ProcessAt(t))` |  
-| `client.EnqueueIn(d, task)` | `client.Enqueue(task, asynq.ProcessIn(d))` |  
+| --------------------------- | ------------------------------------------ |
+| `client.EnqueueAt(t, task)` | `client.Enqueue(task, asynq.ProcessAt(t))` |
+| `client.EnqueueIn(d, task)` | `client.Enqueue(task, asynq.ProcessIn(d))` |
 
 #### `Inspector`
+
 All Inspector methods are scoped to a queue, and the methods take `qname (string)` as the first argument.  
 `EnqueuedTask` is renamed to `PendingTask` and its corresponding methods.  
 `InProgressTask` is renamed to `ActiveTask` and its corresponding methods.  
 Command "Enqueue" is replaced by the verb "Run" (e.g. `EnqueueAllScheduledTasks` --> `RunAllScheduledTasks`)
 
 #### `CLI`
+
 CLI commands are restructured to use subcommands. Commands are organized into a few management commands:
 To view details on any command, use `asynq help <command> <subcommand>`.
+
 - `asynq stats`
 - `asynq queue [ls inspect history rm pause unpause]`
 - `asynq task [ls cancel delete kill run delete-all kill-all run-all]`
@@ -84,19 +99,23 @@ To view details on any command, use `asynq help <command> <subcommand>`.
 ### Added
 
 #### `RedisConnOpt`
+
 - `RedisClusterClientOpt` is added to connect to Redis Cluster.
 - `Username` field is added to all `RedisConnOpt` types in order to authenticate connection when Redis ACLs are used.
 
 #### `Client`
+
 - `ProcessIn(d time.Duration) Option` and `ProcessAt(t time.Time) Option` are added to replace `EnqueueIn` and `EnqueueAt` functionality.
 
 #### `Inspector`
+
 - `Queues() ([]string, error)` method is added to get all queue names.
 - `ClusterKeySlot(qname string) (int64, error)` method is added to get queue's hash slot in Redis cluster.
-- `ClusterNodes(qname string) ([]ClusterNode, error)` method is added to get a list of Redis cluster nodes for the given queue. 
+- `ClusterNodes(qname string) ([]ClusterNode, error)` method is added to get a list of Redis cluster nodes for the given queue.
 - `Close() error` method is added to close connection with redis.
 
-### `Handler` 
+### `Handler`
+
 - `GetQueueName(ctx context.Context) (string, bool)` helper is added to extract queue name from a context.
 
 ## [0.11.0] - 2020-07-28
@@ -113,7 +132,7 @@ To view details on any command, use `asynq help <command> <subcommand>`.
 
 - All tasks now requires timeout or deadline. By default, timeout is set to 30 mins.
 - Tasks that exceed its deadline are automatically retried.
-- Encoding schema for task message has changed. Please install the latest CLI and run `migrate` command if 
+- Encoding schema for task message has changed. Please install the latest CLI and run `migrate` command if
   you have tasks enqueued with the previous version of asynq.
 - API of `(*Client).Enqueue`, `(*Client).EnqueueIn`, and `(*Client).EnqueueAt` has changed to return a `*Result`.
 - API of `ErrorHandler` has changed. It now takes context as the first argument and removed `retried`, `maxRetry` from the argument list.
@@ -130,7 +149,6 @@ To view details on any command, use `asynq help <command> <subcommand>`.
 ### Fixed
 
 - Fixes the JSON number overflow issue (https://github.com/hibiken/asynq/issues/166).
-
 
 ## [0.9.2] - 2020-06-08
 

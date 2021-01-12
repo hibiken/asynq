@@ -202,9 +202,9 @@ type RetryTask struct {
 }
 
 // ArchivedTask is a task archived for debugging and inspection purposes, and
-// ArchivedTask won't be retried automatically.
+// it won't be retried automatically.
 // A task can be archived when the task exhausts its retry counts or manually
-// archived by a user via CLI or Inspector.
+// archived by a user via the CLI or Inspector.
 type ArchivedTask struct {
 	*Task
 	ID           string
