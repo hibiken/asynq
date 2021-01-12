@@ -220,11 +220,11 @@ func SeedRetryQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qn
 	seedRedisZSet(tb, r, base.RetryKey(qname), entries)
 }
 
-// SeedDeadQueue initializes the dead queue with the given messages.
-func SeedDeadQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
+// SeedArchivedQueue initializes the archived queue with the given messages.
+func SeedArchivedQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
 	tb.Helper()
 	r.SAdd(base.AllQueues, qname)
-	seedRedisZSet(tb, r, base.DeadKey(qname), entries)
+	seedRedisZSet(tb, r, base.ArchivedKey(qname), entries)
 }
 
 // SeedDeadlines initializes the deadlines set with the given entries.
@@ -264,10 +264,10 @@ func SeedAllRetryQueues(tb testing.TB, r redis.UniversalClient, retry map[string
 	}
 }
 
-// SeedAllDeadQueues initializes all of the specified dead queues with the given entries.
-func SeedAllDeadQueues(tb testing.TB, r redis.UniversalClient, dead map[string][]base.Z) {
-	for q, entries := range dead {
-		SeedDeadQueue(tb, r, entries, q)
+// SeedAllArchivedQueues initializes all of the specified archived queues with the given entries.
+func SeedAllArchivedQueues(tb testing.TB, r redis.UniversalClient, archived map[string][]base.Z) {
+	for q, entries := range archived {
+		SeedArchivedQueue(tb, r, entries, q)
 	}
 }
 
@@ -320,10 +320,10 @@ func GetRetryMessages(tb testing.TB, r redis.UniversalClient, qname string) []*b
 	return getZSetMessages(tb, r, base.RetryKey(qname))
 }
 
-// GetDeadMessages returns all dead messages in the given queue.
-func GetDeadMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
+// GetArchivedMessages returns all archived messages in the given queue.
+func GetArchivedMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getZSetMessages(tb, r, base.DeadKey(qname))
+	return getZSetMessages(tb, r, base.ArchivedKey(qname))
 }
 
 // GetScheduledEntries returns all scheduled messages and its score in the given queue.
@@ -338,10 +338,10 @@ func GetRetryEntries(tb testing.TB, r redis.UniversalClient, qname string) []bas
 	return getZSetEntries(tb, r, base.RetryKey(qname))
 }
 
-// GetDeadEntries returns all dead messages and its score in the given queue.
-func GetDeadEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
+// GetArchivedEntries returns all archived messages and its score in the given queue.
+func GetArchivedEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.DeadKey(qname))
+	return getZSetEntries(tb, r, base.ArchivedKey(qname))
 }
 
 // GetDeadlinesEntries returns all task messages and its score in the deadlines set for the given queue.

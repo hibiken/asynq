@@ -117,13 +117,13 @@ func (tb *TestBroker) Retry(msg *base.TaskMessage, processAt time.Time, errMsg s
 	return tb.real.Retry(msg, processAt, errMsg)
 }
 
-func (tb *TestBroker) Kill(msg *base.TaskMessage, errMsg string) error {
+func (tb *TestBroker) Archive(msg *base.TaskMessage, errMsg string) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return errRedisDown
 	}
-	return tb.real.Kill(msg, errMsg)
+	return tb.real.Archive(msg, errMsg)
 }
 
 func (tb *TestBroker) CheckAndEnqueue(qnames ...string) error {

@@ -223,7 +223,7 @@ func (p *processor) exec() {
 				// Note: One of three things should happen.
 				// 1) Done  -> Removes the message from Active
 				// 2) Retry -> Removes the message from Active & Adds the message to Retry
-				// 3) Kill  -> Removes the message from Active & Adds the message to Dead
+				// 3) Archive  -> Removes the message from Active & Adds the message to archive
 				if resErr != nil {
 					p.retryOrKill(ctx, msg, resErr)
 					return
@@ -272,7 +272,7 @@ func (p *processor) retryOrKill(ctx context.Context, msg *base.TaskMessage, err 
 	}
 	if msg.Retried >= msg.Retry || errors.Is(err, SkipRetry) {
 		p.logger.Warnf("Retry exhausted for task id=%s", msg.ID)
-		p.kill(ctx, msg, err)
+		p.archive(ctx, msg, err)
 	} else {
 		p.retry(ctx, msg, err)
 	}
@@ -299,10 +299,10 @@ func (p *processor) retry(ctx context.Context, msg *base.TaskMessage, e error) {
 	}
 }
 
-func (p *processor) kill(ctx context.Context, msg *base.TaskMessage, e error) {
-	err := p.broker.Kill(msg, e.Error())
+func (p *processor) archive(ctx context.Context, msg *base.TaskMessage, e error) {
+	err := p.broker.Archive(msg, e.Error())
 	if err != nil {
-		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.ActiveKey(msg.Queue), base.DeadKey(msg.Queue))
+		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.ActiveKey(msg.Queue), base.ArchivedKey(msg.Queue))
 		deadline, ok := ctx.Deadline()
 		if !ok {
 			panic("asynq: internal error: missing deadline in context")
@@ -310,7 +310,7 @@ func (p *processor) kill(ctx context.Context, msg *base.TaskMessage, e error) {
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.Kill(msg, e.Error())
+				return p.broker.Archive(msg, e.Error())
 			},
 			errMsg:   errMsg,
 			deadline: deadline,

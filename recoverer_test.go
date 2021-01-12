@@ -37,11 +37,11 @@ func TestRecoverer(t *testing.T) {
 		inProgress    map[string][]*base.TaskMessage
 		deadlines     map[string][]base.Z
 		retry         map[string][]base.Z
-		dead          map[string][]base.Z
+		archived      map[string][]base.Z
 		wantActive    map[string][]*base.TaskMessage
 		wantDeadlines map[string][]base.Z
 		wantRetry     map[string][]*base.TaskMessage
-		wantDead      map[string][]*base.TaskMessage
+		wantArchived  map[string][]*base.TaskMessage
 	}{
 		{
 			desc: "with one active task",
@@ -54,7 +54,7 @@ func TestRecoverer(t *testing.T) {
 			retry: map[string][]base.Z{
 				"default": {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 			},
 			wantActive: map[string][]*base.TaskMessage{
@@ -66,7 +66,7 @@ func TestRecoverer(t *testing.T) {
 			wantRetry: map[string][]*base.TaskMessage{
 				"default": {h.TaskMessageAfterRetry(*t1, "deadline exceeded")},
 			},
-			wantDead: map[string][]*base.TaskMessage{
+			wantArchived: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 		},
@@ -84,7 +84,7 @@ func TestRecoverer(t *testing.T) {
 				"default":  {},
 				"critical": {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default":  {},
 				"critical": {},
 			},
@@ -100,7 +100,7 @@ func TestRecoverer(t *testing.T) {
 				"default":  {},
 				"critical": {},
 			},
-			wantDead: map[string][]*base.TaskMessage{
+			wantArchived: map[string][]*base.TaskMessage{
 				"default":  {h.TaskMessageWithError(*t4, "deadline exceeded")},
 				"critical": {},
 			},
@@ -124,7 +124,7 @@ func TestRecoverer(t *testing.T) {
 				"default":  {},
 				"critical": {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default":  {},
 				"critical": {},
 			},
@@ -140,7 +140,7 @@ func TestRecoverer(t *testing.T) {
 				"default":  {h.TaskMessageAfterRetry(*t1, "deadline exceeded")},
 				"critical": {},
 			},
-			wantDead: map[string][]*base.TaskMessage{
+			wantArchived: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
 			},
@@ -164,7 +164,7 @@ func TestRecoverer(t *testing.T) {
 				"default": {},
 				"cricial": {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 				"cricial": {},
 			},
@@ -179,7 +179,7 @@ func TestRecoverer(t *testing.T) {
 				"default":  {h.TaskMessageAfterRetry(*t1, "deadline exceeded")},
 				"critical": {h.TaskMessageAfterRetry(*t3, "deadline exceeded")},
 			},
-			wantDead: map[string][]*base.TaskMessage{
+			wantArchived: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
 			},
@@ -198,7 +198,7 @@ func TestRecoverer(t *testing.T) {
 				"default":  {},
 				"critical": {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default":  {},
 				"critical": {},
 			},
@@ -214,7 +214,7 @@ func TestRecoverer(t *testing.T) {
 				"default":  {},
 				"critical": {},
 			},
-			wantDead: map[string][]*base.TaskMessage{
+			wantArchived: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
 			},
@@ -226,7 +226,7 @@ func TestRecoverer(t *testing.T) {
 		h.SeedAllActiveQueues(t, r, tc.inProgress)
 		h.SeedAllDeadlines(t, r, tc.deadlines)
 		h.SeedAllRetryQueues(t, r, tc.retry)
-		h.SeedAllDeadQueues(t, r, tc.dead)
+		h.SeedAllArchivedQueues(t, r, tc.archived)
 
 		recoverer := newRecoverer(recovererParams{
 			logger:         testLogger,
@@ -259,10 +259,10 @@ func TestRecoverer(t *testing.T) {
 				t.Errorf("%s; mismatch found in %q: (-want, +got)\n%s", tc.desc, base.RetryKey(qname), diff)
 			}
 		}
-		for qname, want := range tc.wantDead {
-			gotDead := h.GetDeadMessages(t, r, qname)
+		for qname, want := range tc.wantArchived {
+			gotDead := h.GetArchivedMessages(t, r, qname)
 			if diff := cmp.Diff(want, gotDead, h.SortMsgOpt); diff != "" {
-				t.Errorf("%s; mismatch found in %q: (-want, +got)\n%s", tc.desc, base.DeadKey(qname), diff)
+				t.Errorf("%s; mismatch found in %q: (-want, +got)\n%s", tc.desc, base.ArchivedKey(qname), diff)
 			}
 		}
 	}

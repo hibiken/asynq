@@ -1008,7 +1008,7 @@ func TestRetry(t *testing.T) {
 	}
 }
 
-func TestKill(t *testing.T) {
+func TestArchive(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	now := time.Now()
@@ -1058,11 +1058,11 @@ func TestKill(t *testing.T) {
 	tests := []struct {
 		inProgress    map[string][]*base.TaskMessage
 		deadlines     map[string][]base.Z
-		dead          map[string][]base.Z
-		target        *base.TaskMessage // task to kill
+		archived      map[string][]base.Z
+		target        *base.TaskMessage // task to archive
 		wantActive    map[string][]*base.TaskMessage
 		wantDeadlines map[string][]base.Z
-		wantDead      map[string][]base.Z
+		wantArchived  map[string][]base.Z
 	}{
 		{
 			inProgress: map[string][]*base.TaskMessage{
@@ -1074,7 +1074,7 @@ func TestKill(t *testing.T) {
 					{Message: t2, Score: t2Deadline},
 				},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {
 					{Message: t3, Score: now.Add(-time.Hour).Unix()},
 				},
@@ -1086,7 +1086,7 @@ func TestKill(t *testing.T) {
 			wantDeadlines: map[string][]base.Z{
 				"default": {{Message: t2, Score: t2Deadline}},
 			},
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {
 					{Message: h.TaskMessageWithError(*t1, errMsg), Score: now.Unix()},
 					{Message: t3, Score: now.Add(-time.Hour).Unix()},
@@ -1104,7 +1104,7 @@ func TestKill(t *testing.T) {
 					{Message: t3, Score: t3Deadline},
 				},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 			},
 			target: t1,
@@ -1117,7 +1117,7 @@ func TestKill(t *testing.T) {
 					{Message: t3, Score: t3Deadline},
 				},
 			},
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {
 					{Message: h.TaskMessageWithError(*t1, errMsg), Score: now.Unix()},
 				},
@@ -1136,7 +1136,7 @@ func TestKill(t *testing.T) {
 					{Message: t4, Score: t4Deadline},
 				},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 				"custom":  {},
 			},
@@ -1149,7 +1149,7 @@ func TestKill(t *testing.T) {
 				"default": {{Message: t1, Score: t1Deadline}},
 				"custom":  {},
 			},
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {},
 				"custom": {
 					{Message: h.TaskMessageWithError(*t4, errMsg), Score: now.Unix()},
@@ -1162,11 +1162,11 @@ func TestKill(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
-		h.SeedAllDeadQueues(t, r.client, tc.dead)
+		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		err := r.Kill(tc.target, errMsg)
+		err := r.Archive(tc.target, errMsg)
 		if err != nil {
-			t.Errorf("(*RDB).Kill(%v, %v) = %v, want nil", tc.target, errMsg, err)
+			t.Errorf("(*RDB).Archive(%v, %v) = %v, want nil", tc.target, errMsg, err)
 			continue
 		}
 
@@ -1179,13 +1179,13 @@ func TestKill(t *testing.T) {
 		for queue, want := range tc.wantDeadlines {
 			gotDeadlines := h.GetDeadlinesEntries(t, r.client, queue)
 			if diff := cmp.Diff(want, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
-				t.Errorf("mismatch found in %q after calling (*RDB).Kill: (-want, +got):\n%s", base.DeadlinesKey(queue), diff)
+				t.Errorf("mismatch found in %q after calling (*RDB).Archive: (-want, +got):\n%s", base.DeadlinesKey(queue), diff)
 			}
 		}
-		for queue, want := range tc.wantDead {
-			gotDead := h.GetDeadEntries(t, r.client, queue)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
-				t.Errorf("mismatch found in %q after calling (*RDB).Kill: (-want, +got):\n%s", base.DeadKey(queue), diff)
+		for queue, want := range tc.wantArchived {
+			gotArchived := h.GetArchivedEntries(t, r.client, queue)
+			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+				t.Errorf("mismatch found in %q after calling (*RDB).Archive: (-want, +got):\n%s", base.ArchivedKey(queue), diff)
 			}
 		}
 

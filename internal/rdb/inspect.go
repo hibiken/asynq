@@ -35,7 +35,7 @@ type Stats struct {
 	Active    int
 	Scheduled int
 	Retry     int
-	Dead      int
+	Archived  int
 	// Total number of tasks processed during the current date.
 	// The number includes both succeeded and failed tasks.
 	Processed int
@@ -62,7 +62,7 @@ type DailyStats struct {
 // KEYS[2] -> asynq:<qname>:active
 // KEYS[3] -> asynq:<qname>:scheduled
 // KEYS[4] -> asynq:<qname>:retry
-// KEYS[5] -> asynq:<qname>:dead
+// KEYS[5] -> asynq:<qname>:archived
 // KEYS[6] -> asynq:<qname>:processed:<yyyy-mm-dd>
 // KEYS[7] -> asynq:<qname>:failed:<yyyy-mm-dd>
 // KEYS[8] -> asynq:<qname>:paused
@@ -111,7 +111,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		base.ActiveKey(qname),
 		base.ScheduledKey(qname),
 		base.RetryKey(qname),
-		base.DeadKey(qname),
+		base.ArchivedKey(qname),
 		base.ProcessedKey(qname, now),
 		base.FailedKey(qname, now),
 		base.PausedKey(qname),
@@ -144,8 +144,8 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		case base.RetryKey(qname):
 			stats.Retry = val
 			size += val
-		case base.DeadKey(qname):
-			stats.Dead = val
+		case base.ArchivedKey(qname):
+			stats.Archived = val
 			size += val
 		case base.ProcessedKey(qname, now):
 			stats.Processed = val
@@ -328,12 +328,12 @@ func (r *RDB) ListRetry(qname string, pgn Pagination) ([]base.Z, error) {
 	return r.listZSetEntries(base.RetryKey(qname), pgn)
 }
 
-// ListDead returns all tasks from the given queue that have exhausted its retry limit.
-func (r *RDB) ListDead(qname string, pgn Pagination) ([]base.Z, error) {
+// ListArchived returns all tasks from the given queue that have exhausted its retry limit.
+func (r *RDB) ListArchived(qname string, pgn Pagination) ([]base.Z, error) {
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
 		return nil, fmt.Errorf("queue %q does not exist", qname)
 	}
-	return r.listZSetEntries(base.DeadKey(qname), pgn)
+	return r.listZSetEntries(base.ArchivedKey(qname), pgn)
 }
 
 // listZSetEntries returns a list of message and score pairs in Redis sorted-set
@@ -358,11 +358,11 @@ func (r *RDB) listZSetEntries(key string, pgn Pagination) ([]base.Z, error) {
 	return res, nil
 }
 
-// RunDeadTask finds a dead task that matches the given id and score from
+// RunArchivedTask finds an archived task that matches the given id and score from
 // the given queue and enqueues it for processing.
-//If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) RunDeadTask(qname string, id uuid.UUID, score int64) error {
-	n, err := r.removeAndRun(base.DeadKey(qname), base.QueueKey(qname), id.String(), float64(score))
+// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
+func (r *RDB) RunArchivedTask(qname string, id uuid.UUID, score int64) error {
+	n, err := r.removeAndRun(base.ArchivedKey(qname), base.QueueKey(qname), id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -412,10 +412,10 @@ func (r *RDB) RunAllRetryTasks(qname string) (int64, error) {
 	return r.removeAndRunAll(base.RetryKey(qname), base.QueueKey(qname))
 }
 
-// RunAllDeadTasks enqueues all tasks from dead queue
+// RunAllArchivedTasks enqueues all archived tasks from the given queue
 // and returns the number of tasks enqueued.
-func (r *RDB) RunAllDeadTasks(qname string) (int64, error) {
-	return r.removeAndRunAll(base.DeadKey(qname), base.QueueKey(qname))
+func (r *RDB) RunAllArchivedTasks(qname string) (int64, error) {
+	return r.removeAndRunAll(base.ArchivedKey(qname), base.QueueKey(qname))
 }
 
 var removeAndRunCmd = redis.NewScript(`
@@ -462,10 +462,10 @@ func (r *RDB) removeAndRunAll(zset, qkey string) (int64, error) {
 	return n, nil
 }
 
-// KillRetryTask finds a retry task that matches the given id and score from the given queue
-// and kills it. If a task that maches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) KillRetryTask(qname string, id uuid.UUID, score int64) error {
-	n, err := r.removeAndKill(base.RetryKey(qname), base.DeadKey(qname), id.String(), float64(score))
+// ArchiveRetryTask finds a retry task that matches the given id and score from the given queue
+// and archives it. If a task that maches the id and score does not exist, it returns ErrTaskNotFound.
+func (r *RDB) ArchiveRetryTask(qname string, id uuid.UUID, score int64) error {
+	n, err := r.removeAndArchive(base.RetryKey(qname), base.ArchivedKey(qname), id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -475,10 +475,10 @@ func (r *RDB) KillRetryTask(qname string, id uuid.UUID, score int64) error {
 	return nil
 }
 
-// KillScheduledTask finds a scheduled task that matches the given id and score from the given queue
-// and kills it. If a task that maches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) KillScheduledTask(qname string, id uuid.UUID, score int64) error {
-	n, err := r.removeAndKill(base.ScheduledKey(qname), base.DeadKey(qname), id.String(), float64(score))
+// ArchiveScheduledTask finds a scheduled task that matches the given id and score from the given queue
+// and archives it. If a task that maches the id and score does not exist, it returns ErrTaskNotFound.
+func (r *RDB) ArchiveScheduledTask(qname string, id uuid.UUID, score int64) error {
+	n, err := r.removeAndArchive(base.ScheduledKey(qname), base.ArchivedKey(qname), id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -488,26 +488,26 @@ func (r *RDB) KillScheduledTask(qname string, id uuid.UUID, score int64) error {
 	return nil
 }
 
-// KillAllRetryTasks kills all retry tasks from the given queue and
+// ArchiveAllRetryTasks archives all retry tasks from the given queue and
 // returns the number of tasks that were moved.
-func (r *RDB) KillAllRetryTasks(qname string) (int64, error) {
-	return r.removeAndKillAll(base.RetryKey(qname), base.DeadKey(qname))
+func (r *RDB) ArchiveAllRetryTasks(qname string) (int64, error) {
+	return r.removeAndArchiveAll(base.RetryKey(qname), base.ArchivedKey(qname))
 }
 
-// KillAllScheduledTasks kills all scheduled tasks from the given queue and
+// ArchiveAllScheduledTasks archives all scheduled tasks from the given queue and
 // returns the number of tasks that were moved.
-func (r *RDB) KillAllScheduledTasks(qname string) (int64, error) {
-	return r.removeAndKillAll(base.ScheduledKey(qname), base.DeadKey(qname))
+func (r *RDB) ArchiveAllScheduledTasks(qname string) (int64, error) {
+	return r.removeAndArchiveAll(base.ScheduledKey(qname), base.ArchivedKey(qname))
 }
 
 // KEYS[1] -> ZSET to move task from (e.g., retry queue)
-// KEYS[2] -> asynq:{<qname>}:dead
-// ARGV[1] -> score of the task to kill
-// ARGV[2] -> id of the task to kill
+// KEYS[2] -> asynq:{<qname>}:archived
+// ARGV[1] -> score of the task to archive
+// ARGV[2] -> id of the task to archive
 // ARGV[3] -> current timestamp
 // ARGV[4] -> cutoff timestamp (e.g., 90 days ago)
-// ARGV[5] -> max number of tasks in dead queue (e.g., 100)
-var removeAndKillCmd = redis.NewScript(`
+// ARGV[5] -> max number of tasks in archived state (e.g., 100)
+var removeAndArchiveCmd = redis.NewScript(`
 local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
 for _, msg in ipairs(msgs) do
 	local decoded = cjson.decode(msg)
@@ -521,12 +521,12 @@ for _, msg in ipairs(msgs) do
 end
 return 0`)
 
-func (r *RDB) removeAndKill(src, dst, id string, score float64) (int64, error) {
+func (r *RDB) removeAndArchive(src, dst, id string, score float64) (int64, error) {
 	now := time.Now()
-	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
-	res, err := removeAndKillCmd.Run(r.client,
+	limit := now.AddDate(0, 0, -archivedExpirationInDays).Unix() // 90 days ago
+	res, err := removeAndArchiveCmd.Run(r.client,
 		[]string{src, dst},
-		score, id, now.Unix(), limit, maxDeadTasks).Result()
+		score, id, now.Unix(), limit, maxArchiveSize).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -538,11 +538,11 @@ func (r *RDB) removeAndKill(src, dst, id string, score float64) (int64, error) {
 }
 
 // KEYS[1] -> ZSET to move task from (e.g., retry queue)
-// KEYS[2] -> asynq:{<qname>}:dead
+// KEYS[2] -> asynq:{<qname>}:archived
 // ARGV[1] -> current timestamp
 // ARGV[2] -> cutoff timestamp (e.g., 90 days ago)
-// ARGV[3] -> max number of tasks in dead queue (e.g., 100)
-var removeAndKillAllCmd = redis.NewScript(`
+// ARGV[3] -> max number of tasks in archive (e.g., 100)
+var removeAndArchiveAllCmd = redis.NewScript(`
 local msgs = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, msg in ipairs(msgs) do
 	redis.call("ZADD", KEYS[2], ARGV[1], msg)
@@ -552,11 +552,11 @@ for _, msg in ipairs(msgs) do
 end
 return table.getn(msgs)`)
 
-func (r *RDB) removeAndKillAll(src, dst string) (int64, error) {
+func (r *RDB) removeAndArchiveAll(src, dst string) (int64, error) {
 	now := time.Now()
-	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
-	res, err := removeAndKillAllCmd.Run(r.client, []string{src, dst},
-		now.Unix(), limit, maxDeadTasks).Result()
+	limit := now.AddDate(0, 0, -archivedExpirationInDays).Unix() // 90 days ago
+	res, err := removeAndArchiveAllCmd.Run(r.client, []string{src, dst},
+		now.Unix(), limit, maxArchiveSize).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -567,10 +567,10 @@ func (r *RDB) removeAndKillAll(src, dst string) (int64, error) {
 	return n, nil
 }
 
-// DeleteDeadTask deletes a dead task that matches the given id and score from the given queue.
+// DeleteArchivedTask deletes an archived task that matches the given id and score from the given queue.
 // If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) DeleteDeadTask(qname string, id uuid.UUID, score int64) error {
-	return r.deleteTask(base.DeadKey(qname), id.String(), float64(score))
+func (r *RDB) DeleteArchivedTask(qname string, id uuid.UUID, score int64) error {
+	return r.deleteTask(base.ArchivedKey(qname), id.String(), float64(score))
 }
 
 // DeleteRetryTask deletes a retry task that matches the given id and score from the given queue.
@@ -617,10 +617,10 @@ local n = redis.call("ZCARD", KEYS[1])
 redis.call("DEL", KEYS[1])
 return n`)
 
-// DeleteAllDeadTasks deletes all dead tasks from the given queue
+// DeleteAllArchivedTasks deletes all archived tasks from the given queue
 // and returns the number of tasks deleted.
-func (r *RDB) DeleteAllDeadTasks(qname string) (int64, error) {
-	return r.deleteAll(base.DeadKey(qname))
+func (r *RDB) DeleteAllArchivedTasks(qname string) (int64, error) {
+	return r.deleteAll(base.ArchivedKey(qname))
 }
 
 // DeleteAllRetryTasks deletes all retry tasks from the given queue
@@ -670,7 +670,7 @@ func (e *ErrQueueNotEmpty) Error() string {
 // KEYS[2] -> asynq:{<qname>}:active
 // KEYS[3] -> asynq:{<qname>}:scheduled
 // KEYS[4] -> asynq:{<qname>}:retry
-// KEYS[5] -> asynq:{<qname>}:dead
+// KEYS[5] -> asynq:{<qname>}:archived
 // KEYS[6] -> asynq:{<qname>}:deadlines
 var removeQueueForceCmd = redis.NewScript(`
 local active = redis.call("LLEN", KEYS[2])
@@ -690,15 +690,15 @@ return redis.status_reply("OK")`)
 // KEYS[2] -> asynq:{<qname>}:active
 // KEYS[3] -> asynq:{<qname>}:scheduled
 // KEYS[4] -> asynq:{<qname>}:retry
-// KEYS[5] -> asynq:{<qname>}:dead
+// KEYS[5] -> asynq:{<qname>}:archived
 // KEYS[6] -> asynq:{<qname>}:deadlines
 var removeQueueCmd = redis.NewScript(`
 local pending = redis.call("LLEN", KEYS[1]) 
 local active = redis.call("LLEN", KEYS[2])
 local scheduled = redis.call("SCARD", KEYS[3])
 local retry = redis.call("SCARD", KEYS[4])
-local dead = redis.call("SCARD", KEYS[5])
-local total = pending + active + scheduled + retry + dead
+local archived = redis.call("SCARD", KEYS[5])
+local total = pending + active + scheduled + retry + archived
 if total > 0 then
 	return redis.error_reply("QUEUE NOT EMPTY")
 end
@@ -735,7 +735,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 		base.ActiveKey(qname),
 		base.ScheduledKey(qname),
 		base.RetryKey(qname),
-		base.DeadKey(qname),
+		base.ArchivedKey(qname),
 		base.DeadlinesKey(qname),
 	}
 	if err := script.Run(r.client, keys).Err(); err != nil {

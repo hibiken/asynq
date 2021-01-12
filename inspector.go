@@ -20,7 +20,7 @@ type Inspector struct {
 	rdb *rdb.RDB
 }
 
-// New returns a new instance of Inspector.
+// NewInspector returns a new instance of Inspector.
 func NewInspector(r RedisConnOpt) *Inspector {
 	return &Inspector{
 		rdb: rdb.NewRDB(createRedisClient(r)),
@@ -42,7 +42,7 @@ type QueueStats struct {
 	// Name of the queue.
 	Queue string
 	// Size is the total number of tasks in the queue.
-	// The value is the sum of Pending, Active, Scheduled, Retry, and Dead.
+	// The value is the sum of Pending, Active, Scheduled, Retry, and Archived.
 	Size int
 	// Number of pending tasks.
 	Pending int
@@ -52,8 +52,8 @@ type QueueStats struct {
 	Scheduled int
 	// Number of retry tasks.
 	Retry int
-	// Number of dead tasks.
-	Dead int
+	// Number of archived tasks.
+	Archived int
 	// Total number of tasks being processed during the given date.
 	// The number includes both succeeded and failed tasks.
 	Processed int
@@ -82,7 +82,7 @@ func (i *Inspector) CurrentStats(qname string) (*QueueStats, error) {
 		Active:    stats.Active,
 		Scheduled: stats.Scheduled,
 		Retry:     stats.Retry,
-		Dead:      stats.Dead,
+		Archived:  stats.Archived,
 		Processed: stats.Processed,
 		Failed:    stats.Failed,
 		Paused:    stats.Paused,
@@ -201,9 +201,11 @@ type RetryTask struct {
 	score int64
 }
 
-// DeadTask is a task exhausted its retries.
-// DeadTask won't be retried automatically.
-type DeadTask struct {
+// ArchivedTask is a task archived for debugging and inspection purposes, and
+// ArchivedTask won't be retried automatically.
+// A task can be archived when the task exhausts its retry counts or manually
+// archived by a user via CLI or Inspector.
+type ArchivedTask struct {
 	*Task
 	ID           string
 	Queue        string
@@ -215,19 +217,19 @@ type DeadTask struct {
 	score int64
 }
 
-// Key returns a key used to delete, run, and kill the task.
+// Key returns a key used to delete, run, and archive the task.
 func (t *ScheduledTask) Key() string {
 	return fmt.Sprintf("s:%v:%v", t.ID, t.score)
 }
 
-// Key returns a key used to delete, run, and kill the task.
+// Key returns a key used to delete, run, and archive the task.
 func (t *RetryTask) Key() string {
 	return fmt.Sprintf("r:%v:%v", t.ID, t.score)
 }
 
-// Key returns a key used to delete, run, and kill the task.
-func (t *DeadTask) Key() string {
-	return fmt.Sprintf("d:%v:%v", t.ID, t.score)
+// Key returns a key used to delete, run, and archive the task.
+func (t *ArchivedTask) Key() string {
+	return fmt.Sprintf("a:%v:%v", t.ID, t.score)
 }
 
 // parseTaskKey parses a key string and returns each part of key with proper
@@ -246,7 +248,7 @@ func parseTaskKey(key string) (id uuid.UUID, score int64, state string, err erro
 		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
 	}
 	state = parts[0]
-	if len(state) != 1 || !strings.Contains("srd", state) {
+	if len(state) != 1 || !strings.Contains("sra", state) {
 		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
 	}
 	return id, score, state, nil
@@ -423,25 +425,25 @@ func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*RetryTa
 	return tasks, nil
 }
 
-// ListDeadTasks retrieves dead tasks from the specified queue.
+// ListArchivedTasks retrieves archived tasks from the specified queue.
 // Tasks are sorted by LastFailedAt field in descending order.
 //
 // By default, it retrieves the first 30 tasks.
-func (i *Inspector) ListDeadTasks(qname string, opts ...ListOption) ([]*DeadTask, error) {
+func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*ArchivedTask, error) {
 	if err := validateQueueName(qname); err != nil {
 		return nil, err
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	zs, err := i.rdb.ListDead(qname, pgn)
+	zs, err := i.rdb.ListArchived(qname, pgn)
 	if err != nil {
 		return nil, err
 	}
-	var tasks []*DeadTask
+	var tasks []*ArchivedTask
 	for _, z := range zs {
 		failedAt := time.Unix(z.Score, 0)
 		t := NewTask(z.Message.Type, z.Message.Payload)
-		tasks = append(tasks, &DeadTask{
+		tasks = append(tasks, &ArchivedTask{
 			Task:         t,
 			ID:           z.Message.ID.String(),
 			Queue:        z.Message.Queue,
@@ -475,13 +477,13 @@ func (i *Inspector) DeleteAllRetryTasks(qname string) (int, error) {
 	return int(n), err
 }
 
-// DeleteAllDeadTasks deletes all dead tasks from the specified queue,
+// DeleteAllArchivedTasks deletes all archived tasks from the specified queue,
 // and reports the number tasks deleted.
-func (i *Inspector) DeleteAllDeadTasks(qname string) (int, error) {
+func (i *Inspector) DeleteAllArchivedTasks(qname string) (int, error) {
 	if err := validateQueueName(qname); err != nil {
 		return 0, err
 	}
-	n, err := i.rdb.DeleteAllDeadTasks(qname)
+	n, err := i.rdb.DeleteAllArchivedTasks(qname)
 	return int(n), err
 }
 
@@ -499,8 +501,8 @@ func (i *Inspector) DeleteTaskByKey(qname, key string) error {
 		return i.rdb.DeleteScheduledTask(qname, id, score)
 	case "r":
 		return i.rdb.DeleteRetryTask(qname, id, score)
-	case "d":
-		return i.rdb.DeleteDeadTask(qname, id, score)
+	case "a":
+		return i.rdb.DeleteArchivedTask(qname, id, score)
 	default:
 		return fmt.Errorf("invalid key")
 	}
@@ -526,13 +528,13 @@ func (i *Inspector) RunAllRetryTasks(qname string) (int, error) {
 	return int(n), err
 }
 
-// RunAllDeadTasks transition all dead tasks to pending state within the given queue,
+// RunAllArchivedTasks transition all archived tasks to pending state within the given queue,
 // and reports the number of tasks transitioned.
-func (i *Inspector) RunAllDeadTasks(qname string) (int, error) {
+func (i *Inspector) RunAllArchivedTasks(qname string) (int, error) {
 	if err := validateQueueName(qname); err != nil {
 		return 0, err
 	}
-	n, err := i.rdb.RunAllDeadTasks(qname)
+	n, err := i.rdb.RunAllArchivedTasks(qname)
 	return int(n), err
 }
 
@@ -550,35 +552,35 @@ func (i *Inspector) RunTaskByKey(qname, key string) error {
 		return i.rdb.RunScheduledTask(qname, id, score)
 	case "r":
 		return i.rdb.RunRetryTask(qname, id, score)
-	case "d":
-		return i.rdb.RunDeadTask(qname, id, score)
+	case "a":
+		return i.rdb.RunArchivedTask(qname, id, score)
 	default:
 		return fmt.Errorf("invalid key")
 	}
 }
 
-// KillAllScheduledTasks kills all scheduled tasks within the given queue,
-// and reports the number of tasks killed.
-func (i *Inspector) KillAllScheduledTasks(qname string) (int, error) {
+// ArchiveAllScheduledTasks archives all scheduled tasks within the given queue,
+// and reports the number of tasks archiveed.
+func (i *Inspector) ArchiveAllScheduledTasks(qname string) (int, error) {
 	if err := validateQueueName(qname); err != nil {
 		return 0, err
 	}
-	n, err := i.rdb.KillAllScheduledTasks(qname)
+	n, err := i.rdb.ArchiveAllScheduledTasks(qname)
 	return int(n), err
 }
 
-// KillAllRetryTasks kills all retry tasks within the given queue,
-// and reports the number of tasks killed.
-func (i *Inspector) KillAllRetryTasks(qname string) (int, error) {
+// ArchiveAllRetryTasks archives all retry tasks within the given queue,
+// and reports the number of tasks archiveed.
+func (i *Inspector) ArchiveAllRetryTasks(qname string) (int, error) {
 	if err := validateQueueName(qname); err != nil {
 		return 0, err
 	}
-	n, err := i.rdb.KillAllRetryTasks(qname)
+	n, err := i.rdb.ArchiveAllRetryTasks(qname)
 	return int(n), err
 }
 
-// KillTaskByKey kills a task with the given key in the given queue.
-func (i *Inspector) KillTaskByKey(qname, key string) error {
+// ArchiveTaskByKey archives a task with the given key in the given queue.
+func (i *Inspector) ArchiveTaskByKey(qname, key string) error {
 	if err := validateQueueName(qname); err != nil {
 		return err
 	}
@@ -588,11 +590,11 @@ func (i *Inspector) KillTaskByKey(qname, key string) error {
 	}
 	switch state {
 	case "s":
-		return i.rdb.KillScheduledTask(qname, id, score)
+		return i.rdb.ArchiveScheduledTask(qname, id, score)
 	case "r":
-		return i.rdb.KillRetryTask(qname, id, score)
-	case "d":
-		return fmt.Errorf("task already dead")
+		return i.rdb.ArchiveRetryTask(qname, id, score)
+	case "a":
+		return fmt.Errorf("task already archived")
 	default:
 		return fmt.Errorf("invalid key")
 	}
@@ -716,7 +718,7 @@ type ClusterNode struct {
 	Addr string
 }
 
-// ClusterNode returns a list of nodes the given queue belongs to.
+// ClusterNodes returns a list of nodes the given queue belongs to.
 func (i *Inspector) ClusterNodes(qname string) ([]ClusterNode, error) {
 	nodes, err := i.rdb.ClusterNodes(qname)
 	if err != nil {
