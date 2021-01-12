@@ -98,7 +98,9 @@ func migrate(cmd *cobra.Command, args []string) {
 		printError(err)
 		os.Exit(1)
 	}
-	if err := partitionZSetMembersByQueue(c, "asynq:dead", base.DeadKey); err != nil {
+	// Note: base.DeadKey function was renamed in v0.14. We define the legacy function here since we need it for this migration script.
+	deadKeyFunc := func(qname string) string { return fmt.Sprintf("asynq:{%s}:dead", qname) } 
+	if err := partitionZSetMembersByQueue(c, "asynq:dead", deadKeyFunc); err != nil {
 		printError(err)
 		os.Exit(1)
 	}
@@ -113,7 +115,7 @@ func migrate(cmd *cobra.Command, args []string) {
 
 	paused, err := c.SMembers("asynq:paused").Result()
 	if err != nil {
-		printError(fmt.Errorf("command SMEMBERS asynq:paused failed: ", err))
+		printError(fmt.Errorf("command SMEMBERS asynq:paused failed: %v", err))
 		os.Exit(1)
 	}
 	for _, qkey := range paused {
@@ -135,6 +137,27 @@ func migrate(cmd *cobra.Command, args []string) {
 	if err := deleteKey(c, "asynq:workers"); err != nil {
 		printError(err)
 		os.Exit(1)
+	}
+
+	/*** Migrate from 0.13 to 0.14 compatible ***/
+
+	// Move all dead tasks to archived ZSET.
+	for _, qname := range allQueues {
+		zs, err := c.ZRangeWithScores(deadKeyFunc(qname), 0, -1).Result()
+		if err != nil {
+			printError(err)
+			os.Exit(1)
+		}
+		for _, z := range zs {
+			if err := c.ZAdd(base.ArchivedKey(qname), &z).Err(); err != nil {
+				printError(err)
+				os.Exit(1)
+			}
+		}
+		if err := deleteKey(c, deadKeyFunc(qname)); err != nil {
+			printError(err)
+			os.Exit(1)
+		}
 	}
 }
 

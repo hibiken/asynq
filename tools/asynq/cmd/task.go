@@ -125,7 +125,7 @@ var taskArchiveAllCmd = &cobra.Command{
 	Use:   "archive-all --queue=QUEUE --state=STATE",
 	Short: "Archive all tasks in the given state",
 	Args:  cobra.NoArgs,
-	Run:   taskKillAll,
+	Run:   taskArchiveAll,
 }
 
 var taskDeleteAllCmd = &cobra.Command{
@@ -275,7 +275,7 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 
 func listArchivedTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListDeadTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
+	tasks, err := i.ListArchivedTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -318,7 +318,7 @@ func taskKill(cmd *cobra.Command, args []string) {
 	}
 
 	i := createInspector()
-	err = i.KillTaskByKey(qname, key)
+	err = i.ArchiveTaskByKey(qname, key)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
@@ -368,7 +368,7 @@ func taskRun(cmd *cobra.Command, args []string) {
 	fmt.Println("task transitioned to pending state")
 }
 
-func taskKillAll(cmd *cobra.Command, args []string) {
+func taskArchiveAll(cmd *cobra.Command, args []string) {
 	qname, err := cmd.Flags().GetString("queue")
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
@@ -384,9 +384,9 @@ func taskKillAll(cmd *cobra.Command, args []string) {
 	var n int
 	switch state {
 	case "scheduled":
-		n, err = i.KillAllScheduledTasks(qname)
+		n, err = i.ArchiveAllScheduledTasks(qname)
 	case "retry":
-		n, err = i.KillAllRetryTasks(qname)
+		n, err = i.ArchiveAllRetryTasks(qname)
 	default:
 		fmt.Printf("error: unsupported state %q\n", state)
 		os.Exit(1)
