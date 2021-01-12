@@ -33,7 +33,7 @@ type processor struct {
 	// orderedQueues is set only in strict-priority mode.
 	orderedQueues []string
 
-	retryDelayFunc retryDelayFunc
+	retryDelayFunc RetryDelayFunc
 
 	errHandler ErrorHandler
 
@@ -67,12 +67,10 @@ type processor struct {
 	finished chan<- *base.TaskMessage
 }
 
-type retryDelayFunc func(n int, err error, task *Task) time.Duration
-
 type processorParams struct {
 	logger          *log.Logger
 	broker          base.Broker
-	retryDelayFunc  retryDelayFunc
+	retryDelayFunc  RetryDelayFunc
 	syncCh          chan<- *syncRequest
 	cancelations    *base.Cancelations
 	concurrency     int

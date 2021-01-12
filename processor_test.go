@@ -96,7 +96,7 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
-			retryDelayFunc:  defaultDelayFunc,
+			retryDelayFunc:  DefaultRetryDelayFunc,
 			syncCh:          syncCh,
 			cancelations:    base.NewCancelations(),
 			concurrency:     10,
@@ -187,7 +187,7 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 		p := newProcessor(processorParams{
 			logger:         testLogger,
 			broker:         rdbClient,
-			retryDelayFunc: defaultDelayFunc,
+			retryDelayFunc: DefaultRetryDelayFunc,
 			syncCh:         syncCh,
 			cancelations:   base.NewCancelations(),
 			concurrency:    10,
@@ -268,7 +268,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
-			retryDelayFunc:  defaultDelayFunc,
+			retryDelayFunc:  DefaultRetryDelayFunc,
 			syncCh:          syncCh,
 			cancelations:    base.NewCancelations(),
 			concurrency:     10,
@@ -478,7 +478,7 @@ func TestProcessorQueues(t *testing.T) {
 		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          nil,
-			retryDelayFunc:  defaultDelayFunc,
+			retryDelayFunc:  DefaultRetryDelayFunc,
 			syncCh:          nil,
 			cancelations:    base.NewCancelations(),
 			concurrency:     10,
@@ -569,7 +569,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
-			retryDelayFunc:  defaultDelayFunc,
+			retryDelayFunc:  DefaultRetryDelayFunc,
 			syncCh:          syncCh,
 			cancelations:    base.NewCancelations(),
 			concurrency:     1, // Set concurrency to 1 to make sure tasks are processed one at a time.

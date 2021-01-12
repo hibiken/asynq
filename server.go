@@ -60,11 +60,7 @@ type Config struct {
 	// Function to calculate retry delay for a failed task.
 	//
 	// By default, it uses exponential backoff algorithm to calculate the delay.
-	//
-	// n is the number of times the task has been retried.
-	// e is the error returned by the task handler.
-	// t is the task in question.
-	RetryDelayFunc func(n int, e error, t *Task) time.Duration
+	RetryDelayFunc RetryDelayFunc
 
 	// List of queues to process with given priority value. Keys are the names of the
 	// queues and values are associated priority value.
@@ -152,6 +148,14 @@ type ErrorHandlerFunc func(ctx context.Context, task *Task, err error)
 func (fn ErrorHandlerFunc) HandleError(ctx context.Context, task *Task, err error) {
 	fn(ctx, task, err)
 }
+
+// RetryDelayFunc calculates the retry delay duration for a failed task given
+// the retry count, error, and the task.
+//
+// n is the number of times the task has been retried.
+// e is the error returned by the task handler.
+// t is the task in question.
+type RetryDelayFunc func(n int, e error, t *Task) time.Duration
 
 // Logger supports logging at various log levels.
 type Logger interface {
@@ -253,9 +257,11 @@ func toInternalLogLevel(l LogLevel) log.Level {
 	panic(fmt.Sprintf("asynq: unexpected log level: %v", l))
 }
 
-// Formula taken from https://github.com/mperham/sidekiq.
-func defaultDelayFunc(n int, e error, t *Task) time.Duration {
+// DefaultRetryDelayFunc is the default RetryDelayFunc used if one is not specified in Config.
+// It uses exponential back-off strategy to calculate the retry delay.
+func DefaultRetryDelayFunc(n int, e error, t *Task) time.Duration {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	// Formula taken from https://github.com/mperham/sidekiq.
 	s := int(math.Pow(float64(n), 4)) + 15 + (r.Intn(30) * (n + 1))
 	return time.Duration(s) * time.Second
 }
@@ -279,7 +285,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	}
 	delayFunc := cfg.RetryDelayFunc
 	if delayFunc == nil {
-		delayFunc = defaultDelayFunc
+		delayFunc = DefaultRetryDelayFunc
 	}
 	queues := make(map[string]int)
 	for qname, p := range cfg.Queues {
@@ -291,7 +297,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		queues = defaultQueueConfig
 	}
 	var qnames []string
-	for q, _ := range queues {
+	for q := range queues {
 		qnames = append(qnames, q)
 	}
 	shutdownTimeout := cfg.ShutdownTimeout
