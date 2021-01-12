@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `DefaultRetryDelayFunc` is now a public API, which can be used in the custom `RetryDelayFunc`.
 - `SkipRetry` error is added to be used as a return value from `Handler`.
 - `Servers` method is added to `Inspector`
 - `CancelActiveTask` method is added to `Inspector`.

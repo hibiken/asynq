@@ -16,7 +16,7 @@ import (
 type recoverer struct {
 	logger         *log.Logger
 	broker         base.Broker
-	retryDelayFunc retryDelayFunc
+	retryDelayFunc RetryDelayFunc
 
 	// channel to communicate back to the long running "recoverer" goroutine.
 	done chan struct{}
@@ -33,7 +33,7 @@ type recovererParams struct {
 	broker         base.Broker
 	queues         []string
 	interval       time.Duration
-	retryDelayFunc retryDelayFunc
+	retryDelayFunc RetryDelayFunc
 }
 
 func newRecoverer(params recovererParams) *recoverer {
