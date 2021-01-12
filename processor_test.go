@@ -318,7 +318,7 @@ func TestProcessorRetry(t *testing.T) {
 		handler      Handler             // task handler
 		wait         time.Duration       // wait duration between starting and stopping processor for this test case
 		wantRetry    []base.Z            // tasks in retry queue at the end
-		wantDead     []*base.TaskMessage // tasks in dead queue at the end
+		wantArchived []*base.TaskMessage // tasks in archived queue at the end
 		wantErrCount int                 // number of times error handler should be called
 	}{
 		{
@@ -335,7 +335,7 @@ func TestProcessorRetry(t *testing.T) {
 				{Message: h.TaskMessageAfterRetry(*m3, errMsg), Score: now.Add(time.Minute).Unix()},
 				{Message: h.TaskMessageAfterRetry(*m4, errMsg), Score: now.Add(time.Minute).Unix()},
 			},
-			wantDead:     []*base.TaskMessage{h.TaskMessageWithError(*m1, errMsg)},
+			wantArchived: []*base.TaskMessage{h.TaskMessageWithError(*m1, errMsg)},
 			wantErrCount: 4,
 		},
 		{
@@ -348,7 +348,7 @@ func TestProcessorRetry(t *testing.T) {
 			}),
 			wait:      2 * time.Second,
 			wantRetry: []base.Z{},
-			wantDead: []*base.TaskMessage{
+			wantArchived: []*base.TaskMessage{
 				h.TaskMessageWithError(*m1, SkipRetry.Error()),
 				h.TaskMessageWithError(*m2, SkipRetry.Error()),
 			},
@@ -364,7 +364,7 @@ func TestProcessorRetry(t *testing.T) {
 			}),
 			wait:      2 * time.Second,
 			wantRetry: []base.Z{},
-			wantDead: []*base.TaskMessage{
+			wantArchived: []*base.TaskMessage{
 				h.TaskMessageWithError(*m1, wrappedSkipRetry.Error()),
 				h.TaskMessageWithError(*m2, wrappedSkipRetry.Error()),
 			},
@@ -427,9 +427,9 @@ func TestProcessorRetry(t *testing.T) {
 			t.Errorf("%s: mismatch found in %q after running processor; (-want, +got)\n%s", tc.desc, base.RetryKey(base.DefaultQueueName), diff)
 		}
 
-		gotDead := h.GetDeadMessages(t, r, base.DefaultQueueName)
-		if diff := cmp.Diff(tc.wantDead, gotDead, h.SortMsgOpt); diff != "" {
-			t.Errorf("%s: mismatch found in %q after running processor; (-want, +got)\n%s", tc.desc, base.DeadKey(base.DefaultQueueName), diff)
+		gotDead := h.GetArchivedMessages(t, r, base.DefaultQueueName)
+		if diff := cmp.Diff(tc.wantArchived, gotDead, h.SortMsgOpt); diff != "" {
+			t.Errorf("%s: mismatch found in %q after running processor; (-want, +got)\n%s", tc.desc, base.ArchivedKey(base.DefaultQueueName), diff)
 		}
 
 		if l := r.LLen(base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {

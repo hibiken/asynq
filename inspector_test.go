@@ -67,7 +67,7 @@ func TestInspectorDeleteQueue(t *testing.T) {
 		active    map[string][]*base.TaskMessage
 		scheduled map[string][]base.Z
 		retry     map[string][]base.Z
-		dead      map[string][]base.Z
+		archived  map[string][]base.Z
 		qname     string // queue to remove
 		force     bool
 	}{
@@ -88,7 +88,7 @@ func TestInspectorDeleteQueue(t *testing.T) {
 				"default": {},
 				"custom":  {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 				"custom":  {},
 			},
@@ -112,7 +112,7 @@ func TestInspectorDeleteQueue(t *testing.T) {
 				"default": {},
 				"custom":  {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 				"custom":  {},
 			},
@@ -127,7 +127,7 @@ func TestInspectorDeleteQueue(t *testing.T) {
 		h.SeedAllActiveQueues(t, r, tc.active)
 		h.SeedAllScheduledQueues(t, r, tc.scheduled)
 		h.SeedAllRetryQueues(t, r, tc.retry)
-		h.SeedAllDeadQueues(t, r, tc.dead)
+		h.SeedAllArchivedQueues(t, r, tc.archived)
 
 		err := inspector.DeleteQueue(tc.qname, tc.force)
 		if err != nil {
@@ -156,7 +156,7 @@ func TestInspectorDeleteQueueErrorQueueNotEmpty(t *testing.T) {
 		active    map[string][]*base.TaskMessage
 		scheduled map[string][]base.Z
 		retry     map[string][]base.Z
-		dead      map[string][]base.Z
+		archived  map[string][]base.Z
 		qname     string // queue to remove
 		force     bool
 	}{
@@ -173,7 +173,7 @@ func TestInspectorDeleteQueueErrorQueueNotEmpty(t *testing.T) {
 			retry: map[string][]base.Z{
 				"default": {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 			},
 			qname: "default",
@@ -187,7 +187,7 @@ func TestInspectorDeleteQueueErrorQueueNotEmpty(t *testing.T) {
 		h.SeedAllActiveQueues(t, r, tc.active)
 		h.SeedAllScheduledQueues(t, r, tc.scheduled)
 		h.SeedAllRetryQueues(t, r, tc.retry)
-		h.SeedAllDeadQueues(t, r, tc.dead)
+		h.SeedAllArchivedQueues(t, r, tc.archived)
 
 		err := inspector.DeleteQueue(tc.qname, tc.force)
 		if _, ok := err.(*ErrQueueNotEmpty); !ok {
@@ -212,7 +212,7 @@ func TestInspectorDeleteQueueErrorQueueNotFound(t *testing.T) {
 		active    map[string][]*base.TaskMessage
 		scheduled map[string][]base.Z
 		retry     map[string][]base.Z
-		dead      map[string][]base.Z
+		archived  map[string][]base.Z
 		qname     string // queue to remove
 		force     bool
 	}{
@@ -229,7 +229,7 @@ func TestInspectorDeleteQueueErrorQueueNotFound(t *testing.T) {
 			retry: map[string][]base.Z{
 				"default": {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 			},
 			qname: "nonexistent",
@@ -243,7 +243,7 @@ func TestInspectorDeleteQueueErrorQueueNotFound(t *testing.T) {
 		h.SeedAllActiveQueues(t, r, tc.active)
 		h.SeedAllScheduledQueues(t, r, tc.scheduled)
 		h.SeedAllRetryQueues(t, r, tc.retry)
-		h.SeedAllDeadQueues(t, r, tc.dead)
+		h.SeedAllArchivedQueues(t, r, tc.archived)
 
 		err := inspector.DeleteQueue(tc.qname, tc.force)
 		if _, ok := err.(*ErrQueueNotFound); !ok {
@@ -272,7 +272,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 		active    map[string][]*base.TaskMessage
 		scheduled map[string][]base.Z
 		retry     map[string][]base.Z
-		dead      map[string][]base.Z
+		archived  map[string][]base.Z
 		processed map[string]int
 		failed    map[string]int
 		qname     string
@@ -302,7 +302,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 				"critical": {},
 				"low":      {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default":  {},
 				"critical": {},
 				"low":      {},
@@ -325,7 +325,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 				Active:    1,
 				Scheduled: 2,
 				Retry:     0,
-				Dead:      0,
+				Archived:  0,
 				Processed: 120,
 				Failed:    2,
 				Paused:    false,
@@ -340,7 +340,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 		asynqtest.SeedAllActiveQueues(t, r, tc.active)
 		asynqtest.SeedAllScheduledQueues(t, r, tc.scheduled)
 		asynqtest.SeedAllRetryQueues(t, r, tc.retry)
-		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
+		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
 		for qname, n := range tc.processed {
 			processedKey := base.ProcessedKey(qname, now)
 			r.Set(processedKey, n, 0)
@@ -702,9 +702,9 @@ func TestInspectorListRetryTasks(t *testing.T) {
 	}
 }
 
-func createDeadTask(z base.Z) *DeadTask {
+func createArchivedTask(z base.Z) *ArchivedTask {
 	msg := z.Message
-	return &DeadTask{
+	return &ArchivedTask{
 		Task:         NewTask(msg.Type, msg.Payload),
 		ID:           msg.ID.String(),
 		Queue:        msg.Queue,
@@ -716,7 +716,7 @@ func createDeadTask(z base.Z) *DeadTask {
 	}
 }
 
-func TestInspectorListDeadTasks(t *testing.T) {
+func TestInspectorListArchivedTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
@@ -732,47 +732,47 @@ func TestInspectorListDeadTasks(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		desc  string
-		dead  map[string][]base.Z
-		qname string
-		want  []*DeadTask
+		desc     string
+		archived map[string][]base.Z
+		qname    string
+		want     []*ArchivedTask
 	}{
 		{
-			desc: "with a few dead tasks",
-			dead: map[string][]base.Z{
+			desc: "with a few archived tasks",
+			archived: map[string][]base.Z{
 				"default": {z1, z2, z3},
 				"custom":  {z4},
 			},
 			qname: "default",
 			// Should be sorted by LastFailedAt.
-			want: []*DeadTask{
-				createDeadTask(z2),
-				createDeadTask(z1),
-				createDeadTask(z3),
+			want: []*ArchivedTask{
+				createArchivedTask(z2),
+				createArchivedTask(z1),
+				createArchivedTask(z3),
 			},
 		},
 		{
-			desc: "with empty dead queue",
-			dead: map[string][]base.Z{
+			desc: "with empty archived queue",
+			archived: map[string][]base.Z{
 				"default": {},
 			},
 			qname: "default",
-			want:  []*DeadTask(nil),
+			want:  []*ArchivedTask(nil),
 		},
 	}
 
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
-		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
+		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
 
-		got, err := inspector.ListDeadTasks(tc.qname)
+		got, err := inspector.ListArchivedTasks(tc.qname)
 		if err != nil {
-			t.Errorf("%s; ListDeadTasks(%q) returned error: %v", tc.desc, tc.qname, err)
+			t.Errorf("%s; ListArchivedTasks(%q) returned error: %v", tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(Payload{}, DeadTask{})
+		ignoreOpt := cmpopts.IgnoreUnexported(Payload{}, ArchivedTask{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
-			t.Errorf("%s; ListDeadTask(%q) = %v, want %v; (-want,+got)\n%s",
+			t.Errorf("%s; ListArchivedTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
 		}
 	}
@@ -971,7 +971,7 @@ func TestInspectorDeleteAllRetryTasks(t *testing.T) {
 	}
 }
 
-func TestInspectorDeleteAllDeadTasks(t *testing.T) {
+func TestInspectorDeleteAllArchivedTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
@@ -987,30 +987,30 @@ func TestInspectorDeleteAllDeadTasks(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		dead     map[string][]base.Z
-		qname    string
-		want     int
-		wantDead map[string][]base.Z
+		archived     map[string][]base.Z
+		qname        string
+		want         int
+		wantArchived map[string][]base.Z
 	}{
 		{
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {z1, z2, z3},
 				"custom":  {z4},
 			},
 			qname: "default",
 			want:  3,
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {},
 				"custom":  {z4},
 			},
 		},
 		{
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 			},
 			qname: "default",
 			want:  0,
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {},
 			},
 		},
@@ -1018,20 +1018,20 @@ func TestInspectorDeleteAllDeadTasks(t *testing.T) {
 
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
-		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
+		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
 
-		got, err := inspector.DeleteAllDeadTasks(tc.qname)
+		got, err := inspector.DeleteAllArchivedTasks(tc.qname)
 		if err != nil {
-			t.Errorf("DeleteAllDeadTasks(%q) returned error: %v", tc.qname, err)
+			t.Errorf("DeleteAllArchivedTasks(%q) returned error: %v", tc.qname, err)
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("DeleteAllDeadTasks(%q) = %d, want %d", tc.qname, got, tc.want)
+			t.Errorf("DeleteAllArchivedTasks(%q) = %d, want %d", tc.qname, got, tc.want)
 		}
-		for qname, want := range tc.wantDead {
-			gotDead := asynqtest.GetDeadEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", qname, diff)
+		for qname, want := range tc.wantArchived {
+			gotArchived := asynqtest.GetArchivedEntries(t, r, qname)
+			if diff := cmp.Diff(want, gotArchived, asynqtest.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected archived tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1054,18 +1054,18 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
-		dead          map[string][]base.Z
+		archived      map[string][]base.Z
 		qname         string
 		want          int
 		wantScheduled map[string][]base.Z
-		wantDead      map[string][]base.Z
+		wantArchived  map[string][]base.Z
 	}{
 		{
 			scheduled: map[string][]base.Z{
 				"default": {z1, z2, z3},
 				"custom":  {z4},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 				"custom":  {},
 			},
@@ -1075,7 +1075,7 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 				"default": {},
 				"custom":  {z4},
 			},
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {
 					base.Z{Message: m1, Score: now.Unix()},
 					base.Z{Message: m2, Score: now.Unix()},
@@ -1088,7 +1088,7 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 			scheduled: map[string][]base.Z{
 				"default": {z1, z2},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {z3},
 			},
 			qname: "default",
@@ -1096,7 +1096,7 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 			wantScheduled: map[string][]base.Z{
 				"default": {},
 			},
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {
 					z3,
 					base.Z{Message: m1, Score: now.Unix()},
@@ -1108,7 +1108,7 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 			scheduled: map[string][]base.Z{
 				"default": {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 			},
 			qname: "default",
@@ -1116,7 +1116,7 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 			wantScheduled: map[string][]base.Z{
 				"default": {},
 			},
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {},
 			},
 		},
@@ -1124,7 +1124,7 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 			scheduled: map[string][]base.Z{
 				"default": {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {z1, z2},
 			},
 			qname: "default",
@@ -1132,7 +1132,7 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 			wantScheduled: map[string][]base.Z{
 				"default": {},
 			},
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {z1, z2},
 			},
 		},
@@ -1141,9 +1141,9 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllScheduledQueues(t, r, tc.scheduled)
-		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
+		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
 
-		got, err := inspector.KillAllScheduledTasks(tc.qname)
+		got, err := inspector.ArchiveAllScheduledTasks(tc.qname)
 		if err != nil {
 			t.Errorf("KillAllScheduledTasks(%q) returned error: %v", tc.qname, err)
 			continue
@@ -1157,14 +1157,14 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 				t.Errorf("unexpected scheduled tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
-		for qname, want := range tc.wantDead {
+		for qname, want := range tc.wantArchived {
 			// Allow Z.Score to differ by up to 2.
 			approxOpt := cmp.Comparer(func(a, b int64) bool {
 				return math.Abs(float64(a-b)) < 2
 			})
-			gotDead := asynqtest.GetDeadEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt, approxOpt); diff != "" {
-				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", qname, diff)
+			gotArchived := asynqtest.GetArchivedEntries(t, r, qname)
+			if diff := cmp.Diff(want, gotArchived, asynqtest.SortZSetEntryOpt, approxOpt); diff != "" {
+				t.Errorf("unexpected archived tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1186,19 +1186,19 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		retry     map[string][]base.Z
-		dead      map[string][]base.Z
-		qname     string
-		want      int
-		wantRetry map[string][]base.Z
-		wantDead  map[string][]base.Z
+		retry        map[string][]base.Z
+		archived     map[string][]base.Z
+		qname        string
+		want         int
+		wantRetry    map[string][]base.Z
+		wantArchived map[string][]base.Z
 	}{
 		{
 			retry: map[string][]base.Z{
 				"default": {z1, z2, z3},
 				"custom":  {z4},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 				"custom":  {},
 			},
@@ -1208,7 +1208,7 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 				"default": {},
 				"custom":  {z4},
 			},
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {
 					base.Z{Message: m1, Score: now.Unix()},
 					base.Z{Message: m2, Score: now.Unix()},
@@ -1221,7 +1221,7 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 			retry: map[string][]base.Z{
 				"default": {z1, z2},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {z3},
 			},
 			qname: "default",
@@ -1229,7 +1229,7 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 			wantRetry: map[string][]base.Z{
 				"default": {},
 			},
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {
 					z3,
 					base.Z{Message: m1, Score: now.Unix()},
@@ -1241,7 +1241,7 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 			retry: map[string][]base.Z{
 				"default": {},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {z1, z2},
 			},
 			qname: "default",
@@ -1249,7 +1249,7 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 			wantRetry: map[string][]base.Z{
 				"default": {},
 			},
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {z1, z2},
 			},
 		},
@@ -1258,9 +1258,9 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllRetryQueues(t, r, tc.retry)
-		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
+		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
 
-		got, err := inspector.KillAllRetryTasks(tc.qname)
+		got, err := inspector.ArchiveAllRetryTasks(tc.qname)
 		if err != nil {
 			t.Errorf("KillAllRetryTasks(%q) returned error: %v", tc.qname, err)
 			continue
@@ -1275,10 +1275,10 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 			}
 		}
 		cmpOpt := asynqtest.EquateInt64Approx(2) // allow for 2 seconds difference in Z.Score
-		for qname, want := range tc.wantDead {
-			gotDead := asynqtest.GetDeadEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt, cmpOpt); diff != "" {
-				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", qname, diff)
+		for qname, want := range tc.wantArchived {
+			wantArchived := asynqtest.GetArchivedEntries(t, r, qname)
+			if diff := cmp.Diff(want, wantArchived, asynqtest.SortZSetEntryOpt, cmpOpt); diff != "" {
+				t.Errorf("unexpected archived tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1518,7 +1518,7 @@ func TestInspectorRunAllRetryTasks(t *testing.T) {
 	}
 }
 
-func TestInspectorRunAllDeadTasks(t *testing.T) {
+func TestInspectorRunAllArchivedTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
@@ -1534,15 +1534,15 @@ func TestInspectorRunAllDeadTasks(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		dead        map[string][]base.Z
-		pending     map[string][]*base.TaskMessage
-		qname       string
-		want        int
-		wantDead    map[string][]base.Z
-		wantPending map[string][]*base.TaskMessage
+		archived     map[string][]base.Z
+		pending      map[string][]*base.TaskMessage
+		qname        string
+		want         int
+		wantArchived map[string][]base.Z
+		wantPending  map[string][]*base.TaskMessage
 	}{
 		{
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default":  {z1, z4},
 				"critical": {z2},
 				"low":      {z3},
@@ -1554,7 +1554,7 @@ func TestInspectorRunAllDeadTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  2,
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default":  {},
 				"critical": {z2},
 				"low":      {z3},
@@ -1566,7 +1566,7 @@ func TestInspectorRunAllDeadTasks(t *testing.T) {
 			},
 		},
 		{
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default":  {z1},
 				"critical": {z2},
 			},
@@ -1576,7 +1576,7 @@ func TestInspectorRunAllDeadTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  1,
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default":  {},
 				"critical": {z2},
 			},
@@ -1586,7 +1586,7 @@ func TestInspectorRunAllDeadTasks(t *testing.T) {
 			},
 		},
 		{
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 			},
 			pending: map[string][]*base.TaskMessage{
@@ -1594,7 +1594,7 @@ func TestInspectorRunAllDeadTasks(t *testing.T) {
 			},
 			qname: "default",
 			want:  0,
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {},
 			},
 			wantPending: map[string][]*base.TaskMessage{
@@ -1605,21 +1605,21 @@ func TestInspectorRunAllDeadTasks(t *testing.T) {
 
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
-		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
+		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
 		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
-		got, err := inspector.RunAllDeadTasks(tc.qname)
+		got, err := inspector.RunAllArchivedTasks(tc.qname)
 		if err != nil {
-			t.Errorf("RunAllDeadTasks(%q) returned error: %v", tc.qname, err)
+			t.Errorf("RunAllArchivedTasks(%q) returned error: %v", tc.qname, err)
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("RunAllDeadTasks(%q) = %d, want %d", tc.qname, got, tc.want)
+			t.Errorf("RunAllArchivedTasks(%q) = %d, want %d", tc.qname, got, tc.want)
 		}
-		for qname, want := range tc.wantDead {
-			gotDead := asynqtest.GetDeadEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", qname, diff)
+		for qname, want := range tc.wantArchived {
+			wantArchived := asynqtest.GetArchivedEntries(t, r, qname)
+			if diff := cmp.Diff(want, wantArchived, asynqtest.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected archived tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 
 		}
@@ -1732,7 +1732,7 @@ func TestInspectorDeleteTaskByKeyDeletesRetryTask(t *testing.T) {
 	}
 }
 
-func TestInspectorDeleteTaskByKeyDeletesDeadTask(t *testing.T) {
+func TestInspectorDeleteTaskByKeyDeletesArchivedTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
@@ -1746,19 +1746,19 @@ func TestInspectorDeleteTaskByKeyDeletesDeadTask(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		dead     map[string][]base.Z
-		qname    string
-		key      string
-		wantDead map[string][]base.Z
+		archived     map[string][]base.Z
+		qname        string
+		key          string
+		wantArchived map[string][]base.Z
 	}{
 		{
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {z1, z2},
 				"custom":  {z3},
 			},
 			qname: "default",
-			key:   createDeadTask(z2).Key(),
-			wantDead: map[string][]base.Z{
+			key:   createArchivedTask(z2).Key(),
+			wantArchived: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
 			},
@@ -1767,16 +1767,16 @@ func TestInspectorDeleteTaskByKeyDeletesDeadTask(t *testing.T) {
 
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
-		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
+		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
 
 		if err := inspector.DeleteTaskByKey(tc.qname, tc.key); err != nil {
 			t.Errorf("DeleteTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
 			continue
 		}
-		for qname, want := range tc.wantDead {
-			gotDead := asynqtest.GetDeadEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s", qname, diff)
+		for qname, want := range tc.wantArchived {
+			wantArchived := asynqtest.GetArchivedEntries(t, r, qname)
+			if diff := cmp.Diff(want, wantArchived, asynqtest.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected archived tasks in queue %q: (-want, +got)\n%s", qname, diff)
 			}
 		}
 	}
@@ -1921,7 +1921,7 @@ func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
 	}
 }
 
-func TestInspectorRunTaskByKeyRunsDeadTask(t *testing.T) {
+func TestInspectorRunTaskByKeyRunsArchivedTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
@@ -1935,15 +1935,15 @@ func TestInspectorRunTaskByKeyRunsDeadTask(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		dead        map[string][]base.Z
-		pending     map[string][]*base.TaskMessage
-		qname       string
-		key         string
-		wantDead    map[string][]base.Z
-		wantPending map[string][]*base.TaskMessage
+		archived     map[string][]base.Z
+		pending      map[string][]*base.TaskMessage
+		qname        string
+		key          string
+		wantArchived map[string][]base.Z
+		wantPending  map[string][]*base.TaskMessage
 	}{
 		{
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default":  {z1},
 				"critical": {z2},
 				"low":      {z3},
@@ -1954,8 +1954,8 @@ func TestInspectorRunTaskByKeyRunsDeadTask(t *testing.T) {
 				"low":      {},
 			},
 			qname: "critical",
-			key:   createDeadTask(z2).Key(),
-			wantDead: map[string][]base.Z{
+			key:   createArchivedTask(z2).Key(),
+			wantArchived: map[string][]base.Z{
 				"default":  {z1},
 				"critical": {},
 				"low":      {z3},
@@ -1970,17 +1970,17 @@ func TestInspectorRunTaskByKeyRunsDeadTask(t *testing.T) {
 
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
-		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
+		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
 		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
 
 		if err := inspector.RunTaskByKey(tc.qname, tc.key); err != nil {
 			t.Errorf("RunTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
 			continue
 		}
-		for qname, want := range tc.wantDead {
-			gotDead := asynqtest.GetDeadEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s",
+		for qname, want := range tc.wantArchived {
+			wantArchived := asynqtest.GetArchivedEntries(t, r, qname)
+			if diff := cmp.Diff(want, wantArchived, asynqtest.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected archived tasks in queue %q: (-want, +got)\n%s",
 					qname, diff)
 			}
 		}
@@ -2009,19 +2009,19 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
-		dead          map[string][]base.Z
+		archived      map[string][]base.Z
 		qname         string
 		key           string
 		want          string
 		wantScheduled map[string][]base.Z
-		wantDead      map[string][]base.Z
+		wantArchived  map[string][]base.Z
 	}{
 		{
 			scheduled: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z2, z3},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 				"custom":  {},
 			},
@@ -2031,7 +2031,7 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 				"default": {z1},
 				"custom":  {z3},
 			},
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {},
 				"custom": {
 					{
@@ -2046,9 +2046,9 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllScheduledQueues(t, r, tc.scheduled)
-		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
+		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
 
-		if err := inspector.KillTaskByKey(tc.qname, tc.key); err != nil {
+		if err := inspector.ArchiveTaskByKey(tc.qname, tc.key); err != nil {
 			t.Errorf("KillTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
 			continue
 		}
@@ -2060,10 +2060,10 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 			}
 
 		}
-		for qname, want := range tc.wantDead {
-			gotDead := asynqtest.GetDeadEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s",
+		for qname, want := range tc.wantArchived {
+			wantArchived := asynqtest.GetArchivedEntries(t, r, qname)
+			if diff := cmp.Diff(want, wantArchived, asynqtest.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected archived tasks in queue %q: (-want, +got)\n%s",
 					qname, diff)
 			}
 		}
@@ -2084,19 +2084,19 @@ func TestInspectorKillTaskByKeyKillsRetryTask(t *testing.T) {
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
-		retry     map[string][]base.Z
-		dead      map[string][]base.Z
-		qname     string
-		key       string
-		wantRetry map[string][]base.Z
-		wantDead  map[string][]base.Z
+		retry        map[string][]base.Z
+		archived     map[string][]base.Z
+		qname        string
+		key          string
+		wantRetry    map[string][]base.Z
+		wantArchived map[string][]base.Z
 	}{
 		{
 			retry: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z2, z3},
 			},
-			dead: map[string][]base.Z{
+			archived: map[string][]base.Z{
 				"default": {},
 				"custom":  {},
 			},
@@ -2106,7 +2106,7 @@ func TestInspectorKillTaskByKeyKillsRetryTask(t *testing.T) {
 				"default": {z1},
 				"custom":  {z3},
 			},
-			wantDead: map[string][]base.Z{
+			wantArchived: map[string][]base.Z{
 				"default": {},
 				"custom": {
 					{
@@ -2121,9 +2121,9 @@ func TestInspectorKillTaskByKeyKillsRetryTask(t *testing.T) {
 	for _, tc := range tests {
 		asynqtest.FlushDB(t, r)
 		asynqtest.SeedAllRetryQueues(t, r, tc.retry)
-		asynqtest.SeedAllDeadQueues(t, r, tc.dead)
+		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
 
-		if err := inspector.KillTaskByKey(tc.qname, tc.key); err != nil {
+		if err := inspector.ArchiveTaskByKey(tc.qname, tc.key); err != nil {
 			t.Errorf("KillTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
 			continue
 		}
@@ -2134,10 +2134,10 @@ func TestInspectorKillTaskByKeyKillsRetryTask(t *testing.T) {
 					qname, diff)
 			}
 		}
-		for qname, want := range tc.wantDead {
-			gotDead := asynqtest.GetDeadEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotDead, asynqtest.SortZSetEntryOpt); diff != "" {
-				t.Errorf("unexpected dead tasks in queue %q: (-want, +got)\n%s",
+		for qname, want := range tc.wantArchived {
+			wantArchived := asynqtest.GetArchivedEntries(t, r, qname)
+			if diff := cmp.Diff(want, wantArchived, asynqtest.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected archived tasks in queue %q: (-want, +got)\n%s",
 					qname, diff)
 			}
 		}

@@ -100,19 +100,19 @@ func TestRetryKey(t *testing.T) {
 	}
 }
 
-func TestDeadKey(t *testing.T) {
+func TestArchivedKey(t *testing.T) {
 	tests := []struct {
 		qname string
 		want  string
 	}{
-		{"default", "asynq:{default}:dead"},
-		{"custom", "asynq:{custom}:dead"},
+		{"default", "asynq:{default}:archived"},
+		{"custom", "asynq:{custom}:archived"},
 	}
 
 	for _, tc := range tests {
-		got := DeadKey(tc.qname)
+		got := ArchivedKey(tc.qname)
 		if got != tc.want {
-			t.Errorf("DeadKey(%q) = %q, want %q", tc.qname, got, tc.want)
+			t.Errorf("ArchivedKey(%q) = %q, want %q", tc.qname, got, tc.want)
 		}
 	}
 }

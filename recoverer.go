@@ -75,7 +75,7 @@ func (r *recoverer) start(wg *sync.WaitGroup) {
 				const errMsg = "deadline exceeded" // TODO: better error message
 				for _, msg := range msgs {
 					if msg.Retried >= msg.Retry {
-						r.kill(msg, errMsg)
+						r.archive(msg, errMsg)
 					} else {
 						r.retry(msg, errMsg)
 					}
@@ -94,8 +94,8 @@ func (r *recoverer) retry(msg *base.TaskMessage, errMsg string) {
 	}
 }
 
-func (r *recoverer) kill(msg *base.TaskMessage, errMsg string) {
-	if err := r.broker.Kill(msg, errMsg); err != nil {
-		r.logger.Warnf("recoverer: could not move task to dead queue: %v", err)
+func (r *recoverer) archive(msg *base.TaskMessage, errMsg string) {
+	if err := r.broker.Archive(msg, errMsg); err != nil {
+		r.logger.Warnf("recoverer: could not move task to archive: %v", err)
 	}
 }

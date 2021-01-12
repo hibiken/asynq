@@ -26,11 +26,11 @@ func init() {
 
 	taskCmd.AddCommand(taskCancelCmd)
 
-	taskCmd.AddCommand(taskKillCmd)
-	taskKillCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
-	taskKillCmd.Flags().StringP("key", "k", "", "key of the task")
-	taskKillCmd.MarkFlagRequired("queue")
-	taskKillCmd.MarkFlagRequired("key")
+	taskCmd.AddCommand(taskArchiveCmd)
+	taskArchiveCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
+	taskArchiveCmd.Flags().StringP("key", "k", "", "key of the task")
+	taskArchiveCmd.MarkFlagRequired("queue")
+	taskArchiveCmd.MarkFlagRequired("key")
 
 	taskCmd.AddCommand(taskDeleteCmd)
 	taskDeleteCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
@@ -44,11 +44,11 @@ func init() {
 	taskRunCmd.MarkFlagRequired("queue")
 	taskRunCmd.MarkFlagRequired("key")
 
-	taskCmd.AddCommand(taskKillAllCmd)
-	taskKillAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong")
-	taskKillAllCmd.Flags().StringP("state", "s", "", "state of the tasks")
-	taskKillAllCmd.MarkFlagRequired("queue")
-	taskKillAllCmd.MarkFlagRequired("state")
+	taskCmd.AddCommand(taskArchiveAllCmd)
+	taskArchiveAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong")
+	taskArchiveAllCmd.Flags().StringP("state", "s", "", "state of the tasks")
+	taskArchiveAllCmd.MarkFlagRequired("queue")
+	taskArchiveAllCmd.MarkFlagRequired("state")
 
 	taskCmd.AddCommand(taskDeleteAllCmd)
 	taskDeleteAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong")
@@ -78,7 +78,7 @@ The value for the state flag should be one of:
 - pending
 - scheduled
 - retry
-- dead
+- archived
 
 List opeartion paginates the result set.
 By default, the command fetches the first 30 tasks.
@@ -100,9 +100,9 @@ var taskCancelCmd = &cobra.Command{
 	Run:   taskCancel,
 }
 
-var taskKillCmd = &cobra.Command{
-	Use:   "kill --queue=QUEUE --key=KEY",
-	Short: "Kill a task with the given key",
+var taskArchiveCmd = &cobra.Command{
+	Use:   "archive --queue=QUEUE --key=KEY",
+	Short: "Archive a task with the given key",
 	Args:  cobra.NoArgs,
 	Run:   taskKill,
 }
@@ -121,9 +121,9 @@ var taskRunCmd = &cobra.Command{
 	Run:   taskRun,
 }
 
-var taskKillAllCmd = &cobra.Command{
-	Use:   "kill-all --queue=QUEUE --state=STATE",
-	Short: "Kill all tasks in the given state",
+var taskArchiveAllCmd = &cobra.Command{
+	Use:   "archive-all --queue=QUEUE --state=STATE",
+	Short: "Archive all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskKillAll,
 }
@@ -173,8 +173,8 @@ func taskList(cmd *cobra.Command, args []string) {
 		listScheduledTasks(qname, pageNum, pageSize)
 	case "retry":
 		listRetryTasks(qname, pageNum, pageSize)
-	case "dead":
-		listDeadTasks(qname, pageNum, pageSize)
+	case "archived":
+		listArchivedTasks(qname, pageNum, pageSize)
 	default:
 		fmt.Printf("error: state=%q is not supported\n", state)
 		os.Exit(1)
@@ -273,7 +273,7 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 	)
 }
 
-func listDeadTasks(qname string, pageNum, pageSize int) {
+func listArchivedTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
 	tasks, err := i.ListDeadTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
@@ -281,7 +281,7 @@ func listDeadTasks(qname string, pageNum, pageSize int) {
 		os.Exit(1)
 	}
 	if len(tasks) == 0 {
-		fmt.Printf("No dead tasks in %q queue\n", qname)
+		fmt.Printf("No archived tasks in %q queue\n", qname)
 		return
 	}
 	printTable(
@@ -323,7 +323,7 @@ func taskKill(cmd *cobra.Command, args []string) {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("task transitioned to dead state")
+	fmt.Println("task transitioned to archived state")
 }
 
 func taskDelete(cmd *cobra.Command, args []string) {
@@ -395,7 +395,7 @@ func taskKillAll(cmd *cobra.Command, args []string) {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("%d tasks transitioned to dead state\n", n)
+	fmt.Printf("%d tasks transitioned to archived state\n", n)
 }
 
 func taskDeleteAll(cmd *cobra.Command, args []string) {
@@ -417,8 +417,8 @@ func taskDeleteAll(cmd *cobra.Command, args []string) {
 		n, err = i.DeleteAllScheduledTasks(qname)
 	case "retry":
 		n, err = i.DeleteAllRetryTasks(qname)
-	case "dead":
-		n, err = i.DeleteAllDeadTasks(qname)
+	case "archived":
+		n, err = i.DeleteAllArchivedTasks(qname)
 	default:
 		fmt.Printf("error: unsupported state %q\n", state)
 		os.Exit(1)
@@ -449,8 +449,8 @@ func taskRunAll(cmd *cobra.Command, args []string) {
 		n, err = i.RunAllScheduledTasks(qname)
 	case "retry":
 		n, err = i.RunAllRetryTasks(qname)
-	case "dead":
-		n, err = i.RunAllDeadTasks(qname)
+	case "archived":
+		n, err = i.RunAllArchivedTasks(qname)
 	default:
 		fmt.Printf("error: unsupported state %q\n", state)
 		os.Exit(1)

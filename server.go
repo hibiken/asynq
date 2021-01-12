@@ -20,18 +20,17 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
-// Server is responsible for managing the background-task processing.
+// Server is responsible for managing the task processing.
 //
 // Server pulls tasks off queues and processes them.
-// If the processing of a task is unsuccessful, server will
-// schedule it for a retry.
+// If the processing of a task is unsuccessful, server will schedule it for a retry.
 // A task will be retried until either the task gets processed successfully
 // or until it reaches its max retry count.
 //
-// If a task exhausts its retries, it will be moved to the "dead" queue and
-// will be kept in the queue for some time until a certain condition is met
-// (e.g., queue size reaches a certain limit, or the task has been in the
-// queue for a certain amount of time).
+// If a task exhausts its retries, it will be moved to the archive and
+// will be kept in the archive for some time until a certain condition is met
+// (e.g., archive size reaches a certain limit, or the task has been in the
+// archive for a certain amount of time).
 type Server struct {
 	logger *log.Logger
 

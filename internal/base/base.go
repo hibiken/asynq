@@ -56,9 +56,9 @@ func RetryKey(qname string) string {
 	return fmt.Sprintf("asynq:{%s}:retry", qname)
 }
 
-// DeadKey returns a redis key for the dead tasks.
-func DeadKey(qname string) string {
-	return fmt.Sprintf("asynq:{%s}:dead", qname)
+// ArchivedKey returns a redis key for the archived tasks.
+func ArchivedKey(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:archived", qname)
 }
 
 // DeadlinesKey returns a redis key for the deadlines.
@@ -156,7 +156,7 @@ type TaskMessage struct {
 
 	// Timeout specifies timeout in seconds.
 	// If task processing doesn't complete within the timeout, the task will be retried
-	// if retry count is remaining. Otherwise it will be moved to the dead queue.
+	// if retry count is remaining. Otherwise it will be moved to the archive.
 	//
 	// Use zero to indicate no timeout.
 	Timeout int64
@@ -164,7 +164,7 @@ type TaskMessage struct {
 	// Deadline specifies the deadline for the task in Unix time,
 	// the number of seconds elapsed since January 1, 1970 UTC.
 	// If task processing doesn't complete before the deadline, the task will be retried
-	// if retry count is remaining. Otherwise it will be moved to the dead queue.
+	// if retry count is remaining. Otherwise it will be moved to the archive.
 	//
 	// Use zero to indicate no deadline.
 	Deadline int64
@@ -369,7 +369,7 @@ type Broker interface {
 	Schedule(msg *TaskMessage, processAt time.Time) error
 	ScheduleUnique(msg *TaskMessage, processAt time.Time, ttl time.Duration) error
 	Retry(msg *TaskMessage, processAt time.Time, errMsg string) error
-	Kill(msg *TaskMessage, errMsg string) error
+	Archive(msg *TaskMessage, errMsg string) error
 	CheckAndEnqueue(qnames ...string) error
 	ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*TaskMessage, error)
 	WriteServerState(info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error

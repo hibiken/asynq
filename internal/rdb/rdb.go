@@ -381,22 +381,22 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) e
 }
 
 const (
-	maxDeadTasks         = 10000
-	deadExpirationInDays = 90
+	maxArchiveSize           = 10000 // maximum number of tasks in archive
+	archivedExpirationInDays = 90    // number of days before an archived task gets deleted permanently
 )
 
 // KEYS[1] -> asynq:{<qname>}:active
 // KEYS[2] -> asynq:{<qname>}:deadlines
-// KEYS[3] -> asynq:{<qname>}:dead
+// KEYS[3] -> asynq:{<qname>}:archived
 // KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[5] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
-// ARGV[1] -> base.TaskMessage value to remove from base.ActiveQueue queue
-// ARGV[2] -> base.TaskMessage value to add to Dead queue
+// ARGV[1] -> base.TaskMessage value to remove
+// ARGV[2] -> base.TaskMessage value to add
 // ARGV[3] -> died_at UNIX timestamp
 // ARGV[4] -> cutoff timestamp (e.g., 90 days ago)
-// ARGV[5] -> max number of tasks in dead queue (e.g., 100)
+// ARGV[5] -> max number of tasks in archive (e.g., 100)
 // ARGV[6] -> stats expiration timestamp
-var killCmd = redis.NewScript(`
+var archiveCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
@@ -416,10 +416,9 @@ if tonumber(m) == 1 then
 end
 return redis.status_reply("OK")`)
 
-// Kill sends the task to "dead" queue from active queue, assigning
-// the error message to the task.
-// It also trims the set by timestamp and set size.
-func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
+// Archive sends the given task to archive, attaching the error message to the task.
+// It also trims the archive by timestamp and set size.
+func (r *RDB) Archive(msg *base.TaskMessage, errMsg string) error {
 	msgToRemove, err := base.EncodeMessage(msg)
 	if err != nil {
 		return err
@@ -431,13 +430,13 @@ func (r *RDB) Kill(msg *base.TaskMessage, errMsg string) error {
 		return err
 	}
 	now := time.Now()
-	limit := now.AddDate(0, 0, -deadExpirationInDays).Unix() // 90 days ago
+	limit := now.AddDate(0, 0, -archivedExpirationInDays).Unix() // 90 days ago
 	processedKey := base.ProcessedKey(msg.Queue, now)
 	failedKey := base.FailedKey(msg.Queue, now)
 	expireAt := now.Add(statsTTL)
-	return killCmd.Run(r.client,
-		[]string{base.ActiveKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.DeadKey(msg.Queue), processedKey, failedKey},
-		msgToRemove, msgToAdd, now.Unix(), limit, maxDeadTasks, expireAt.Unix()).Err()
+	return archiveCmd.Run(r.client,
+		[]string{base.ActiveKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.ArchivedKey(msg.Queue), processedKey, failedKey},
+		msgToRemove, msgToAdd, now.Unix(), limit, maxArchiveSize, expireAt.Unix()).Err()
 }
 
 // CheckAndEnqueue checks for scheduled/retry tasks for the given queues
