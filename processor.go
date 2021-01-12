@@ -221,8 +221,8 @@ func (p *processor) exec() {
 				return
 			case resErr := <-resCh:
 				// Note: One of three things should happen.
-				// 1) Done  -> Removes the message from Active
-				// 2) Retry -> Removes the message from Active & Adds the message to Retry
+				// 1) Done     -> Removes the message from Active
+				// 2) Retry    -> Removes the message from Active & Adds the message to Retry
 				// 3) Archive  -> Removes the message from Active & Adds the message to archive
 				if resErr != nil {
 					p.retryOrKill(ctx, msg, resErr)
