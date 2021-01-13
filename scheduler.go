@@ -115,7 +115,7 @@ func (j *enqueueJob) Run() {
 		}
 		return
 	}
-	j.logger.Infof("scheduler enqueued a task: %+v", res)
+	j.logger.Debugf("scheduler enqueued a task: %+v", res)
 	event := &base.SchedulerEnqueueEvent{
 		TaskID:     res.ID,
 		EnqueuedAt: res.EnqueuedAt.In(j.location),
