@@ -13,8 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Renamed `DeadTask` to `ArchivedTask`.
 - Renamed the operation `Kill` to `Archive` in `Inpsector`.
-- Print stack track when Handler panics.
-- Include a file name and a line number in error message when recovering from a panic.
+- Print stack trace when Handler panics.
+- Include a file name and a line number in the error message when recovering from a panic.
 
 ### Added
 
