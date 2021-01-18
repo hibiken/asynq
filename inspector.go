@@ -217,17 +217,24 @@ type ArchivedTask struct {
 	score int64
 }
 
-// Key returns a key used to delete, run, and archive the task.
+// Key returns a key used to delete, and archive the pending task.
+func (t *PendingTask) Key() string {
+	// Note: Pending tasks are stored in redis LIST, therefore no score.
+	// Use zero for the score to preserve the same key format.
+	return fmt.Sprintf("p:%v:%v", t.ID, 0)
+}
+
+// Key returns a key used to delete, run, and archive the scheduled task.
 func (t *ScheduledTask) Key() string {
 	return fmt.Sprintf("s:%v:%v", t.ID, t.score)
 }
 
-// Key returns a key used to delete, run, and archive the task.
+// Key returns a key used to delete, run, and archive the retry task.
 func (t *RetryTask) Key() string {
 	return fmt.Sprintf("r:%v:%v", t.ID, t.score)
 }
 
-// Key returns a key used to delete, run, and archive the task.
+// Key returns a key used to delete and run the archived task.
 func (t *ArchivedTask) Key() string {
 	return fmt.Sprintf("a:%v:%v", t.ID, t.score)
 }
@@ -248,7 +255,7 @@ func parseTaskKey(key string) (id uuid.UUID, score int64, state string, err erro
 		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
 	}
 	state = parts[0]
-	if len(state) != 1 || !strings.Contains("sra", state) {
+	if len(state) != 1 || !strings.Contains("psra", state) {
 		return uuid.Nil, 0, "", fmt.Errorf("invalid id")
 	}
 	return id, score, state, nil
@@ -497,6 +504,8 @@ func (i *Inspector) DeleteTaskByKey(qname, key string) error {
 		return err
 	}
 	switch state {
+	case "p":
+		return i.rdb.DeletePendingTask(qname, id)
 	case "s":
 		return i.rdb.DeleteScheduledTask(qname, id, score)
 	case "r":
@@ -589,6 +598,8 @@ func (i *Inspector) ArchiveTaskByKey(qname, key string) error {
 		return err
 	}
 	switch state {
+	case "p":
+		return i.rdb.ArchivePendingTask(qname, id)
 	case "s":
 		return i.rdb.ArchiveScheduledTask(qname, id, score)
 	case "r":
