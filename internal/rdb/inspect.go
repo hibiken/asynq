@@ -824,9 +824,8 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 	if err := script.Run(r.client, keys).Err(); err != nil {
 		if err.Error() == "QUEUE NOT EMPTY" {
 			return &ErrQueueNotEmpty{qname}
-		} else {
-			return err
 		}
+		return err
 	}
 	return r.client.SRem(base.AllQueues, qname).Err()
 }
