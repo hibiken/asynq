@@ -464,6 +464,16 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Arch
 	return tasks, nil
 }
 
+// DeleteAllPendingTasks deletes all pending tasks from the specified queue,
+// and reports the number tasks deleted.
+func (i *Inspector) DeleteAllPendingTasks(qname string) (int, error) {
+	if err := validateQueueName(qname); err != nil {
+		return 0, err
+	}
+	n, err := i.rdb.DeleteAllPendingTasks(qname)
+	return int(n), err
+}
+
 // DeleteAllScheduledTasks deletes all scheduled tasks from the specified queue,
 // and reports the number tasks deleted.
 func (i *Inspector) DeleteAllScheduledTasks(qname string) (int, error) {
@@ -517,7 +527,7 @@ func (i *Inspector) DeleteTaskByKey(qname, key string) error {
 	}
 }
 
-// RunAllScheduledTasks transition all scheduled tasks to pending state within the given queue,
+// RunAllScheduledTasks transition all scheduled tasks to pending state from the given queue,
 // and reports the number of tasks transitioned.
 func (i *Inspector) RunAllScheduledTasks(qname string) (int, error) {
 	if err := validateQueueName(qname); err != nil {
@@ -527,7 +537,7 @@ func (i *Inspector) RunAllScheduledTasks(qname string) (int, error) {
 	return int(n), err
 }
 
-// RunAllRetryTasks transition all retry tasks to pending state within the given queue,
+// RunAllRetryTasks transition all retry tasks to pending state from the given queue,
 // and reports the number of tasks transitioned.
 func (i *Inspector) RunAllRetryTasks(qname string) (int, error) {
 	if err := validateQueueName(qname); err != nil {
@@ -537,7 +547,7 @@ func (i *Inspector) RunAllRetryTasks(qname string) (int, error) {
 	return int(n), err
 }
 
-// RunAllArchivedTasks transition all archived tasks to pending state within the given queue,
+// RunAllArchivedTasks transition all archived tasks to pending state from the given queue,
 // and reports the number of tasks transitioned.
 func (i *Inspector) RunAllArchivedTasks(qname string) (int, error) {
 	if err := validateQueueName(qname); err != nil {
@@ -568,7 +578,17 @@ func (i *Inspector) RunTaskByKey(qname, key string) error {
 	}
 }
 
-// ArchiveAllScheduledTasks archives all scheduled tasks within the given queue,
+// ArchiveAllPendingTasks archives all pending tasks from the given queue,
+// and reports the number of tasks archived.
+func (i *Inspector) ArchiveAllPendingTasks(qname string) (int, error) {
+	if err := validateQueueName(qname); err != nil {
+		return 0, err
+	}
+	n, err := i.rdb.ArchiveAllPendingTasks(qname)
+	return int(n), err
+}
+
+// ArchiveAllScheduledTasks archives all scheduled tasks from the given queue,
 // and reports the number of tasks archiveed.
 func (i *Inspector) ArchiveAllScheduledTasks(qname string) (int, error) {
 	if err := validateQueueName(qname); err != nil {
@@ -578,7 +598,7 @@ func (i *Inspector) ArchiveAllScheduledTasks(qname string) (int, error) {
 	return int(n), err
 }
 
-// ArchiveAllRetryTasks archives all retry tasks within the given queue,
+// ArchiveAllRetryTasks archives all retry tasks from the given queue,
 // and reports the number of tasks archiveed.
 func (i *Inspector) ArchiveAllRetryTasks(qname string) (int, error) {
 	if err := validateQueueName(qname); err != nil {
