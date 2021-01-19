@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2021-01-19
+
+### Fixed
+
+- `go.mod` file for CLI
+
 ## [0.14.0] - 2021-01-14
 
 **IMPORTATNT**: Please run `asynq migrate` command to migrate from the previous versions.
