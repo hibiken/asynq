@@ -104,7 +104,7 @@ var taskArchiveCmd = &cobra.Command{
 	Use:   "archive --queue=QUEUE --key=KEY",
 	Short: "Archive a task with the given key",
 	Args:  cobra.NoArgs,
-	Run:   taskKill,
+	Run:   taskArchive,
 }
 
 var taskDeleteCmd = &cobra.Command{
@@ -214,10 +214,10 @@ func listPendingTasks(qname string, pageNum, pageSize int) {
 		return
 	}
 	printTable(
-		[]string{"ID", "Type", "Payload"},
+		[]string{"Key", "Type", "Payload"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, t.Payload)
+				fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload)
 			}
 		},
 	)
@@ -305,7 +305,7 @@ func taskCancel(cmd *cobra.Command, args []string) {
 	}
 }
 
-func taskKill(cmd *cobra.Command, args []string) {
+func taskArchive(cmd *cobra.Command, args []string) {
 	qname, err := cmd.Flags().GetString("queue")
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
@@ -323,7 +323,7 @@ func taskKill(cmd *cobra.Command, args []string) {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("task transitioned to archived state")
+	fmt.Println("task archived")
 }
 
 func taskDelete(cmd *cobra.Command, args []string) {
@@ -365,7 +365,7 @@ func taskRun(cmd *cobra.Command, args []string) {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("task transitioned to pending state")
+	fmt.Println("task is now pending")
 }
 
 func taskArchiveAll(cmd *cobra.Command, args []string) {
@@ -383,6 +383,8 @@ func taskArchiveAll(cmd *cobra.Command, args []string) {
 	i := createInspector()
 	var n int
 	switch state {
+	case "pending":
+		n, err = i.ArchiveAllPendingTasks(qname)
 	case "scheduled":
 		n, err = i.ArchiveAllScheduledTasks(qname)
 	case "retry":
@@ -395,7 +397,7 @@ func taskArchiveAll(cmd *cobra.Command, args []string) {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("%d tasks transitioned to archived state\n", n)
+	fmt.Printf("%d tasks archived\n", n)
 }
 
 func taskDeleteAll(cmd *cobra.Command, args []string) {
@@ -413,6 +415,8 @@ func taskDeleteAll(cmd *cobra.Command, args []string) {
 	i := createInspector()
 	var n int
 	switch state {
+	case "pending":
+		n, err = i.DeleteAllPendingTasks(qname)
 	case "scheduled":
 		n, err = i.DeleteAllScheduledTasks(qname)
 	case "retry":
@@ -459,5 +463,5 @@ func taskRunAll(cmd *cobra.Command, args []string) {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("%d tasks transitioned to pending state\n", n)
+	fmt.Printf("%d tasks are now pending\n", n)
 }

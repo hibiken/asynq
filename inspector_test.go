@@ -1175,7 +1175,6 @@ func TestInspectorArchiveAllPendingTasks(t *testing.T) {
 			},
 			wantArchived: map[string][]base.Z{
 				"default": {
-
 					z1,
 					z2,
 					base.Z{Message: m3, Score: now.Unix()},
