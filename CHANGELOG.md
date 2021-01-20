@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `DeleteAllPendingTasks`, `ArchiveAllPendingTasks` were added to `Inspector`
+- `DeleteTaskByKey` and `ArchiveTaskByKey` now supports deleting/archiving `PendingTask`.
+- asynq CLI now supports deleting/archiving pending tasks.
+
 ## [0.14.1] - 2021-01-19
 
 ### Fixed
