@@ -488,6 +488,66 @@ func (r *RDB) ArchiveScheduledTask(qname string, id uuid.UUID, score int64) erro
 	return nil
 }
 
+// KEYS[1] -> asynq:{<qname>}
+// KEYS[2] -> asynq:{<qname>}:archived
+// ARGV[1] -> task message to archive
+// ARGV[2] -> current timestamp
+// ARGV[3] -> cutoff timestamp (e.g., 90 days ago)
+// ARGV[4] -> max number of tasks in archive (e.g., 100)
+var archivePendingCmd = redis.NewScript(`
+local x = redis.call("LREM", KEYS[1], 1, ARGV[1])
+if x == 0 then
+	return 0
+end
+redis.call("ZADD", KEYS[2], ARGV[2], ARGV[1])
+redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[3])
+redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[4])
+return 1
+`)
+
+func (r *RDB) archivePending(qname, msg string) (int64, error) {
+	keys := []string{base.QueueKey(qname), base.ArchivedKey(qname)}
+	now := time.Now()
+	limit := now.AddDate(0, 0, -archivedExpirationInDays).Unix() // 90 days ago
+	args := []interface{}{msg, now.Unix(), limit, maxArchiveSize}
+	res, err := archivePendingCmd.Run(r.client, keys, args...).Result()
+	if err != nil {
+		return 0, err
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, fmt.Errorf("could not cast %v to int64", res)
+	}
+	return n, nil
+}
+
+// ArchivePendingTask finds a pending task that matches the given id  from the given queue
+// and archives it. If a task that maches the id does not exist, it returns ErrTaskNotFound.
+func (r *RDB) ArchivePendingTask(qname string, id uuid.UUID) error {
+	qkey := base.QueueKey(qname)
+	data, err := r.client.LRange(qkey, 0, -1).Result()
+	if err != nil {
+		return err
+	}
+	for _, s := range data {
+		msg, err := base.DecodeMessage(s)
+		if err != nil {
+			return err
+		}
+		if msg.ID == id {
+			n, err := r.archivePending(qname, s)
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				return ErrTaskNotFound
+			}
+			return nil
+		}
+	}
+	return ErrTaskNotFound
+}
+
 // ArchiveAllRetryTasks archives all retry tasks from the given queue and
 // returns the number of tasks that were moved.
 func (r *RDB) ArchiveAllRetryTasks(qname string) (int64, error) {
@@ -498,6 +558,39 @@ func (r *RDB) ArchiveAllRetryTasks(qname string) (int64, error) {
 // returns the number of tasks that were moved.
 func (r *RDB) ArchiveAllScheduledTasks(qname string) (int64, error) {
 	return r.removeAndArchiveAll(base.ScheduledKey(qname), base.ArchivedKey(qname))
+}
+
+// KEYS[1] -> asynq:{<qname>}
+// KEYS[2] -> asynq:{<qname>}:archived
+// ARGV[1] -> current timestamp
+// ARGV[2] -> cutoff timestamp (e.g., 90 days ago)
+// ARGV[3] -> max number of tasks in archive (e.g., 100)
+var archiveAllPendingCmd = redis.NewScript(`
+local msgs = redis.call("LRANGE", KEYS[1], 0, -1)
+for _, msg in ipairs(msgs) do
+	redis.call("ZADD", KEYS[2], ARGV[1], msg)
+	redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
+	redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
+end
+redis.call("DEL", KEYS[1])
+return table.getn(msgs)`)
+
+// ArchiveAllPendingTasks archives all pending tasks from the given queue and
+// returns the number of tasks that were moved.
+func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
+	keys := []string{base.QueueKey(qname), base.ArchivedKey(qname)}
+	now := time.Now()
+	limit := now.AddDate(0, 0, -archivedExpirationInDays).Unix() // 90 days ago
+	args := []interface{}{now.Unix(), limit, maxArchiveSize}
+	res, err := archiveAllPendingCmd.Run(r.client, keys, args...).Result()
+	if err != nil {
+		return 0, err
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, fmt.Errorf("could not cast %v to int64", res)
+	}
+	return n, nil
 }
 
 // KEYS[1] -> ZSET to move task from (e.g., retry queue)
@@ -585,6 +678,33 @@ func (r *RDB) DeleteScheduledTask(qname string, id uuid.UUID, score int64) error
 	return r.deleteTask(base.ScheduledKey(qname), id.String(), float64(score))
 }
 
+// DeletePendingTask deletes a pending tasks that matches the given id from the given queue.
+// If a task that matches the id does not exist, it returns ErrTaskNotFound.
+func (r *RDB) DeletePendingTask(qname string, id uuid.UUID) error {
+	qkey := base.QueueKey(qname)
+	data, err := r.client.LRange(qkey, 0, -1).Result()
+	if err != nil {
+		return err
+	}
+	for _, s := range data {
+		msg, err := base.DecodeMessage(s)
+		if err != nil {
+			return err
+		}
+		if msg.ID == id {
+			n, err := r.client.LRem(qkey, 1, s).Result()
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				return ErrTaskNotFound
+			}
+			return nil
+		}
+	}
+	return ErrTaskNotFound
+}
+
 var deleteTaskCmd = redis.NewScript(`
 local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
 for _, msg in ipairs(msgs) do
@@ -637,6 +757,26 @@ func (r *RDB) DeleteAllScheduledTasks(qname string) (int64, error) {
 
 func (r *RDB) deleteAll(key string) (int64, error) {
 	res, err := deleteAllCmd.Run(r.client, []string{key}).Result()
+	if err != nil {
+		return 0, err
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, fmt.Errorf("could not cast %v to int64", res)
+	}
+	return n, nil
+}
+
+// KEYS[1] -> asynq:{<qname>}
+var deleteAllPendingCmd = redis.NewScript(`
+local n = redis.call("LLEN", KEYS[1])
+redis.call("DEL", KEYS[1])
+return n`)
+
+// DeleteAllPendingTasks deletes all pending tasks from the given queue
+// and returns the number of tasks deleted.
+func (r *RDB) DeleteAllPendingTasks(qname string) (int64, error) {
+	res, err := deleteAllPendingCmd.Run(r.client, []string{base.QueueKey(qname)}).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -741,9 +881,8 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 	if err := script.Run(r.client, keys).Err(); err != nil {
 		if err.Error() == "QUEUE NOT EMPTY" {
 			return &ErrQueueNotEmpty{qname}
-		} else {
-			return err
 		}
+		return err
 	}
 	return r.client.SRem(base.AllQueues, qname).Err()
 }
