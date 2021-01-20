@@ -839,6 +839,70 @@ func TestInspectorListPagination(t *testing.T) {
 	}
 }
 
+func TestInspectorDeleteAllPendingTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1 := asynqtest.NewTaskMessage("task1", nil)
+	m2 := asynqtest.NewTaskMessage("task2", nil)
+	m3 := asynqtest.NewTaskMessage("task3", nil)
+	m4 := asynqtest.NewTaskMessageWithQueue("task3", nil, "custom")
+
+	inspector := NewInspector(getRedisConnOpt(t))
+
+	tests := []struct {
+		pending     map[string][]*base.TaskMessage
+		qname       string
+		want        int
+		wantPending map[string][]*base.TaskMessage
+	}{
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2, m3},
+				"custom":  {m4},
+			},
+			qname: "default",
+			want:  3,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+				"custom":  {m4},
+			},
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2, m3},
+				"custom":  {m4},
+			},
+			qname: "custom",
+			want:  1,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {m1, m2, m3},
+				"custom":  {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		asynqtest.FlushDB(t, r)
+		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
+
+		got, err := inspector.DeleteAllPendingTasks(tc.qname)
+		if err != nil {
+			t.Errorf("DeleteAllPendingTasks(%q) returned error: %v", tc.qname, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("DeleteAllPendingTasks(%q) = %d, want %d", tc.qname, got, tc.want)
+		}
+
+		for qname, want := range tc.wantPending {
+			gotPending := asynqtest.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, asynqtest.SortMsgOpt); diff != "" {
+				t.Errorf("unexpected pending tasks in queue %q: (-want, +got)\n%s", qname, diff)
+			}
+		}
+	}
+}
+
 func TestInspectorDeleteAllScheduledTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -1037,7 +1101,122 @@ func TestInspectorDeleteAllArchivedTasks(t *testing.T) {
 	}
 }
 
-func TestInspectorKillAllScheduledTasks(t *testing.T) {
+func TestInspectorArchiveAllPendingTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1 := asynqtest.NewTaskMessage("task1", nil)
+	m2 := asynqtest.NewTaskMessage("task2", nil)
+	m3 := asynqtest.NewTaskMessage("task3", nil)
+	m4 := asynqtest.NewTaskMessageWithQueue("task4", nil, "custom")
+	now := time.Now()
+	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
+	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
+	inspector := NewInspector(getRedisConnOpt(t))
+
+	tests := []struct {
+		pending      map[string][]*base.TaskMessage
+		archived     map[string][]base.Z
+		qname        string
+		want         int
+		wantPending  map[string][]*base.TaskMessage
+		wantArchived map[string][]base.Z
+	}{
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2, m3},
+				"custom":  {m4},
+			},
+			archived: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			qname: "default",
+			want:  3,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+				"custom":  {m4},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {
+					base.Z{Message: m1, Score: now.Unix()},
+					base.Z{Message: m2, Score: now.Unix()},
+					base.Z{Message: m3, Score: now.Unix()},
+				},
+				"custom": {},
+			},
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			archived: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			want:  0,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {},
+			},
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m3, m4},
+			},
+			archived: map[string][]base.Z{
+				"default": {z1, z2},
+			},
+			qname: "default",
+			want:  2,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {
+					z1,
+					z2,
+					base.Z{Message: m3, Score: now.Unix()},
+					base.Z{Message: m4, Score: now.Unix()},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		asynqtest.FlushDB(t, r)
+		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
+		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
+
+		got, err := inspector.ArchiveAllPendingTasks(tc.qname)
+		if err != nil {
+			t.Errorf("ArchiveAllPendingTasks(%q) returned error: %v", tc.qname, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("ArchiveAllPendingTasks(%q) = %d, want %d", tc.qname, got, tc.want)
+		}
+		for qname, want := range tc.wantPending {
+			gotPending := asynqtest.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, asynqtest.SortMsgOpt); diff != "" {
+				t.Errorf("unexpected pending tasks in queue %q: (-want, +got)\n%s", qname, diff)
+			}
+		}
+		for qname, want := range tc.wantArchived {
+			// Allow Z.Score to differ by up to 2.
+			approxOpt := cmp.Comparer(func(a, b int64) bool {
+				return math.Abs(float64(a-b)) < 2
+			})
+			gotArchived := asynqtest.GetArchivedEntries(t, r, qname)
+			if diff := cmp.Diff(want, gotArchived, asynqtest.SortZSetEntryOpt, approxOpt); diff != "" {
+				t.Errorf("unexpected archived tasks in queue %q: (-want, +got)\n%s", qname, diff)
+			}
+		}
+	}
+}
+
+func TestInspectorArchiveAllScheduledTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
@@ -1145,11 +1324,11 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 
 		got, err := inspector.ArchiveAllScheduledTasks(tc.qname)
 		if err != nil {
-			t.Errorf("KillAllScheduledTasks(%q) returned error: %v", tc.qname, err)
+			t.Errorf("ArchiveAllScheduledTasks(%q) returned error: %v", tc.qname, err)
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("KillAllScheduledTasks(%q) = %d, want %d", tc.qname, got, tc.want)
+			t.Errorf("ArchiveAllScheduledTasks(%q) = %d, want %d", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := asynqtest.GetScheduledEntries(t, r, qname)
@@ -1170,7 +1349,7 @@ func TestInspectorKillAllScheduledTasks(t *testing.T) {
 	}
 }
 
-func TestInspectorKillAllRetryTasks(t *testing.T) {
+func TestInspectorArchiveAllRetryTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
@@ -1262,11 +1441,11 @@ func TestInspectorKillAllRetryTasks(t *testing.T) {
 
 		got, err := inspector.ArchiveAllRetryTasks(tc.qname)
 		if err != nil {
-			t.Errorf("KillAllRetryTasks(%q) returned error: %v", tc.qname, err)
+			t.Errorf("ArchiveAllRetryTasks(%q) returned error: %v", tc.qname, err)
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("KillAllRetryTasks(%q) = %d, want %d", tc.qname, got, tc.want)
+			t.Errorf("ArchiveAllRetryTasks(%q) = %d, want %d", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantRetry {
 			gotRetry := asynqtest.GetRetryEntries(t, r, qname)
@@ -1627,6 +1806,67 @@ func TestInspectorRunAllArchivedTasks(t *testing.T) {
 			gotPending := asynqtest.GetPendingMessages(t, r, qname)
 			if diff := cmp.Diff(want, gotPending, asynqtest.SortMsgOpt); diff != "" {
 				t.Errorf("unexpected pending tasks in queue %q: (-want, +got)\n%s", qname, diff)
+			}
+		}
+	}
+}
+
+func TestInspectorDeleteTaskByKeyDeletesPendingTask(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1 := asynqtest.NewTaskMessage("task1", nil)
+	m2 := asynqtest.NewTaskMessage("task2", nil)
+	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "custom")
+	inspector := NewInspector(getRedisConnOpt(t))
+
+	tests := []struct {
+		pending     map[string][]*base.TaskMessage
+		qname       string
+		key         string
+		wantPending map[string][]*base.TaskMessage
+	}{
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+				"custom":  {m3},
+			},
+			qname: "default",
+			key:   createPendingTask(m2).Key(),
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {m1},
+				"custom":  {m3},
+			},
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+				"custom":  {m3},
+			},
+			qname: "custom",
+			key:   createPendingTask(m3).Key(),
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+				"custom":  {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		asynqtest.FlushDB(t, r)
+		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
+
+		if err := inspector.DeleteTaskByKey(tc.qname, tc.key); err != nil {
+			t.Errorf("DeleteTaskByKey(%q, %q) returned error: %v",
+				tc.qname, tc.key, err)
+			continue
+		}
+
+		for qname, want := range tc.wantPending {
+			got := asynqtest.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, got, asynqtest.SortMsgOpt); diff != "" {
+				t.Errorf("unspected pending tasks in queue %q: (-want,+got):\n%s",
+					qname, diff)
+				continue
 			}
 		}
 	}
@@ -1994,7 +2234,98 @@ func TestInspectorRunTaskByKeyRunsArchivedTask(t *testing.T) {
 	}
 }
 
-func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
+func TestInspectorArchiveTaskByKeyArchivesPendingTask(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1 := asynqtest.NewTaskMessage("task1", nil)
+	m2 := asynqtest.NewTaskMessageWithQueue("task2", nil, "custom")
+	m3 := asynqtest.NewTaskMessageWithQueue("task3", nil, "custom")
+	inspector := NewInspector(getRedisConnOpt(t))
+	now := time.Now()
+
+	tests := []struct {
+		pending      map[string][]*base.TaskMessage
+		archived     map[string][]base.Z
+		qname        string
+		key          string
+		wantPending  map[string][]*base.TaskMessage
+		wantArchived map[string][]base.Z
+	}{
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1},
+				"custom":  {m2, m3},
+			},
+			archived: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			qname: "default",
+			key:   createPendingTask(m1).Key(),
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+				"custom":  {m2, m3},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: now.Unix()},
+				},
+				"custom": {},
+			},
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1},
+				"custom":  {m2, m3},
+			},
+			archived: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			qname: "custom",
+			key:   createPendingTask(m2).Key(),
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {m1},
+				"custom":  {m3},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {},
+				"custom": {
+					{Message: m2, Score: now.Unix()},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		asynqtest.FlushDB(t, r)
+		asynqtest.SeedAllPendingQueues(t, r, tc.pending)
+		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
+
+		if err := inspector.ArchiveTaskByKey(tc.qname, tc.key); err != nil {
+			t.Errorf("ArchiveTaskByKey(%q, %q) returned error: %v",
+				tc.qname, tc.key, err)
+			continue
+		}
+		for qname, want := range tc.wantPending {
+			gotPending := asynqtest.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, asynqtest.SortMsgOpt); diff != "" {
+				t.Errorf("unexpected pending tasks in queue %q: (-want,+got)\n%s",
+					qname, diff)
+			}
+
+		}
+		for qname, want := range tc.wantArchived {
+			wantArchived := asynqtest.GetArchivedEntries(t, r, qname)
+			if diff := cmp.Diff(want, wantArchived, asynqtest.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected archived tasks in queue %q: (-want,+got)\n%s",
+					qname, diff)
+			}
+		}
+	}
+}
+
+func TestInspectorArchiveTaskByKeyArchivesScheduledTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
@@ -2049,7 +2380,7 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
 
 		if err := inspector.ArchiveTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("KillTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+			t.Errorf("ArchiveTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
 			continue
 		}
 		for qname, want := range tc.wantScheduled {
@@ -2070,7 +2401,7 @@ func TestInspectorKillTaskByKeyKillsScheduledTask(t *testing.T) {
 	}
 }
 
-func TestInspectorKillTaskByKeyKillsRetryTask(t *testing.T) {
+func TestInspectorArchiveTaskByKeyArchivesRetryTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := asynqtest.NewTaskMessage("task1", nil)
@@ -2124,7 +2455,7 @@ func TestInspectorKillTaskByKeyKillsRetryTask(t *testing.T) {
 		asynqtest.SeedAllArchivedQueues(t, r, tc.archived)
 
 		if err := inspector.ArchiveTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("KillTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+			t.Errorf("ArchiveTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
 			continue
 		}
 		for qname, want := range tc.wantRetry {

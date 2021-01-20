@@ -3017,7 +3017,7 @@ func TestWriteListClearSchedulerEntries(t *testing.T) {
 	schedulerID := "127.0.0.1:9876:abc123"
 
 	data := []*base.SchedulerEntry{
-		&base.SchedulerEntry{
+		{
 			Spec:    "* * * * *",
 			Type:    "foo",
 			Payload: nil,
@@ -3025,7 +3025,7 @@ func TestWriteListClearSchedulerEntries(t *testing.T) {
 			Next:    now.Add(5 * time.Hour),
 			Prev:    now.Add(-2 * time.Hour),
 		},
-		&base.SchedulerEntry{
+		{
 			Spec:    "@every 20m",
 			Type:    "bar",
 			Payload: map[string]interface{}{"fiz": "baz"},
