@@ -692,8 +692,12 @@ func (r *RDB) DeletePendingTask(qname string, id uuid.UUID) error {
 			return err
 		}
 		if msg.ID == id {
-			if err := r.client.LRem(qkey, 1, s).Err(); err != nil {
+			n, err := r.client.LRem(qkey, 1, s).Result()
+			if err != nil {
 				return err
+			}
+			if n == 0 {
+				return ErrTaskNotFound
 			}
 			return nil
 		}
