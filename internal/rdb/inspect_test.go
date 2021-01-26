@@ -3067,12 +3067,6 @@ func TestSchedulerEnqueueEvents(t *testing.T) {
 		oneHourAgo   = now.Add(-1 * time.Hour)
 	)
 
-	type event struct {
-		entryID    string
-		taskID     string
-		enqueuedAt time.Time
-	}
-
 	tests := []struct {
 		entryID string
 		events  []*base.SchedulerEnqueueEvent
@@ -3118,6 +3112,53 @@ loop:
 			t.Errorf("ListSchedulerEnqueueEvent(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.entryID, got, tc.want, diff)
 		}
+	}
+}
+
+func TestRecordSchedulerEnqueueEventTrimsDataSet(t *testing.T) {
+	r := setup(t)
+	var (
+		entryID = "entry123"
+		now     = time.Now()
+		key     = base.SchedulerHistoryKey(entryID)
+	)
+
+	// Record maximum number of events.
+	for i := 1; i <= maxEvents; i++ {
+		event := base.SchedulerEnqueueEvent{
+			TaskID:     fmt.Sprintf("task%d", i),
+			EnqueuedAt: now.Add(-time.Duration(i) * time.Second),
+		}
+		if err := r.RecordSchedulerEnqueueEvent(entryID, &event); err != nil {
+			t.Fatalf("RecordSchedulerEnqueueEvent failed: %v", err)
+		}
+	}
+
+	// Make sure the set is full.
+	if n := r.client.ZCard(key).Val(); n != maxEvents {
+		t.Fatalf("unexpected number of events; got %d, want %d", n, maxEvents)
+	}
+
+	// Record one more event, should evict the oldest event.
+	event := base.SchedulerEnqueueEvent{
+		TaskID:     "latest",
+		EnqueuedAt: now,
+	}
+	if err := r.RecordSchedulerEnqueueEvent(entryID, &event); err != nil {
+		t.Fatalf("RecordSchedulerEnqueueEvent failed: %v", err)
+	}
+	if n := r.client.ZCard(key).Val(); n != maxEvents {
+		t.Fatalf("unexpected number of events; got %d, want %d", n, maxEvents)
+	}
+	events, err := r.ListSchedulerEnqueueEvents(entryID, Pagination{Size: maxEvents})
+	if err != nil {
+		t.Fatalf("ListSchedulerEnqueueEvents failed: %v", err)
+	}
+	if first := events[0]; first.TaskID != "latest" {
+		t.Errorf("unexpected first event; got %q, want %q", first.TaskID, "latest")
+	}
+	if last := events[maxEvents-1]; last.TaskID != fmt.Sprintf("task%d", maxEvents-1) {
+		t.Errorf("unexpected last event; got %q, want %q", last.TaskID, fmt.Sprintf("task%d", maxEvents-1))
 	}
 }
 

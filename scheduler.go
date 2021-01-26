@@ -186,6 +186,7 @@ func (s *Scheduler) Stop() error {
 	<-ctx.Done()
 	s.wg.Wait()
 
+	s.clearHistory()
 	s.client.Close()
 	s.rdb.Close()
 	s.status.Set(base.StatusStopped)
@@ -236,4 +237,13 @@ func stringifyOptions(opts []Option) []string {
 		res = append(res, opt.String())
 	}
 	return res
+}
+
+func (s *Scheduler) clearHistory() {
+	for _, entry := range s.cron.Entries() {
+		job := entry.Job.(*enqueueJob)
+		if err := s.rdb.ClearSchedulerHistory(job.id.String()); err != nil {
+			s.logger.Warnf("Could not clear scheduler history for entry %q: %v", job.id.String(), err)
+		}
+	}
 }
