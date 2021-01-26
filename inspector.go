@@ -41,6 +41,8 @@ func (i *Inspector) Queues() ([]string, error) {
 type QueueStats struct {
 	// Name of the queue.
 	Queue string
+	// Total number of bytes that the queue and its tasks require to be stored in redis.
+	MemoryUsage int64
 	// Size is the total number of tasks in the queue.
 	// The value is the sum of Pending, Active, Scheduled, Retry, and Archived.
 	Size int
@@ -76,17 +78,18 @@ func (i *Inspector) CurrentStats(qname string) (*QueueStats, error) {
 		return nil, err
 	}
 	return &QueueStats{
-		Queue:     stats.Queue,
-		Size:      stats.Size,
-		Pending:   stats.Pending,
-		Active:    stats.Active,
-		Scheduled: stats.Scheduled,
-		Retry:     stats.Retry,
-		Archived:  stats.Archived,
-		Processed: stats.Processed,
-		Failed:    stats.Failed,
-		Paused:    stats.Paused,
-		Timestamp: stats.Timestamp,
+		Queue:       stats.Queue,
+		MemoryUsage: stats.MemoryUsage,
+		Size:        stats.Size,
+		Pending:     stats.Pending,
+		Active:      stats.Active,
+		Scheduled:   stats.Scheduled,
+		Retry:       stats.Retry,
+		Archived:    stats.Archived,
+		Processed:   stats.Processed,
+		Failed:      stats.Failed,
+		Paused:      stats.Paused,
+		Timestamp:   stats.Timestamp,
 	}, nil
 }
 
