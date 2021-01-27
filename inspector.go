@@ -169,15 +169,21 @@ func (i *Inspector) DeleteQueue(qname string, force bool) error {
 // PendingTask is a task in a queue and is ready to be processed.
 type PendingTask struct {
 	*Task
-	ID    string
-	Queue string
+	ID        string
+	Queue     string
+	MaxRetry  int
+	Retried   int
+	LastError string
 }
 
 // ActiveTask is a task that's currently being processed.
 type ActiveTask struct {
 	*Task
-	ID    string
-	Queue string
+	ID        string
+	Queue     string
+	MaxRetry  int
+	Retried   int
+	LastError string
 }
 
 // ScheduledTask is a task scheduled to be processed in the future.
@@ -185,6 +191,9 @@ type ScheduledTask struct {
 	*Task
 	ID            string
 	Queue         string
+	MaxRetry      int
+	Retried       int
+	LastError     string
 	NextProcessAt time.Time
 
 	score int64
@@ -198,7 +207,7 @@ type RetryTask struct {
 	NextProcessAt time.Time
 	MaxRetry      int
 	Retried       int
-	ErrorMsg      string
+	LastError     string
 	// TODO: LastFailedAt  time.Time
 
 	score int64
@@ -215,7 +224,7 @@ type ArchivedTask struct {
 	MaxRetry     int
 	Retried      int
 	LastFailedAt time.Time
-	ErrorMsg     string
+	LastError    string
 
 	score int64
 }
@@ -355,9 +364,12 @@ func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*Pendi
 	var tasks []*PendingTask
 	for _, m := range msgs {
 		tasks = append(tasks, &PendingTask{
-			Task:  NewTask(m.Type, m.Payload),
-			ID:    m.ID.String(),
-			Queue: m.Queue,
+			Task:      NewTask(m.Type, m.Payload),
+			ID:        m.ID.String(),
+			Queue:     m.Queue,
+			MaxRetry:  m.Retry,
+			Retried:   m.Retried,
+			LastError: m.ErrorMsg,
 		})
 	}
 	return tasks, err
@@ -378,10 +390,14 @@ func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*Active
 	}
 	var tasks []*ActiveTask
 	for _, m := range msgs {
+
 		tasks = append(tasks, &ActiveTask{
-			Task:  NewTask(m.Type, m.Payload),
-			ID:    m.ID.String(),
-			Queue: m.Queue,
+			Task:      NewTask(m.Type, m.Payload),
+			ID:        m.ID.String(),
+			Queue:     m.Queue,
+			MaxRetry:  m.Retry,
+			Retried:   m.Retried,
+			LastError: m.ErrorMsg,
 		})
 	}
 	return tasks, err
@@ -409,6 +425,9 @@ func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*Sch
 			Task:          t,
 			ID:            z.Message.ID.String(),
 			Queue:         z.Message.Queue,
+			MaxRetry:      z.Message.Retry,
+			Retried:       z.Message.Retried,
+			LastError:     z.Message.ErrorMsg,
 			NextProcessAt: processAt,
 			score:         z.Score,
 		})
@@ -442,8 +461,8 @@ func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*RetryTa
 			MaxRetry:      z.Message.Retry,
 			Retried:       z.Message.Retried,
 			// TODO: LastFailedAt: z.Message.LastFailedAt
-			ErrorMsg: z.Message.ErrorMsg,
-			score:    z.Score,
+			LastError: z.Message.ErrorMsg,
+			score:     z.Score,
 		})
 	}
 	return tasks, nil
@@ -474,7 +493,7 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Arch
 			MaxRetry:     z.Message.Retry,
 			Retried:      z.Message.Retried,
 			LastFailedAt: failedAt,
-			ErrorMsg:     z.Message.ErrorMsg,
+			LastError:    z.Message.ErrorMsg,
 			score:        z.Score,
 		})
 	}
