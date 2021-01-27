@@ -423,9 +423,12 @@ func TestInspectorHistory(t *testing.T) {
 
 func createPendingTask(msg *base.TaskMessage) *PendingTask {
 	return &PendingTask{
-		Task:  NewTask(msg.Type, msg.Payload),
-		ID:    msg.ID.String(),
-		Queue: msg.Queue,
+		Task:      NewTask(msg.Type, msg.Payload),
+		ID:        msg.ID.String(),
+		Queue:     msg.Queue,
+		MaxRetry:  msg.Retry,
+		Retried:   msg.Retried,
+		LastError: msg.ErrorMsg,
 	}
 }
 
@@ -510,9 +513,12 @@ func TestInspectorListActiveTasks(t *testing.T) {
 
 	createActiveTask := func(msg *base.TaskMessage) *ActiveTask {
 		return &ActiveTask{
-			Task:  NewTask(msg.Type, msg.Payload),
-			ID:    msg.ID.String(),
-			Queue: msg.Queue,
+			Task:      NewTask(msg.Type, msg.Payload),
+			ID:        msg.ID.String(),
+			Queue:     msg.Queue,
+			MaxRetry:  msg.Retry,
+			Retried:   msg.Retried,
+			LastError: msg.ErrorMsg,
 		}
 	}
 
@@ -559,6 +565,9 @@ func createScheduledTask(z base.Z) *ScheduledTask {
 		Task:          NewTask(msg.Type, msg.Payload),
 		ID:            msg.ID.String(),
 		Queue:         msg.Queue,
+		MaxRetry:      msg.Retry,
+		Retried:       msg.Retried,
+		LastError:     msg.ErrorMsg,
 		NextProcessAt: time.Unix(z.Score, 0),
 		score:         z.Score,
 	}
@@ -635,7 +644,7 @@ func createRetryTask(z base.Z) *RetryTask {
 		NextProcessAt: time.Unix(z.Score, 0),
 		MaxRetry:      msg.Retry,
 		Retried:       msg.Retried,
-		ErrorMsg:      msg.ErrorMsg,
+		LastError:     msg.ErrorMsg,
 		score:         z.Score,
 	}
 }
@@ -712,7 +721,7 @@ func createArchivedTask(z base.Z) *ArchivedTask {
 		MaxRetry:     msg.Retry,
 		Retried:      msg.Retried,
 		LastFailedAt: time.Unix(z.Score, 0),
-		ErrorMsg:     msg.ErrorMsg,
+		LastError:    msg.ErrorMsg,
 		score:        z.Score,
 	}
 }
