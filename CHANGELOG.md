@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `MemoryUsage` field is added to `QueueStats`.
 - `DeleteAllPendingTasks`, `ArchiveAllPendingTasks` were added to `Inspector`
 - `DeleteTaskByKey` and `ArchiveTaskByKey` now supports deleting/archiving `PendingTask`.
 - asynq CLI now supports deleting/archiving pending tasks.

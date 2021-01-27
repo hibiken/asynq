@@ -264,6 +264,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 	m6 := h.NewTaskMessageWithQueue("task6", nil, "low")
 	now := time.Now()
 	timeCmpOpt := cmpopts.EquateApproxTime(time.Second)
+	ignoreMemUsg := cmpopts.IgnoreFields(QueueStats{}, "MemoryUsage")
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
@@ -356,7 +357,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 				tc.qname, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, timeCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, timeCmpOpt, ignoreMemUsg); diff != "" {
 			t.Errorf("r.CurrentStats(%q) = %v, %v, want %v, nil; (-want, +got)\n%s",
 				tc.qname, got, err, tc.want, diff)
 			continue

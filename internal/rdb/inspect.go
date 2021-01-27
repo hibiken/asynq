@@ -25,6 +25,9 @@ func (r *RDB) AllQueues() ([]string, error) {
 type Stats struct {
 	// Name of the queue (e.g. "default", "critical").
 	Queue string
+	// MemoryUsage is the total number of bytes the queue and its tasks require
+	// to be stored in redis.
+	MemoryUsage int64
 	// Paused indicates whether the queue is paused.
 	// If true, tasks in the queue should not be processed.
 	Paused bool
@@ -160,7 +163,28 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		}
 	}
 	stats.Size = size
+	memusg, err := r.memoryUsage(qname)
+	if err != nil {
+		return nil, err
+	}
+	stats.MemoryUsage = memusg
 	return stats, nil
+}
+
+func (r *RDB) memoryUsage(qname string) (int64, error) {
+	keys, err := r.client.Keys(fmt.Sprintf("asynq:{%s}*", qname)).Result()
+	if err != nil {
+		return 0, err
+	}
+	var usg int64
+	for _, k := range keys {
+		n, err := r.client.MemoryUsage(k).Result()
+		if err != nil {
+			return 0, err
+		}
+		usg += n
+	}
+	return usg, nil
 }
 
 var historicalStatsCmd = redis.NewScript(`
