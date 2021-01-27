@@ -209,7 +209,8 @@ func TestCurrentStats(t *testing.T) {
 			continue
 		}
 
-		if diff := cmp.Diff(tc.want, got, timeCmpOpt); diff != "" {
+		ignoreMemUsg := cmpopts.IgnoreFields(Stats{}, "MemoryUsage")
+		if diff := cmp.Diff(tc.want, got, timeCmpOpt, ignoreMemUsg); diff != "" {
 			t.Errorf("r.CurrentStats(%q) = %v, %v, want %v, nil; (-want, +got)\n%s", tc.qname, got, err, tc.want, diff)
 			continue
 		}
