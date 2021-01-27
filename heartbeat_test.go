@@ -47,7 +47,7 @@ func TestHeartbeater(t *testing.T) {
 			queues:         tc.queues,
 			strictPriority: false,
 			status:         status,
-			starting:       make(chan *base.TaskMessage),
+			starting:       make(chan *workerInfo),
 			finished:       make(chan *base.TaskMessage),
 		})
 
@@ -139,7 +139,7 @@ func TestHeartbeaterWithRedisDown(t *testing.T) {
 		queues:         map[string]int{"default": 1},
 		strictPriority: false,
 		status:         base.NewServerStatus(base.StatusRunning),
-		starting:       make(chan *base.TaskMessage),
+		starting:       make(chan *workerInfo),
 		finished:       make(chan *base.TaskMessage),
 	})
 

@@ -725,7 +725,8 @@ func (i *Inspector) Servers() ([]*ServerInfo, error) {
 			continue
 		}
 		wrkInfo := &WorkerInfo{
-			Started: w.Started,
+			Started:  w.Started,
+			Deadline: w.Deadline,
 			Task: &ActiveTask{
 				Task:  NewTask(w.Type, w.Payload),
 				ID:    w.ID,
@@ -771,6 +772,8 @@ type WorkerInfo struct {
 	Task *ActiveTask
 	// Time the worker started processing the task.
 	Started time.Time
+	// Time the worker needs to finish processing the task by.
+	Deadline time.Time
 }
 
 // ClusterKeySlot returns an integer identifying the hash slot the given queue hashes to.

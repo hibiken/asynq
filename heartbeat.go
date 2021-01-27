@@ -38,13 +38,13 @@ type heartbeater struct {
 	// heartbeater goroutine. In other words, confine these variables
 	// to this goroutine only.
 	started time.Time
-	workers map[string]workerStat
+	workers map[string]*workerInfo
 
 	// status is shared with other goroutine but is concurrency safe.
 	status *base.ServerStatus
 
 	// channels to receive updates on active workers.
-	starting <-chan *base.TaskMessage
+	starting <-chan *workerInfo
 	finished <-chan *base.TaskMessage
 }
 
@@ -56,7 +56,7 @@ type heartbeaterParams struct {
 	queues         map[string]int
 	strictPriority bool
 	status         *base.ServerStatus
-	starting       <-chan *base.TaskMessage
+	starting       <-chan *workerInfo
 	finished       <-chan *base.TaskMessage
 }
 
@@ -80,7 +80,7 @@ func newHeartbeater(params heartbeaterParams) *heartbeater {
 		strictPriority: params.strictPriority,
 
 		status:   params.status,
-		workers:  make(map[string]workerStat),
+		workers:  make(map[string]*workerInfo),
 		starting: params.starting,
 		finished: params.finished,
 	}
@@ -92,11 +92,14 @@ func (h *heartbeater) terminate() {
 	h.done <- struct{}{}
 }
 
-// A workerStat records the message a worker is working on
-// and the time the worker has started processing the message.
-type workerStat struct {
+// A workerInfo holds an active worker information.
+type workerInfo struct {
+	// the task message the worker is processing.
+	msg *base.TaskMessage
+	// the time the worker has started processing the message.
 	started time.Time
-	msg     *base.TaskMessage
+	// deadline the worker has to finish processing the task by.
+	deadline time.Time
 }
 
 func (h *heartbeater) start(wg *sync.WaitGroup) {
@@ -121,8 +124,8 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 				h.beat()
 				timer.Reset(h.interval)
 
-			case msg := <-h.starting:
-				h.workers[msg.ID.String()] = workerStat{time.Now(), msg}
+			case w := <-h.starting:
+				h.workers[w.msg.ID.String()] = w
 
 			case msg := <-h.finished:
 				delete(h.workers, msg.ID.String())
@@ -145,16 +148,17 @@ func (h *heartbeater) beat() {
 	}
 
 	var ws []*base.WorkerInfo
-	for id, stat := range h.workers {
+	for id, w := range h.workers {
 		ws = append(ws, &base.WorkerInfo{
 			Host:     h.host,
 			PID:      h.pid,
 			ServerID: h.serverID,
 			ID:       id,
-			Type:     stat.msg.Type,
-			Queue:    stat.msg.Queue,
-			Payload:  stat.msg.Payload,
-			Started:  stat.started,
+			Type:     w.msg.Type,
+			Queue:    w.msg.Queue,
+			Payload:  w.msg.Payload,
+			Started:  w.started,
+			Deadline: w.deadline,
 		})
 	}
 

@@ -20,7 +20,7 @@ import (
 )
 
 // fakeHeartbeater receives from starting and finished channels and do nothing.
-func fakeHeartbeater(starting, finished <-chan *base.TaskMessage, done <-chan struct{}) {
+func fakeHeartbeater(starting <-chan *workerInfo, finished <-chan *base.TaskMessage, done <-chan struct{}) {
 	for {
 		select {
 		case <-starting:
@@ -86,7 +86,7 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 			processed = append(processed, task)
 			return nil
 		}
-		starting := make(chan *base.TaskMessage)
+		starting := make(chan *workerInfo)
 		finished := make(chan *base.TaskMessage)
 		syncCh := make(chan *syncRequest)
 		done := make(chan struct{})
@@ -177,7 +177,7 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 			processed = append(processed, task)
 			return nil
 		}
-		starting := make(chan *base.TaskMessage)
+		starting := make(chan *workerInfo)
 		finished := make(chan *base.TaskMessage)
 		syncCh := make(chan *syncRequest)
 		done := make(chan struct{})
@@ -258,7 +258,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 			processed = append(processed, task)
 			return nil
 		}
-		starting := make(chan *base.TaskMessage)
+		starting := make(chan *workerInfo)
 		finished := make(chan *base.TaskMessage)
 		syncCh := make(chan *syncRequest)
 		done := make(chan struct{})
@@ -389,7 +389,7 @@ func TestProcessorRetry(t *testing.T) {
 			defer mu.Unlock()
 			n++
 		}
-		starting := make(chan *base.TaskMessage)
+		starting := make(chan *workerInfo)
 		finished := make(chan *base.TaskMessage)
 		done := make(chan struct{})
 		defer func() { close(done) }()
@@ -470,7 +470,7 @@ func TestProcessorQueues(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		starting := make(chan *base.TaskMessage)
+		starting := make(chan *workerInfo)
 		finished := make(chan *base.TaskMessage)
 		done := make(chan struct{})
 		defer func() { close(done) }()
@@ -559,7 +559,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 			"critical":            3,
 			"low":                 1,
 		}
-		starting := make(chan *base.TaskMessage)
+		starting := make(chan *workerInfo)
 		finished := make(chan *base.TaskMessage)
 		syncCh := make(chan *syncRequest)
 		done := make(chan struct{})

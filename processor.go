@@ -63,7 +63,7 @@ type processor struct {
 	// cancelations is a set of cancel functions for all active tasks.
 	cancelations *base.Cancelations
 
-	starting chan<- *base.TaskMessage
+	starting chan<- *workerInfo
 	finished chan<- *base.TaskMessage
 }
 
@@ -78,7 +78,7 @@ type processorParams struct {
 	strictPriority  bool
 	errHandler      ErrorHandler
 	shutdownTimeout time.Duration
-	starting        chan<- *base.TaskMessage
+	starting        chan<- *workerInfo
 	finished        chan<- *base.TaskMessage
 }
 
@@ -180,7 +180,7 @@ func (p *processor) exec() {
 			return
 		}
 
-		p.starting <- msg
+		p.starting <- &workerInfo{msg, time.Now(), deadline}
 		go func() {
 			defer func() {
 				p.finished <- msg
