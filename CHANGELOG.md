@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `ErrorMsg` field in `RetryTask` and `ArchivedTask` was renamed to `LastError`.
+
 ### Added
 
-- `MemoryUsage` field is added to `QueueStats`.
+- `MaxRetry`, `Retried`, `LastError` fields were added to all task types returned from `Inspector`.
+- `MemoryUsage` field was added to `QueueStats`.
 - `DeleteAllPendingTasks`, `ArchiveAllPendingTasks` were added to `Inspector`
 - `DeleteTaskByKey` and `ArchiveTaskByKey` now supports deleting/archiving `PendingTask`.
 - asynq CLI now supports deleting/archiving pending tasks.
