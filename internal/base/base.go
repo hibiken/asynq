@@ -283,6 +283,7 @@ type WorkerInfo struct {
 	Queue    string
 	Payload  map[string]interface{}
 	Started  time.Time
+	Deadline time.Time
 }
 
 // SchedulerEntry holds information about a periodic task registered with a scheduler.

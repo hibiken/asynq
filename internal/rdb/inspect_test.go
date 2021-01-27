@@ -2966,6 +2966,7 @@ func TestListWorkers(t *testing.T) {
 					Queue:    m1.Queue,
 					Payload:  m1.Payload,
 					Started:  time.Now().Add(-1 * time.Second),
+					Deadline: time.Now().Add(30 * time.Second),
 				},
 				{
 					Host:     host,
@@ -2976,6 +2977,7 @@ func TestListWorkers(t *testing.T) {
 					Queue:    m2.Queue,
 					Payload:  m2.Payload,
 					Started:  time.Now().Add(-5 * time.Second),
+					Deadline: time.Now().Add(10 * time.Minute),
 				},
 				{
 					Host:     host,
@@ -2986,6 +2988,7 @@ func TestListWorkers(t *testing.T) {
 					Queue:    m3.Queue,
 					Payload:  m3.Payload,
 					Started:  time.Now().Add(-30 * time.Second),
+					Deadline: time.Now().Add(30 * time.Minute),
 				},
 			},
 		},

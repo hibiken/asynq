@@ -316,7 +316,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	logger.SetLevel(toInternalLogLevel(loglevel))
 
 	rdb := rdb.NewRDB(createRedisClient(r))
-	starting := make(chan *base.TaskMessage)
+	starting := make(chan *workerInfo)
 	finished := make(chan *base.TaskMessage)
 	syncCh := make(chan *syncRequest)
 	status := base.NewServerStatus(base.StatusIdle)
