@@ -974,7 +974,6 @@ func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
 				continue // skip bad data
 			}
 			workers = append(workers, &w)
-
 		}
 	}
 	return workers, nil
