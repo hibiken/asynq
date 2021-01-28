@@ -2,7 +2,7 @@
 // Use of this source code is governed by a MIT license
 // that can be found in the LICENSE file.
 
-package asynq
+package inspeq
 
 import (
 	"fmt"
@@ -10,7 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-redis/redis/v7"
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
+	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
@@ -20,10 +23,78 @@ type Inspector struct {
 	rdb *rdb.RDB
 }
 
-// NewInspector returns a new instance of Inspector.
-func NewInspector(r RedisConnOpt) *Inspector {
+// New returns a new instance of Inspector.
+func New(r asynq.RedisConnOpt) *Inspector {
 	return &Inspector{
 		rdb: rdb.NewRDB(createRedisClient(r)),
+	}
+}
+
+// createRedisClient returns a redis client given a redis connection configuration.
+//
+// Passing an unexpected type as a RedisConnOpt argument will cause panic.
+func createRedisClient(r asynq.RedisConnOpt) redis.UniversalClient {
+	switch r := r.(type) {
+	case *asynq.RedisClientOpt:
+		return redis.NewClient(&redis.Options{
+			Network:   r.Network,
+			Addr:      r.Addr,
+			Username:  r.Username,
+			Password:  r.Password,
+			DB:        r.DB,
+			PoolSize:  r.PoolSize,
+			TLSConfig: r.TLSConfig,
+		})
+	case asynq.RedisClientOpt:
+		return redis.NewClient(&redis.Options{
+			Network:   r.Network,
+			Addr:      r.Addr,
+			Username:  r.Username,
+			Password:  r.Password,
+			DB:        r.DB,
+			PoolSize:  r.PoolSize,
+			TLSConfig: r.TLSConfig,
+		})
+	case *asynq.RedisFailoverClientOpt:
+		return redis.NewFailoverClient(&redis.FailoverOptions{
+			MasterName:       r.MasterName,
+			SentinelAddrs:    r.SentinelAddrs,
+			SentinelPassword: r.SentinelPassword,
+			Username:         r.Username,
+			Password:         r.Password,
+			DB:               r.DB,
+			PoolSize:         r.PoolSize,
+			TLSConfig:        r.TLSConfig,
+		})
+	case asynq.RedisFailoverClientOpt:
+		return redis.NewFailoverClient(&redis.FailoverOptions{
+			MasterName:       r.MasterName,
+			SentinelAddrs:    r.SentinelAddrs,
+			SentinelPassword: r.SentinelPassword,
+			Username:         r.Username,
+			Password:         r.Password,
+			DB:               r.DB,
+			PoolSize:         r.PoolSize,
+			TLSConfig:        r.TLSConfig,
+		})
+	case asynq.RedisClusterClientOpt:
+		return redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs:        r.Addrs,
+			MaxRedirects: r.MaxRedirects,
+			Username:     r.Username,
+			Password:     r.Password,
+			TLSConfig:    r.TLSConfig,
+		})
+	case *asynq.RedisClusterClientOpt:
+		return redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs:        r.Addrs,
+			MaxRedirects: r.MaxRedirects,
+			Username:     r.Username,
+			Password:     r.Password,
+			TLSConfig:    r.TLSConfig,
+		})
+	default:
+		panic(fmt.Sprintf("inspeq: unexpected type %T for RedisConnOpt", r))
 	}
 }
 
@@ -70,7 +141,7 @@ type QueueStats struct {
 
 // CurrentStats returns a current stats of the given queue.
 func (i *Inspector) CurrentStats(qname string) (*QueueStats, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return nil, err
 	}
 	stats, err := i.rdb.CurrentStats(qname)
@@ -108,7 +179,7 @@ type DailyStats struct {
 
 // History returns a list of stats from the last n days.
 func (i *Inspector) History(qname string, n int) ([]*DailyStats, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return nil, err
 	}
 	stats, err := i.rdb.HistoricalStats(qname, n)
@@ -168,7 +239,7 @@ func (i *Inspector) DeleteQueue(qname string, force bool) error {
 
 // PendingTask is a task in a queue and is ready to be processed.
 type PendingTask struct {
-	*Task
+	*asynq.Task
 	ID        string
 	Queue     string
 	MaxRetry  int
@@ -178,7 +249,7 @@ type PendingTask struct {
 
 // ActiveTask is a task that's currently being processed.
 type ActiveTask struct {
-	*Task
+	*asynq.Task
 	ID        string
 	Queue     string
 	MaxRetry  int
@@ -188,7 +259,7 @@ type ActiveTask struct {
 
 // ScheduledTask is a task scheduled to be processed in the future.
 type ScheduledTask struct {
-	*Task
+	*asynq.Task
 	ID            string
 	Queue         string
 	MaxRetry      int
@@ -201,7 +272,7 @@ type ScheduledTask struct {
 
 // RetryTask is a task scheduled to be retried in the future.
 type RetryTask struct {
-	*Task
+	*asynq.Task
 	ID            string
 	Queue         string
 	NextProcessAt time.Time
@@ -218,7 +289,7 @@ type RetryTask struct {
 // A task can be archived when the task exhausts its retry counts or manually
 // archived by a user via the CLI or Inspector.
 type ArchivedTask struct {
-	*Task
+	*asynq.Task
 	ID           string
 	Queue        string
 	MaxRetry     int
@@ -352,7 +423,7 @@ func Page(n int) ListOption {
 //
 // By default, it retrieves the first 30 tasks.
 func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*PendingTask, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return nil, err
 	}
 	opt := composeListOptions(opts...)
@@ -364,7 +435,7 @@ func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*Pendi
 	var tasks []*PendingTask
 	for _, m := range msgs {
 		tasks = append(tasks, &PendingTask{
-			Task:      NewTask(m.Type, m.Payload),
+			Task:      asynq.NewTask(m.Type, m.Payload),
 			ID:        m.ID.String(),
 			Queue:     m.Queue,
 			MaxRetry:  m.Retry,
@@ -379,7 +450,7 @@ func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*Pendi
 //
 // By default, it retrieves the first 30 tasks.
 func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*ActiveTask, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return nil, err
 	}
 	opt := composeListOptions(opts...)
@@ -392,7 +463,7 @@ func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*Active
 	for _, m := range msgs {
 
 		tasks = append(tasks, &ActiveTask{
-			Task:      NewTask(m.Type, m.Payload),
+			Task:      asynq.NewTask(m.Type, m.Payload),
 			ID:        m.ID.String(),
 			Queue:     m.Queue,
 			MaxRetry:  m.Retry,
@@ -408,7 +479,7 @@ func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*Active
 //
 // By default, it retrieves the first 30 tasks.
 func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*ScheduledTask, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return nil, err
 	}
 	opt := composeListOptions(opts...)
@@ -420,7 +491,7 @@ func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*Sch
 	var tasks []*ScheduledTask
 	for _, z := range zs {
 		processAt := time.Unix(z.Score, 0)
-		t := NewTask(z.Message.Type, z.Message.Payload)
+		t := asynq.NewTask(z.Message.Type, z.Message.Payload)
 		tasks = append(tasks, &ScheduledTask{
 			Task:          t,
 			ID:            z.Message.ID.String(),
@@ -440,7 +511,7 @@ func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*Sch
 //
 // By default, it retrieves the first 30 tasks.
 func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*RetryTask, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return nil, err
 	}
 	opt := composeListOptions(opts...)
@@ -452,7 +523,7 @@ func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*RetryTa
 	var tasks []*RetryTask
 	for _, z := range zs {
 		processAt := time.Unix(z.Score, 0)
-		t := NewTask(z.Message.Type, z.Message.Payload)
+		t := asynq.NewTask(z.Message.Type, z.Message.Payload)
 		tasks = append(tasks, &RetryTask{
 			Task:          t,
 			ID:            z.Message.ID.String(),
@@ -473,7 +544,7 @@ func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*RetryTa
 //
 // By default, it retrieves the first 30 tasks.
 func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*ArchivedTask, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return nil, err
 	}
 	opt := composeListOptions(opts...)
@@ -485,7 +556,7 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Arch
 	var tasks []*ArchivedTask
 	for _, z := range zs {
 		failedAt := time.Unix(z.Score, 0)
-		t := NewTask(z.Message.Type, z.Message.Payload)
+		t := asynq.NewTask(z.Message.Type, z.Message.Payload)
 		tasks = append(tasks, &ArchivedTask{
 			Task:         t,
 			ID:           z.Message.ID.String(),
@@ -503,7 +574,7 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Arch
 // DeleteAllPendingTasks deletes all pending tasks from the specified queue,
 // and reports the number tasks deleted.
 func (i *Inspector) DeleteAllPendingTasks(qname string) (int, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return 0, err
 	}
 	n, err := i.rdb.DeleteAllPendingTasks(qname)
@@ -513,7 +584,7 @@ func (i *Inspector) DeleteAllPendingTasks(qname string) (int, error) {
 // DeleteAllScheduledTasks deletes all scheduled tasks from the specified queue,
 // and reports the number tasks deleted.
 func (i *Inspector) DeleteAllScheduledTasks(qname string) (int, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return 0, err
 	}
 	n, err := i.rdb.DeleteAllScheduledTasks(qname)
@@ -523,7 +594,7 @@ func (i *Inspector) DeleteAllScheduledTasks(qname string) (int, error) {
 // DeleteAllRetryTasks deletes all retry tasks from the specified queue,
 // and reports the number tasks deleted.
 func (i *Inspector) DeleteAllRetryTasks(qname string) (int, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return 0, err
 	}
 	n, err := i.rdb.DeleteAllRetryTasks(qname)
@@ -533,7 +604,7 @@ func (i *Inspector) DeleteAllRetryTasks(qname string) (int, error) {
 // DeleteAllArchivedTasks deletes all archived tasks from the specified queue,
 // and reports the number tasks deleted.
 func (i *Inspector) DeleteAllArchivedTasks(qname string) (int, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return 0, err
 	}
 	n, err := i.rdb.DeleteAllArchivedTasks(qname)
@@ -542,7 +613,7 @@ func (i *Inspector) DeleteAllArchivedTasks(qname string) (int, error) {
 
 // DeleteTaskByKey deletes a task with the given key from the given queue.
 func (i *Inspector) DeleteTaskByKey(qname, key string) error {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return err
 	}
 	prefix, id, score, err := parseTaskKey(key)
@@ -566,7 +637,7 @@ func (i *Inspector) DeleteTaskByKey(qname, key string) error {
 // RunAllScheduledTasks transition all scheduled tasks to pending state from the given queue,
 // and reports the number of tasks transitioned.
 func (i *Inspector) RunAllScheduledTasks(qname string) (int, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return 0, err
 	}
 	n, err := i.rdb.RunAllScheduledTasks(qname)
@@ -576,7 +647,7 @@ func (i *Inspector) RunAllScheduledTasks(qname string) (int, error) {
 // RunAllRetryTasks transition all retry tasks to pending state from the given queue,
 // and reports the number of tasks transitioned.
 func (i *Inspector) RunAllRetryTasks(qname string) (int, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return 0, err
 	}
 	n, err := i.rdb.RunAllRetryTasks(qname)
@@ -586,7 +657,7 @@ func (i *Inspector) RunAllRetryTasks(qname string) (int, error) {
 // RunAllArchivedTasks transition all archived tasks to pending state from the given queue,
 // and reports the number of tasks transitioned.
 func (i *Inspector) RunAllArchivedTasks(qname string) (int, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return 0, err
 	}
 	n, err := i.rdb.RunAllArchivedTasks(qname)
@@ -595,7 +666,7 @@ func (i *Inspector) RunAllArchivedTasks(qname string) (int, error) {
 
 // RunTaskByKey transition a task to pending state given task key and queue name.
 func (i *Inspector) RunTaskByKey(qname, key string) error {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return err
 	}
 	prefix, id, score, err := parseTaskKey(key)
@@ -619,7 +690,7 @@ func (i *Inspector) RunTaskByKey(qname, key string) error {
 // ArchiveAllPendingTasks archives all pending tasks from the given queue,
 // and reports the number of tasks archived.
 func (i *Inspector) ArchiveAllPendingTasks(qname string) (int, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return 0, err
 	}
 	n, err := i.rdb.ArchiveAllPendingTasks(qname)
@@ -629,7 +700,7 @@ func (i *Inspector) ArchiveAllPendingTasks(qname string) (int, error) {
 // ArchiveAllScheduledTasks archives all scheduled tasks from the given queue,
 // and reports the number of tasks archiveed.
 func (i *Inspector) ArchiveAllScheduledTasks(qname string) (int, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return 0, err
 	}
 	n, err := i.rdb.ArchiveAllScheduledTasks(qname)
@@ -639,7 +710,7 @@ func (i *Inspector) ArchiveAllScheduledTasks(qname string) (int, error) {
 // ArchiveAllRetryTasks archives all retry tasks from the given queue,
 // and reports the number of tasks archiveed.
 func (i *Inspector) ArchiveAllRetryTasks(qname string) (int, error) {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return 0, err
 	}
 	n, err := i.rdb.ArchiveAllRetryTasks(qname)
@@ -648,7 +719,7 @@ func (i *Inspector) ArchiveAllRetryTasks(qname string) (int, error) {
 
 // ArchiveTaskByKey archives a task with the given key in the given queue.
 func (i *Inspector) ArchiveTaskByKey(qname, key string) error {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return err
 	}
 	prefix, id, score, err := parseTaskKey(key)
@@ -680,7 +751,7 @@ func (i *Inspector) CancelActiveTask(id string) error {
 // PauseQueue pauses task processing on the specified queue.
 // If the queue is already paused, it will return a non-nil error.
 func (i *Inspector) PauseQueue(qname string) error {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return err
 	}
 	return i.rdb.Pause(qname)
@@ -689,7 +760,7 @@ func (i *Inspector) PauseQueue(qname string) error {
 // UnpauseQueue resumes task processing on the specified queue.
 // If the queue is not paused, it will return a non-nil error.
 func (i *Inspector) UnpauseQueue(qname string) error {
-	if err := validateQueueName(qname); err != nil {
+	if err := base.ValidateQueueName(qname); err != nil {
 		return err
 	}
 	return i.rdb.Unpause(qname)
@@ -728,7 +799,7 @@ func (i *Inspector) Servers() ([]*ServerInfo, error) {
 			Started:  w.Started,
 			Deadline: w.Deadline,
 			Task: &ActiveTask{
-				Task:  NewTask(w.Type, w.Payload),
+				Task:  asynq.NewTask(w.Type, w.Payload),
 				ID:    w.ID,
 				Queue: w.Queue,
 			},
@@ -812,10 +883,10 @@ type SchedulerEntry struct {
 	Spec string
 
 	// Periodic Task registered for this entry.
-	Task *Task
+	Task *asynq.Task
 
 	// Opts is the options for the periodic task.
-	Opts []Option
+	Opts []asynq.Option
 
 	// Next shows the next time the task will be enqueued.
 	Next time.Time
@@ -834,8 +905,8 @@ func (i *Inspector) SchedulerEntries() ([]*SchedulerEntry, error) {
 		return nil, err
 	}
 	for _, e := range res {
-		task := NewTask(e.Type, e.Payload)
-		var opts []Option
+		task := asynq.NewTask(e.Type, e.Payload)
+		var opts []asynq.Option
 		for _, s := range e.Opts {
 			if o, err := parseOption(s); err == nil {
 				// ignore bad data
@@ -852,6 +923,74 @@ func (i *Inspector) SchedulerEntries() ([]*SchedulerEntry, error) {
 		})
 	}
 	return entries, nil
+}
+
+// parseOption interprets a string s as an Option and returns the Option if parsing is successful,
+// otherwise returns non-nil error.
+func parseOption(s string) (asynq.Option, error) {
+	fn, arg := parseOptionFunc(s), parseOptionArg(s)
+	switch fn {
+	case "Queue":
+		qname, err := strconv.Unquote(arg)
+		if err != nil {
+			return nil, err
+		}
+		return asynq.Queue(qname), nil
+	case "MaxRetry":
+		n, err := strconv.Atoi(arg)
+		if err != nil {
+			return nil, err
+		}
+		return asynq.MaxRetry(n), nil
+	case "Timeout":
+		d, err := time.ParseDuration(arg)
+		if err != nil {
+			return nil, err
+		}
+		return asynq.Timeout(d), nil
+	case "Deadline":
+		t, err := time.Parse(time.UnixDate, arg)
+		if err != nil {
+			return nil, err
+		}
+		return asynq.Deadline(t), nil
+	case "Unique":
+		d, err := time.ParseDuration(arg)
+		if err != nil {
+			return nil, err
+		}
+		return asynq.Unique(d), nil
+	case "ProcessAt":
+		t, err := time.Parse(time.UnixDate, arg)
+		if err != nil {
+			return nil, err
+		}
+		return asynq.ProcessAt(t), nil
+	case "ProcessIn":
+		d, err := time.ParseDuration(arg)
+		if err != nil {
+			return nil, err
+		}
+		return asynq.ProcessIn(d), nil
+	default:
+		return nil, fmt.Errorf("cannot not parse option string %q", s)
+	}
+}
+
+func parseOptionFunc(s string) string {
+	i := strings.Index(s, "(")
+	return s[:i]
+}
+
+func parseOptionArg(s string) string {
+	i := strings.Index(s, "(")
+	if i >= 0 {
+		j := strings.Index(s, ")")
+		if j > i {
+			return s[i+1 : j]
+		}
+	}
+	return ""
 }
 
 // SchedulerEnqueueEvent holds information about an enqueue event by a scheduler.

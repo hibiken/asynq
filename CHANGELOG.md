@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**IMPORTATNT**: All `Inspector` related code are moved to subpackage "github.com/hibiken/asynq/inspeq"
+
 ### Changed
 
+- `Inspector` related code are moved to subpackage "github.com/hibken/asynq/inspeq".
 - `ErrorMsg` field in `RetryTask` and `ArchivedTask` was renamed to `LastError`.
 
 ### Added
