@@ -36,6 +36,15 @@ const (
 	CancelChannel = "asynq:cancel"     // PubSub channel
 )
 
+// ValidateQueueName validates a given qname to be used as a queue name.
+// Returns nil if valid, otherwise returns non-nil error.
+func ValidateQueueName(qname string) error {
+	if len(qname) == 0 {
+		return fmt.Errorf("queue name must contain one or more characters")
+	}
+	return nil
+}
+
 // QueueKey returns a redis key for the given queue name.
 func QueueKey(qname string) string {
 	return fmt.Sprintf("asynq:{%s}", qname)

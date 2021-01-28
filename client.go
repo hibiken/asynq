@@ -7,7 +7,6 @@ package asynq
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -172,73 +171,6 @@ func (d processInOption) String() string     { return fmt.Sprintf("ProcessIn(%v)
 func (d processInOption) Type() OptionType   { return ProcessInOpt }
 func (d processInOption) Value() interface{} { return time.Duration(d) }
 
-// parseOption interprets a string s as an Option and returns the Option if parsing is successful,
-// otherwise returns non-nil error.
-func parseOption(s string) (Option, error) {
-	fn, arg := parseOptionFunc(s), parseOptionArg(s)
-	switch fn {
-	case "Queue":
-		qname, err := strconv.Unquote(arg)
-		if err != nil {
-			return nil, err
-		}
-		return Queue(qname), nil
-	case "MaxRetry":
-		n, err := strconv.Atoi(arg)
-		if err != nil {
-			return nil, err
-		}
-		return MaxRetry(n), nil
-	case "Timeout":
-		d, err := time.ParseDuration(arg)
-		if err != nil {
-			return nil, err
-		}
-		return Timeout(d), nil
-	case "Deadline":
-		t, err := time.Parse(time.UnixDate, arg)
-		if err != nil {
-			return nil, err
-		}
-		return Deadline(t), nil
-	case "Unique":
-		d, err := time.ParseDuration(arg)
-		if err != nil {
-			return nil, err
-		}
-		return Unique(d), nil
-	case "ProcessAt":
-		t, err := time.Parse(time.UnixDate, arg)
-		if err != nil {
-			return nil, err
-		}
-		return ProcessAt(t), nil
-	case "ProcessIn":
-		d, err := time.ParseDuration(arg)
-		if err != nil {
-			return nil, err
-		}
-		return ProcessIn(d), nil
-	default:
-		return nil, fmt.Errorf("cannot not parse option string %q", s)
-	}
-}
-
-func parseOptionFunc(s string) string {
-	i := strings.Index(s, "(")
-	return s[:i]
-}
-
-func parseOptionArg(s string) string {
-	i := strings.Index(s, "(")
-	if i >= 0 {
-		j := strings.Index(s, ")")
-		if j > i {
-			return s[i+1 : j]
-		}
-	}
-	return ""
-}
 
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
@@ -272,7 +204,7 @@ func composeOptions(opts ...Option) (option, error) {
 			res.retry = int(opt)
 		case queueOption:
 			trimmed := strings.TrimSpace(string(opt))
-			if err := validateQueueName(trimmed); err != nil {
+			if err := base.ValidateQueueName(trimmed); err != nil {
 				return option{}, err
 			}
 			res.queue = trimmed
@@ -291,13 +223,6 @@ func composeOptions(opts ...Option) (option, error) {
 		}
 	}
 	return res, nil
-}
-
-func validateQueueName(qname string) error {
-	if len(qname) == 0 {
-		return fmt.Errorf("queue name must contain one or more characters")
-	}
-	return nil
 }
 
 const (
