@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `Inspector` related code are moved to subpackage "github.com/hibken/asynq/inspeq".
+- `RedisConnOpt` interface has changed slightly. If you have been passing `RedisClientOpt`, `RedisFailoverClientOpt`, or `RedisClusterClientOpt` as a pointer,
+   update your code to pass as a value.
 - `ErrorMsg` field in `RetryTask` and `ArchivedTask` was renamed to `LastError`.
 
 ### Added

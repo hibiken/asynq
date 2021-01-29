@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis/v7"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
@@ -30,7 +31,11 @@ type Client struct {
 
 // NewClient returns a new Client instance given a redis connection option.
 func NewClient(r RedisConnOpt) *Client {
-	rdb := rdb.NewRDB(createRedisClient(r))
+	c, ok := r.MakeRedisClient().(redis.UniversalClient)
+	if !ok {
+		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
+	}
+	rdb := rdb.NewRDB(c)
 	return &Client{
 		opts: make(map[string][]Option),
 		rdb:  rdb,
