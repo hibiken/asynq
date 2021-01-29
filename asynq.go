@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	stdlog "log"
+
 	"github.com/go-redis/redis/v7"
 )
 
@@ -204,6 +206,11 @@ func parseRedisSentinelURI(u *url.URL) (RedisConnOpt, error) {
 		password = v
 	}
 	return RedisFailoverClientOpt{MasterName: master, SentinelAddrs: addrs, Password: password}, nil
+}
+
+//SetReditLogger set redit logger
+func SetReditLogger(logger *stdlog.Logger) {
+	redis.SetLogger(logger)
 }
 
 // createRedisClient returns a redis client given a redis connection configuration.
