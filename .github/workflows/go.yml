@@ -28,3 +28,6 @@ jobs:
 
     - name: Test
       run: go test -race -v ./...
+
+    - name: Bench Test
+      run: go test -run=^$ -bench=. -loglevel=debug ./...
