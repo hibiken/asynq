@@ -10,7 +10,7 @@ import (
 	"os"
 
 	"github.com/fatih/color"
-	"github.com/hibiken/asynq"
+	"github.com/hibiken/asynq/inspeq"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
 )
@@ -82,7 +82,7 @@ func queueList(cmd *cobra.Command, args []string) {
 	type queueInfo struct {
 		name    string
 		keyslot int64
-		nodes   []asynq.ClusterNode
+		nodes   []inspeq.ClusterNode
 	}
 	inspector := createInspector()
 	queues, err := inspector.Queues()
@@ -141,7 +141,7 @@ func queueInspect(cmd *cobra.Command, args []string) {
 	}
 }
 
-func printQueueStats(s *asynq.QueueStats) {
+func printQueueStats(s *inspeq.QueueStats) {
 	bold := color.New(color.Bold)
 	bold.Println("Queue Info")
 	fmt.Printf("Name:   %s\n", s.Queue)
@@ -191,7 +191,7 @@ func queueHistory(cmd *cobra.Command, args []string) {
 	}
 }
 
-func printDailyStats(stats []*asynq.DailyStats) {
+func printDailyStats(stats []*inspeq.DailyStats) {
 	printTable(
 		[]string{"date (UTC)", "processed", "failed", "error rate"},
 		func(w io.Writer, tmpl string) {

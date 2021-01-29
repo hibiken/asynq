@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/hibiken/asynq"
+	"github.com/hibiken/asynq/inspeq"
 	"github.com/spf13/cobra"
 )
 
@@ -183,7 +183,7 @@ func taskList(cmd *cobra.Command, args []string) {
 
 func listActiveTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListActiveTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
+	tasks, err := i.ListActiveTasks(qname, inspeq.PageSize(pageSize), inspeq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -204,7 +204,7 @@ func listActiveTasks(qname string, pageNum, pageSize int) {
 
 func listPendingTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListPendingTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
+	tasks, err := i.ListPendingTasks(qname, inspeq.PageSize(pageSize), inspeq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -225,7 +225,7 @@ func listPendingTasks(qname string, pageNum, pageSize int) {
 
 func listScheduledTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListScheduledTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
+	tasks, err := i.ListScheduledTasks(qname, inspeq.PageSize(pageSize), inspeq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -248,7 +248,7 @@ func listScheduledTasks(qname string, pageNum, pageSize int) {
 
 func listRetryTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListRetryTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
+	tasks, err := i.ListRetryTasks(qname, inspeq.PageSize(pageSize), inspeq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -267,7 +267,7 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 				} else {
 					nextRetry = "right now"
 				}
-				fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload, nextRetry, t.ErrorMsg, t.Retried, t.MaxRetry)
+				fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload, nextRetry, t.LastError, t.Retried, t.MaxRetry)
 			}
 		},
 	)
@@ -275,7 +275,7 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 
 func listArchivedTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListArchivedTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
+	tasks, err := i.ListArchivedTasks(qname, inspeq.PageSize(pageSize), inspeq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -288,7 +288,7 @@ func listArchivedTasks(qname string, pageNum, pageSize int) {
 		[]string{"Key", "Type", "Payload", "Last Failed", "Last Error"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload, t.LastFailedAt, t.ErrorMsg)
+				fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload, t.LastFailedAt, t.LastError)
 			}
 		})
 }
