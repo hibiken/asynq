@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq"
+	"github.com/hibiken/asynq/inspeq"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
@@ -135,7 +136,7 @@ func createRDB() *rdb.RDB {
 }
 
 // createRDB creates a Inspector instance using flag values and returns it.
-func createInspector() *asynq.Inspector {
+func createInspector() *inspeq.Inspector {
 	var connOpt asynq.RedisConnOpt
 	if useRedisCluster {
 		addrs := strings.Split(viper.GetString("cluster_addrs"), ",")
@@ -152,7 +153,7 @@ func createInspector() *asynq.Inspector {
 			TLSConfig: getTLSConfig(),
 		}
 	}
-	return asynq.NewInspector(connOpt)
+	return inspeq.New(connOpt)
 }
 
 func getTLSConfig() *tls.Config {
