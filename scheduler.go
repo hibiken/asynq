@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis/v7"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
@@ -34,6 +35,10 @@ type Scheduler struct {
 // NewScheduler returns a new Scheduler instance given the redis connection option.
 // The parameter opts is optional, defaults will be used if opts is set to nil
 func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
+	c, ok := r.MakeRedisClient().(redis.UniversalClient)
+	if !ok {
+		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
+	}
 	if opts == nil {
 		opts = &SchedulerOpts{}
 	}
@@ -55,7 +60,7 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 		status:     base.NewServerStatus(base.StatusIdle),
 		logger:     logger,
 		client:     NewClient(r),
-		rdb:        rdb.NewRDB(createRedisClient(r)),
+		rdb:        rdb.NewRDB(c),
 		cron:       cron.New(cron.WithLocation(loc)),
 		location:   loc,
 		done:       make(chan struct{}),
