@@ -25,76 +25,12 @@ type Inspector struct {
 
 // New returns a new instance of Inspector.
 func New(r asynq.RedisConnOpt) *Inspector {
-	return &Inspector{
-		rdb: rdb.NewRDB(createRedisClient(r)),
+	c, ok := r.MakeRedisClient().(redis.UniversalClient)
+	if !ok {
+		panic(fmt.Sprintf("inspeq: unsupported RedisConnOpt type %T", r))
 	}
-}
-
-// createRedisClient returns a redis client given a redis connection configuration.
-//
-// Passing an unexpected type as a RedisConnOpt argument will cause panic.
-func createRedisClient(r asynq.RedisConnOpt) redis.UniversalClient {
-	switch r := r.(type) {
-	case *asynq.RedisClientOpt:
-		return redis.NewClient(&redis.Options{
-			Network:   r.Network,
-			Addr:      r.Addr,
-			Username:  r.Username,
-			Password:  r.Password,
-			DB:        r.DB,
-			PoolSize:  r.PoolSize,
-			TLSConfig: r.TLSConfig,
-		})
-	case asynq.RedisClientOpt:
-		return redis.NewClient(&redis.Options{
-			Network:   r.Network,
-			Addr:      r.Addr,
-			Username:  r.Username,
-			Password:  r.Password,
-			DB:        r.DB,
-			PoolSize:  r.PoolSize,
-			TLSConfig: r.TLSConfig,
-		})
-	case *asynq.RedisFailoverClientOpt:
-		return redis.NewFailoverClient(&redis.FailoverOptions{
-			MasterName:       r.MasterName,
-			SentinelAddrs:    r.SentinelAddrs,
-			SentinelPassword: r.SentinelPassword,
-			Username:         r.Username,
-			Password:         r.Password,
-			DB:               r.DB,
-			PoolSize:         r.PoolSize,
-			TLSConfig:        r.TLSConfig,
-		})
-	case asynq.RedisFailoverClientOpt:
-		return redis.NewFailoverClient(&redis.FailoverOptions{
-			MasterName:       r.MasterName,
-			SentinelAddrs:    r.SentinelAddrs,
-			SentinelPassword: r.SentinelPassword,
-			Username:         r.Username,
-			Password:         r.Password,
-			DB:               r.DB,
-			PoolSize:         r.PoolSize,
-			TLSConfig:        r.TLSConfig,
-		})
-	case asynq.RedisClusterClientOpt:
-		return redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:        r.Addrs,
-			MaxRedirects: r.MaxRedirects,
-			Username:     r.Username,
-			Password:     r.Password,
-			TLSConfig:    r.TLSConfig,
-		})
-	case *asynq.RedisClusterClientOpt:
-		return redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:        r.Addrs,
-			MaxRedirects: r.MaxRedirects,
-			Username:     r.Username,
-			Password:     r.Password,
-			TLSConfig:    r.TLSConfig,
-		})
-	default:
-		panic(fmt.Sprintf("inspeq: unexpected type %T for RedisConnOpt", r))
+	return &Inspector{
+		rdb: rdb.NewRDB(c),
 	}
 }
 

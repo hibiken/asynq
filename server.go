@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
@@ -279,6 +280,10 @@ const (
 // NewServer returns a new Server given a redis connection option
 // and background processing configuration.
 func NewServer(r RedisConnOpt, cfg Config) *Server {
+	c, ok := r.MakeRedisClient().(redis.UniversalClient)
+	if !ok {
+		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
+	}
 	n := cfg.Concurrency
 	if n < 1 {
 		n = runtime.NumCPU()
@@ -315,7 +320,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	}
 	logger.SetLevel(toInternalLogLevel(loglevel))
 
-	rdb := rdb.NewRDB(createRedisClient(r))
+	rdb := rdb.NewRDB(c)
 	starting := make(chan *workerInfo)
 	finished := make(chan *base.TaskMessage)
 	syncCh := make(chan *syncRequest)

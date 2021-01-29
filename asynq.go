@@ -40,7 +40,11 @@ func NewTask(typename string, payload map[string]interface{}) *Task {
 //   - RedisClientOpt
 //   - RedisFailoverClientOpt
 //   - RedisClusterClientOpt
-type RedisConnOpt interface{}
+type RedisConnOpt interface {
+	// MakeRedisClient returns a new redis client instance.
+	// Return value is intentionally opaque to hide the implementation detail of redis client.
+	MakeRedisClient() interface{}
+}
 
 // RedisClientOpt is used to create a redis client that connects
 // to a redis server directly.
@@ -71,6 +75,18 @@ type RedisClientOpt struct {
 	// TLS Config used to connect to a server.
 	// TLS will be negotiated only if this field is set.
 	TLSConfig *tls.Config
+}
+
+func (opt RedisClientOpt) MakeRedisClient() interface{} {
+	return redis.NewClient(&redis.Options{
+		Network:   opt.Network,
+		Addr:      opt.Addr,
+		Username:  opt.Username,
+		Password:  opt.Password,
+		DB:        opt.DB,
+		PoolSize:  opt.PoolSize,
+		TLSConfig: opt.TLSConfig,
+	})
 }
 
 // RedisFailoverClientOpt is used to creates a redis client that talks
@@ -109,6 +125,19 @@ type RedisFailoverClientOpt struct {
 	TLSConfig *tls.Config
 }
 
+func (opt RedisFailoverClientOpt) MakeRedisClient() interface{} {
+	return redis.NewFailoverClient(&redis.FailoverOptions{
+		MasterName:       opt.MasterName,
+		SentinelAddrs:    opt.SentinelAddrs,
+		SentinelPassword: opt.SentinelPassword,
+		Username:         opt.Username,
+		Password:         opt.Password,
+		DB:               opt.DB,
+		PoolSize:         opt.PoolSize,
+		TLSConfig:        opt.TLSConfig,
+	})
+}
+
 // RedisFailoverClientOpt is used to creates a redis client that connects to
 // redis cluster.
 type RedisClusterClientOpt struct {
@@ -131,6 +160,16 @@ type RedisClusterClientOpt struct {
 	// TLS Config used to connect to a server.
 	// TLS will be negotiated only if this field is set.
 	TLSConfig *tls.Config
+}
+
+func (opt RedisClusterClientOpt) MakeRedisClient() interface{} {
+	return redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs:        opt.Addrs,
+		MaxRedirects: opt.MaxRedirects,
+		Username:     opt.Username,
+		Password:     opt.Password,
+		TLSConfig:    opt.TLSConfig,
+	})
 }
 
 // ParseRedisURI parses redis uri string and returns RedisConnOpt if uri is valid.
@@ -204,72 +243,4 @@ func parseRedisSentinelURI(u *url.URL) (RedisConnOpt, error) {
 		password = v
 	}
 	return RedisFailoverClientOpt{MasterName: master, SentinelAddrs: addrs, Password: password}, nil
-}
-
-// createRedisClient returns a redis client given a redis connection configuration.
-//
-// Passing an unexpected type as a RedisConnOpt argument will cause panic.
-func createRedisClient(r RedisConnOpt) redis.UniversalClient {
-	switch r := r.(type) {
-	case *RedisClientOpt:
-		return redis.NewClient(&redis.Options{
-			Network:   r.Network,
-			Addr:      r.Addr,
-			Username:  r.Username,
-			Password:  r.Password,
-			DB:        r.DB,
-			PoolSize:  r.PoolSize,
-			TLSConfig: r.TLSConfig,
-		})
-	case RedisClientOpt:
-		return redis.NewClient(&redis.Options{
-			Network:   r.Network,
-			Addr:      r.Addr,
-			Username:  r.Username,
-			Password:  r.Password,
-			DB:        r.DB,
-			PoolSize:  r.PoolSize,
-			TLSConfig: r.TLSConfig,
-		})
-	case *RedisFailoverClientOpt:
-		return redis.NewFailoverClient(&redis.FailoverOptions{
-			MasterName:       r.MasterName,
-			SentinelAddrs:    r.SentinelAddrs,
-			SentinelPassword: r.SentinelPassword,
-			Username:         r.Username,
-			Password:         r.Password,
-			DB:               r.DB,
-			PoolSize:         r.PoolSize,
-			TLSConfig:        r.TLSConfig,
-		})
-	case RedisFailoverClientOpt:
-		return redis.NewFailoverClient(&redis.FailoverOptions{
-			MasterName:       r.MasterName,
-			SentinelAddrs:    r.SentinelAddrs,
-			SentinelPassword: r.SentinelPassword,
-			Username:         r.Username,
-			Password:         r.Password,
-			DB:               r.DB,
-			PoolSize:         r.PoolSize,
-			TLSConfig:        r.TLSConfig,
-		})
-	case RedisClusterClientOpt:
-		return redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:        r.Addrs,
-			MaxRedirects: r.MaxRedirects,
-			Username:     r.Username,
-			Password:     r.Password,
-			TLSConfig:    r.TLSConfig,
-		})
-	case *RedisClusterClientOpt:
-		return redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:        r.Addrs,
-			MaxRedirects: r.MaxRedirects,
-			Username:     r.Username,
-			Password:     r.Password,
-			TLSConfig:    r.TLSConfig,
-		})
-	default:
-		panic(fmt.Sprintf("asynq: unexpected type %T for RedisConnOpt", r))
-	}
 }
