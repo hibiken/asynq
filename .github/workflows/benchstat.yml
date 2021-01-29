@@ -6,7 +6,7 @@
 
 name: Benchstat
 
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
   incoming:
@@ -15,7 +15,7 @@ jobs:
       redis:
         image: redis
         ports:
-          - 6379:637
+          - 6379:6379
     steps:
       - name: Install Go
         uses: actions/setup-go@v2
@@ -39,7 +39,7 @@ jobs:
       redis:
         image: redis
         ports:
-          - 6379:637
+          - 6379:6379
     steps:
       - name: Install Go
         uses: actions/setup-go@v2
