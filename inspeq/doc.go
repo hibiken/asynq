@@ -5,27 +5,18 @@
 /*
 Package inspeq provides helper types and functions to inspect queues and tasks managed by Asynq.
 
-Inspector is used to query and mutate the state of queues.
+Inspector is used to query and mutate the state of queues and tasks.
 
-    inspector := inspeq.New(asynq.RedisConnOpt{Addr: "localhost:6379"})
+Example:
 
-    // Query tasks from a queue.
-    archived, err := inspector.ListArchivedTasks("my_queue")
-	if err != nil {
-		// handle error
-	}
+    inspector := inspeq.New(asynq.RedisClientOpt{Addr: "localhost:6379"})
 
-    // Take action on a task.
-    for _, t := range archived {
-        if err := inspector.RunTaskByKey(t.Key()); err != nil {
+    tasks, err := inspector.ListArchivedTasks("my-queue")
+
+    for _, t := range tasks {
+        if err := inspector.DeleteTaskByKey(t.Key()); err != nil {
             // handle error
         }
-    }
-
-    // Take action on all tasks of a specified state.
-    n, err := inspector.DeleteAllRetryTasks("my_queue")
-    if err != nil {
-        // handle error
     }
 */
 package inspeq
