@@ -38,7 +38,7 @@ var testLogger *log.Logger
 
 func init() {
 	flag.StringVar(&redisAddr, "redis_addr", "localhost:6379", "redis address to use in testing")
-	flag.IntVar(&redisDB, "redis_db", 14, "redis db number to use in testing")
+	flag.IntVar(&redisDB, "redis_db", 13, "redis db number to use in testing")
 	flag.BoolVar(&useRedisCluster, "redis_cluster", false, "use redis cluster as a broker in testing")
 	flag.StringVar(&redisClusterAddrs, "redis_cluster_addrs", "localhost:7000,localhost:7001,localhost:7002", "comma separated list of redis server addresses")
 	flag.Var(&testLogLevel, "loglevel", "log level to use in testing")
