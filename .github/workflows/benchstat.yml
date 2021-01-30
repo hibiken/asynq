@@ -24,10 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Benchmark
-        run: |
-          for i in {1..5}; do
-            go test -run=^$ -bench=. ./... | tee -a bench.txt
-          done
+        run: go test -run=^$ -bench=. -count=5 -timeout=60m ./... | tee -a bench.txt
       - name: Upload Benchmark
         uses: actions/upload-artifact@v2
         with:
@@ -50,10 +47,7 @@ jobs:
         with:
           ref: master
       - name: Benchmark
-        run: |
-          for i in {1..5}; do
-            go test -run=^$ -bench=. ./... | tee -a bench.txt
-          done
+        run: go test -run=^$ -bench=. -count=5 -timeout=60m ./... | tee -a bench.txt
       - name: Upload Benchmark
         uses: actions/upload-artifact@v2
         with:
