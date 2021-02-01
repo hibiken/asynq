@@ -44,6 +44,7 @@ A system can consist of multiple worker servers and brokers, giving way to high 
 - [Periodic Tasks](https://github.com/hibiken/asynq/wiki/Periodic-Tasks)
 - [Support Redis Cluster](https://github.com/hibiken/asynq/wiki/Redis-Cluster) for automatic sharding and high availability
 - [Support Redis Sentinels](https://github.com/hibiken/asynq/wiki/Automatic-Failover) for high availability
+- [Web UI](#web-ui) to inspect and remote-control queues and tasks
 - [CLI](#command-line-tool) to inspect and remote-control queues and tasks
 
 ## Quickstart
@@ -250,6 +251,19 @@ func main() {
 For a more detailed walk-through of the library, see our [Getting Started Guide](https://github.com/hibiken/asynq/wiki/Getting-Started).
 
 To Learn more about `asynq` features and APIs, see our [Wiki](https://github.com/hibiken/asynq/wiki) and [godoc](https://godoc.org/github.com/hibiken/asynq).
+
+## Web UI
+
+[Asynqmon](https://github.com/hibiken/asynqmon) is a web based tool for monitoring and administrating Asynq queues and tasks.
+Please see the tool's [README](https://github.com/hibiken/asynqmon) for details.
+
+Here's a few screenshots of the web UI.
+
+**Queues view**  
+![Web UI QueuesView](/docs/assets/asynqmon-queues-view.png)
+
+**Tasks view**  
+![Web UI TasksView](/docs/assets/asynqmon-task-view.png)
 
 ## Command Line Tool
 
