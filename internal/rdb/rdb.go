@@ -59,7 +59,7 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
 		return err
 	}
-	key := base.QueueKey(msg.Queue)
+	key := base.PendingKey(msg.Queue)
 	return r.client.LPush(key, encoded).Err()
 }
 
@@ -88,7 +88,7 @@ func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
 		return err
 	}
 	res, err := enqueueUniqueCmd.Run(r.client,
-		[]string{msg.UniqueKey, base.QueueKey(msg.Queue)},
+		[]string{msg.UniqueKey, base.PendingKey(msg.Queue)},
 		msg.ID.String(), int(ttl.Seconds()), encoded).Result()
 	if err != nil {
 		return err
@@ -154,7 +154,7 @@ return nil`)
 func (r *RDB) dequeue(qnames ...string) (msgjson string, deadline int64, err error) {
 	for _, qname := range qnames {
 		keys := []string{
-			base.QueueKey(qname),
+			base.PendingKey(qname),
 			base.PausedKey(qname),
 			base.ActiveKey(qname),
 			base.DeadlinesKey(qname),
@@ -271,7 +271,7 @@ func (r *RDB) Requeue(msg *base.TaskMessage) error {
 		return err
 	}
 	return requeueCmd.Run(r.client,
-		[]string{base.ActiveKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.QueueKey(msg.Queue)},
+		[]string{base.ActiveKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.PendingKey(msg.Queue)},
 		encoded).Err()
 }
 
@@ -443,10 +443,10 @@ func (r *RDB) Archive(msg *base.TaskMessage, errMsg string) error {
 //and enqueues any tasks that  are ready to be processed.
 func (r *RDB) CheckAndEnqueue(qnames ...string) error {
 	for _, qname := range qnames {
-		if err := r.forwardAll(base.ScheduledKey(qname), base.QueueKey(qname)); err != nil {
+		if err := r.forwardAll(base.ScheduledKey(qname), base.PendingKey(qname)); err != nil {
 			return err
 		}
-		if err := r.forwardAll(base.RetryKey(qname), base.QueueKey(qname)); err != nil {
+		if err := r.forwardAll(base.RetryKey(qname), base.PendingKey(qname)); err != nil {
 			return err
 		}
 	}

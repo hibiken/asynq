@@ -25,7 +25,7 @@ func TestQueueKey(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got := QueueKey(tc.qname)
+		got := PendingKey(tc.qname)
 		if got != tc.want {
 			t.Errorf("QueueKey(%q) = %q, want %q", tc.qname, got, tc.want)
 		}

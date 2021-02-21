@@ -25,7 +25,7 @@ const Version = "0.16.0"
 const DefaultQueueName = "default"
 
 // DefaultQueue is the redis key for the default queue.
-var DefaultQueue = QueueKey(DefaultQueueName)
+var DefaultQueue = PendingKey(DefaultQueueName)
 
 // Global Redis keys.
 const (
@@ -45,9 +45,9 @@ func ValidateQueueName(qname string) error {
 	return nil
 }
 
-// QueueKey returns a redis key for the given queue name.
-func QueueKey(qname string) string {
-	return fmt.Sprintf("asynq:{%s}", qname)
+// PendingKey returns a redis key for the given queue name.
+func PendingKey(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:pending", qname)
 }
 
 // ActiveKey returns a redis key for the active tasks.

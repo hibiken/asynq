@@ -120,7 +120,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 		for qname, want := range tc.wantPending {
 			gotPending := h.GetPendingMessages(t, r, qname)
 			if diff := cmp.Diff(want, gotPending, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
-				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.QueueKey(qname), diff)
+				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.PendingKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantScheduled {
@@ -379,7 +379,7 @@ func TestClientEnqueue(t *testing.T) {
 		for qname, want := range tc.wantPending {
 			got := h.GetPendingMessages(t, r, qname)
 			if diff := cmp.Diff(want, got, h.IgnoreIDOpt); diff != "" {
-				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.QueueKey(qname), diff)
+				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.PendingKey(qname), diff)
 			}
 		}
 	}
@@ -484,7 +484,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 		for qname, want := range tc.wantPending {
 			gotPending := h.GetPendingMessages(t, r, qname)
 			if diff := cmp.Diff(want, gotPending, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
-				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.QueueKey(qname), diff)
+				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.PendingKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantScheduled {

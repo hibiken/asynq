@@ -83,7 +83,7 @@ func TestEnqueue(t *testing.T) {
 
 		gotPending := h.GetPendingMessages(t, r.client, tc.msg.Queue)
 		if len(gotPending) != 1 {
-			t.Errorf("%q has length %d, want 1", base.QueueKey(tc.msg.Queue), len(gotPending))
+			t.Errorf("%q has length %d, want 1", base.PendingKey(tc.msg.Queue), len(gotPending))
 			continue
 		}
 		if diff := cmp.Diff(tc.msg, gotPending[0]); diff != "" {
@@ -319,7 +319,7 @@ func TestDequeue(t *testing.T) {
 		for queue, want := range tc.wantPending {
 			gotPending := h.GetPendingMessages(t, r.client, queue)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.QueueKey(queue), diff)
+				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.PendingKey(queue), diff)
 			}
 		}
 		for queue, want := range tc.wantActive {
@@ -438,7 +438,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 		for queue, want := range tc.wantPending {
 			gotPending := h.GetPendingMessages(t, r.client, queue)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.QueueKey(queue), diff)
+				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.PendingKey(queue), diff)
 			}
 		}
 		for queue, want := range tc.wantActive {
@@ -734,7 +734,7 @@ func TestRequeue(t *testing.T) {
 		for qname, want := range tc.wantPending {
 			gotPending := h.GetPendingMessages(t, r.client, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.QueueKey(qname), diff)
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantActive {
@@ -1337,7 +1337,7 @@ func TestCheckAndEnqueue(t *testing.T) {
 		for qname, want := range tc.wantPending {
 			gotPending := h.GetPendingMessages(t, r.client, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.QueueKey(qname), diff)
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantScheduled {

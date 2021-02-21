@@ -196,7 +196,7 @@ func FlushDB(tb testing.TB, r redis.UniversalClient) {
 func SeedPendingQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname string) {
 	tb.Helper()
 	r.SAdd(base.AllQueues, qname)
-	seedRedisList(tb, r, base.QueueKey(qname), msgs)
+	seedRedisList(tb, r, base.PendingKey(qname), msgs)
 }
 
 // SeedActiveQueue initializes the active queue with the given messages.
@@ -299,7 +299,7 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string, items []b
 // GetPendingMessages returns all pending messages in the given queue.
 func GetPendingMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getListMessages(tb, r, base.QueueKey(qname))
+	return getListMessages(tb, r, base.PendingKey(qname))
 }
 
 // GetActiveMessages returns all active messages in the given queue.

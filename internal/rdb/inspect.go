@@ -110,7 +110,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 	}
 	now := time.Now()
 	res, err := currentStatsCmd.Run(r.client, []string{
-		base.QueueKey(qname),
+		base.PendingKey(qname),
 		base.ActiveKey(qname),
 		base.ScheduledKey(qname),
 		base.RetryKey(qname),
@@ -135,7 +135,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		key := cast.ToString(data[i])
 		val := cast.ToInt(data[i+1])
 		switch key {
-		case base.QueueKey(qname):
+		case base.PendingKey(qname):
 			stats.Pending = val
 			size += val
 		case base.ActiveKey(qname):
@@ -300,7 +300,7 @@ func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskMessage, er
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
 		return nil, fmt.Errorf("queue %q does not exist", qname)
 	}
-	return r.listMessages(base.QueueKey(qname), pgn)
+	return r.listMessages(base.PendingKey(qname), pgn)
 }
 
 // ListActive returns all tasks that are currently being processed for the given queue.
@@ -386,7 +386,7 @@ func (r *RDB) listZSetEntries(key string, pgn Pagination) ([]base.Z, error) {
 // the given queue and enqueues it for processing.
 // If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
 func (r *RDB) RunArchivedTask(qname string, id uuid.UUID, score int64) error {
-	n, err := r.removeAndRun(base.ArchivedKey(qname), base.QueueKey(qname), id.String(), float64(score))
+	n, err := r.removeAndRun(base.ArchivedKey(qname), base.PendingKey(qname), id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -400,7 +400,7 @@ func (r *RDB) RunArchivedTask(qname string, id uuid.UUID, score int64) error {
 // the given queue and enqueues it for processing.
 // If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
 func (r *RDB) RunRetryTask(qname string, id uuid.UUID, score int64) error {
-	n, err := r.removeAndRun(base.RetryKey(qname), base.QueueKey(qname), id.String(), float64(score))
+	n, err := r.removeAndRun(base.RetryKey(qname), base.PendingKey(qname), id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -414,7 +414,7 @@ func (r *RDB) RunRetryTask(qname string, id uuid.UUID, score int64) error {
 // from the given queue and enqueues it for processing.
 // If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
 func (r *RDB) RunScheduledTask(qname string, id uuid.UUID, score int64) error {
-	n, err := r.removeAndRun(base.ScheduledKey(qname), base.QueueKey(qname), id.String(), float64(score))
+	n, err := r.removeAndRun(base.ScheduledKey(qname), base.PendingKey(qname), id.String(), float64(score))
 	if err != nil {
 		return err
 	}
@@ -427,19 +427,19 @@ func (r *RDB) RunScheduledTask(qname string, id uuid.UUID, score int64) error {
 // RunAllScheduledTasks enqueues all scheduled tasks from the given queue
 // and returns the number of tasks enqueued.
 func (r *RDB) RunAllScheduledTasks(qname string) (int64, error) {
-	return r.removeAndRunAll(base.ScheduledKey(qname), base.QueueKey(qname))
+	return r.removeAndRunAll(base.ScheduledKey(qname), base.PendingKey(qname))
 }
 
 // RunAllRetryTasks enqueues all retry tasks from the given queue
 // and returns the number of tasks enqueued.
 func (r *RDB) RunAllRetryTasks(qname string) (int64, error) {
-	return r.removeAndRunAll(base.RetryKey(qname), base.QueueKey(qname))
+	return r.removeAndRunAll(base.RetryKey(qname), base.PendingKey(qname))
 }
 
 // RunAllArchivedTasks enqueues all archived tasks from the given queue
 // and returns the number of tasks enqueued.
 func (r *RDB) RunAllArchivedTasks(qname string) (int64, error) {
-	return r.removeAndRunAll(base.ArchivedKey(qname), base.QueueKey(qname))
+	return r.removeAndRunAll(base.ArchivedKey(qname), base.PendingKey(qname))
 }
 
 var removeAndRunCmd = redis.NewScript(`
@@ -530,7 +530,7 @@ return 1
 `)
 
 func (r *RDB) archivePending(qname, msg string) (int64, error) {
-	keys := []string{base.QueueKey(qname), base.ArchivedKey(qname)}
+	keys := []string{base.PendingKey(qname), base.ArchivedKey(qname)}
 	now := time.Now()
 	limit := now.AddDate(0, 0, -archivedExpirationInDays).Unix() // 90 days ago
 	args := []interface{}{msg, now.Unix(), limit, maxArchiveSize}
@@ -548,7 +548,7 @@ func (r *RDB) archivePending(qname, msg string) (int64, error) {
 // ArchivePendingTask finds a pending task that matches the given id  from the given queue
 // and archives it. If a task that maches the id does not exist, it returns ErrTaskNotFound.
 func (r *RDB) ArchivePendingTask(qname string, id uuid.UUID) error {
-	qkey := base.QueueKey(qname)
+	qkey := base.PendingKey(qname)
 	data, err := r.client.LRange(qkey, 0, -1).Result()
 	if err != nil {
 		return err
@@ -602,7 +602,7 @@ return table.getn(msgs)`)
 // ArchiveAllPendingTasks archives all pending tasks from the given queue and
 // returns the number of tasks that were moved.
 func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
-	keys := []string{base.QueueKey(qname), base.ArchivedKey(qname)}
+	keys := []string{base.PendingKey(qname), base.ArchivedKey(qname)}
 	now := time.Now()
 	limit := now.AddDate(0, 0, -archivedExpirationInDays).Unix() // 90 days ago
 	args := []interface{}{now.Unix(), limit, maxArchiveSize}
@@ -705,7 +705,7 @@ func (r *RDB) DeleteScheduledTask(qname string, id uuid.UUID, score int64) error
 // DeletePendingTask deletes a pending tasks that matches the given id from the given queue.
 // If a task that matches the id does not exist, it returns ErrTaskNotFound.
 func (r *RDB) DeletePendingTask(qname string, id uuid.UUID) error {
-	qkey := base.QueueKey(qname)
+	qkey := base.PendingKey(qname)
 	data, err := r.client.LRange(qkey, 0, -1).Result()
 	if err != nil {
 		return err
@@ -800,7 +800,7 @@ return n`)
 // DeleteAllPendingTasks deletes all pending tasks from the given queue
 // and returns the number of tasks deleted.
 func (r *RDB) DeleteAllPendingTasks(qname string) (int64, error) {
-	res, err := deleteAllPendingCmd.Run(r.client, []string{base.QueueKey(qname)}).Result()
+	res, err := deleteAllPendingCmd.Run(r.client, []string{base.PendingKey(qname)}).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -895,7 +895,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 		script = removeQueueCmd
 	}
 	keys := []string{
-		base.QueueKey(qname),
+		base.PendingKey(qname),
 		base.ActiveKey(qname),
 		base.ScheduledKey(qname),
 		base.RetryKey(qname),
@@ -1064,7 +1064,7 @@ func (r *RDB) Unpause(qname string) error {
 
 // ClusterKeySlot returns an integer identifying the hash slot the given queue hashes to.
 func (r *RDB) ClusterKeySlot(qname string) (int64, error) {
-	key := base.QueueKey(qname)
+	key := base.PendingKey(qname)
 	return r.client.ClusterKeySlot(key).Result()
 }
 
