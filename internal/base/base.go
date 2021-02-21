@@ -46,7 +46,7 @@ func ValidateQueueName(qname string) error {
 }
 
 // TaskKey returns a redis key for the given task message.
-func TaskKey(qname string, id uuid.UUID) string {
+func TaskKey(qname, id string) string {
 	return fmt.Sprintf("asynq:{%s}:t:%s", qname, id)
 }
 

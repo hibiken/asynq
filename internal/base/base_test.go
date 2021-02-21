@@ -17,11 +17,11 @@ import (
 )
 
 func TestTaskKey(t *testing.T) {
-	id := uuid.New()
+	id := uuid.NewString()
 
 	tests := []struct {
 		qname string
-		id    uuid.UUID
+		id    string
 		want  string
 	}{
 		{"default", id, fmt.Sprintf("asynq:{default}:t:%s", id)},
