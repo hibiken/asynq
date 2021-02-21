@@ -7,6 +7,7 @@ package base
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +15,25 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 )
+
+func TestTaskKey(t *testing.T) {
+	id := uuid.New()
+
+	tests := []struct {
+		qname string
+		id    uuid.UUID
+		want  string
+	}{
+		{"default", id, fmt.Sprintf("asynq:{default}:t:%s", id)},
+	}
+
+	for _, tc := range tests {
+		got := TaskKey(tc.qname, tc.id)
+		if got != tc.want {
+			t.Errorf("TaskKey(%q, %s) = %q, want %q", tc.qname, tc.id, got, tc.want)
+		}
+	}
+}
 
 func TestQueueKey(t *testing.T) {
 	tests := []struct {
