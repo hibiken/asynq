@@ -50,8 +50,8 @@ func (r *RDB) Ping() error {
 	return r.client.Ping().Err()
 }
 
-// KEYS[1] -> asynq:{qname}:t:<task_id>
-// KEYS[2] -> asynq:{qname}:pending
+// KEYS[1] -> asynq:{<qname>}:t:<task_id>
+// KEYS[2] -> asynq:{<qname>}:pending
 // ARGV[1] -> task message data
 // ARGV[2] -> task ID
 var enqueueCmd = redis.NewScript(`
@@ -75,7 +75,8 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 }
 
 // KEYS[1] -> unique key
-// KEYS[2] -> asynq:{<qname>}:pending
+// KEYS[2] -> asynq:{<qname>}:t:<taskid>
+// KEYS[3] -> asynq:{<qname>}:pending
 // ARGV[1] -> task ID
 // ARGV[2] -> uniqueness lock TTL
 // ARGV[3] -> task message data
@@ -84,7 +85,8 @@ local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
 if not ok then
   return 0
 end
-redis.call("LPUSH", KEYS[2], ARGV[3])
+redis.call("SET", KEYS[2], ARGV[3])
+redis.call("LPUSH", KEYS[3], ARGV[1])
 return 1
 `)
 
@@ -98,9 +100,9 @@ func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
 	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
 		return err
 	}
-	res, err := enqueueUniqueCmd.Run(r.client,
-		[]string{msg.UniqueKey, base.PendingKey(msg.Queue)},
-		msg.ID.String(), int(ttl.Seconds()), encoded).Result()
+	keys := []string{msg.UniqueKey, base.TaskKey(msg.Queue, msg.ID.String()), base.PendingKey(msg.Queue)}
+	args := []interface{}{msg.ID.String(), int(ttl.Seconds()), encoded}
+	res, err := enqueueUniqueCmd.Run(r.client, keys, args...).Result()
 	if err != nil {
 		return err
 	}

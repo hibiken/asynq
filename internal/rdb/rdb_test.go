@@ -101,7 +101,7 @@ func TestEnqueueUnique(t *testing.T) {
 	m1 := base.TaskMessage{
 		ID:        uuid.New(),
 		Type:      "email",
-		Payload:   map[string]interface{}{"user_id": 123},
+		Payload:   map[string]interface{}{"user_id": float64(123)},
 		Queue:     base.DefaultQueueName,
 		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", map[string]interface{}{"user_id": 123}),
 	}
@@ -116,13 +116,26 @@ func TestEnqueueUnique(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case.
 
+		// Enqueue the first message, should succeed.
 		err := r.EnqueueUnique(tc.msg, tc.ttl)
 		if err != nil {
 			t.Errorf("First message: (*RDB).EnqueueUnique(%v, %v) = %v, want nil",
 				tc.msg, tc.ttl, err)
 			continue
 		}
+		gotPending := h.GetPendingMessages(t, r.client, tc.msg.Queue)
+		if len(gotPending) != 1 {
+			t.Errorf("%q has length %d, want 1", base.PendingKey(tc.msg.Queue), len(gotPending))
+			continue
+		}
+		if diff := cmp.Diff(tc.msg, gotPending[0]); diff != "" {
+			t.Errorf("persisted data differed from the original input (-want, +got)\n%s", diff)
+		}
+		if !r.client.SIsMember(base.AllQueues, tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		}
 
+		// Enqueue the second message, should fail.
 		got := r.EnqueueUnique(tc.msg, tc.ttl)
 		if got != ErrDuplicateTask {
 			t.Errorf("Second message: (*RDB).EnqueueUnique(%v, %v) = %v, want %v",
@@ -133,9 +146,6 @@ func TestEnqueueUnique(t *testing.T) {
 		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL %q = %v, want %v", tc.msg.UniqueKey, gotTTL, tc.ttl)
 			continue
-		}
-		if !r.client.SIsMember(base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
 		}
 	}
 }
