@@ -299,13 +299,25 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string, items []b
 // GetPendingMessages returns all pending messages in the given queue.
 func GetPendingMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getListMessages(tb, r, base.PendingKey(qname))
+	ids := r.LRange(base.PendingKey(qname), 0, -1).Val()
+	var msgs []*base.TaskMessage
+	for _, id := range ids {
+		data := r.Get(base.TaskKey(qname, id)).Val()
+		msgs = append(msgs, MustUnmarshal(tb, data))
+	}
+	return msgs
 }
 
 // GetActiveMessages returns all active messages in the given queue.
 func GetActiveMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getListMessages(tb, r, base.ActiveKey(qname))
+	ids := r.LRange(base.ActiveKey(qname), 0, -1).Val()
+	var msgs []*base.TaskMessage
+	for _, id := range ids {
+		data := r.Get(base.TaskKey(qname, id)).Val()
+		msgs = append(msgs, MustUnmarshal(tb, data))
+	}
+	return msgs
 }
 
 // GetScheduledMessages returns all scheduled task messages in the given queue.

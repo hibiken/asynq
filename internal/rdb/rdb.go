@@ -50,7 +50,17 @@ func (r *RDB) Ping() error {
 	return r.client.Ping().Err()
 }
 
-// Enqueue inserts the given task to the tail of the queue.
+// KEYS[1] -> asynq:{qname}:t:<task_id>
+// KEYS[2] -> asynq:{qname}:pending
+// ARGV[1] -> task message data
+// ARGV[2] -> task ID
+var enqueueCmd = redis.NewScript(`
+redis.call("SET", KEYS[1], ARGV[1])
+redis.call("LPUSH", KEYS[2], ARGV[2])
+return 1
+`)
+
+// Enqueue adds the given task to the pending list of the queue.
 func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
@@ -59,12 +69,13 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
 		return err
 	}
-	key := base.PendingKey(msg.Queue)
-	return r.client.LPush(key, encoded).Err()
+	keys := []string{base.TaskKey(msg.Queue, msg.ID.String()), base.PendingKey(msg.Queue)}
+	args := []interface{}{encoded, msg.ID.String()}
+	return enqueueCmd.Run(r.client, keys, args...).Err()
 }
 
 // KEYS[1] -> unique key
-// KEYS[2] -> asynq:{<qname>}
+// KEYS[2] -> asynq:{<qname>}:pending
 // ARGV[1] -> task ID
 // ARGV[2] -> uniqueness lock TTL
 // ARGV[3] -> task message data
