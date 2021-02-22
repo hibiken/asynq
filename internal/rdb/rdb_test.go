@@ -765,12 +765,12 @@ func TestRequeue(t *testing.T) {
 func TestSchedule(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	t1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
+	msg := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
 	tests := []struct {
 		msg       *base.TaskMessage
 		processAt time.Time
 	}{
-		{t1, time.Now().Add(15 * time.Minute)},
+		{msg, time.Now().Add(15 * time.Minute)},
 	}
 
 	for _, tc := range tests {

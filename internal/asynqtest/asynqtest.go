@@ -323,43 +323,94 @@ func GetActiveMessages(tb testing.TB, r redis.UniversalClient, qname string) []*
 // GetScheduledMessages returns all scheduled task messages in the given queue.
 func GetScheduledMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getZSetMessages(tb, r, base.ScheduledKey(qname))
+	ids := r.ZRange(base.ScheduledKey(qname), 0, -1).Val()
+	var msgs []*base.TaskMessage
+	for _, id := range ids {
+		msg := r.Get(base.TaskKey(qname, id)).Val()
+		msgs = append(msgs, MustUnmarshal(tb, msg))
+	}
+	return msgs
 }
 
 // GetRetryMessages returns all retry messages in the given queue.
 func GetRetryMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getZSetMessages(tb, r, base.RetryKey(qname))
+	ids := r.ZRange(base.RetryKey(qname), 0, -1).Val()
+	var msgs []*base.TaskMessage
+	for _, id := range ids {
+		msg := r.Get(base.TaskKey(qname, id)).Val()
+		msgs = append(msgs, MustUnmarshal(tb, msg))
+	}
+	return msgs
 }
 
 // GetArchivedMessages returns all archived messages in the given queue.
 func GetArchivedMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getZSetMessages(tb, r, base.ArchivedKey(qname))
+	ids := r.ZRange(base.ArchivedKey(qname), 0, -1).Val()
+	var msgs []*base.TaskMessage
+	for _, id := range ids {
+		msg := r.Get(base.TaskKey(qname, id)).Val()
+		msgs = append(msgs, MustUnmarshal(tb, msg))
+	}
+	return msgs
 }
 
 // GetScheduledEntries returns all scheduled messages and its score in the given queue.
 func GetScheduledEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.ScheduledKey(qname))
+	zs := r.ZRangeWithScores(base.ScheduledKey(qname), 0, -1).Val()
+	var res []base.Z
+	for _, z := range zs {
+		msg := r.Get(base.TaskKey(qname, z.Member.(string))).Val()
+		res = append(res, base.Z{Message: MustUnmarshal(tb, msg), Score: int64(z.Score)})
+	}
+	return res
 }
 
 // GetRetryEntries returns all retry messages and its score in the given queue.
 func GetRetryEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.RetryKey(qname))
+	zs := r.ZRangeWithScores(base.RetryKey(qname), 0, -1).Val()
+	var res []base.Z
+	for _, z := range zs {
+		msg := r.Get(base.TaskKey(qname, z.Member.(string))).Val()
+		res = append(res, base.Z{
+			Message: MustUnmarshal(tb, msg),
+			Score:   int64(z.Score),
+		})
+	}
+	return res
 }
 
 // GetArchivedEntries returns all archived messages and its score in the given queue.
 func GetArchivedEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.ArchivedKey(qname))
+	zs := r.ZRangeWithScores(base.ArchivedKey(qname), 0, -1).Val()
+	var res []base.Z
+	for _, z := range zs {
+		msg := r.Get(base.TaskKey(qname, z.Member.(string))).Val()
+		res = append(res, base.Z{
+			Message: MustUnmarshal(tb, msg),
+			Score:   int64(z.Score),
+		})
+	}
+	return res
 }
 
 // GetDeadlinesEntries returns all task messages and its score in the deadlines set for the given queue.
 func GetDeadlinesEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.DeadlinesKey(qname))
+	zs := r.ZRangeWithScores(base.DeadlinesKey(qname), 0, -1).Val()
+	var res []base.Z
+	for _, z := range zs {
+		msg := r.Get(base.TaskKey(qname, z.Member.(string))).Val()
+		res = append(res, base.Z{
+			Message: MustUnmarshal(tb, msg),
+			Score:   int64(z.Score),
+		})
+	}
+	return res
 }
 
 func getListMessages(tb testing.TB, r redis.UniversalClient, list string) []*base.TaskMessage {

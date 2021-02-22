@@ -288,7 +288,18 @@ func (r *RDB) Requeue(msg *base.TaskMessage) error {
 		encoded).Err()
 }
 
-// Schedule adds the task to the backlog queue to be processed in the future.
+// KEYS[1] -> asynq:{<qname>}:t:<task_id>
+// KEYS[2] -> asynq:{<qname>}:scheduled
+// ARGV[1] -> task message data
+// ARGV[2] -> process_at time in Unix time
+// ARGV[3] -> task ID
+var scheduleCmd = redis.NewScript(`
+redis.call("SET", KEYS[1], ARGV[1])
+redis.call("ZADD", KEYS[2], ARGV[2], ARGV[3])
+return 1
+`)
+
+// Schedule adds the task to the scheduled set to be processed in the future.
 func (r *RDB) Schedule(msg *base.TaskMessage, processAt time.Time) error {
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
@@ -297,8 +308,9 @@ func (r *RDB) Schedule(msg *base.TaskMessage, processAt time.Time) error {
 	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
 		return err
 	}
-	score := float64(processAt.Unix())
-	return r.client.ZAdd(base.ScheduledKey(msg.Queue), &redis.Z{Score: score, Member: encoded}).Err()
+	keys := []string{base.TaskKey(msg.Queue, msg.ID.String()), base.ScheduledKey(msg.Queue)}
+	args := []interface{}{encoded, processAt.Unix(), msg.ID.String()}
+	return scheduleCmd.Run(r.client, keys, args...).Err()
 }
 
 // KEYS[1] -> unique key
