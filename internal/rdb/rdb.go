@@ -495,9 +495,9 @@ func (r *RDB) Archive(msg *base.TaskMessage, errMsg string) error {
 		msgToRemove, msgToAdd, now.Unix(), limit, maxArchiveSize, expireAt.Unix()).Err()
 }
 
-// CheckAndEnqueue checks for scheduled/retry tasks for the given queues
-//and enqueues any tasks that  are ready to be processed.
-func (r *RDB) CheckAndEnqueue(qnames ...string) error {
+// ForwardIfReady checks scheduled and retry sets of the given queues
+// and move any tasks that are ready to be processed to the pending set.
+func (r *RDB) ForwardIfReady(qnames ...string) error {
 	for _, qname := range qnames {
 		if err := r.forwardAll(base.ScheduledKey(qname), base.PendingKey(qname)); err != nil {
 			return err
@@ -514,12 +514,12 @@ func (r *RDB) CheckAndEnqueue(qnames ...string) error {
 // ARGV[1] -> current unix time
 // Note: Script moves tasks up to 100 at a time to keep the runtime of script short.
 var forwardCmd = redis.NewScript(`
-local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, 100)
-for _, msg in ipairs(msgs) do
-	redis.call("LPUSH", KEYS[2], msg)
-	redis.call("ZREM", KEYS[1], msg)
+local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, 100)
+for _, id in ipairs(ids) do
+	redis.call("LPUSH", KEYS[2], id)
+	redis.call("ZREM", KEYS[1], id)
 end
-return table.getn(msgs)`)
+return table.getn(ids)`)
 
 // forward moves tasks with a score less than the current unix time
 // from the src zset to the dst list. It returns the number of tasks moved.

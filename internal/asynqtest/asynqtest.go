@@ -279,9 +279,12 @@ func SeedAllDeadlines(tb testing.TB, r redis.UniversalClient, deadlines map[stri
 }
 
 func seedRedisList(tb testing.TB, c redis.UniversalClient, key string, msgs []*base.TaskMessage) {
-	data := MustMarshalSlice(tb, msgs)
-	for _, s := range data {
-		if err := c.LPush(key, s).Err(); err != nil {
+	for _, msg := range msgs {
+		encoded := MustMarshal(tb, msg)
+		if err := c.LPush(key, msg.ID.String()).Err(); err != nil {
+			tb.Fatal(err)
+		}
+		if err := c.Set(base.TaskKey(msg.Queue, msg.ID.String()), encoded, 0).Err(); err != nil {
 			tb.Fatal(err)
 		}
 	}
@@ -289,8 +292,13 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string, msgs []*b
 
 func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string, items []base.Z) {
 	for _, item := range items {
-		z := &redis.Z{Member: MustMarshal(tb, item.Message), Score: float64(item.Score)}
+		msg := item.Message
+		encoded := MustMarshal(tb, msg)
+		z := &redis.Z{Member: msg.ID.String(), Score: float64(item.Score)}
 		if err := c.ZAdd(key, z).Err(); err != nil {
+			tb.Fatal(err)
+		}
+		if err := c.Set(base.TaskKey(msg.Queue, msg.ID.String()), encoded, 0).Err(); err != nil {
 			tb.Fatal(err)
 		}
 	}

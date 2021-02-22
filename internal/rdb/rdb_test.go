@@ -1221,7 +1221,7 @@ func TestArchive(t *testing.T) {
 	}
 }
 
-func TestCheckAndEnqueue(t *testing.T) {
+func TestForwardIfReady(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	t1 := h.NewTaskMessage("send_email", nil)
@@ -1338,7 +1338,7 @@ func TestCheckAndEnqueue(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		err := r.CheckAndEnqueue(tc.qnames...)
+		err := r.ForwardIfReady(tc.qnames...)
 		if err != nil {
 			t.Errorf("(*RDB).CheckScheduled(%v) = %v, want nil", tc.qnames, err)
 			continue
