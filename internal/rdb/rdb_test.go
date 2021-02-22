@@ -495,7 +495,7 @@ func TestDone(t *testing.T) {
 
 	tests := []struct {
 		desc          string
-		inProgress    map[string][]*base.TaskMessage // initial state of the active list
+		active        map[string][]*base.TaskMessage // initial state of the active list
 		deadlines     map[string][]base.Z            // initial state of deadlines set
 		target        *base.TaskMessage              // task to remove
 		wantActive    map[string][]*base.TaskMessage // final state of the active list
@@ -503,7 +503,7 @@ func TestDone(t *testing.T) {
 	}{
 		{
 			desc: "removes message from the correct queue",
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1},
 				"custom":  {t2},
 			},
@@ -523,7 +523,7 @@ func TestDone(t *testing.T) {
 		},
 		{
 			desc: "with one queue",
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
 			deadlines: map[string][]base.Z{
@@ -539,7 +539,7 @@ func TestDone(t *testing.T) {
 		},
 		{
 			desc: "with multiple messages in a queue",
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1, t3},
 				"custom":  {t2},
 			},
@@ -562,8 +562,8 @@ func TestDone(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
-		for _, msgs := range tc.inProgress {
+		h.SeedAllActiveQueues(t, r.client, tc.active)
+		for _, msgs := range tc.active {
 			for _, msg := range msgs {
 				// Set uniqueness lock if unique key is present.
 				if len(msg.UniqueKey) > 0 {

@@ -212,8 +212,9 @@ func (r *RDB) dequeue(qnames ...string) (msgjson string, deadline int64, err err
 
 // KEYS[1] -> asynq:{<qname>}:active
 // KEYS[2] -> asynq:{<qname>}:deadlines
-// KEYS[3] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
-// ARGV[1] -> base.TaskMessage value
+// KEYS[3] -> asynq:{<qname>}:t:<task_id>
+// KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
+// ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
 var doneCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
@@ -222,20 +223,23 @@ end
 if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-local n = redis.call("INCR", KEYS[3])
+if redis.call("DEL", KEYS[3]) == 0 then
+  return redis.error_reply("NOT FOUND")
+end
+local n = redis.call("INCR", KEYS[4])
 if tonumber(n) == 1 then
-	redis.call("EXPIREAT", KEYS[3], ARGV[2])
+	redis.call("EXPIREAT", KEYS[4], ARGV[2])
 end
 return redis.status_reply("OK")
 `)
 
 // KEYS[1] -> asynq:{<qname>}:active
 // KEYS[2] -> asynq:{<qname>}:deadlines
-// KEYS[3] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
-// KEYS[4] -> unique key
-// ARGV[1] -> base.TaskMessage value
+// KEYS[3] -> asynq:{<qname>}:t:<task_id>
+// KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
+// KEYS[5] -> unique key
+// ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
-// ARGV[3] -> task ID
 var doneUniqueCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
@@ -243,12 +247,15 @@ end
 if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-local n = redis.call("INCR", KEYS[3])
-if tonumber(n) == 1 then
-	redis.call("EXPIREAT", KEYS[3], ARGV[2])
+if redis.call("DEL", KEYS[3]) == 0 then
+  return redis.error_reply("NOT FOUND")
 end
-if redis.call("GET", KEYS[4]) == ARGV[3] then
-  redis.call("DEL", KEYS[4])
+local n = redis.call("INCR", KEYS[4])
+if tonumber(n) == 1 then
+	redis.call("EXPIREAT", KEYS[4], ARGV[2])
+end
+if redis.call("GET", KEYS[5]) == ARGV[1] then
+  redis.call("DEL", KEYS[5])
 end
 return redis.status_reply("OK")
 `)
@@ -256,24 +263,23 @@ return redis.status_reply("OK")
 // Done removes the task from active queue to mark the task as done.
 // It removes a uniqueness lock acquired by the task, if any.
 func (r *RDB) Done(msg *base.TaskMessage) error {
-	encoded, err := base.EncodeMessage(msg)
-	if err != nil {
-		return err
-	}
 	now := time.Now()
 	expireAt := now.Add(statsTTL)
 	keys := []string{
 		base.ActiveKey(msg.Queue),
 		base.DeadlinesKey(msg.Queue),
+		base.TaskKey(msg.Queue, msg.ID.String()),
 		base.ProcessedKey(msg.Queue, now),
 	}
-	args := []interface{}{encoded, expireAt.Unix()}
+	argv := []interface{}{
+		msg.ID.String(),
+		expireAt.Unix(),
+	}
 	if len(msg.UniqueKey) > 0 {
 		keys = append(keys, msg.UniqueKey)
-		args = append(args, msg.ID.String())
-		return doneUniqueCmd.Run(r.client, keys, args...).Err()
+		return doneUniqueCmd.Run(r.client, keys, argv...).Err()
 	}
-	return doneCmd.Run(r.client, keys, args...).Err()
+	return doneCmd.Run(r.client, keys, argv...).Err()
 }
 
 // KEYS[1] -> asynq:{<qname>}:active
