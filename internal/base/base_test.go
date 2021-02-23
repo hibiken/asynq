@@ -40,8 +40,8 @@ func TestQueueKey(t *testing.T) {
 		qname string
 		want  string
 	}{
-		{"default", "asynq:{default}"},
-		{"custom", "asynq:{custom}"},
+		{"default", "asynq:{default}:pending"},
+		{"custom", "asynq:{custom}:pending"},
 	}
 
 	for _, tc := range tests {

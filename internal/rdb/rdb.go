@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v7"
@@ -565,19 +564,33 @@ func (r *RDB) forwardAll(src, dst string) (err error) {
 	return nil
 }
 
+// KEYS[1] -> asynq:{<qname>}:deadlines
+// ARGV[1] -> deadline in unix time
+// ARGV[2] -> task key prefix
+var listDeadlineExceededCmd = redis.NewScript(`
+local res = {}
+local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+for _, id in ipairs(ids) do
+	table.insert(res, redis.call("GET", ARGV[2] .. id))
+end
+return res
+`)
+
 // ListDeadlineExceeded returns a list of task messages that have exceeded the deadline from the given queues.
 func (r *RDB) ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*base.TaskMessage, error) {
 	var msgs []*base.TaskMessage
-	opt := &redis.ZRangeBy{
-		Min: "-inf",
-		Max: strconv.FormatInt(deadline.Unix(), 10),
-	}
 	for _, qname := range qnames {
-		res, err := r.client.ZRangeByScore(base.DeadlinesKey(qname), opt).Result()
+		res, err := listDeadlineExceededCmd.Run(r.client,
+			[]string{base.DeadlinesKey(qname)},
+			deadline.Unix(), base.TaskKeyPrefix(qname)).Result()
 		if err != nil {
 			return nil, err
 		}
-		for _, s := range res {
+		data, err := cast.ToStringSliceE(res)
+		if err != nil {
+			return nil, err
+		}
+		for _, s := range data {
 			msg, err := base.DecodeMessage(s)
 			if err != nil {
 				return nil, err

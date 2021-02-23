@@ -45,9 +45,14 @@ func ValidateQueueName(qname string) error {
 	return nil
 }
 
+// TaskKeyPrefix returns a prefix for task key.
+func TaskKeyPrefix(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:t:", qname)
+}
+
 // TaskKey returns a redis key for the given task message.
 func TaskKey(qname, id string) string {
-	return fmt.Sprintf("asynq:{%s}:t:%s", qname, id)
+	return fmt.Sprintf("%s%s", TaskKeyPrefix(qname), id)
 }
 
 // PendingKey returns a redis key for the given queue name.
