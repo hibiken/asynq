@@ -644,7 +644,7 @@ func TestRequeue(t *testing.T) {
 
 	tests := []struct {
 		pending       map[string][]*base.TaskMessage // initial state of queues
-		inProgress    map[string][]*base.TaskMessage // initial state of the active list
+		active        map[string][]*base.TaskMessage // initial state of the active list
 		deadlines     map[string][]base.Z            // initial state of the deadlines set
 		target        *base.TaskMessage              // task to requeue
 		wantPending   map[string][]*base.TaskMessage // final state of queues
@@ -655,7 +655,7 @@ func TestRequeue(t *testing.T) {
 			pending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 			},
 			deadlines: map[string][]base.Z{
@@ -681,7 +681,7 @@ func TestRequeue(t *testing.T) {
 			pending: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t2},
 			},
 			deadlines: map[string][]base.Z{
@@ -705,7 +705,7 @@ func TestRequeue(t *testing.T) {
 				"default":  {t1},
 				"critical": {},
 			},
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default":  {t2},
 				"critical": {t3},
 			},
@@ -732,7 +732,7 @@ func TestRequeue(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.active)
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
 
 		err := r.Requeue(tc.target)
