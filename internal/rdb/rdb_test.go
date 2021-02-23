@@ -1066,7 +1066,7 @@ func TestArchive(t *testing.T) {
 
 	// TODO(hibiken): add test cases for trimming
 	tests := []struct {
-		inProgress    map[string][]*base.TaskMessage
+		active        map[string][]*base.TaskMessage
 		deadlines     map[string][]base.Z
 		archived      map[string][]base.Z
 		target        *base.TaskMessage // task to archive
@@ -1075,7 +1075,7 @@ func TestArchive(t *testing.T) {
 		wantArchived  map[string][]base.Z
 	}{
 		{
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 			},
 			deadlines: map[string][]base.Z{
@@ -1104,7 +1104,7 @@ func TestArchive(t *testing.T) {
 			},
 		},
 		{
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1, t2, t3},
 			},
 			deadlines: map[string][]base.Z{
@@ -1134,7 +1134,7 @@ func TestArchive(t *testing.T) {
 			},
 		},
 		{
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1},
 				"custom":  {t4},
 			},
@@ -1170,7 +1170,7 @@ func TestArchive(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.active)
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
