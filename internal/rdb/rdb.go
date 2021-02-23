@@ -392,44 +392,42 @@ func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl tim
 	return nil
 }
 
-// KEYS[1] -> asynq:{<qname>}:active
-// KEYS[2] -> asynq:{<qname>}:deadlines
-// KEYS[3] -> asynq:{<qname>}:retry
-// KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
-// KEYS[5] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
-// ARGV[1] -> base.TaskMessage value to remove from base.ActiveQueue queue
-// ARGV[2] -> base.TaskMessage value to add to Retry queue
+// KEYS[1] -> asynq:{<qname>}:t:<task_id>
+// KEYS[2] -> asynq:{<qname>}:active
+// KEYS[3] -> asynq:{<qname>}:deadlines
+// KEYS[4] -> asynq:{<qname>}:retry
+// KEYS[5] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
+// KEYS[6] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
+// ARGV[1] -> task ID
+// ARGV[2] -> updated base.TaskMessage value
 // ARGV[3] -> retry_at UNIX timestamp
 // ARGV[4] -> stats expiration timestamp
 var retryCmd = redis.NewScript(`
-if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
+if redis.call("LREM", KEYS[2], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
+if redis.call("ZREM", KEYS[3], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-redis.call("ZADD", KEYS[3], ARGV[3], ARGV[2])
-local n = redis.call("INCR", KEYS[4])
+redis.call("ZADD", KEYS[4], ARGV[3], ARGV[1])
+redis.call("SET", KEYS[1], ARGV[2])
+local n = redis.call("INCR", KEYS[5])
 if tonumber(n) == 1 then
-	redis.call("EXPIREAT", KEYS[4], ARGV[4])
-end
-local m = redis.call("INCR", KEYS[5])
-if tonumber(m) == 1 then
 	redis.call("EXPIREAT", KEYS[5], ARGV[4])
+end
+local m = redis.call("INCR", KEYS[6])
+if tonumber(m) == 1 then
+	redis.call("EXPIREAT", KEYS[6], ARGV[4])
 end
 return redis.status_reply("OK")`)
 
 // Retry moves the task from active to retry queue, incrementing retry count
 // and assigning error message to the task message.
 func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) error {
-	msgToRemove, err := base.EncodeMessage(msg)
-	if err != nil {
-		return err
-	}
 	modified := *msg
 	modified.Retried++
 	modified.ErrorMsg = errMsg
-	msgToAdd, err := base.EncodeMessage(&modified)
+	encoded, err := base.EncodeMessage(&modified)
 	if err != nil {
 		return err
 	}
@@ -437,9 +435,21 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) e
 	processedKey := base.ProcessedKey(msg.Queue, now)
 	failedKey := base.FailedKey(msg.Queue, now)
 	expireAt := now.Add(statsTTL)
-	return retryCmd.Run(r.client,
-		[]string{base.ActiveKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.RetryKey(msg.Queue), processedKey, failedKey},
-		msgToRemove, msgToAdd, processAt.Unix(), expireAt.Unix()).Err()
+	keys := []string{
+		base.TaskKey(msg.Queue, msg.ID.String()),
+		base.ActiveKey(msg.Queue),
+		base.DeadlinesKey(msg.Queue),
+		base.RetryKey(msg.Queue),
+		processedKey,
+		failedKey,
+	}
+	argv := []interface{}{
+		msg.ID.String(),
+		encoded,
+		processAt.Unix(),
+		expireAt.Unix(),
+	}
+	return retryCmd.Run(r.client, keys, argv...).Err()
 }
 
 const (

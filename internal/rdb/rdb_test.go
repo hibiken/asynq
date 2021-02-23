@@ -896,7 +896,7 @@ func TestRetry(t *testing.T) {
 	errMsg := "SMTP server is not responding"
 
 	tests := []struct {
-		inProgress    map[string][]*base.TaskMessage
+		active        map[string][]*base.TaskMessage
 		deadlines     map[string][]base.Z
 		retry         map[string][]base.Z
 		msg           *base.TaskMessage
@@ -907,7 +907,7 @@ func TestRetry(t *testing.T) {
 		wantRetry     map[string][]base.Z
 	}{
 		{
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 			},
 			deadlines: map[string][]base.Z{
@@ -933,7 +933,7 @@ func TestRetry(t *testing.T) {
 			},
 		},
 		{
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 				"custom":  {t4},
 			},
@@ -967,7 +967,7 @@ func TestRetry(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.active)
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
