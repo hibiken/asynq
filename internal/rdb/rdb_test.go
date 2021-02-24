@@ -158,6 +158,7 @@ func TestDequeue(t *testing.T) {
 		ID:       uuid.New(),
 		Type:     "send_email",
 		Payload:  map[string]interface{}{"subject": "hello!"},
+		Queue:    "default",
 		Timeout:  1800,
 		Deadline: 0,
 	}
@@ -166,6 +167,7 @@ func TestDequeue(t *testing.T) {
 		ID:       uuid.New(),
 		Type:     "export_csv",
 		Payload:  nil,
+		Queue:    "critical",
 		Timeout:  0,
 		Deadline: 1593021600,
 	}
@@ -174,10 +176,10 @@ func TestDequeue(t *testing.T) {
 		ID:       uuid.New(),
 		Type:     "reindex",
 		Payload:  nil,
+		Queue:    "low",
 		Timeout:  int64((5 * time.Minute).Seconds()),
 		Deadline: time.Now().Add(10 * time.Minute).Unix(),
 	}
-	t3Deadline := now.Unix() + t3.Timeout // use whichever is earliest
 
 	tests := []struct {
 		pending       map[string][]*base.TaskMessage
@@ -253,26 +255,26 @@ func TestDequeue(t *testing.T) {
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
-				"default":  {t3},
+				"default":  {t1},
 				"critical": {},
-				"low":      {t2, t1},
+				"low":      {t3},
 			},
 			args:         []string{"critical", "default", "low"},
-			wantMsg:      t3,
-			wantDeadline: time.Unix(t3Deadline, 0),
+			wantMsg:      t1,
+			wantDeadline: time.Unix(t1Deadline, 0),
 			err:          nil,
 			wantPending: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
-				"low":      {t2, t1},
+				"low":      {t3},
 			},
 			wantActive: map[string][]*base.TaskMessage{
-				"default":  {t3},
+				"default":  {t1},
 				"critical": {},
 				"low":      {},
 			},
 			wantDeadlines: map[string][]base.Z{
-				"default":  {{Message: t3, Score: t3Deadline}},
+				"default":  {{Message: t1, Score: t1Deadline}},
 				"critical": {},
 				"low":      {},
 			},

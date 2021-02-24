@@ -284,7 +284,13 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string, msgs []*b
 		if err := c.LPush(key, msg.ID.String()).Err(); err != nil {
 			tb.Fatal(err)
 		}
-		if err := c.Set(base.TaskKey(msg.Queue, msg.ID.String()), encoded, 0).Err(); err != nil {
+		key := base.TaskKey(msg.Queue, msg.ID.String())
+		data := map[string]interface{}{
+			"msg":      encoded,
+			"timeout":  msg.Timeout,
+			"deadline": msg.Deadline,
+		}
+		if err := c.HSet(key, data).Err(); err != nil {
 			tb.Fatal(err)
 		}
 	}
@@ -298,7 +304,13 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string, items []b
 		if err := c.ZAdd(key, z).Err(); err != nil {
 			tb.Fatal(err)
 		}
-		if err := c.Set(base.TaskKey(msg.Queue, msg.ID.String()), encoded, 0).Err(); err != nil {
+		key := base.TaskKey(msg.Queue, msg.ID.String())
+		data := map[string]interface{}{
+			"msg":      encoded,
+			"timeout":  msg.Timeout,
+			"deadline": msg.Deadline,
+		}
+		if err := c.HSet(key, data).Err(); err != nil {
 			tb.Fatal(err)
 		}
 	}
@@ -310,7 +322,7 @@ func GetPendingMessages(tb testing.TB, r redis.UniversalClient, qname string) []
 	ids := r.LRange(base.PendingKey(qname), 0, -1).Val()
 	var msgs []*base.TaskMessage
 	for _, id := range ids {
-		data := r.Get(base.TaskKey(qname, id)).Val()
+		data := r.HGet(base.TaskKey(qname, id), "msg").Val()
 		msgs = append(msgs, MustUnmarshal(tb, data))
 	}
 	return msgs
@@ -322,7 +334,7 @@ func GetActiveMessages(tb testing.TB, r redis.UniversalClient, qname string) []*
 	ids := r.LRange(base.ActiveKey(qname), 0, -1).Val()
 	var msgs []*base.TaskMessage
 	for _, id := range ids {
-		data := r.Get(base.TaskKey(qname, id)).Val()
+		data := r.HGet(base.TaskKey(qname, id), "msg").Val()
 		msgs = append(msgs, MustUnmarshal(tb, data))
 	}
 	return msgs
@@ -334,7 +346,7 @@ func GetScheduledMessages(tb testing.TB, r redis.UniversalClient, qname string) 
 	ids := r.ZRange(base.ScheduledKey(qname), 0, -1).Val()
 	var msgs []*base.TaskMessage
 	for _, id := range ids {
-		msg := r.Get(base.TaskKey(qname, id)).Val()
+		msg := r.HGet(base.TaskKey(qname, id), "msg").Val()
 		msgs = append(msgs, MustUnmarshal(tb, msg))
 	}
 	return msgs
@@ -346,7 +358,7 @@ func GetRetryMessages(tb testing.TB, r redis.UniversalClient, qname string) []*b
 	ids := r.ZRange(base.RetryKey(qname), 0, -1).Val()
 	var msgs []*base.TaskMessage
 	for _, id := range ids {
-		msg := r.Get(base.TaskKey(qname, id)).Val()
+		msg := r.HGet(base.TaskKey(qname, id), "msg").Val()
 		msgs = append(msgs, MustUnmarshal(tb, msg))
 	}
 	return msgs
@@ -358,7 +370,7 @@ func GetArchivedMessages(tb testing.TB, r redis.UniversalClient, qname string) [
 	ids := r.ZRange(base.ArchivedKey(qname), 0, -1).Val()
 	var msgs []*base.TaskMessage
 	for _, id := range ids {
-		msg := r.Get(base.TaskKey(qname, id)).Val()
+		msg := r.HGet(base.TaskKey(qname, id), "msg").Val()
 		msgs = append(msgs, MustUnmarshal(tb, msg))
 	}
 	return msgs
@@ -370,7 +382,7 @@ func GetScheduledEntries(tb testing.TB, r redis.UniversalClient, qname string) [
 	zs := r.ZRangeWithScores(base.ScheduledKey(qname), 0, -1).Val()
 	var res []base.Z
 	for _, z := range zs {
-		msg := r.Get(base.TaskKey(qname, z.Member.(string))).Val()
+		msg := r.HGet(base.TaskKey(qname, z.Member.(string)), "msg").Val()
 		res = append(res, base.Z{Message: MustUnmarshal(tb, msg), Score: int64(z.Score)})
 	}
 	return res
@@ -382,7 +394,7 @@ func GetRetryEntries(tb testing.TB, r redis.UniversalClient, qname string) []bas
 	zs := r.ZRangeWithScores(base.RetryKey(qname), 0, -1).Val()
 	var res []base.Z
 	for _, z := range zs {
-		msg := r.Get(base.TaskKey(qname, z.Member.(string))).Val()
+		msg := r.HGet(base.TaskKey(qname, z.Member.(string)), "msg").Val()
 		res = append(res, base.Z{
 			Message: MustUnmarshal(tb, msg),
 			Score:   int64(z.Score),
@@ -397,7 +409,7 @@ func GetArchivedEntries(tb testing.TB, r redis.UniversalClient, qname string) []
 	zs := r.ZRangeWithScores(base.ArchivedKey(qname), 0, -1).Val()
 	var res []base.Z
 	for _, z := range zs {
-		msg := r.Get(base.TaskKey(qname, z.Member.(string))).Val()
+		msg := r.HGet(base.TaskKey(qname, z.Member.(string)), "msg").Val()
 		res = append(res, base.Z{
 			Message: MustUnmarshal(tb, msg),
 			Score:   int64(z.Score),
@@ -412,7 +424,7 @@ func GetDeadlinesEntries(tb testing.TB, r redis.UniversalClient, qname string) [
 	zs := r.ZRangeWithScores(base.DeadlinesKey(qname), 0, -1).Val()
 	var res []base.Z
 	for _, z := range zs {
-		msg := r.Get(base.TaskKey(qname, z.Member.(string))).Val()
+		msg := r.HGet(base.TaskKey(qname, z.Member.(string)), "msg").Val()
 		res = append(res, base.Z{
 			Message: MustUnmarshal(tb, msg),
 			Score:   int64(z.Score),

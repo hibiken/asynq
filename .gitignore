@@ -19,3 +19,6 @@
 
 # Ignore asynq config file
 .asynq.*
+
+# Ignore editor config files
+.vscode
