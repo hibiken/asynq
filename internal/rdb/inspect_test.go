@@ -386,7 +386,7 @@ func TestListPendingPagination(t *testing.T) {
 
 	msgs = []*base.TaskMessage(nil) // empty list
 	for i := 0; i < 100; i++ {
-		msg := h.NewTaskMessage(fmt.Sprintf("custom %d", i), nil)
+		msg := h.NewTaskMessageWithQueue(fmt.Sprintf("custom %d", i), nil, "custom")
 		msgs = append(msgs, msg)
 	}
 	// create 100 tasks in custom queue
