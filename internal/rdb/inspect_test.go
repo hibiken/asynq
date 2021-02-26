@@ -996,7 +996,7 @@ var (
 	zScoreCmpOpt = h.EquateInt64Approx(2)                    // allow for 2 seconds margin in Z.Score
 )
 
-func TestRunDeadTask(t *testing.T) {
+func TestRunArchivedTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	t1 := h.NewTaskMessage("send_email", nil)
@@ -1008,9 +1008,8 @@ func TestRunDeadTask(t *testing.T) {
 	tests := []struct {
 		archived     map[string][]base.Z
 		qname        string
-		score        int64
 		id           uuid.UUID
-		want         error // expected return value from calling RunDeadTask
+		want         error // expected return value from calling RunArchivedTask
 		wantArchived map[string][]*base.TaskMessage
 		wantPending  map[string][]*base.TaskMessage
 	}{
@@ -1022,7 +1021,6 @@ func TestRunDeadTask(t *testing.T) {
 				},
 			},
 			qname: "default",
-			score: s2,
 			id:    t2.ID,
 			want:  nil,
 			wantArchived: map[string][]*base.TaskMessage{
@@ -1040,8 +1038,7 @@ func TestRunDeadTask(t *testing.T) {
 				},
 			},
 			qname: "default",
-			score: 123,
-			id:    t2.ID,
+			id:    uuid.New(),
 			want:  ErrTaskNotFound,
 			wantArchived: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
@@ -1061,7 +1058,6 @@ func TestRunDeadTask(t *testing.T) {
 				},
 			},
 			qname: "critical",
-			score: s1,
 			id:    t3.ID,
 			want:  nil,
 			wantArchived: map[string][]*base.TaskMessage{
@@ -1079,9 +1075,9 @@ func TestRunDeadTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.RunArchivedTask(tc.qname, tc.id, tc.score)
+		got := r.RunArchivedTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("r.RunDeadTask(%q, %s, %d) = %v, want %v", tc.qname, tc.id, tc.score, got, tc.want)
+			t.Errorf("r.RunDeadTask(%q, %s) = %v, want %v", tc.qname, tc.id, got, tc.want)
 			continue
 		}
 
@@ -1113,7 +1109,6 @@ func TestRunRetryTask(t *testing.T) {
 	tests := []struct {
 		retry       map[string][]base.Z
 		qname       string
-		score       int64
 		id          uuid.UUID
 		want        error // expected return value from calling RunRetryTask
 		wantRetry   map[string][]*base.TaskMessage
@@ -1127,7 +1122,6 @@ func TestRunRetryTask(t *testing.T) {
 				},
 			},
 			qname: "default",
-			score: s2,
 			id:    t2.ID,
 			want:  nil,
 			wantRetry: map[string][]*base.TaskMessage{
@@ -1145,8 +1139,7 @@ func TestRunRetryTask(t *testing.T) {
 				},
 			},
 			qname: "default",
-			score: 123,
-			id:    t2.ID,
+			id:    uuid.New(),
 			want:  ErrTaskNotFound,
 			wantRetry: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
@@ -1166,7 +1159,6 @@ func TestRunRetryTask(t *testing.T) {
 				},
 			},
 			qname: "low",
-			score: s2,
 			id:    t3.ID,
 			want:  nil,
 			wantRetry: map[string][]*base.TaskMessage{
@@ -1184,9 +1176,9 @@ func TestRunRetryTask(t *testing.T) {
 		h.FlushDB(t, r.client)                      // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry) // initialize retry queue
 
-		got := r.RunRetryTask(tc.qname, tc.id, tc.score)
+		got := r.RunRetryTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("r.RunRetryTask(%q, %s, %d) = %v, want %v", tc.qname, tc.id, tc.score, got, tc.want)
+			t.Errorf("r.RunRetryTask(%q, %s) = %v, want %v", tc.qname, tc.id, got, tc.want)
 			continue
 		}
 
@@ -1218,7 +1210,6 @@ func TestRunScheduledTask(t *testing.T) {
 	tests := []struct {
 		scheduled     map[string][]base.Z
 		qname         string
-		score         int64
 		id            uuid.UUID
 		want          error // expected return value from calling RunScheduledTask
 		wantScheduled map[string][]*base.TaskMessage
@@ -1232,7 +1223,6 @@ func TestRunScheduledTask(t *testing.T) {
 				},
 			},
 			qname: "default",
-			score: s2,
 			id:    t2.ID,
 			want:  nil,
 			wantScheduled: map[string][]*base.TaskMessage{
@@ -1250,8 +1240,7 @@ func TestRunScheduledTask(t *testing.T) {
 				},
 			},
 			qname: "default",
-			score: 123,
-			id:    t2.ID,
+			id:    uuid.New(),
 			want:  ErrTaskNotFound,
 			wantScheduled: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
@@ -1271,7 +1260,6 @@ func TestRunScheduledTask(t *testing.T) {
 				},
 			},
 			qname: "notifications",
-			score: s1,
 			id:    t3.ID,
 			want:  nil,
 			wantScheduled: map[string][]*base.TaskMessage{
@@ -1289,9 +1277,9 @@ func TestRunScheduledTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got := r.RunScheduledTask(tc.qname, tc.id, tc.score)
+		got := r.RunScheduledTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("r.RunRetryTask(%q, %s, %d) = %v, want %v", tc.qname, tc.id, tc.score, got, tc.want)
+			t.Errorf("r.RunRetryTask(%q, %s) = %v, want %v", tc.qname, tc.id, got, tc.want)
 			continue
 		}
 

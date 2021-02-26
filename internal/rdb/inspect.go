@@ -431,8 +431,8 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, erro
 // RunArchivedTask finds an archived task that matches the given id and score from
 // the given queue and enqueues it for processing.
 // If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) RunArchivedTask(qname string, id uuid.UUID, score int64) error {
-	n, err := r.removeAndRun(base.ArchivedKey(qname), base.PendingKey(qname), id.String(), float64(score))
+func (r *RDB) RunArchivedTask(qname string, id uuid.UUID) error {
+	n, err := r.removeAndRun(base.ArchivedKey(qname), base.PendingKey(qname), id.String())
 	if err != nil {
 		return err
 	}
@@ -445,8 +445,8 @@ func (r *RDB) RunArchivedTask(qname string, id uuid.UUID, score int64) error {
 // RunRetryTask finds a retry task that matches the given id and score from
 // the given queue and enqueues it for processing.
 // If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) RunRetryTask(qname string, id uuid.UUID, score int64) error {
-	n, err := r.removeAndRun(base.RetryKey(qname), base.PendingKey(qname), id.String(), float64(score))
+func (r *RDB) RunRetryTask(qname string, id uuid.UUID) error {
+	n, err := r.removeAndRun(base.RetryKey(qname), base.PendingKey(qname), id.String())
 	if err != nil {
 		return err
 	}
@@ -459,8 +459,8 @@ func (r *RDB) RunRetryTask(qname string, id uuid.UUID, score int64) error {
 // RunScheduledTask finds a scheduled task that matches the given id and score from
 // from the given queue and enqueues it for processing.
 // If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) RunScheduledTask(qname string, id uuid.UUID, score int64) error {
-	n, err := r.removeAndRun(base.ScheduledKey(qname), base.PendingKey(qname), id.String(), float64(score))
+func (r *RDB) RunScheduledTask(qname string, id uuid.UUID) error {
+	n, err := r.removeAndRun(base.ScheduledKey(qname), base.PendingKey(qname), id.String())
 	if err != nil {
 		return err
 	}
@@ -488,20 +488,20 @@ func (r *RDB) RunAllArchivedTasks(qname string) (int64, error) {
 	return r.removeAndRunAll(base.ArchivedKey(qname), base.PendingKey(qname))
 }
 
+// KEYS[1] -> sorted set to remove the id from
+// KEYS[2] -> asynq:{<qname>}:pending
+// ARGV[1] -> task ID
 var removeAndRunCmd = redis.NewScript(`
-local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
-for _, msg in ipairs(msgs) do
-	local decoded = cjson.decode(msg)
-	if decoded["ID"] == ARGV[2] then
-		redis.call("LPUSH", KEYS[2], msg)
-		redis.call("ZREM", KEYS[1], msg)
-		return 1
+	local n = redis.call("ZREM", KEYS[1], ARGV[1])
+	if n == 0 then
+		return 0
 	end
-end
-return 0`)
+	redis.call("LPUSH", KEYS[2], ARGV[1])
+	return 1
+`)
 
-func (r *RDB) removeAndRun(zset, qkey, id string, score float64) (int64, error) {
-	res, err := removeAndRunCmd.Run(r.client, []string{zset, qkey}, score, id).Result()
+func (r *RDB) removeAndRun(zset, qkey, id string) (int64, error) {
+	res, err := removeAndRunCmd.Run(r.client, []string{zset, qkey}, id).Result()
 	if err != nil {
 		return 0, err
 	}
