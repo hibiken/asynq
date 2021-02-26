@@ -1511,7 +1511,7 @@ func TestRunAllRetryTasks(t *testing.T) {
 	}
 }
 
-func TestRunAllDeadTasks(t *testing.T) {
+func TestRunAllArchivedTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	t1 := h.NewTaskMessage("send_email", nil)

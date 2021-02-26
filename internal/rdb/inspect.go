@@ -513,12 +513,12 @@ func (r *RDB) removeAndRun(zset, qkey, id string) (int64, error) {
 }
 
 var removeAndRunAllCmd = redis.NewScript(`
-local msgs = redis.call("ZRANGE", KEYS[1], 0, -1)
-for _, msg in ipairs(msgs) do
-	redis.call("LPUSH", KEYS[2], msg)
-	redis.call("ZREM", KEYS[1], msg)
+local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
+for _, id in ipairs(ids) do
+	redis.call("LPUSH", KEYS[2], id)
+	redis.call("ZREM", KEYS[1], id)
 end
-return table.getn(msgs)`)
+return table.getn(ids)`)
 
 func (r *RDB) removeAndRunAll(zset, qkey string) (int64, error) {
 	res, err := removeAndRunAllCmd.Run(r.client, []string{zset, qkey}).Result()
