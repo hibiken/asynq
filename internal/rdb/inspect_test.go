@@ -841,7 +841,7 @@ func TestListRetryPagination(t *testing.T) {
 	}
 }
 
-func TestListDead(t *testing.T) {
+func TestListArchived(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := &base.TaskMessage{
@@ -932,7 +932,7 @@ func TestListDead(t *testing.T) {
 	}
 }
 
-func TestListDeadPagination(t *testing.T) {
+func TestListArchivedPagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	var entries []base.Z
