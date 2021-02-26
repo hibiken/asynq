@@ -518,8 +518,8 @@ func TestInspectorListPendingTasks(t *testing.T) {
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
-	m3 := h.NewTaskMessage("task3", nil)
-	m4 := h.NewTaskMessage("task4", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "critical")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "low")
 
 	inspector := New(getRedisConnOpt(t))
 
@@ -587,8 +587,8 @@ func TestInspectorListActiveTasks(t *testing.T) {
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
-	m3 := h.NewTaskMessage("task3", nil)
-	m4 := h.NewTaskMessage("task4", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 
 	inspector := New(getRedisConnOpt(t))
 
