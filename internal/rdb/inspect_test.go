@@ -1617,7 +1617,7 @@ func TestRunAllArchivedTasks(t *testing.T) {
 	}
 }
 
-func TestKillRetryTask(t *testing.T) {
+func TestArchiveRetryTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -1634,7 +1634,6 @@ func TestKillRetryTask(t *testing.T) {
 		archived     map[string][]base.Z
 		qname        string
 		id           uuid.UUID
-		score        int64
 		want         error
 		wantRetry    map[string][]base.Z
 		wantArchived map[string][]base.Z
@@ -1651,7 +1650,6 @@ func TestKillRetryTask(t *testing.T) {
 			},
 			qname: "default",
 			id:    m1.ID,
-			score: t1.Unix(),
 			want:  nil,
 			wantRetry: map[string][]base.Z{
 				"default": {{Message: m2, Score: t2.Unix()}},
@@ -1668,8 +1666,7 @@ func TestKillRetryTask(t *testing.T) {
 				"default": {{Message: m2, Score: t2.Unix()}},
 			},
 			qname: "default",
-			id:    m2.ID,
-			score: t2.Unix(),
+			id:    uuid.New(),
 			want:  ErrTaskNotFound,
 			wantRetry: map[string][]base.Z{
 				"default": {{Message: m1, Score: t1.Unix()}},
@@ -1695,7 +1692,6 @@ func TestKillRetryTask(t *testing.T) {
 			},
 			qname: "custom",
 			id:    m3.ID,
-			score: t3.Unix(),
 			want:  nil,
 			wantRetry: map[string][]base.Z{
 				"default": {
@@ -1718,10 +1714,10 @@ func TestKillRetryTask(t *testing.T) {
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.ArchiveRetryTask(tc.qname, tc.id, tc.score)
+		got := r.ArchiveRetryTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("(*RDB).KillRetryTask(%q, %v, %v) = %v, want %v",
-				tc.qname, tc.id, tc.score, got, tc.want)
+			t.Errorf("(*RDB).KillRetryTask(%q, %v) = %v, want %v",
+				tc.qname, tc.id, got, tc.want)
 			continue
 		}
 
@@ -1743,7 +1739,7 @@ func TestKillRetryTask(t *testing.T) {
 	}
 }
 
-func TestKillScheduledTask(t *testing.T) {
+func TestArchiveScheduledTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -1760,7 +1756,6 @@ func TestKillScheduledTask(t *testing.T) {
 		archived      map[string][]base.Z
 		qname         string
 		id            uuid.UUID
-		score         int64
 		want          error
 		wantScheduled map[string][]base.Z
 		wantArchived  map[string][]base.Z
@@ -1777,7 +1772,6 @@ func TestKillScheduledTask(t *testing.T) {
 			},
 			qname: "default",
 			id:    m1.ID,
-			score: t1.Unix(),
 			want:  nil,
 			wantScheduled: map[string][]base.Z{
 				"default": {{Message: m2, Score: t2.Unix()}},
@@ -1795,7 +1789,6 @@ func TestKillScheduledTask(t *testing.T) {
 			},
 			qname: "default",
 			id:    m2.ID,
-			score: t2.Unix(),
 			want:  ErrTaskNotFound,
 			wantScheduled: map[string][]base.Z{
 				"default": {{Message: m1, Score: t1.Unix()}},
@@ -1821,7 +1814,6 @@ func TestKillScheduledTask(t *testing.T) {
 			},
 			qname: "custom",
 			id:    m3.ID,
-			score: t3.Unix(),
 			want:  nil,
 			wantScheduled: map[string][]base.Z{
 				"default": {
@@ -1844,10 +1836,10 @@ func TestKillScheduledTask(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.ArchiveScheduledTask(tc.qname, tc.id, tc.score)
+		got := r.ArchiveScheduledTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("(*RDB).KillScheduledTask(%q, %v, %v) = %v, want %v",
-				tc.qname, tc.id, tc.score, got, tc.want)
+			t.Errorf("(*RDB).KillScheduledTask(%q, %v) = %v, want %v",
+				tc.qname, tc.id, got, tc.want)
 			continue
 		}
 
