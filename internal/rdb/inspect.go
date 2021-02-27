@@ -562,13 +562,12 @@ func (r *RDB) ArchiveScheduledTask(qname string, id uuid.UUID) error {
 
 // KEYS[1] -> asynq:{<qname>}
 // KEYS[2] -> asynq:{<qname>}:archived
-// ARGV[1] -> task message to archive
+// ARGV[1] -> ID of the task to archive
 // ARGV[2] -> current timestamp
 // ARGV[3] -> cutoff timestamp (e.g., 90 days ago)
 // ARGV[4] -> max number of tasks in archive (e.g., 100)
 var archivePendingCmd = redis.NewScript(`
-local x = redis.call("LREM", KEYS[1], 1, ARGV[1])
-if x == 0 then
+if redis.call("LREM", KEYS[1], 1, ARGV[1]) == 0 then
 	return 0
 end
 redis.call("ZADD", KEYS[2], ARGV[2], ARGV[1])
@@ -577,47 +576,33 @@ redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[4])
 return 1
 `)
 
-func (r *RDB) archivePending(qname, msg string) (int64, error) {
-	keys := []string{base.PendingKey(qname), base.ArchivedKey(qname)}
-	now := time.Now()
-	limit := now.AddDate(0, 0, -archivedExpirationInDays).Unix() // 90 days ago
-	args := []interface{}{msg, now.Unix(), limit, maxArchiveSize}
-	res, err := archivePendingCmd.Run(r.client, keys, args...).Result()
-	if err != nil {
-		return 0, err
-	}
-	n, ok := res.(int64)
-	if !ok {
-		return 0, fmt.Errorf("could not cast %v to int64", res)
-	}
-	return n, nil
-}
-
-// ArchivePendingTask finds a pending task that matches the given id  from the given queue
-// and archives it. If a task that maches the id does not exist, it returns ErrTaskNotFound.
+// ArchivePendingTask finds a pending task that matches the given id
+// from the given queue and archives it.
+// If there's no match, it returns ErrTaskNotFound.
 func (r *RDB) ArchivePendingTask(qname string, id uuid.UUID) error {
-	qkey := base.PendingKey(qname)
-	data, err := r.client.LRange(qkey, 0, -1).Result()
+	keys := []string{
+		base.PendingKey(qname),
+		base.ArchivedKey(qname),
+	}
+	now := time.Now()
+	argv := []interface{}{
+		id.String(),
+		now.Unix(),
+		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
+		maxArchiveSize,
+	}
+	res, err := archivePendingCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
 		return err
 	}
-	for _, s := range data {
-		msg, err := base.DecodeMessage(s)
-		if err != nil {
-			return err
-		}
-		if msg.ID == id {
-			n, err := r.archivePending(qname, s)
-			if err != nil {
-				return err
-			}
-			if n == 0 {
-				return ErrTaskNotFound
-			}
-			return nil
-		}
+	n, ok := res.(int64)
+	if !ok {
+		return fmt.Errorf("command error: unexpected return value %v", res)
 	}
-	return ErrTaskNotFound
+	if n == 0 {
+		return ErrTaskNotFound
+	}
+	return nil
 }
 
 // ArchiveAllRetryTasks archives all retry tasks from the given queue and

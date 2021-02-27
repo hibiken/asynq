@@ -1716,7 +1716,7 @@ func TestArchiveRetryTask(t *testing.T) {
 
 		got := r.ArchiveRetryTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("(*RDB).KillRetryTask(%q, %v) = %v, want %v",
+			t.Errorf("(*RDB).ArchiveRetryTask(%q, %v) = %v, want %v",
 				tc.qname, tc.id, got, tc.want)
 			continue
 		}
@@ -1838,7 +1838,7 @@ func TestArchiveScheduledTask(t *testing.T) {
 
 		got := r.ArchiveScheduledTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("(*RDB).KillScheduledTask(%q, %v) = %v, want %v",
+			t.Errorf("(*RDB).ArchiveScheduledTask(%q, %v) = %v, want %v",
 				tc.qname, tc.id, got, tc.want)
 			continue
 		}
@@ -1861,7 +1861,112 @@ func TestArchiveScheduledTask(t *testing.T) {
 	}
 }
 
-func TestKillAllRetryTasks(t *testing.T) {
+func TestArchivePendingTask(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
+
+	oneHourAgo := time.Now().Add(-1 * time.Hour)
+
+	tests := []struct {
+		pending      map[string][]*base.TaskMessage
+		archived     map[string][]base.Z
+		qname        string
+		id           uuid.UUID
+		want         error
+		wantPending  map[string][]*base.TaskMessage
+		wantArchived map[string][]base.Z
+	}{
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+			},
+			archived: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			id:    m1.ID,
+			want:  nil,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {m2},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {{Message: m1, Score: time.Now().Unix()}},
+			},
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1},
+			},
+			archived: map[string][]base.Z{
+				"default": {{Message: m2, Score: oneHourAgo.Unix()}},
+			},
+			qname: "default",
+			id:    m2.ID,
+			want:  ErrTaskNotFound,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {m1},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {{Message: m2, Score: oneHourAgo.Unix()}},
+			},
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+				"custom":  {m3, m4},
+			},
+			archived: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			qname: "custom",
+			id:    m3.ID,
+			want:  nil,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+				"custom":  {m4},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {},
+				"custom":  {{Message: m3, Score: time.Now().Unix()}},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedAllPendingQueues(t, r.client, tc.pending)
+		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+
+		got := r.ArchivePendingTask(tc.qname, tc.id)
+		if got != tc.want {
+			t.Errorf("(*RDB).ArchivePendingTask(%q, %v) = %v, want %v",
+				tc.qname, tc.id, got, tc.want)
+			continue
+		}
+
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
+					base.PendingKey(qname), diff)
+			}
+		}
+
+		for qname, want := range tc.wantArchived {
+			gotDead := h.GetArchivedEntries(t, r.client, qname)
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
+					base.ArchivedKey(qname), diff)
+			}
+		}
+	}
+}
+func TestArchiveAllRetryTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2008,7 +2113,7 @@ func TestKillAllRetryTasks(t *testing.T) {
 	}
 }
 
-func TestKillAllScheduledTasks(t *testing.T) {
+func TestArchiveAllScheduledTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2155,7 +2260,7 @@ func TestKillAllScheduledTasks(t *testing.T) {
 	}
 }
 
-func TestDeleteDeadTask(t *testing.T) {
+func TestDeleteArchivedTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2425,7 +2530,7 @@ func TestDeleteScheduledTask(t *testing.T) {
 	}
 }
 
-func TestDeleteAllDeadTasks(t *testing.T) {
+func TestDeleteAllArchivedTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
