@@ -617,35 +617,38 @@ func (r *RDB) ArchiveAllScheduledTasks(qname string) (int64, error) {
 	return r.removeAndArchiveAll(base.ScheduledKey(qname), base.ArchivedKey(qname))
 }
 
-// KEYS[1] -> asynq:{<qname>}
+// KEYS[1] -> asynq:{<qname>}:pending
 // KEYS[2] -> asynq:{<qname>}:archived
 // ARGV[1] -> current timestamp
 // ARGV[2] -> cutoff timestamp (e.g., 90 days ago)
 // ARGV[3] -> max number of tasks in archive (e.g., 100)
 var archiveAllPendingCmd = redis.NewScript(`
-local msgs = redis.call("LRANGE", KEYS[1], 0, -1)
-for _, msg in ipairs(msgs) do
-	redis.call("ZADD", KEYS[2], ARGV[1], msg)
+local ids = redis.call("LRANGE", KEYS[1], 0, -1)
+for _, id in ipairs(ids) do
+	redis.call("ZADD", KEYS[2], ARGV[1], id)
 	redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
 	redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
 end
 redis.call("DEL", KEYS[1])
-return table.getn(msgs)`)
+return table.getn(ids)`)
 
 // ArchiveAllPendingTasks archives all pending tasks from the given queue and
-// returns the number of tasks that were moved.
+// returns the number of tasks moved.
 func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 	keys := []string{base.PendingKey(qname), base.ArchivedKey(qname)}
 	now := time.Now()
-	limit := now.AddDate(0, 0, -archivedExpirationInDays).Unix() // 90 days ago
-	args := []interface{}{now.Unix(), limit, maxArchiveSize}
-	res, err := archiveAllPendingCmd.Run(r.client, keys, args...).Result()
+	argv := []interface{}{
+		now.Unix(),
+		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
+		maxArchiveSize,
+	}
+	res, err := archiveAllPendingCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
 		return 0, err
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return 0, fmt.Errorf("could not cast %v to int64", res)
+		return 0, fmt.Errorf("command error: unexpected return value %v", res)
 	}
 	return n, nil
 }

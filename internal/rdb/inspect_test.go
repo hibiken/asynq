@@ -1966,6 +1966,138 @@ func TestArchivePendingTask(t *testing.T) {
 		}
 	}
 }
+func TestArchiveAllPendingTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
+	t1 := time.Now().Add(1 * time.Minute)
+	t2 := time.Now().Add(1 * time.Hour)
+
+	tests := []struct {
+		pending      map[string][]*base.TaskMessage
+		archived     map[string][]base.Z
+		qname        string
+		want         int64
+		wantPending  map[string][]*base.TaskMessage
+		wantArchived map[string][]base.Z
+	}{
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+			},
+			archived: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			want:  2,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: time.Now().Unix()},
+					{Message: m2, Score: time.Now().Unix()},
+				},
+			},
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1},
+			},
+			archived: map[string][]base.Z{
+				"default": {{Message: m2, Score: t2.Unix()}},
+			},
+			qname: "default",
+			want:  1,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: time.Now().Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+			},
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			archived: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+			},
+			qname: "default",
+			want:  0,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+					{Message: m2, Score: t2.Unix()},
+				},
+			},
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+				"custom":  {m3, m4},
+			},
+			archived: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			qname: "custom",
+			want:  2,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+				"custom":  {},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {},
+				"custom": {
+					{Message: m3, Score: time.Now().Unix()},
+					{Message: m4, Score: time.Now().Unix()},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedAllPendingQueues(t, r.client, tc.pending)
+		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+
+		got, err := r.ArchiveAllPendingTasks(tc.qname)
+		if got != tc.want || err != nil {
+			t.Errorf("(*RDB).KillAllRetryTasks(%q) = %v, %v; want %v, nil",
+				tc.qname, got, err, tc.want)
+			continue
+		}
+
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
+					base.PendingKey(qname), diff)
+			}
+		}
+
+		for qname, want := range tc.wantArchived {
+			gotDead := h.GetArchivedEntries(t, r.client, qname)
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
+					base.ArchivedKey(qname), diff)
+			}
+		}
+	}
+}
 func TestArchiveAllRetryTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
