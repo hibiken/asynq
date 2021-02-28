@@ -219,7 +219,6 @@ func (r *RDB) dequeue(qnames ...string) (encoded string, deadline int64, err err
 		if deadline, err = cast.ToInt64E(data[1]); err != nil {
 			return "", 0, err
 		}
-		fmt.Printf("debug: Returning msgjson=%s deadline=%d\n", encoded, deadline)
 		return encoded, deadline, nil
 	}
 	return "", 0, ErrNoProcessableTask
