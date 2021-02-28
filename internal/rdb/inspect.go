@@ -793,31 +793,36 @@ func (r *RDB) deleteTask(key, qname, id string) error {
 }
 
 // KEYS[1] -> queue to delete
+// ARGV[1] -> task key prefix
 var deleteAllCmd = redis.NewScript(`
-local n = redis.call("ZCARD", KEYS[1])
+local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
+for _, id in ipairs(ids) do
+	local key = ARGV[1] .. id
+	redis.call("DEL", key)
+end
 redis.call("DEL", KEYS[1])
-return n`)
+return table.getn(ids)`)
 
 // DeleteAllArchivedTasks deletes all archived tasks from the given queue
 // and returns the number of tasks deleted.
 func (r *RDB) DeleteAllArchivedTasks(qname string) (int64, error) {
-	return r.deleteAll(base.ArchivedKey(qname))
+	return r.deleteAll(base.ArchivedKey(qname), qname)
 }
 
 // DeleteAllRetryTasks deletes all retry tasks from the given queue
 // and returns the number of tasks deleted.
 func (r *RDB) DeleteAllRetryTasks(qname string) (int64, error) {
-	return r.deleteAll(base.RetryKey(qname))
+	return r.deleteAll(base.RetryKey(qname), qname)
 }
 
 // DeleteAllScheduledTasks deletes all scheduled tasks from the given queue
 // and returns the number of tasks deleted.
 func (r *RDB) DeleteAllScheduledTasks(qname string) (int64, error) {
-	return r.deleteAll(base.ScheduledKey(qname))
+	return r.deleteAll(base.ScheduledKey(qname), qname)
 }
 
-func (r *RDB) deleteAll(key string) (int64, error) {
-	res, err := deleteAllCmd.Run(r.client, []string{key}).Result()
+func (r *RDB) deleteAll(key, qname string) (int64, error) {
+	res, err := deleteAllCmd.Run(r.client, []string{key}, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -828,22 +833,28 @@ func (r *RDB) deleteAll(key string) (int64, error) {
 	return n, nil
 }
 
-// KEYS[1] -> asynq:{<qname>}
+// KEYS[1] -> asynq:{<qname>}:pending
+// ARGV[1] -> task key prefix
 var deleteAllPendingCmd = redis.NewScript(`
-local n = redis.call("LLEN", KEYS[1])
+local ids = redis.call("LRANGE", KEYS[1], 0, -1)
+for _, id in ipairs(ids) do
+	local key = ARGV[1] .. id
+	redis.call("DEL", key)
+end
 redis.call("DEL", KEYS[1])
-return n`)
+return table.getn(ids)`)
 
 // DeleteAllPendingTasks deletes all pending tasks from the given queue
 // and returns the number of tasks deleted.
 func (r *RDB) DeleteAllPendingTasks(qname string) (int64, error) {
-	res, err := deleteAllPendingCmd.Run(r.client, []string{base.PendingKey(qname)}).Result()
+	res, err := deleteAllPendingCmd.Run(r.client,
+		[]string{base.PendingKey(qname)}, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
 		return 0, err
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return 0, fmt.Errorf("could not cast %v to int64", res)
+		return 0, fmt.Errorf("command error: unexpected return value %v", res)
 	}
 	return n, nil
 }

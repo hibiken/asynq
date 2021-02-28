@@ -2905,6 +2905,63 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 	}
 }
 
+func TestDeleteAllPendingTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+
+	tests := []struct {
+		pending     map[string][]*base.TaskMessage
+		qname       string
+		want        int64
+		wantPending map[string][]*base.TaskMessage
+	}{
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+				"custom":  {m3},
+			},
+			qname: "default",
+			want:  2,
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+				"custom":  {m3},
+			},
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"custom": {},
+			},
+			qname: "custom",
+			want:  0,
+			wantPending: map[string][]*base.TaskMessage{
+				"custom": {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllPendingQueues(t, r.client, tc.pending)
+
+		got, err := r.DeleteAllPendingTasks(tc.qname)
+		if err != nil {
+			t.Errorf("r.DeleteAllPendingTasks(%q) returned error: %v", tc.qname, err)
+		}
+		if got != tc.want {
+			t.Errorf("r.DeleteAllPendingTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
+		}
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
+			}
+		}
+	}
+}
+
 func TestRemoveQueue(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
