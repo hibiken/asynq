@@ -3060,6 +3060,10 @@ func TestRemoveQueue(t *testing.T) {
 				t.Errorf("key %q still exists", key)
 			}
 		}
+
+		if n := len(r.client.Keys(base.TaskKeyPrefix(tc.qname) + "*").Val()); n != 0 {
+			t.Errorf("%d keys still exists for tasks", n)
+		}
 	}
 }
 

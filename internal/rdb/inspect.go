@@ -884,10 +884,26 @@ func (e *ErrQueueNotEmpty) Error() string {
 // KEYS[4] -> asynq:{<qname>}:retry
 // KEYS[5] -> asynq:{<qname>}:archived
 // KEYS[6] -> asynq:{<qname>}:deadlines
+// ARGV[1] -> task key prefix
 var removeQueueForceCmd = redis.NewScript(`
 local active = redis.call("LLEN", KEYS[2])
 if active > 0 then
     return redis.error_reply("Queue has tasks active")
+end
+for _, id in ipairs(redis.call("LRANGE", KEYS[1], 0, -1)) do
+	redis.call("DEL", ARGV[1] .. id)
+end
+for _, id in ipairs(redis.call("LRANGE", KEYS[2], 0, -1)) do
+	redis.call("DEL", ARGV[1] .. id)
+end
+for _, id in ipairs(redis.call("ZRANGE", KEYS[3], 0, -1)) do
+	redis.call("DEL", ARGV[1] .. id)
+end
+for _, id in ipairs(redis.call("ZRANGE", KEYS[4], 0, -1)) do
+	redis.call("DEL", ARGV[1] .. id)
+end
+for _, id in ipairs(redis.call("ZRANGE", KEYS[5], 0, -1)) do
+	redis.call("DEL", ARGV[1] .. id)
 end
 redis.call("DEL", KEYS[1])
 redis.call("DEL", KEYS[2])
@@ -898,21 +914,35 @@ redis.call("DEL", KEYS[6])
 return redis.status_reply("OK")`)
 
 // Checks whether queue is empty before removing.
-// KEYS[1] -> asynq:{<qname>}
+// KEYS[1] -> asynq:{<qname>}:pending
 // KEYS[2] -> asynq:{<qname>}:active
 // KEYS[3] -> asynq:{<qname>}:scheduled
 // KEYS[4] -> asynq:{<qname>}:retry
 // KEYS[5] -> asynq:{<qname>}:archived
 // KEYS[6] -> asynq:{<qname>}:deadlines
+// ARGV[1] -> task key prefix
 var removeQueueCmd = redis.NewScript(`
-local pending = redis.call("LLEN", KEYS[1]) 
-local active = redis.call("LLEN", KEYS[2])
-local scheduled = redis.call("SCARD", KEYS[3])
-local retry = redis.call("SCARD", KEYS[4])
-local archived = redis.call("SCARD", KEYS[5])
-local total = pending + active + scheduled + retry + archived
-if total > 0 then
+local ids = {}
+for _, id in ipairs(redis.call("LRANGE", KEYS[1], 0, -1)) do
+	table.insert(ids, id)
+end
+for _, id in ipairs(redis.call("LRANGE", KEYS[2], 0, -1)) do
+	table.insert(ids, id)
+end
+for _, id in ipairs(redis.call("ZRANGE", KEYS[3], 0, -1)) do
+	table.insert(ids, id)
+end
+for _, id in ipairs(redis.call("ZRANGE", KEYS[4], 0, -1)) do
+	table.insert(ids, id)
+end
+for _, id in ipairs(redis.call("ZRANGE", KEYS[5], 0, -1)) do
+	table.insert(ids, id)
+end
+if table.getn(ids) > 0 then
 	return redis.error_reply("QUEUE NOT EMPTY")
+end
+for _, id in ipairs(ids) do
+	redis.call("DEL", ARGV[1] .. id)
 end
 redis.call("DEL", KEYS[1])
 redis.call("DEL", KEYS[2])
@@ -950,7 +980,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 		base.ArchivedKey(qname),
 		base.DeadlinesKey(qname),
 	}
-	if err := script.Run(r.client, keys).Err(); err != nil {
+	if err := script.Run(r.client, keys, base.TaskKeyPrefix(qname)).Err(); err != nil {
 		if err.Error() == "QUEUE NOT EMPTY" {
 			return &ErrQueueNotEmpty{qname}
 		}
