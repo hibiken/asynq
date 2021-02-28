@@ -721,68 +721,70 @@ func (r *RDB) removeAndArchiveAll(src, dst string) (int64, error) {
 
 // DeleteArchivedTask deletes an archived task that matches the given id and score from the given queue.
 // If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) DeleteArchivedTask(qname string, id uuid.UUID, score int64) error {
-	return r.deleteTask(base.ArchivedKey(qname), id.String(), float64(score))
+func (r *RDB) DeleteArchivedTask(qname string, id uuid.UUID) error {
+	return r.deleteTask(base.ArchivedKey(qname), qname, id.String())
 }
 
 // DeleteRetryTask deletes a retry task that matches the given id and score from the given queue.
 // If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) DeleteRetryTask(qname string, id uuid.UUID, score int64) error {
-	return r.deleteTask(base.RetryKey(qname), id.String(), float64(score))
+func (r *RDB) DeleteRetryTask(qname string, id uuid.UUID) error {
+	return r.deleteTask(base.RetryKey(qname), qname, id.String())
 }
 
 // DeleteScheduledTask deletes a scheduled task that matches the given id and score from the given queue.
 // If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) DeleteScheduledTask(qname string, id uuid.UUID, score int64) error {
-	return r.deleteTask(base.ScheduledKey(qname), id.String(), float64(score))
+func (r *RDB) DeleteScheduledTask(qname string, id uuid.UUID) error {
+	return r.deleteTask(base.ScheduledKey(qname), qname, id.String())
 }
+
+// KEYS[1] -> asynq:{<qname>}:pending
+// KEYS[2] -> asynq:{<qname>}:t:<task_id>
+// ARGV[1] -> task ID
+var deletePendingTaskCmd = redis.NewScript(`
+if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
+	return 0
+end
+return redis.call("DEL", KEYS[2])
+`)
 
 // DeletePendingTask deletes a pending tasks that matches the given id from the given queue.
-// If a task that matches the id does not exist, it returns ErrTaskNotFound.
+// If there's no match, it returns ErrTaskNotFound.
 func (r *RDB) DeletePendingTask(qname string, id uuid.UUID) error {
-	qkey := base.PendingKey(qname)
-	data, err := r.client.LRange(qkey, 0, -1).Result()
-	if err != nil {
-		return err
-	}
-	for _, s := range data {
-		msg, err := base.DecodeMessage(s)
-		if err != nil {
-			return err
-		}
-		if msg.ID == id {
-			n, err := r.client.LRem(qkey, 1, s).Result()
-			if err != nil {
-				return err
-			}
-			if n == 0 {
-				return ErrTaskNotFound
-			}
-			return nil
-		}
-	}
-	return ErrTaskNotFound
-}
-
-var deleteTaskCmd = redis.NewScript(`
-local msgs = redis.call("ZRANGEBYSCORE", KEYS[1], ARGV[1], ARGV[1])
-for _, msg in ipairs(msgs) do
-	local decoded = cjson.decode(msg)
-	if decoded["ID"] == ARGV[2] then
-		redis.call("ZREM", KEYS[1], msg)
-		return 1
-	end
-end
-return 0`)
-
-func (r *RDB) deleteTask(key, id string, score float64) error {
-	res, err := deleteTaskCmd.Run(r.client, []string{key}, score, id).Result()
+	keys := []string{base.PendingKey(qname), base.TaskKey(qname, id.String())}
+	res, err := deletePendingTaskCmd.Run(r.client, keys, id.String()).Result()
 	if err != nil {
 		return err
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return fmt.Errorf("could not cast %v to int64", res)
+		return fmt.Errorf("command error: unexpected return value %v", res)
+	}
+	if n == 0 {
+		return ErrTaskNotFound
+	}
+	return nil
+}
+
+// KEYS[1] -> ZSET key to remove the task from (e.g. asynq:{<qname>}:retry)
+// KEYS[2] -> asynq:{<qname>}:t:<task_id>
+// ARGV[1] -> task ID
+var deleteTaskCmd = redis.NewScript(`
+if redis.call("ZREM", KEYS[1], ARGV[1]) == 0 then
+	return 0
+end
+return redis.call("DEL", KEYS[2])
+`)
+
+func (r *RDB) deleteTask(key, qname, id string) error {
+	keys := []string{key, base.TaskKey(qname, id)}
+	argv := []interface{}{id}
+	res, err := deleteTaskCmd.Run(r.client, keys, argv...).Result()
+	if err != nil {
+		return err
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return fmt.Errorf("command error: unexpected return value %v", res)
 	}
 	if n == 0 {
 		return ErrTaskNotFound
