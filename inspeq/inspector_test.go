@@ -1254,13 +1254,13 @@ func TestInspectorArchiveAllPendingTasks(t *testing.T) {
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
-				"default": {m3, m4},
+				"default": {m3},
 			},
 			archived: map[string][]base.Z{
 				"default": {z1, z2},
 			},
 			qname: "default",
-			want:  2,
+			want:  1,
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
@@ -1269,7 +1269,6 @@ func TestInspectorArchiveAllPendingTasks(t *testing.T) {
 					z1,
 					z2,
 					base.Z{Message: m3, Score: now.Unix()},
-					base.Z{Message: m4, Score: now.Unix()},
 				},
 			},
 		},
