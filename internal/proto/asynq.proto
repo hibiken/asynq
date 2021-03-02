@@ -14,9 +14,9 @@ message TaskMessage {
 
   string queue = 4;
 
-  string retry = 5;
+  int32 retry = 5;
 
-  string retried = 6;
+  int32 retried = 6;
 
   string error_msg = 7;
 

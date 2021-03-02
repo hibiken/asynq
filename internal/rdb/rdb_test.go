@@ -101,7 +101,7 @@ func TestEnqueueUnique(t *testing.T) {
 	m1 := base.TaskMessage{
 		ID:        uuid.New(),
 		Type:      "email",
-		Payload:   map[string]interface{}{"user_id": float64(123)},
+		Payload:   map[string]interface{}{"user_id": json.Number("123")},
 		Queue:     base.DefaultQueueName,
 		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", map[string]interface{}{"user_id": 123}),
 	}
