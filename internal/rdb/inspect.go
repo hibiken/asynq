@@ -343,7 +343,7 @@ func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskMessa
 	reverse(data)
 	var msgs []*base.TaskMessage
 	for _, s := range data {
-		m, err := base.DecodeMessage(s)
+		m, err := base.DecodeMessage([]byte(s))
 		if err != nil {
 			continue // bad data, ignore and continue
 		}
@@ -419,7 +419,7 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, erro
 		if err != nil {
 			return nil, err
 		}
-		msg, err := base.DecodeMessage(s)
+		msg, err := base.DecodeMessage([]byte(s))
 		if err != nil {
 			continue // bad data, ignore and continue
 		}

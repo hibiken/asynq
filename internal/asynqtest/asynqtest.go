@@ -140,7 +140,7 @@ func MustMarshal(tb testing.TB, msg *base.TaskMessage) string {
 // Calling test will fail if unmarshaling errors out.
 func MustUnmarshal(tb testing.TB, data string) *base.TaskMessage {
 	tb.Helper()
-	msg, err := base.DecodeMessage(data)
+	msg, err := base.DecodeMessage([]byte(data))
 	if err != nil {
 		tb.Fatal(err)
 	}

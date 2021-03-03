@@ -218,11 +218,10 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 	return proto.Marshal(&pbmsg)
 }
 
-// DecodeMessage unmarshals the given encoded string and returns a decoded task message.
-// TODO: should take []byte instead of string
-func DecodeMessage(s string) (*TaskMessage, error) {
+// DecodeMessage unmarshals the given bytes and returns a decoded task message.
+func DecodeMessage(data []byte) (*TaskMessage, error) {
 	var pbmsg pb.TaskMessage
-	if err := proto.Unmarshal([]byte(s), &pbmsg); err != nil {
+	if err := proto.Unmarshal(data, &pbmsg); err != nil {
 		return nil, err
 	}
 	d := json.NewDecoder(bytes.NewReader(pbmsg.Payload))

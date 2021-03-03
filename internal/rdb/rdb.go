@@ -146,7 +146,7 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, deadline time.Ti
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	if msg, err = base.DecodeMessage(encoded); err != nil {
+	if msg, err = base.DecodeMessage([]byte(encoded)); err != nil {
 		return nil, time.Time{}, err
 	}
 	return msg, time.Unix(d, 0), nil
@@ -619,7 +619,7 @@ func (r *RDB) ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*bas
 			return nil, err
 		}
 		for _, s := range data {
-			msg, err := base.DecodeMessage(s)
+			msg, err := base.DecodeMessage([]byte(s))
 			if err != nil {
 				return nil, err
 			}
