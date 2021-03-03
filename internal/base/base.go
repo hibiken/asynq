@@ -197,12 +197,11 @@ type TaskMessage struct {
 	UniqueKey string
 }
 
-// EncodeMessage marshals the given task message in JSON and returns an encoded string.
-// TODO: Should return []byte instead of string
-func EncodeMessage(msg *TaskMessage) (string, error) {
+// EncodeMessage marshals the given task message and returns an encoded bytes.
+func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 	payload, err := json.Marshal(msg.Payload)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	pbmsg := pb.TaskMessage{
 		Type:      msg.Type,
@@ -216,11 +215,7 @@ func EncodeMessage(msg *TaskMessage) (string, error) {
 		Deadline:  msg.Deadline,
 		UniqueKey: msg.UniqueKey,
 	}
-	b, err := proto.Marshal(&pbmsg)
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
+	return proto.Marshal(&pbmsg)
 }
 
 // DecodeMessage unmarshals the given encoded string and returns a decoded task message.
