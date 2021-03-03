@@ -647,14 +647,14 @@ return redis.status_reply("OK")`)
 
 // WriteServerState writes server state data to redis with expiration set to the value ttl.
 func (r *RDB) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo, ttl time.Duration) error {
-	bytes, err := json.Marshal(info)
+	bytes, err := base.EncodeServerInfo(info)
 	if err != nil {
 		return err
 	}
 	exp := time.Now().Add(ttl).UTC()
 	args := []interface{}{ttl.Seconds(), bytes} // args to the lua script
 	for _, w := range workers {
-		bytes, err := json.Marshal(w)
+		bytes, err := base.EncodeWorkerInfo(w)
 		if err != nil {
 			continue // skip bad data
 		}

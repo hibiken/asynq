@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
+	"github.com/golang/protobuf/ptypes"
 	"github.com/google/uuid"
 	pb "github.com/hibiken/asynq/internal/proto"
 	"google.golang.org/protobuf/proto"
@@ -203,7 +204,7 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	pbmsg := pb.TaskMessage{
+	return proto.Marshal(&pb.TaskMessage{
 		Type:      msg.Type,
 		Payload:   payload,
 		Id:        msg.ID.String(),
@@ -214,8 +215,7 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 		Timeout:   msg.Timeout,
 		Deadline:  msg.Deadline,
 		UniqueKey: msg.UniqueKey,
-	}
-	return proto.Marshal(&pbmsg)
+	})
 }
 
 // DecodeMessage unmarshals the given bytes and returns a decoded task message.
@@ -322,17 +322,128 @@ type ServerInfo struct {
 	ActiveWorkerCount int
 }
 
+// EncodeServerInfo marshals the given ServerInfo and returns the encoded bytes.
+func EncodeServerInfo(info *ServerInfo) ([]byte, error) {
+	queues := make(map[string]int32)
+	for q, p := range info.Queues {
+		queues[q] = int32(p)
+	}
+	ts, err := ptypes.TimestampProto(info.Started)
+	if err != nil {
+		return nil, err
+	}
+	return proto.Marshal(&pb.ServerInfo{
+		Host:              info.Host,
+		Pid:               int32(info.PID),
+		ServerId:          info.ServerID,
+		Concurrency:       int32(info.Concurrency),
+		Queues:            queues,
+		StrictPriority:    info.StrictPriority,
+		Status:            info.Status,
+		StartTime:         ts,
+		ActiveWorkerCount: int32(info.ActiveWorkerCount),
+	})
+}
+
+// DecodeServerInfo decodes the given bytes into ServerInfo.
+func DecodeServerInfo(b []byte) (*ServerInfo, error) {
+	var pbmsg pb.ServerInfo
+	if err := proto.Unmarshal(b, &pbmsg); err != nil {
+		return nil, err
+	}
+	queues := make(map[string]int)
+	for q, p := range pbmsg.GetQueues() {
+		queues[q] = int(p)
+	}
+	startTime, err := ptypes.Timestamp(pbmsg.GetStartTime())
+	if err != nil {
+		return nil, err
+	}
+	return &ServerInfo{
+		Host:              pbmsg.Host,
+		PID:               int(pbmsg.Pid),
+		ServerID:          pbmsg.ServerId,
+		Concurrency:       int(pbmsg.Concurrency),
+		Queues:            queues,
+		StrictPriority:    pbmsg.StrictPriority,
+		Status:            pbmsg.Status,
+		Started:           startTime,
+		ActiveWorkerCount: int(pbmsg.ActiveWorkerCount),
+	}, nil
+}
+
 // WorkerInfo holds information about a running worker.
 type WorkerInfo struct {
 	Host     string
 	PID      int
 	ServerID string
+	// TODO: Can we have Task field (*TaskMessage)?
 	ID       string
 	Type     string
-	Queue    string
 	Payload  map[string]interface{}
+	Queue    string
 	Started  time.Time
 	Deadline time.Time
+}
+
+// EncodeWorkerInfo marshals the given WorkerInfo and returns the encoded bytes.
+func EncodeWorkerInfo(info *WorkerInfo) ([]byte, error) {
+	payload, err := json.Marshal(info.Payload)
+	if err != nil {
+		return nil, err
+	}
+	startTime, err := ptypes.TimestampProto(info.Started)
+	if err != nil {
+		return nil, err
+	}
+	deadline, err := ptypes.TimestampProto(info.Deadline)
+	if err != nil {
+		return nil, err
+	}
+	return proto.Marshal(&pb.WorkerInfo{
+		Host:        info.Host,
+		Pid:         int32(info.PID),
+		ServerId:    info.ServerID,
+		TaskId:      info.ID,
+		TaskType:    info.Type,
+		TaskPayload: payload,
+		Queue:       info.Queue,
+		StartTime:   startTime,
+		Deadline:    deadline,
+	})
+}
+
+// DecodeWorkerInfo decodes the given bytes into WorkerInfo.
+func DecodeWorkerInfo(b []byte) (*WorkerInfo, error) {
+	var pbmsg pb.WorkerInfo
+	if err := proto.Unmarshal(b, &pbmsg); err != nil {
+		return nil, err
+	}
+	d := json.NewDecoder(bytes.NewReader(pbmsg.GetTaskPayload()))
+	d.UseNumber()
+	payload := make(map[string]interface{})
+	if err := d.Decode(&payload); err != nil {
+		return nil, err
+	}
+	startTime, err := ptypes.Timestamp(pbmsg.GetStartTime())
+	if err != nil {
+		return nil, err
+	}
+	deadline, err := ptypes.Timestamp(pbmsg.GetDeadline())
+	if err != nil {
+		return nil, err
+	}
+	return &WorkerInfo{
+		Host:     pbmsg.Host,
+		PID:      int(pbmsg.Pid),
+		ServerID: pbmsg.ServerId,
+		ID:       pbmsg.TaskId,
+		Type:     pbmsg.TaskType,
+		Payload:  payload,
+		Queue:    pbmsg.Queue,
+		Started:  startTime,
+		Deadline: deadline,
+	}, nil
 }
 
 // SchedulerEntry holds information about a periodic task registered with a scheduler.

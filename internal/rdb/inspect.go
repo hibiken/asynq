@@ -1013,11 +1013,11 @@ func (r *RDB) ListServers() ([]*base.ServerInfo, error) {
 		if err != nil {
 			continue // skip bad data
 		}
-		var info base.ServerInfo
-		if err := json.Unmarshal([]byte(data), &info); err != nil {
+		info, err := base.DecodeServerInfo([]byte(data))
+		if err != nil {
 			continue // skip bad data
 		}
-		servers = append(servers, &info)
+		servers = append(servers, info)
 	}
 	return servers, nil
 }
@@ -1047,11 +1047,11 @@ func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
 			continue // skip bad data
 		}
 		for _, s := range data {
-			var w base.WorkerInfo
-			if err := json.Unmarshal([]byte(s), &w); err != nil {
+			w, err := base.DecodeWorkerInfo([]byte(s))
+			if err != nil {
 				continue // skip bad data
 			}
-			workers = append(workers, &w)
+			workers = append(workers, w)
 		}
 	}
 	return workers, nil

@@ -1,7 +1,7 @@
 syntax = "proto3";
 package tutorial;
 
-//import "google/protobuf/timestamp.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/hibiken/asynq/internal/proto";
 
@@ -25,4 +25,30 @@ message TaskMessage {
   int64 deadline = 9;
 
   string unique_key = 10;
+};
+
+// ServerInfo holds information about a running server.
+message ServerInfo {
+  string host = 1;
+  int32 pid = 2;
+  string server_id = 3;
+  int32 concurrency = 4;
+  map<string, int32> queues = 5;
+  bool strict_priority = 6;
+  string status = 7;
+  google.protobuf.Timestamp start_time = 8;
+  int32 active_worker_count = 9;
+};
+
+// WorkerInfo holds information about a running worker.
+message WorkerInfo {
+  string host = 1;
+  int32 pid = 2;
+  string server_id = 3;
+  string task_id = 4;
+  string task_type = 5;
+  bytes task_payload = 6;
+  string queue = 7;
+  google.protobuf.Timestamp start_time = 8;
+  google.protobuf.Timestamp deadline = 9;
 };
