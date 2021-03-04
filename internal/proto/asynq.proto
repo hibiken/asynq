@@ -1,10 +1,12 @@
 syntax = "proto3";
-package tutorial;
+package asynq;
 
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/hibiken/asynq/internal/proto";
 
+// TaskMessage is the internal representation of a task with additional metadata fields.
+// See base.TaskMessage for details of each field.
 message TaskMessage {
   string type = 1;
 
@@ -51,4 +53,38 @@ message WorkerInfo {
   string queue = 7;
   google.protobuf.Timestamp start_time = 8;
   google.protobuf.Timestamp deadline = 9;
+};
+
+// SchedulerEntry holds information about a periodic task registered with a scheduler.
+message SchedulerEntry {
+	// Identifier of the scheduler entry.
+	string id = 1;
+
+	// Periodic schedule spec of the entry.
+	string spec = 2;
+
+	// Task type of the periodic task.
+	string task_type = 3;
+
+	// Task payload of the periodic task.
+	bytes task_payload = 4;
+
+	// Options used to enqueue the periodic task.
+	repeated string enqueue_options = 5;
+
+	// Next time the task will be enqueued.
+  google.protobuf.Timestamp next_enqueue_time = 6;
+
+	// Last time the task was enqueued.
+	// Zero time if task was never enqueued.
+  google.protobuf.Timestamp prev_enqueue_time = 7;
+};
+
+// SchedulerEnqueueEvent holds information about an enqueue event by a scheduler.
+message SchedulerEnqueueEvent {
+	// ID of the task that was enqueued.
+  string task_id = 1;
+
+	// Time the task was enqueued.
+  google.protobuf.Timestamp enqueue_time = 2;
 };

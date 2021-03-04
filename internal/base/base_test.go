@@ -446,6 +446,71 @@ func TestWorkerInfoEncoding(t *testing.T) {
 	}
 }
 
+func TestSchedulerEntryEncoding(t *testing.T) {
+	tests := []struct {
+		entry SchedulerEntry
+	}{
+		{
+			entry: SchedulerEntry{
+				ID:      uuid.NewString(),
+				Spec:    "* * * * *",
+				Type:    "task_A",
+				Payload: map[string]interface{}{"foo": "bar"},
+				Opts:    []string{"Queue('email')"},
+				Next:    time.Now().Add(30 * time.Second).UTC(),
+				Prev:    time.Now().Add(-2 * time.Minute).UTC(),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		encoded, err := EncodeSchedulerEntry(&tc.entry)
+		if err != nil {
+			t.Errorf("EncodeSchedulerEntry(entry) returned error: %v", err)
+			continue
+		}
+		decoded, err := DecodeSchedulerEntry(encoded)
+		if err != nil {
+			t.Errorf("DecodeSchedulerEntry(encoded) returned error: %v", err)
+			continue
+		}
+		if diff := cmp.Diff(&tc.entry, decoded); diff != "" {
+			t.Errorf("Decoded SchedulerEntry == %+v, want %+v;(-want,+got)\n%s",
+				decoded, tc.entry, diff)
+		}
+	}
+}
+
+func TestSchedulerEnqueueEventEncoding(t *testing.T) {
+	tests := []struct {
+		event SchedulerEnqueueEvent
+	}{
+		{
+			event: SchedulerEnqueueEvent{
+				TaskID:     uuid.NewString(),
+				EnqueuedAt: time.Now().Add(-30 * time.Second).UTC(),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		encoded, err := EncodeSchedulerEnqueueEvent(&tc.event)
+		if err != nil {
+			t.Errorf("EncodeSchedulerEnqueueEvent(event) returned error: %v", err)
+			continue
+		}
+		decoded, err := DecodeSchedulerEnqueueEvent(encoded)
+		if err != nil {
+			t.Errorf("DecodeSchedulerEnqueueEvent(encoded) returned error: %v", err)
+			continue
+		}
+		if diff := cmp.Diff(&tc.event, decoded); diff != "" {
+			t.Errorf("Decoded SchedulerEnqueueEvent == %+v, want %+v;(-want,+got)\n%s",
+				decoded, tc.event, diff)
+		}
+	}
+}
+
 // Test for status being accessed by multiple goroutines.
 // Run with -race flag to check for data race.
 func TestStatusConcurrentAccess(t *testing.T) {

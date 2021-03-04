@@ -224,10 +224,8 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 	if err := proto.Unmarshal(data, &pbmsg); err != nil {
 		return nil, err
 	}
-	d := json.NewDecoder(bytes.NewReader(pbmsg.Payload))
-	d.UseNumber()
-	payload := make(map[string]interface{})
-	if err := d.Decode(&payload); err != nil {
+	payload, err := decodePayload(pbmsg.GetPayload())
+	if err != nil {
 		return nil, err
 	}
 	return &TaskMessage{
@@ -413,16 +411,24 @@ func EncodeWorkerInfo(info *WorkerInfo) ([]byte, error) {
 	})
 }
 
+func decodePayload(b []byte) (map[string]interface{}, error) {
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.UseNumber()
+	payload := make(map[string]interface{})
+	if err := d.Decode(&payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
 // DecodeWorkerInfo decodes the given bytes into WorkerInfo.
 func DecodeWorkerInfo(b []byte) (*WorkerInfo, error) {
 	var pbmsg pb.WorkerInfo
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
 		return nil, err
 	}
-	d := json.NewDecoder(bytes.NewReader(pbmsg.GetTaskPayload()))
-	d.UseNumber()
-	payload := make(map[string]interface{})
-	if err := d.Decode(&payload); err != nil {
+	payload, err := decodePayload(pbmsg.GetTaskPayload())
+	if err != nil {
 		return nil, err
 	}
 	startTime, err := ptypes.Timestamp(pbmsg.GetStartTime())
@@ -471,6 +477,60 @@ type SchedulerEntry struct {
 	Prev time.Time
 }
 
+// EncodeSchedulerEntry marshals the given entry and returns an encoded bytes.
+func EncodeSchedulerEntry(entry *SchedulerEntry) ([]byte, error) {
+	payload, err := json.Marshal(entry.Payload)
+	if err != nil {
+		return nil, err
+	}
+	next, err := ptypes.TimestampProto(entry.Next)
+	if err != nil {
+		return nil, err
+	}
+	prev, err := ptypes.TimestampProto(entry.Prev)
+	if err != nil {
+		return nil, err
+	}
+	return proto.Marshal(&pb.SchedulerEntry{
+		Id:              entry.ID,
+		Spec:            entry.Spec,
+		TaskType:        entry.Type,
+		TaskPayload:     payload,
+		EnqueueOptions:  entry.Opts,
+		NextEnqueueTime: next,
+		PrevEnqueueTime: prev,
+	})
+}
+
+// DecodeSchedulerEntry unmarshals the given bytes and returns a decoded SchedulerEntry.
+func DecodeSchedulerEntry(b []byte) (*SchedulerEntry, error) {
+	var pbmsg pb.SchedulerEntry
+	if err := proto.Unmarshal(b, &pbmsg); err != nil {
+		return nil, err
+	}
+	payload, err := decodePayload(pbmsg.GetTaskPayload())
+	if err != nil {
+		return nil, err
+	}
+	next, err := ptypes.Timestamp(pbmsg.GetNextEnqueueTime())
+	if err != nil {
+		return nil, err
+	}
+	prev, err := ptypes.Timestamp(pbmsg.GetPrevEnqueueTime())
+	if err != nil {
+		return nil, err
+	}
+	return &SchedulerEntry{
+		ID:      pbmsg.Id,
+		Spec:    pbmsg.Spec,
+		Type:    pbmsg.TaskType,
+		Payload: payload,
+		Opts:    pbmsg.EnqueueOptions,
+		Next:    next,
+		Prev:    prev,
+	}, nil
+}
+
 // SchedulerEnqueueEvent holds information about an enqueue event by a scheduler.
 type SchedulerEnqueueEvent struct {
 	// ID of the task that was enqueued.
@@ -478,6 +538,36 @@ type SchedulerEnqueueEvent struct {
 
 	// Time the task was enqueued.
 	EnqueuedAt time.Time
+}
+
+// EncodeSchedulerEnqueueEvent marshals the given event
+// and returns an encoded bytes.
+func EncodeSchedulerEnqueueEvent(event *SchedulerEnqueueEvent) ([]byte, error) {
+	enqueuedAt, err := ptypes.TimestampProto(event.EnqueuedAt)
+	if err != nil {
+		return nil, err
+	}
+	return proto.Marshal(&pb.SchedulerEnqueueEvent{
+		TaskId:      event.TaskID,
+		EnqueueTime: enqueuedAt,
+	})
+}
+
+// DecodeSchedulerEnqueueEvent unmarshals the given bytes
+// and returns a decoded SchedulerEnqueueEvent.
+func DecodeSchedulerEnqueueEvent(b []byte) (*SchedulerEnqueueEvent, error) {
+	var pbmsg pb.SchedulerEnqueueEvent
+	if err := proto.Unmarshal(b, &pbmsg); err != nil {
+		return nil, err
+	}
+	enqueuedAt, err := ptypes.Timestamp(pbmsg.GetEnqueueTime())
+	if err != nil {
+		return nil, err
+	}
+	return &SchedulerEnqueueEvent{
+		TaskID:     pbmsg.TaskId,
+		EnqueuedAt: enqueuedAt,
+	}, nil
 }
 
 // Cancelations is a collection that holds cancel functions for all active tasks.

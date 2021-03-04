@@ -5,7 +5,6 @@
 package rdb
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -1082,11 +1081,11 @@ func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
 			continue // skip bad data
 		}
 		for _, s := range data {
-			var e base.SchedulerEntry
-			if err := json.Unmarshal([]byte(s), &e); err != nil {
+			e, err := base.DecodeSchedulerEntry([]byte(s))
+			if err != nil {
 				continue // skip bad data
 			}
-			entries = append(entries, &e)
+			entries = append(entries, e)
 		}
 	}
 	return entries, nil
@@ -1105,11 +1104,11 @@ func (r *RDB) ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*bas
 		if err != nil {
 			return nil, err
 		}
-		var e base.SchedulerEnqueueEvent
-		if err := json.Unmarshal([]byte(data), &e); err != nil {
+		e, err := base.DecodeSchedulerEnqueueEvent([]byte(data))
+		if err != nil {
 			return nil, err
 		}
-		events = append(events, &e)
+		events = append(events, e)
 	}
 	return events, nil
 }

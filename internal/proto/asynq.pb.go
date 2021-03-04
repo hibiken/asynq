@@ -369,6 +369,168 @@ func (x *WorkerInfo) GetDeadline() *timestamppb.Timestamp {
 	return nil
 }
 
+// SchedulerEntry holds information about a periodic task registered with a scheduler.
+type SchedulerEntry struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Identifier of the scheduler entry.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Periodic schedule spec of the entry.
+	Spec string `protobuf:"bytes,2,opt,name=spec,proto3" json:"spec,omitempty"`
+	// Task type of the periodic task.
+	TaskType string `protobuf:"bytes,3,opt,name=task_type,json=taskType,proto3" json:"task_type,omitempty"`
+	// Task payload of the periodic task.
+	TaskPayload []byte `protobuf:"bytes,4,opt,name=task_payload,json=taskPayload,proto3" json:"task_payload,omitempty"`
+	// Options used to enqueue the periodic task.
+	EnqueueOptions []string `protobuf:"bytes,5,rep,name=enqueue_options,json=enqueueOptions,proto3" json:"enqueue_options,omitempty"`
+	// Next time the task will be enqueued.
+	NextEnqueueTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=next_enqueue_time,json=nextEnqueueTime,proto3" json:"next_enqueue_time,omitempty"`
+	// Last time the task was enqueued.
+	// Zero time if task was never enqueued.
+	PrevEnqueueTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=prev_enqueue_time,json=prevEnqueueTime,proto3" json:"prev_enqueue_time,omitempty"`
+}
+
+func (x *SchedulerEntry) Reset() {
+	*x = SchedulerEntry{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_asynq_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SchedulerEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SchedulerEntry) ProtoMessage() {}
+
+func (x *SchedulerEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_asynq_proto_msgTypes[3]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SchedulerEntry.ProtoReflect.Descriptor instead.
+func (*SchedulerEntry) Descriptor() ([]byte, []int) {
+	return file_asynq_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SchedulerEntry) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SchedulerEntry) GetSpec() string {
+	if x != nil {
+		return x.Spec
+	}
+	return ""
+}
+
+func (x *SchedulerEntry) GetTaskType() string {
+	if x != nil {
+		return x.TaskType
+	}
+	return ""
+}
+
+func (x *SchedulerEntry) GetTaskPayload() []byte {
+	if x != nil {
+		return x.TaskPayload
+	}
+	return nil
+}
+
+func (x *SchedulerEntry) GetEnqueueOptions() []string {
+	if x != nil {
+		return x.EnqueueOptions
+	}
+	return nil
+}
+
+func (x *SchedulerEntry) GetNextEnqueueTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NextEnqueueTime
+	}
+	return nil
+}
+
+func (x *SchedulerEntry) GetPrevEnqueueTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PrevEnqueueTime
+	}
+	return nil
+}
+
+// SchedulerEnqueueEvent holds information about an enqueue event by a scheduler.
+type SchedulerEnqueueEvent struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// ID of the task that was enqueued.
+	TaskId string `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	// Time the task was enqueued.
+	EnqueueTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=enqueue_time,json=enqueueTime,proto3" json:"enqueue_time,omitempty"`
+}
+
+func (x *SchedulerEnqueueEvent) Reset() {
+	*x = SchedulerEnqueueEvent{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_asynq_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SchedulerEnqueueEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SchedulerEnqueueEvent) ProtoMessage() {}
+
+func (x *SchedulerEnqueueEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_asynq_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SchedulerEnqueueEvent.ProtoReflect.Descriptor instead.
+func (*SchedulerEnqueueEvent) Descriptor() ([]byte, []int) {
+	return file_asynq_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SchedulerEnqueueEvent) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *SchedulerEnqueueEvent) GetEnqueueTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EnqueueTime
+	}
+	return nil
+}
+
 var File_asynq_proto protoreflect.FileDescriptor
 
 var file_asynq_proto_rawDesc = []byte{
@@ -436,10 +598,36 @@ var file_asynq_proto_rawDesc = []byte{
 	0x36, 0x0a, 0x08, 0x64, 0x65, 0x61, 0x64, 0x6c, 0x69, 0x6e, 0x65, 0x18, 0x09, 0x20, 0x01, 0x28,
 	0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
 	0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x08, 0x64,
-	0x65, 0x61, 0x64, 0x6c, 0x69, 0x6e, 0x65, 0x42, 0x29, 0x5a, 0x27, 0x67, 0x69, 0x74, 0x68, 0x75,
-	0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x68, 0x69, 0x62, 0x69, 0x6b, 0x65, 0x6e, 0x2f, 0x61, 0x73,
-	0x79, 0x6e, 0x71, 0x2f, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2f, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x65, 0x61, 0x64, 0x6c, 0x69, 0x6e, 0x65, 0x22, 0xad, 0x02, 0x0a, 0x0e, 0x53, 0x63, 0x68, 0x65,
+	0x64, 0x75, 0x6c, 0x65, 0x72, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x73, 0x70,
+	0x65, 0x63, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x73, 0x70, 0x65, 0x63, 0x12, 0x1b,
+	0x0a, 0x09, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x08, 0x74, 0x61, 0x73, 0x6b, 0x54, 0x79, 0x70, 0x65, 0x12, 0x21, 0x0a, 0x0c, 0x74,
+	0x61, 0x73, 0x6b, 0x5f, 0x70, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x18, 0x04, 0x20, 0x01, 0x28,
+	0x0c, 0x52, 0x0b, 0x74, 0x61, 0x73, 0x6b, 0x50, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x27,
+	0x0a, 0x0f, 0x65, 0x6e, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x6f, 0x70, 0x74, 0x69, 0x6f, 0x6e,
+	0x73, 0x18, 0x05, 0x20, 0x03, 0x28, 0x09, 0x52, 0x0e, 0x65, 0x6e, 0x71, 0x75, 0x65, 0x75, 0x65,
+	0x4f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x12, 0x46, 0x0a, 0x11, 0x6e, 0x65, 0x78, 0x74, 0x5f,
+	0x65, 0x6e, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x06, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0f,
+	0x6e, 0x65, 0x78, 0x74, 0x45, 0x6e, 0x71, 0x75, 0x65, 0x75, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x12,
+	0x46, 0x0a, 0x11, 0x70, 0x72, 0x65, 0x76, 0x5f, 0x65, 0x6e, 0x71, 0x75, 0x65, 0x75, 0x65, 0x5f,
+	0x74, 0x69, 0x6d, 0x65, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f,
+	0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d,
+	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0f, 0x70, 0x72, 0x65, 0x76, 0x45, 0x6e, 0x71, 0x75,
+	0x65, 0x75, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x22, 0x6f, 0x0a, 0x15, 0x53, 0x63, 0x68, 0x65, 0x64,
+	0x75, 0x6c, 0x65, 0x72, 0x45, 0x6e, 0x71, 0x75, 0x65, 0x75, 0x65, 0x45, 0x76, 0x65, 0x6e, 0x74,
+	0x12, 0x17, 0x0a, 0x07, 0x74, 0x61, 0x73, 0x6b, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x06, 0x74, 0x61, 0x73, 0x6b, 0x49, 0x64, 0x12, 0x3d, 0x0a, 0x0c, 0x65, 0x6e, 0x71,
+	0x75, 0x65, 0x75, 0x65, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75,
+	0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0b, 0x65, 0x6e, 0x71,
+	0x75, 0x65, 0x75, 0x65, 0x54, 0x69, 0x6d, 0x65, 0x42, 0x29, 0x5a, 0x27, 0x67, 0x69, 0x74, 0x68,
+	0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x68, 0x69, 0x62, 0x69, 0x6b, 0x65, 0x6e, 0x2f, 0x61,
+	0x73, 0x79, 0x6e, 0x71, 0x2f, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2f, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -454,24 +642,29 @@ func file_asynq_proto_rawDescGZIP() []byte {
 	return file_asynq_proto_rawDescData
 }
 
-var file_asynq_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_asynq_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_asynq_proto_goTypes = []interface{}{
 	(*TaskMessage)(nil),           // 0: tutorial.TaskMessage
 	(*ServerInfo)(nil),            // 1: tutorial.ServerInfo
 	(*WorkerInfo)(nil),            // 2: tutorial.WorkerInfo
-	nil,                           // 3: tutorial.ServerInfo.QueuesEntry
-	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
+	(*SchedulerEntry)(nil),        // 3: tutorial.SchedulerEntry
+	(*SchedulerEnqueueEvent)(nil), // 4: tutorial.SchedulerEnqueueEvent
+	nil,                           // 5: tutorial.ServerInfo.QueuesEntry
+	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
 }
 var file_asynq_proto_depIdxs = []int32{
-	3, // 0: tutorial.ServerInfo.queues:type_name -> tutorial.ServerInfo.QueuesEntry
-	4, // 1: tutorial.ServerInfo.start_time:type_name -> google.protobuf.Timestamp
-	4, // 2: tutorial.WorkerInfo.start_time:type_name -> google.protobuf.Timestamp
-	4, // 3: tutorial.WorkerInfo.deadline:type_name -> google.protobuf.Timestamp
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	5, // 0: tutorial.ServerInfo.queues:type_name -> tutorial.ServerInfo.QueuesEntry
+	6, // 1: tutorial.ServerInfo.start_time:type_name -> google.protobuf.Timestamp
+	6, // 2: tutorial.WorkerInfo.start_time:type_name -> google.protobuf.Timestamp
+	6, // 3: tutorial.WorkerInfo.deadline:type_name -> google.protobuf.Timestamp
+	6, // 4: tutorial.SchedulerEntry.next_enqueue_time:type_name -> google.protobuf.Timestamp
+	6, // 5: tutorial.SchedulerEntry.prev_enqueue_time:type_name -> google.protobuf.Timestamp
+	6, // 6: tutorial.SchedulerEnqueueEvent.enqueue_time:type_name -> google.protobuf.Timestamp
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_asynq_proto_init() }
@@ -516,6 +709,30 @@ func file_asynq_proto_init() {
 				return nil
 			}
 		}
+		file_asynq_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SchedulerEntry); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_asynq_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SchedulerEnqueueEvent); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -523,7 +740,7 @@ func file_asynq_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_asynq_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

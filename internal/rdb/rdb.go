@@ -6,7 +6,6 @@
 package rdb
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -706,7 +705,7 @@ return redis.status_reply("OK")`)
 func (r *RDB) WriteSchedulerEntries(schedulerID string, entries []*base.SchedulerEntry, ttl time.Duration) error {
 	args := []interface{}{ttl.Seconds()}
 	for _, e := range entries {
-		bytes, err := json.Marshal(e)
+		bytes, err := base.EncodeSchedulerEntry(e)
 		if err != nil {
 			continue // skip bad data
 		}
@@ -761,7 +760,7 @@ const maxEvents = 1000
 // RecordSchedulerEnqueueEvent records the time when the given task was enqueued.
 func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerEnqueueEvent) error {
 	key := base.SchedulerHistoryKey(entryID)
-	data, err := json.Marshal(event)
+	data, err := base.EncodeSchedulerEnqueueEvent(event)
 	if err != nil {
 		return err
 	}
