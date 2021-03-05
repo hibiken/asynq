@@ -37,12 +37,12 @@ func init() {
 	flag.StringVar(&redisClusterAddrs, "redis_cluster_addrs", "localhost:7000,localhost:7001,localhost:7002", "comma separated list of redis server addresses")
 }
 
-func setup(t *testing.T) (r *RDB) {
-	t.Helper()
+func setup(tb testing.TB) (r *RDB) {
+	tb.Helper()
 	if useRedisCluster {
 		addrs := strings.Split(redisClusterAddrs, ",")
 		if len(addrs) == 0 {
-			t.Fatal("No redis cluster addresses provided. Please set addresses using --redis_cluster_addrs flag.")
+			tb.Fatal("No redis cluster addresses provided. Please set addresses using --redis_cluster_addrs flag.")
 		}
 		r = NewRDB(redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs: addrs,
@@ -54,7 +54,7 @@ func setup(t *testing.T) (r *RDB) {
 		}))
 	}
 	// Start each test with a clean slate.
-	h.FlushDB(t, r.client)
+	h.FlushDB(tb, r.client)
 	return r
 }
 
