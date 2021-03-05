@@ -138,7 +138,7 @@ func (opt RedisFailoverClientOpt) MakeRedisClient() interface{} {
 	})
 }
 
-// RedisFailoverClientOpt is used to creates a redis client that connects to
+// RedisClusterClientOpt is used to creates a redis client that connects to
 // redis cluster.
 type RedisClusterClientOpt struct {
 	// A seed list of host:port addresses of cluster nodes.

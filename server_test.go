@@ -70,7 +70,7 @@ func TestServerRun(t *testing.T) {
 	go func() {
 		select {
 		case <-time.After(10 * time.Second):
-			t.Fatal("server did not stop after receiving TERM signal")
+			panic("server did not stop after receiving TERM signal")
 		case <-done:
 		}
 	}()
