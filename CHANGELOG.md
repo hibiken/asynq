@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2021-03-10
+
 ### Added
 
 - `Unregister` method is added to `Scheduler` to remove a registered entry.
