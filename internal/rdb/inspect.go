@@ -1022,36 +1022,37 @@ func (r *RDB) ListServers() ([]*base.ServerInfo, error) {
 }
 
 // Note: Script also removes stale keys.
-var listWorkerKeysCmd = redis.NewScript(`
+var listWorkersCmd = redis.NewScript(`
 local now = tonumber(ARGV[1])
 local keys = redis.call("ZRANGEBYSCORE", KEYS[1], now, "+inf")
 redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
-return keys`)
+local res = {}
+for _, key in ipairs(keys) do
+	local vals = redis.call("HVALS", key)
+	for _, v in ipairs(vals) do
+		table.insert(res, v)
+	end
+end
+return res`)
 
 // ListWorkers returns the list of worker stats.
 func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
 	now := time.Now()
-	res, err := listWorkerKeysCmd.Run(r.client, []string{base.AllWorkers}, now.Unix()).Result()
+	res, err := listWorkersCmd.Run(r.client, []string{base.AllWorkers}, now.Unix()).Result()
 	if err != nil {
 		return nil, err
 	}
-	keys, err := cast.ToStringSliceE(res)
+	data, err := cast.ToStringSliceE(res)
 	if err != nil {
 		return nil, err
 	}
 	var workers []*base.WorkerInfo
-	for _, key := range keys {
-		data, err := r.client.HVals(key).Result()
+	for _, s := range data {
+		w, err := base.DecodeWorkerInfo([]byte(s))
 		if err != nil {
 			continue // skip bad data
 		}
-		for _, s := range data {
-			w, err := base.DecodeWorkerInfo([]byte(s))
-			if err != nil {
-				continue // skip bad data
-			}
-			workers = append(workers, w)
-		}
+		workers = append(workers, w)
 	}
 	return workers, nil
 }

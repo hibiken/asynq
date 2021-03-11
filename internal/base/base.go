@@ -381,7 +381,6 @@ type WorkerInfo struct {
 	Host     string
 	PID      int
 	ServerID string
-	// TODO: Can we have Task field (*TaskMessage)?
 	ID       string
 	Type     string
 	Payload  map[string]interface{}
