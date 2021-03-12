@@ -5,7 +5,6 @@
 package rdb
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -343,7 +342,7 @@ func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskMessa
 	reverse(data)
 	var msgs []*base.TaskMessage
 	for _, s := range data {
-		m, err := base.DecodeMessage(s)
+		m, err := base.DecodeMessage([]byte(s))
 		if err != nil {
 			continue // bad data, ignore and continue
 		}
@@ -419,7 +418,7 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, erro
 		if err != nil {
 			return nil, err
 		}
-		msg, err := base.DecodeMessage(s)
+		msg, err := base.DecodeMessage([]byte(s))
 		if err != nil {
 			continue // bad data, ignore and continue
 		}
@@ -1013,46 +1012,47 @@ func (r *RDB) ListServers() ([]*base.ServerInfo, error) {
 		if err != nil {
 			continue // skip bad data
 		}
-		var info base.ServerInfo
-		if err := json.Unmarshal([]byte(data), &info); err != nil {
+		info, err := base.DecodeServerInfo([]byte(data))
+		if err != nil {
 			continue // skip bad data
 		}
-		servers = append(servers, &info)
+		servers = append(servers, info)
 	}
 	return servers, nil
 }
 
 // Note: Script also removes stale keys.
-var listWorkerKeysCmd = redis.NewScript(`
+var listWorkersCmd = redis.NewScript(`
 local now = tonumber(ARGV[1])
 local keys = redis.call("ZRANGEBYSCORE", KEYS[1], now, "+inf")
 redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
-return keys`)
+local res = {}
+for _, key in ipairs(keys) do
+	local vals = redis.call("HVALS", key)
+	for _, v in ipairs(vals) do
+		table.insert(res, v)
+	end
+end
+return res`)
 
 // ListWorkers returns the list of worker stats.
 func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
 	now := time.Now()
-	res, err := listWorkerKeysCmd.Run(r.client, []string{base.AllWorkers}, now.Unix()).Result()
+	res, err := listWorkersCmd.Run(r.client, []string{base.AllWorkers}, now.Unix()).Result()
 	if err != nil {
 		return nil, err
 	}
-	keys, err := cast.ToStringSliceE(res)
+	data, err := cast.ToStringSliceE(res)
 	if err != nil {
 		return nil, err
 	}
 	var workers []*base.WorkerInfo
-	for _, key := range keys {
-		data, err := r.client.HVals(key).Result()
+	for _, s := range data {
+		w, err := base.DecodeWorkerInfo([]byte(s))
 		if err != nil {
 			continue // skip bad data
 		}
-		for _, s := range data {
-			var w base.WorkerInfo
-			if err := json.Unmarshal([]byte(s), &w); err != nil {
-				continue // skip bad data
-			}
-			workers = append(workers, &w)
-		}
+		workers = append(workers, w)
 	}
 	return workers, nil
 }
@@ -1082,11 +1082,11 @@ func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
 			continue // skip bad data
 		}
 		for _, s := range data {
-			var e base.SchedulerEntry
-			if err := json.Unmarshal([]byte(s), &e); err != nil {
+			e, err := base.DecodeSchedulerEntry([]byte(s))
+			if err != nil {
 				continue // skip bad data
 			}
-			entries = append(entries, &e)
+			entries = append(entries, e)
 		}
 	}
 	return entries, nil
@@ -1105,11 +1105,11 @@ func (r *RDB) ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*bas
 		if err != nil {
 			return nil, err
 		}
-		var e base.SchedulerEnqueueEvent
-		if err := json.Unmarshal([]byte(data), &e); err != nil {
+		e, err := base.DecodeSchedulerEnqueueEvent([]byte(data))
+		if err != nil {
 			return nil, err
 		}
-		events = append(events, &e)
+		events = append(events, e)
 	}
 	return events, nil
 }

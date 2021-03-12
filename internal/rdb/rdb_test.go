@@ -101,7 +101,7 @@ func TestEnqueueUnique(t *testing.T) {
 	m1 := base.TaskMessage{
 		ID:        uuid.New(),
 		Type:      "email",
-		Payload:   map[string]interface{}{"user_id": float64(123)},
+		Payload:   map[string]interface{}{"user_id": json.Number("123")},
 		Queue:     base.DefaultQueueName,
 		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", map[string]interface{}{"user_id": 123}),
 	}
@@ -1474,7 +1474,7 @@ func TestWriteServerState(t *testing.T) {
 		Concurrency:       10,
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
-		Started:           time.Now(),
+		Started:           time.Now().UTC(),
 		Status:            "running",
 		ActiveWorkerCount: 0,
 	}
@@ -1487,12 +1487,11 @@ func TestWriteServerState(t *testing.T) {
 	// Check ServerInfo was written correctly.
 	skey := base.ServerInfoKey(host, pid, serverID)
 	data := r.client.Get(skey).Val()
-	var got base.ServerInfo
-	err = json.Unmarshal([]byte(data), &got)
+	got, err := base.DecodeServerInfo([]byte(data))
 	if err != nil {
-		t.Fatalf("could not decode json: %v", err)
+		t.Fatalf("could not decode server info: %v", err)
 	}
-	if diff := cmp.Diff(info, got); diff != "" {
+	if diff := cmp.Diff(info, *got); diff != "" {
 		t.Errorf("persisted ServerInfo was %v, want %v; (-want,+got)\n%s",
 			got, info, diff)
 	}
@@ -1565,7 +1564,7 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		Concurrency:       10,
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
-		Started:           time.Now().Add(-10 * time.Minute),
+		Started:           time.Now().Add(-10 * time.Minute).UTC(),
 		Status:            "running",
 		ActiveWorkerCount: len(workers),
 	}
@@ -1578,12 +1577,11 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 	// Check ServerInfo was written correctly.
 	skey := base.ServerInfoKey(host, pid, serverID)
 	data := r.client.Get(skey).Val()
-	var got base.ServerInfo
-	err = json.Unmarshal([]byte(data), &got)
+	got, err := base.DecodeServerInfo([]byte(data))
 	if err != nil {
-		t.Fatalf("could not decode json: %v", err)
+		t.Fatalf("could not decode server info: %v", err)
 	}
-	if diff := cmp.Diff(serverInfo, got); diff != "" {
+	if diff := cmp.Diff(serverInfo, *got); diff != "" {
 		t.Errorf("persisted ServerInfo was %v, want %v; (-want,+got)\n%s",
 			got, serverInfo, diff)
 	}
@@ -1607,11 +1605,11 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 	}
 	var gotWorkers []*base.WorkerInfo
 	for _, val := range wdata {
-		var w base.WorkerInfo
-		if err := json.Unmarshal([]byte(val), &w); err != nil {
+		w, err := base.DecodeWorkerInfo([]byte(val))
+		if err != nil {
 			t.Fatalf("could not unmarshal worker's data: %v", err)
 		}
-		gotWorkers = append(gotWorkers, &w)
+		gotWorkers = append(gotWorkers, w)
 	}
 	if diff := cmp.Diff(workers, gotWorkers, h.SortWorkerInfoOpt); diff != "" {
 		t.Errorf("persisted workers info was %v, want %v; (-want,+got)\n%s",

@@ -6,7 +6,6 @@
 package asynqtest
 
 import (
-	"encoding/json"
 	"math"
 	"sort"
 	"testing"
@@ -130,7 +129,7 @@ func TaskMessageWithError(t base.TaskMessage, errMsg string) *base.TaskMessage {
 // Calling test will fail if marshaling errors out.
 func MustMarshal(tb testing.TB, msg *base.TaskMessage) string {
 	tb.Helper()
-	data, err := json.Marshal(msg)
+	data, err := base.EncodeMessage(msg)
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -141,12 +140,11 @@ func MustMarshal(tb testing.TB, msg *base.TaskMessage) string {
 // Calling test will fail if unmarshaling errors out.
 func MustUnmarshal(tb testing.TB, data string) *base.TaskMessage {
 	tb.Helper()
-	var msg base.TaskMessage
-	err := json.Unmarshal([]byte(data), &msg)
+	msg, err := base.DecodeMessage([]byte(data))
 	if err != nil {
 		tb.Fatal(err)
 	}
-	return &msg
+	return msg
 }
 
 // MustMarshalSlice marshals a slice of task messages and return a slice of

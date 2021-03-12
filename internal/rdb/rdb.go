@@ -6,7 +6,6 @@
 package rdb
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -146,7 +145,7 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, deadline time.Ti
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	if msg, err = base.DecodeMessage(encoded); err != nil {
+	if msg, err = base.DecodeMessage([]byte(encoded)); err != nil {
 		return nil, time.Time{}, err
 	}
 	return msg, time.Unix(d, 0), nil
@@ -615,7 +614,7 @@ func (r *RDB) ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*bas
 			return nil, err
 		}
 		for _, s := range data {
-			msg, err := base.DecodeMessage(s)
+			msg, err := base.DecodeMessage([]byte(s))
 			if err != nil {
 				return nil, err
 			}
@@ -643,14 +642,14 @@ return redis.status_reply("OK")`)
 
 // WriteServerState writes server state data to redis with expiration set to the value ttl.
 func (r *RDB) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo, ttl time.Duration) error {
-	bytes, err := json.Marshal(info)
+	bytes, err := base.EncodeServerInfo(info)
 	if err != nil {
 		return err
 	}
 	exp := time.Now().Add(ttl).UTC()
 	args := []interface{}{ttl.Seconds(), bytes} // args to the lua script
 	for _, w := range workers {
-		bytes, err := json.Marshal(w)
+		bytes, err := base.EncodeWorkerInfo(w)
 		if err != nil {
 			continue // skip bad data
 		}
@@ -702,7 +701,7 @@ return redis.status_reply("OK")`)
 func (r *RDB) WriteSchedulerEntries(schedulerID string, entries []*base.SchedulerEntry, ttl time.Duration) error {
 	args := []interface{}{ttl.Seconds()}
 	for _, e := range entries {
-		bytes, err := json.Marshal(e)
+		bytes, err := base.EncodeSchedulerEntry(e)
 		if err != nil {
 			continue // skip bad data
 		}
@@ -757,7 +756,7 @@ const maxEvents = 1000
 // RecordSchedulerEnqueueEvent records the time when the given task was enqueued.
 func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerEnqueueEvent) error {
 	key := base.SchedulerHistoryKey(entryID)
-	data, err := json.Marshal(event)
+	data, err := base.EncodeSchedulerEnqueueEvent(event)
 	if err != nil {
 		return err
 	}
