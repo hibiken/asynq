@@ -150,6 +150,17 @@ func TestEnqueueUnique(t *testing.T) {
 				tc.msg, tc.ttl, err)
 			continue
 		}
+		gotPending := h.GetPendingMessages(t, r.client, tc.msg.Queue)
+		if len(gotPending) != 1 {
+			t.Errorf("%q has length %d, want 1", base.PendingKey(tc.msg.Queue), len(gotPending))
+			continue
+		}
+		if diff := cmp.Diff(tc.msg, gotPending[0]); diff != "" {
+			t.Errorf("persisted data differed from the original input (-want, +got)\n%s", diff)
+		}
+		if !r.client.SIsMember(base.AllQueues, tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		}
 
 		// Check Pending list has task ID.
 		pendingKey := base.PendingKey(tc.msg.Queue)
