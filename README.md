@@ -293,7 +293,7 @@ go get -u github.com/hibiken/asynq/tools/asynq
 
 | Dependency                 | Version |
 | -------------------------- | ------- |
-| [Redis](https://redis.io/) | v3.0+   |
+| [Redis](https://redis.io/) | v4.0+   |
 | [Go](https://golang.org/)  | v1.13+  |
 
 ## Contributing

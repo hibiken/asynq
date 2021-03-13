@@ -69,7 +69,7 @@ func (f *forwarder) start(wg *sync.WaitGroup) {
 }
 
 func (f *forwarder) exec() {
-	if err := f.broker.CheckAndEnqueue(f.queues...); err != nil {
+	if err := f.broker.ForwardIfReady(f.queues...); err != nil {
 		f.logger.Errorf("Could not enqueue scheduled tasks: %v", err)
 	}
 }
