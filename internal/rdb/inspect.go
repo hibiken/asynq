@@ -425,11 +425,19 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, erro
 		s, err := cast.ToStringE(data[i])
 		if err != nil {
 			return nil, err
+<<<<<<< HEAD
 		}
 		score, err := cast.ToInt64E(data[i+1])
 		if err != nil {
 			return nil, err
 		}
+=======
+		}
+		score, err := cast.ToInt64E(data[i+1])
+		if err != nil {
+			return nil, err
+		}
+>>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		msg, err := base.DecodeMessage([]byte(s))
 		if err != nil {
 			continue // bad data, ignore and continue
