@@ -765,10 +765,17 @@ func (r *RDB) DeletePendingTask(qname string, id uuid.UUID) error {
 	n, ok := res.(int64)
 	if !ok {
 		return fmt.Errorf("command error: unexpected return value %v", res)
+<<<<<<< HEAD
 	}
 	if n == 0 {
 		return ErrTaskNotFound
 	}
+=======
+	}
+	if n == 0 {
+		return ErrTaskNotFound
+	}
+>>>>>>> e0402fe... Refactor redis keys and store messages in protobuf
 	return nil
 }
 
