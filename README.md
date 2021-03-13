@@ -50,7 +50,7 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 
 ## Quickstart
 
-Make sure you have Go installed ([download](https://golang.org/dl/)). Version `1.13` or higher is required. 
+Make sure you have Go installed ([download](https://golang.org/dl/)). Version `1.13` or higher is required.
 
 Initialize your project by creating a folder and then running `go mod init github.com/your/repo` ([learn more](https://blog.golang.org/using-go-modules)) inside the folder. Then install Asynq library with the [`go get`](https://golang.org/cmd/go/#hdr-Add_dependencies_to_current_module_and_install_them) command:
 
@@ -58,7 +58,7 @@ Initialize your project by creating a folder and then running `go mod init githu
 go get -u github.com/hibiken/asynq
 ```
 
-Make sure you're running a Redis server locally or from a [Docker](https://hub.docker.com/_/redis) container. Version `3.0` or higher is required. 
+Make sure you're running a Redis server locally or from a [Docker](https://hub.docker.com/_/redis) container. Version `3.0` or higher is required.
 
 Next, write a package that encapsulates task creation and task handling.
 
@@ -262,11 +262,11 @@ To learn more about `asynq` features and APIs, see the package [godoc](https://g
 
 Here's a few screenshots of the Web UI:
 
-**Queues view**  
+**Queues view**
 
 ![Web UI Queues View](https://user-images.githubusercontent.com/11155743/114697016-07327f00-9d26-11eb-808c-0ac841dc888e.png)
 
-**Tasks view**  
+**Tasks view**
 
 ![Web UI TasksView](https://user-images.githubusercontent.com/11155743/114697070-1f0a0300-9d26-11eb-855c-d3ec263865b7.png)
 
@@ -274,7 +274,7 @@ Here's a few screenshots of the Web UI:
 
 ![Web UI Settings and adaptive dark mode](https://user-images.githubusercontent.com/11155743/114697149-3517c380-9d26-11eb-9f7a-ae2dd00aad5b.png)
 
-For details on how to use the tool, refer to the tool's [README](https://github.com/hibiken/asynqmon#readme). 
+For details on how to use the tool, refer to the tool's [README](https://github.com/hibiken/asynqmon#readme).
 
 ## Command Line Tool
 

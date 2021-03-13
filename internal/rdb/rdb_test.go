@@ -83,7 +83,7 @@ func TestEnqueue(t *testing.T) {
 
 		gotPending := h.GetPendingMessages(t, r.client, tc.msg.Queue)
 		if len(gotPending) != 1 {
-			t.Errorf("%q has length %d, want 1", base.QueueKey(tc.msg.Queue), len(gotPending))
+			t.Errorf("%q has length %d, want 1", base.PendingKey(tc.msg.Queue), len(gotPending))
 			continue
 		}
 		if diff := cmp.Diff(tc.msg, gotPending[0]); diff != "" {
@@ -101,7 +101,7 @@ func TestEnqueueUnique(t *testing.T) {
 	m1 := base.TaskMessage{
 		ID:        uuid.New(),
 		Type:      "email",
-		Payload:   map[string]interface{}{"user_id": 123},
+		Payload:   map[string]interface{}{"user_id": json.Number("123")},
 		Queue:     base.DefaultQueueName,
 		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", map[string]interface{}{"user_id": 123}),
 	}
@@ -116,13 +116,26 @@ func TestEnqueueUnique(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case.
 
+		// Enqueue the first message, should succeed.
 		err := r.EnqueueUnique(tc.msg, tc.ttl)
 		if err != nil {
 			t.Errorf("First message: (*RDB).EnqueueUnique(%v, %v) = %v, want nil",
 				tc.msg, tc.ttl, err)
 			continue
 		}
+		gotPending := h.GetPendingMessages(t, r.client, tc.msg.Queue)
+		if len(gotPending) != 1 {
+			t.Errorf("%q has length %d, want 1", base.PendingKey(tc.msg.Queue), len(gotPending))
+			continue
+		}
+		if diff := cmp.Diff(tc.msg, gotPending[0]); diff != "" {
+			t.Errorf("persisted data differed from the original input (-want, +got)\n%s", diff)
+		}
+		if !r.client.SIsMember(base.AllQueues, tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		}
 
+		// Enqueue the second message, should fail.
 		got := r.EnqueueUnique(tc.msg, tc.ttl)
 		if got != ErrDuplicateTask {
 			t.Errorf("Second message: (*RDB).EnqueueUnique(%v, %v) = %v, want %v",
@@ -133,9 +146,6 @@ func TestEnqueueUnique(t *testing.T) {
 		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL %q = %v, want %v", tc.msg.UniqueKey, gotTTL, tc.ttl)
 			continue
-		}
-		if !r.client.SIsMember(base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
 		}
 	}
 }
@@ -148,6 +158,7 @@ func TestDequeue(t *testing.T) {
 		ID:       uuid.New(),
 		Type:     "send_email",
 		Payload:  map[string]interface{}{"subject": "hello!"},
+		Queue:    "default",
 		Timeout:  1800,
 		Deadline: 0,
 	}
@@ -156,6 +167,7 @@ func TestDequeue(t *testing.T) {
 		ID:       uuid.New(),
 		Type:     "export_csv",
 		Payload:  nil,
+		Queue:    "critical",
 		Timeout:  0,
 		Deadline: 1593021600,
 	}
@@ -164,10 +176,10 @@ func TestDequeue(t *testing.T) {
 		ID:       uuid.New(),
 		Type:     "reindex",
 		Payload:  nil,
+		Queue:    "low",
 		Timeout:  int64((5 * time.Minute).Seconds()),
 		Deadline: time.Now().Add(10 * time.Minute).Unix(),
 	}
-	t3Deadline := now.Unix() + t3.Timeout // use whichever is earliest
 
 	tests := []struct {
 		pending       map[string][]*base.TaskMessage
@@ -243,26 +255,26 @@ func TestDequeue(t *testing.T) {
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
-				"default":  {t3},
+				"default":  {t1},
 				"critical": {},
-				"low":      {t2, t1},
+				"low":      {t3},
 			},
 			args:         []string{"critical", "default", "low"},
-			wantMsg:      t3,
-			wantDeadline: time.Unix(t3Deadline, 0),
+			wantMsg:      t1,
+			wantDeadline: time.Unix(t1Deadline, 0),
 			err:          nil,
 			wantPending: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
-				"low":      {t2, t1},
+				"low":      {t3},
 			},
 			wantActive: map[string][]*base.TaskMessage{
-				"default":  {t3},
+				"default":  {t1},
 				"critical": {},
 				"low":      {},
 			},
 			wantDeadlines: map[string][]base.Z{
-				"default":  {{Message: t3, Score: t3Deadline}},
+				"default":  {{Message: t1, Score: t1Deadline}},
 				"critical": {},
 				"low":      {},
 			},
@@ -319,7 +331,7 @@ func TestDequeue(t *testing.T) {
 		for queue, want := range tc.wantPending {
 			gotPending := h.GetPendingMessages(t, r.client, queue)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.QueueKey(queue), diff)
+				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.PendingKey(queue), diff)
 			}
 		}
 		for queue, want := range tc.wantActive {
@@ -438,7 +450,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 		for queue, want := range tc.wantPending {
 			gotPending := h.GetPendingMessages(t, r.client, queue)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.QueueKey(queue), diff)
+				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.PendingKey(queue), diff)
 			}
 		}
 		for queue, want := range tc.wantActive {
@@ -485,7 +497,7 @@ func TestDone(t *testing.T) {
 
 	tests := []struct {
 		desc          string
-		inProgress    map[string][]*base.TaskMessage // initial state of the active list
+		active        map[string][]*base.TaskMessage // initial state of the active list
 		deadlines     map[string][]base.Z            // initial state of deadlines set
 		target        *base.TaskMessage              // task to remove
 		wantActive    map[string][]*base.TaskMessage // final state of the active list
@@ -493,7 +505,7 @@ func TestDone(t *testing.T) {
 	}{
 		{
 			desc: "removes message from the correct queue",
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1},
 				"custom":  {t2},
 			},
@@ -513,7 +525,7 @@ func TestDone(t *testing.T) {
 		},
 		{
 			desc: "with one queue",
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
 			deadlines: map[string][]base.Z{
@@ -529,7 +541,7 @@ func TestDone(t *testing.T) {
 		},
 		{
 			desc: "with multiple messages in a queue",
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1, t3},
 				"custom":  {t2},
 			},
@@ -552,8 +564,8 @@ func TestDone(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
-		for _, msgs := range tc.inProgress {
+		h.SeedAllActiveQueues(t, r.client, tc.active)
+		for _, msgs := range tc.active {
 			for _, msg := range msgs {
 				// Set uniqueness lock if unique key is present.
 				if len(msg.UniqueKey) > 0 {
@@ -634,7 +646,7 @@ func TestRequeue(t *testing.T) {
 
 	tests := []struct {
 		pending       map[string][]*base.TaskMessage // initial state of queues
-		inProgress    map[string][]*base.TaskMessage // initial state of the active list
+		active        map[string][]*base.TaskMessage // initial state of the active list
 		deadlines     map[string][]base.Z            // initial state of the deadlines set
 		target        *base.TaskMessage              // task to requeue
 		wantPending   map[string][]*base.TaskMessage // final state of queues
@@ -645,7 +657,7 @@ func TestRequeue(t *testing.T) {
 			pending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 			},
 			deadlines: map[string][]base.Z{
@@ -671,7 +683,7 @@ func TestRequeue(t *testing.T) {
 			pending: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t2},
 			},
 			deadlines: map[string][]base.Z{
@@ -695,7 +707,7 @@ func TestRequeue(t *testing.T) {
 				"default":  {t1},
 				"critical": {},
 			},
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default":  {t2},
 				"critical": {t3},
 			},
@@ -722,7 +734,7 @@ func TestRequeue(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.active)
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
 
 		err := r.Requeue(tc.target)
@@ -734,7 +746,7 @@ func TestRequeue(t *testing.T) {
 		for qname, want := range tc.wantPending {
 			gotPending := h.GetPendingMessages(t, r.client, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.QueueKey(qname), diff)
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantActive {
@@ -755,12 +767,12 @@ func TestRequeue(t *testing.T) {
 func TestSchedule(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	t1 := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
+	msg := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
 	tests := []struct {
 		msg       *base.TaskMessage
 		processAt time.Time
 	}{
-		{t1, time.Now().Add(15 * time.Minute)},
+		{msg, time.Now().Add(15 * time.Minute)},
 	}
 
 	for _, tc := range tests {
@@ -886,7 +898,7 @@ func TestRetry(t *testing.T) {
 	errMsg := "SMTP server is not responding"
 
 	tests := []struct {
-		inProgress    map[string][]*base.TaskMessage
+		active        map[string][]*base.TaskMessage
 		deadlines     map[string][]base.Z
 		retry         map[string][]base.Z
 		msg           *base.TaskMessage
@@ -897,7 +909,7 @@ func TestRetry(t *testing.T) {
 		wantRetry     map[string][]base.Z
 	}{
 		{
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 			},
 			deadlines: map[string][]base.Z{
@@ -923,7 +935,7 @@ func TestRetry(t *testing.T) {
 			},
 		},
 		{
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 				"custom":  {t4},
 			},
@@ -957,7 +969,7 @@ func TestRetry(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.active)
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
@@ -1056,7 +1068,7 @@ func TestArchive(t *testing.T) {
 
 	// TODO(hibiken): add test cases for trimming
 	tests := []struct {
-		inProgress    map[string][]*base.TaskMessage
+		active        map[string][]*base.TaskMessage
 		deadlines     map[string][]base.Z
 		archived      map[string][]base.Z
 		target        *base.TaskMessage // task to archive
@@ -1065,7 +1077,7 @@ func TestArchive(t *testing.T) {
 		wantArchived  map[string][]base.Z
 	}{
 		{
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 			},
 			deadlines: map[string][]base.Z{
@@ -1094,7 +1106,7 @@ func TestArchive(t *testing.T) {
 			},
 		},
 		{
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1, t2, t3},
 			},
 			deadlines: map[string][]base.Z{
@@ -1124,7 +1136,7 @@ func TestArchive(t *testing.T) {
 			},
 		},
 		{
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {t1},
 				"custom":  {t4},
 			},
@@ -1160,7 +1172,7 @@ func TestArchive(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.active)
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
@@ -1211,7 +1223,7 @@ func TestArchive(t *testing.T) {
 	}
 }
 
-func TestCheckAndEnqueue(t *testing.T) {
+func TestForwardIfReady(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	t1 := h.NewTaskMessage("send_email", nil)
@@ -1328,7 +1340,7 @@ func TestCheckAndEnqueue(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		err := r.CheckAndEnqueue(tc.qnames...)
+		err := r.ForwardIfReady(tc.qnames...)
 		if err != nil {
 			t.Errorf("(*RDB).CheckScheduled(%v) = %v, want nil", tc.qnames, err)
 			continue
@@ -1337,7 +1349,7 @@ func TestCheckAndEnqueue(t *testing.T) {
 		for qname, want := range tc.wantPending {
 			gotPending := h.GetPendingMessages(t, r.client, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.QueueKey(qname), diff)
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantScheduled {
@@ -1462,7 +1474,7 @@ func TestWriteServerState(t *testing.T) {
 		Concurrency:       10,
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
-		Started:           time.Now(),
+		Started:           time.Now().UTC(),
 		Status:            "running",
 		ActiveWorkerCount: 0,
 	}
@@ -1475,12 +1487,11 @@ func TestWriteServerState(t *testing.T) {
 	// Check ServerInfo was written correctly.
 	skey := base.ServerInfoKey(host, pid, serverID)
 	data := r.client.Get(skey).Val()
-	var got base.ServerInfo
-	err = json.Unmarshal([]byte(data), &got)
+	got, err := base.DecodeServerInfo([]byte(data))
 	if err != nil {
-		t.Fatalf("could not decode json: %v", err)
+		t.Fatalf("could not decode server info: %v", err)
 	}
-	if diff := cmp.Diff(info, got); diff != "" {
+	if diff := cmp.Diff(info, *got); diff != "" {
 		t.Errorf("persisted ServerInfo was %v, want %v; (-want,+got)\n%s",
 			got, info, diff)
 	}
@@ -1553,7 +1564,7 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		Concurrency:       10,
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
-		Started:           time.Now().Add(-10 * time.Minute),
+		Started:           time.Now().Add(-10 * time.Minute).UTC(),
 		Status:            "running",
 		ActiveWorkerCount: len(workers),
 	}
@@ -1566,12 +1577,11 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 	// Check ServerInfo was written correctly.
 	skey := base.ServerInfoKey(host, pid, serverID)
 	data := r.client.Get(skey).Val()
-	var got base.ServerInfo
-	err = json.Unmarshal([]byte(data), &got)
+	got, err := base.DecodeServerInfo([]byte(data))
 	if err != nil {
-		t.Fatalf("could not decode json: %v", err)
+		t.Fatalf("could not decode server info: %v", err)
 	}
-	if diff := cmp.Diff(serverInfo, got); diff != "" {
+	if diff := cmp.Diff(serverInfo, *got); diff != "" {
 		t.Errorf("persisted ServerInfo was %v, want %v; (-want,+got)\n%s",
 			got, serverInfo, diff)
 	}
@@ -1595,11 +1605,11 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 	}
 	var gotWorkers []*base.WorkerInfo
 	for _, val := range wdata {
-		var w base.WorkerInfo
-		if err := json.Unmarshal([]byte(val), &w); err != nil {
+		w, err := base.DecodeWorkerInfo([]byte(val))
+		if err != nil {
 			t.Fatalf("could not unmarshal worker's data: %v", err)
 		}
-		gotWorkers = append(gotWorkers, &w)
+		gotWorkers = append(gotWorkers, w)
 	}
 	if diff := cmp.Diff(workers, gotWorkers, h.SortWorkerInfoOpt); diff != "" {
 		t.Errorf("persisted workers info was %v, want %v; (-want,+got)\n%s",

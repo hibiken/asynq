@@ -548,11 +548,12 @@ func (i *Inspector) DeleteAllArchivedTasks(qname string) (int, error) {
 }
 
 // DeleteTaskByKey deletes a task with the given key from the given queue.
+// TODO: We don't need score any more. Update this to delete task by ID
 func (i *Inspector) DeleteTaskByKey(qname, key string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return err
 	}
-	prefix, id, score, err := parseTaskKey(key)
+	prefix, id, _, err := parseTaskKey(key)
 	if err != nil {
 		return err
 	}
@@ -560,11 +561,11 @@ func (i *Inspector) DeleteTaskByKey(qname, key string) error {
 	case keyPrefixPending:
 		return i.rdb.DeletePendingTask(qname, id)
 	case keyPrefixScheduled:
-		return i.rdb.DeleteScheduledTask(qname, id, score)
+		return i.rdb.DeleteScheduledTask(qname, id)
 	case keyPrefixRetry:
-		return i.rdb.DeleteRetryTask(qname, id, score)
+		return i.rdb.DeleteRetryTask(qname, id)
 	case keyPrefixArchived:
-		return i.rdb.DeleteArchivedTask(qname, id, score)
+		return i.rdb.DeleteArchivedTask(qname, id)
 	default:
 		return fmt.Errorf("invalid key")
 	}
@@ -601,21 +602,22 @@ func (i *Inspector) RunAllArchivedTasks(qname string) (int, error) {
 }
 
 // RunTaskByKey transition a task to pending state given task key and queue name.
+// TODO: Update this to run task by ID.
 func (i *Inspector) RunTaskByKey(qname, key string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return err
 	}
-	prefix, id, score, err := parseTaskKey(key)
+	prefix, id, _, err := parseTaskKey(key)
 	if err != nil {
 		return err
 	}
 	switch prefix {
 	case keyPrefixScheduled:
-		return i.rdb.RunScheduledTask(qname, id, score)
+		return i.rdb.RunScheduledTask(qname, id)
 	case keyPrefixRetry:
-		return i.rdb.RunRetryTask(qname, id, score)
+		return i.rdb.RunRetryTask(qname, id)
 	case keyPrefixArchived:
-		return i.rdb.RunArchivedTask(qname, id, score)
+		return i.rdb.RunArchivedTask(qname, id)
 	case keyPrefixPending:
 		return fmt.Errorf("task is already pending for run")
 	default:
@@ -654,11 +656,12 @@ func (i *Inspector) ArchiveAllRetryTasks(qname string) (int, error) {
 }
 
 // ArchiveTaskByKey archives a task with the given key in the given queue.
+// TODO: Update this to Archive task by ID.
 func (i *Inspector) ArchiveTaskByKey(qname, key string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return err
 	}
-	prefix, id, score, err := parseTaskKey(key)
+	prefix, id, _, err := parseTaskKey(key)
 	if err != nil {
 		return err
 	}
@@ -666,9 +669,9 @@ func (i *Inspector) ArchiveTaskByKey(qname, key string) error {
 	case keyPrefixPending:
 		return i.rdb.ArchivePendingTask(qname, id)
 	case keyPrefixScheduled:
-		return i.rdb.ArchiveScheduledTask(qname, id, score)
+		return i.rdb.ArchiveScheduledTask(qname, id)
 	case keyPrefixRetry:
-		return i.rdb.ArchiveRetryTask(qname, id, score)
+		return i.rdb.ArchiveRetryTask(qname, id)
 	case keyPrefixArchived:
 		return fmt.Errorf("task is already archived")
 	default:
