@@ -130,7 +130,7 @@ func TestForwarder(t *testing.T) {
 		for qname, want := range tc.wantPending {
 			gotPending := h.GetPendingMessages(t, r, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
-				t.Errorf("mismatch found in %q after running forwarder: (-want, +got)\n%s", base.QueueKey(qname), diff)
+				t.Errorf("mismatch found in %q after running forwarder: (-want, +got)\n%s", base.PendingKey(qname), diff)
 			}
 		}
 	}

@@ -6,6 +6,7 @@
 package base
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,7 +16,10 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
+	"github.com/golang/protobuf/ptypes"
 	"github.com/google/uuid"
+	pb "github.com/hibiken/asynq/internal/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 // Version of asynq library and CLI.
@@ -25,7 +29,7 @@ const Version = "0.17.2"
 const DefaultQueueName = "default"
 
 // DefaultQueue is the redis key for the default queue.
-var DefaultQueue = QueueKey(DefaultQueueName)
+var DefaultQueue = PendingKey(DefaultQueueName)
 
 // Global Redis keys.
 const (
@@ -45,9 +49,19 @@ func ValidateQueueName(qname string) error {
 	return nil
 }
 
-// QueueKey returns a redis key for the given queue name.
-func QueueKey(qname string) string {
-	return fmt.Sprintf("asynq:{%s}", qname)
+// TaskKeyPrefix returns a prefix for task key.
+func TaskKeyPrefix(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:t:", qname)
+}
+
+// TaskKey returns a redis key for the given task message.
+func TaskKey(qname, id string) string {
+	return fmt.Sprintf("%s%s", TaskKeyPrefix(qname), id)
+}
+
+// PendingKey returns a redis key for the given queue name.
+func PendingKey(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:pending", qname)
 }
 
 // ActiveKey returns a redis key for the active tasks.
@@ -184,24 +198,51 @@ type TaskMessage struct {
 	UniqueKey string
 }
 
-// EncodeMessage marshals the given task message in JSON and returns an encoded string.
-func EncodeMessage(msg *TaskMessage) (string, error) {
-	b, err := json.Marshal(msg)
-	if err != nil {
-		return "", err
+// EncodeMessage marshals the given task message and returns an encoded bytes.
+func EncodeMessage(msg *TaskMessage) ([]byte, error) {
+	if msg == nil {
+		return nil, fmt.Errorf("cannot encode nil message")
 	}
-	return string(b), nil
-}
-
-// DecodeMessage unmarshals the given encoded string and returns a decoded task message.
-func DecodeMessage(s string) (*TaskMessage, error) {
-	d := json.NewDecoder(strings.NewReader(s))
-	d.UseNumber()
-	var msg TaskMessage
-	if err := d.Decode(&msg); err != nil {
+	payload, err := json.Marshal(msg.Payload)
+	if err != nil {
 		return nil, err
 	}
-	return &msg, nil
+	return proto.Marshal(&pb.TaskMessage{
+		Type:      msg.Type,
+		Payload:   payload,
+		Id:        msg.ID.String(),
+		Queue:     msg.Queue,
+		Retry:     int32(msg.Retry),
+		Retried:   int32(msg.Retried),
+		ErrorMsg:  msg.ErrorMsg,
+		Timeout:   msg.Timeout,
+		Deadline:  msg.Deadline,
+		UniqueKey: msg.UniqueKey,
+	})
+}
+
+// DecodeMessage unmarshals the given bytes and returns a decoded task message.
+func DecodeMessage(data []byte) (*TaskMessage, error) {
+	var pbmsg pb.TaskMessage
+	if err := proto.Unmarshal(data, &pbmsg); err != nil {
+		return nil, err
+	}
+	payload, err := decodePayload(pbmsg.GetPayload())
+	if err != nil {
+		return nil, err
+	}
+	return &TaskMessage{
+		Type:      pbmsg.GetType(),
+		Payload:   payload,
+		ID:        uuid.MustParse(pbmsg.GetId()),
+		Queue:     pbmsg.GetQueue(),
+		Retry:     int(pbmsg.GetRetry()),
+		Retried:   int(pbmsg.GetRetried()),
+		ErrorMsg:  pbmsg.GetErrorMsg(),
+		Timeout:   pbmsg.GetTimeout(),
+		Deadline:  pbmsg.GetDeadline(),
+		UniqueKey: pbmsg.GetUniqueKey(),
+	}, nil
 }
 
 // Z represents sorted set member.
@@ -282,6 +323,59 @@ type ServerInfo struct {
 	ActiveWorkerCount int
 }
 
+// EncodeServerInfo marshals the given ServerInfo and returns the encoded bytes.
+func EncodeServerInfo(info *ServerInfo) ([]byte, error) {
+	if info == nil {
+		return nil, fmt.Errorf("cannot encode nil server info")
+	}
+	queues := make(map[string]int32)
+	for q, p := range info.Queues {
+		queues[q] = int32(p)
+	}
+	started, err := ptypes.TimestampProto(info.Started)
+	if err != nil {
+		return nil, err
+	}
+	return proto.Marshal(&pb.ServerInfo{
+		Host:              info.Host,
+		Pid:               int32(info.PID),
+		ServerId:          info.ServerID,
+		Concurrency:       int32(info.Concurrency),
+		Queues:            queues,
+		StrictPriority:    info.StrictPriority,
+		Status:            info.Status,
+		StartTime:         started,
+		ActiveWorkerCount: int32(info.ActiveWorkerCount),
+	})
+}
+
+// DecodeServerInfo decodes the given bytes into ServerInfo.
+func DecodeServerInfo(b []byte) (*ServerInfo, error) {
+	var pbmsg pb.ServerInfo
+	if err := proto.Unmarshal(b, &pbmsg); err != nil {
+		return nil, err
+	}
+	queues := make(map[string]int)
+	for q, p := range pbmsg.GetQueues() {
+		queues[q] = int(p)
+	}
+	startTime, err := ptypes.Timestamp(pbmsg.GetStartTime())
+	if err != nil {
+		return nil, err
+	}
+	return &ServerInfo{
+		Host:              pbmsg.GetHost(),
+		PID:               int(pbmsg.GetPid()),
+		ServerID:          pbmsg.GetServerId(),
+		Concurrency:       int(pbmsg.GetConcurrency()),
+		Queues:            queues,
+		StrictPriority:    pbmsg.GetStrictPriority(),
+		Status:            pbmsg.GetStatus(),
+		Started:           startTime,
+		ActiveWorkerCount: int(pbmsg.GetActiveWorkerCount()),
+	}, nil
+}
+
 // WorkerInfo holds information about a running worker.
 type WorkerInfo struct {
 	Host     string
@@ -289,10 +383,81 @@ type WorkerInfo struct {
 	ServerID string
 	ID       string
 	Type     string
-	Queue    string
 	Payload  map[string]interface{}
+	Queue    string
 	Started  time.Time
 	Deadline time.Time
+}
+
+// EncodeWorkerInfo marshals the given WorkerInfo and returns the encoded bytes.
+func EncodeWorkerInfo(info *WorkerInfo) ([]byte, error) {
+	if info == nil {
+		return nil, fmt.Errorf("cannot encode nil worker info")
+	}
+	payload, err := json.Marshal(info.Payload)
+	if err != nil {
+		return nil, err
+	}
+	startTime, err := ptypes.TimestampProto(info.Started)
+	if err != nil {
+		return nil, err
+	}
+	deadline, err := ptypes.TimestampProto(info.Deadline)
+	if err != nil {
+		return nil, err
+	}
+	return proto.Marshal(&pb.WorkerInfo{
+		Host:        info.Host,
+		Pid:         int32(info.PID),
+		ServerId:    info.ServerID,
+		TaskId:      info.ID,
+		TaskType:    info.Type,
+		TaskPayload: payload,
+		Queue:       info.Queue,
+		StartTime:   startTime,
+		Deadline:    deadline,
+	})
+}
+
+func decodePayload(b []byte) (map[string]interface{}, error) {
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.UseNumber()
+	payload := make(map[string]interface{})
+	if err := d.Decode(&payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+// DecodeWorkerInfo decodes the given bytes into WorkerInfo.
+func DecodeWorkerInfo(b []byte) (*WorkerInfo, error) {
+	var pbmsg pb.WorkerInfo
+	if err := proto.Unmarshal(b, &pbmsg); err != nil {
+		return nil, err
+	}
+	payload, err := decodePayload(pbmsg.GetTaskPayload())
+	if err != nil {
+		return nil, err
+	}
+	startTime, err := ptypes.Timestamp(pbmsg.GetStartTime())
+	if err != nil {
+		return nil, err
+	}
+	deadline, err := ptypes.Timestamp(pbmsg.GetDeadline())
+	if err != nil {
+		return nil, err
+	}
+	return &WorkerInfo{
+		Host:     pbmsg.GetHost(),
+		PID:      int(pbmsg.GetPid()),
+		ServerID: pbmsg.GetServerId(),
+		ID:       pbmsg.GetTaskId(),
+		Type:     pbmsg.GetTaskType(),
+		Payload:  payload,
+		Queue:    pbmsg.GetQueue(),
+		Started:  startTime,
+		Deadline: deadline,
+	}, nil
 }
 
 // SchedulerEntry holds information about a periodic task registered with a scheduler.
@@ -320,6 +485,63 @@ type SchedulerEntry struct {
 	Prev time.Time
 }
 
+// EncodeSchedulerEntry marshals the given entry and returns an encoded bytes.
+func EncodeSchedulerEntry(entry *SchedulerEntry) ([]byte, error) {
+	if entry == nil {
+		return nil, fmt.Errorf("cannot encode nil scheduler entry")
+	}
+	payload, err := json.Marshal(entry.Payload)
+	if err != nil {
+		return nil, err
+	}
+	next, err := ptypes.TimestampProto(entry.Next)
+	if err != nil {
+		return nil, err
+	}
+	prev, err := ptypes.TimestampProto(entry.Prev)
+	if err != nil {
+		return nil, err
+	}
+	return proto.Marshal(&pb.SchedulerEntry{
+		Id:              entry.ID,
+		Spec:            entry.Spec,
+		TaskType:        entry.Type,
+		TaskPayload:     payload,
+		EnqueueOptions:  entry.Opts,
+		NextEnqueueTime: next,
+		PrevEnqueueTime: prev,
+	})
+}
+
+// DecodeSchedulerEntry unmarshals the given bytes and returns a decoded SchedulerEntry.
+func DecodeSchedulerEntry(b []byte) (*SchedulerEntry, error) {
+	var pbmsg pb.SchedulerEntry
+	if err := proto.Unmarshal(b, &pbmsg); err != nil {
+		return nil, err
+	}
+	payload, err := decodePayload(pbmsg.GetTaskPayload())
+	if err != nil {
+		return nil, err
+	}
+	next, err := ptypes.Timestamp(pbmsg.GetNextEnqueueTime())
+	if err != nil {
+		return nil, err
+	}
+	prev, err := ptypes.Timestamp(pbmsg.GetPrevEnqueueTime())
+	if err != nil {
+		return nil, err
+	}
+	return &SchedulerEntry{
+		ID:      pbmsg.GetId(),
+		Spec:    pbmsg.GetSpec(),
+		Type:    pbmsg.GetTaskType(),
+		Payload: payload,
+		Opts:    pbmsg.GetEnqueueOptions(),
+		Next:    next,
+		Prev:    prev,
+	}, nil
+}
+
 // SchedulerEnqueueEvent holds information about an enqueue event by a scheduler.
 type SchedulerEnqueueEvent struct {
 	// ID of the task that was enqueued.
@@ -327,6 +549,39 @@ type SchedulerEnqueueEvent struct {
 
 	// Time the task was enqueued.
 	EnqueuedAt time.Time
+}
+
+// EncodeSchedulerEnqueueEvent marshals the given event
+// and returns an encoded bytes.
+func EncodeSchedulerEnqueueEvent(event *SchedulerEnqueueEvent) ([]byte, error) {
+	if event == nil {
+		return nil, fmt.Errorf("cannot encode nil enqueue event")
+	}
+	enqueuedAt, err := ptypes.TimestampProto(event.EnqueuedAt)
+	if err != nil {
+		return nil, err
+	}
+	return proto.Marshal(&pb.SchedulerEnqueueEvent{
+		TaskId:      event.TaskID,
+		EnqueueTime: enqueuedAt,
+	})
+}
+
+// DecodeSchedulerEnqueueEvent unmarshals the given bytes
+// and returns a decoded SchedulerEnqueueEvent.
+func DecodeSchedulerEnqueueEvent(b []byte) (*SchedulerEnqueueEvent, error) {
+	var pbmsg pb.SchedulerEnqueueEvent
+	if err := proto.Unmarshal(b, &pbmsg); err != nil {
+		return nil, err
+	}
+	enqueuedAt, err := ptypes.Timestamp(pbmsg.GetEnqueueTime())
+	if err != nil {
+		return nil, err
+	}
+	return &SchedulerEnqueueEvent{
+		TaskID:     pbmsg.GetTaskId(),
+		EnqueuedAt: enqueuedAt,
+	}, nil
 }
 
 // Cancelations is a collection that holds cancel functions for all active tasks.
@@ -380,7 +635,7 @@ type Broker interface {
 	ScheduleUnique(msg *TaskMessage, processAt time.Time, ttl time.Duration) error
 	Retry(msg *TaskMessage, processAt time.Time, errMsg string) error
 	Archive(msg *TaskMessage, errMsg string) error
-	CheckAndEnqueue(qnames ...string) error
+	ForwardIfReady(qnames ...string) error
 	ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*TaskMessage, error)
 	WriteServerState(info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error
 	ClearServerState(host string, pid int, serverID string) error

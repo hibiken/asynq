@@ -126,13 +126,13 @@ func (tb *TestBroker) Archive(msg *base.TaskMessage, errMsg string) error {
 	return tb.real.Archive(msg, errMsg)
 }
 
-func (tb *TestBroker) CheckAndEnqueue(qnames ...string) error {
+func (tb *TestBroker) ForwardIfReady(qnames ...string) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return errRedisDown
 	}
-	return tb.real.CheckAndEnqueue(qnames...)
+	return tb.real.ForwardIfReady(qnames...)
 }
 
 func (tb *TestBroker) ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*base.TaskMessage, error) {

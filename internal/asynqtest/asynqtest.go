@@ -6,7 +6,6 @@
 package asynqtest
 
 import (
-	"encoding/json"
 	"math"
 	"sort"
 	"testing"
@@ -130,7 +129,7 @@ func TaskMessageWithError(t base.TaskMessage, errMsg string) *base.TaskMessage {
 // Calling test will fail if marshaling errors out.
 func MustMarshal(tb testing.TB, msg *base.TaskMessage) string {
 	tb.Helper()
-	data, err := json.Marshal(msg)
+	data, err := base.EncodeMessage(msg)
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -141,34 +140,11 @@ func MustMarshal(tb testing.TB, msg *base.TaskMessage) string {
 // Calling test will fail if unmarshaling errors out.
 func MustUnmarshal(tb testing.TB, data string) *base.TaskMessage {
 	tb.Helper()
-	var msg base.TaskMessage
-	err := json.Unmarshal([]byte(data), &msg)
+	msg, err := base.DecodeMessage([]byte(data))
 	if err != nil {
 		tb.Fatal(err)
 	}
-	return &msg
-}
-
-// MustMarshalSlice marshals a slice of task messages and return a slice of
-// json strings. Calling test will fail if marshaling errors out.
-func MustMarshalSlice(tb testing.TB, msgs []*base.TaskMessage) []string {
-	tb.Helper()
-	var data []string
-	for _, m := range msgs {
-		data = append(data, MustMarshal(tb, m))
-	}
-	return data
-}
-
-// MustUnmarshalSlice unmarshals a slice of strings into a slice of task message structs.
-// Calling test will fail if marshaling errors out.
-func MustUnmarshalSlice(tb testing.TB, data []string) []*base.TaskMessage {
-	tb.Helper()
-	var msgs []*base.TaskMessage
-	for _, s := range data {
-		msgs = append(msgs, MustUnmarshal(tb, s))
-	}
-	return msgs
+	return msg
 }
 
 // FlushDB deletes all the keys of the currently selected DB.
@@ -196,7 +172,7 @@ func FlushDB(tb testing.TB, r redis.UniversalClient) {
 func SeedPendingQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname string) {
 	tb.Helper()
 	r.SAdd(base.AllQueues, qname)
-	seedRedisList(tb, r, base.QueueKey(qname), msgs)
+	seedRedisList(tb, r, base.PendingKey(qname), msgs)
 }
 
 // SeedActiveQueue initializes the active queue with the given messages.
@@ -238,6 +214,7 @@ func SeedDeadlines(tb testing.TB, r redis.UniversalClient, entries []base.Z, qna
 //
 // pending maps a queue name to a list of messages.
 func SeedAllPendingQueues(tb testing.TB, r redis.UniversalClient, pending map[string][]*base.TaskMessage) {
+	tb.Helper()
 	for q, msgs := range pending {
 		SeedPendingQueue(tb, r, msgs, q)
 	}
@@ -245,6 +222,7 @@ func SeedAllPendingQueues(tb testing.TB, r redis.UniversalClient, pending map[st
 
 // SeedAllActiveQueues initializes all of the specified active queues with the given messages.
 func SeedAllActiveQueues(tb testing.TB, r redis.UniversalClient, active map[string][]*base.TaskMessage) {
+	tb.Helper()
 	for q, msgs := range active {
 		SeedActiveQueue(tb, r, msgs, q)
 	}
@@ -252,6 +230,7 @@ func SeedAllActiveQueues(tb testing.TB, r redis.UniversalClient, active map[stri
 
 // SeedAllScheduledQueues initializes all of the specified scheduled queues with the given entries.
 func SeedAllScheduledQueues(tb testing.TB, r redis.UniversalClient, scheduled map[string][]base.Z) {
+	tb.Helper()
 	for q, entries := range scheduled {
 		SeedScheduledQueue(tb, r, entries, q)
 	}
@@ -259,6 +238,7 @@ func SeedAllScheduledQueues(tb testing.TB, r redis.UniversalClient, scheduled ma
 
 // SeedAllRetryQueues initializes all of the specified retry queues with the given entries.
 func SeedAllRetryQueues(tb testing.TB, r redis.UniversalClient, retry map[string][]base.Z) {
+	tb.Helper()
 	for q, entries := range retry {
 		SeedRetryQueue(tb, r, entries, q)
 	}
@@ -266,6 +246,7 @@ func SeedAllRetryQueues(tb testing.TB, r redis.UniversalClient, retry map[string
 
 // SeedAllArchivedQueues initializes all of the specified archived queues with the given entries.
 func SeedAllArchivedQueues(tb testing.TB, r redis.UniversalClient, archived map[string][]base.Z) {
+	tb.Helper()
 	for q, entries := range archived {
 		SeedArchivedQueue(tb, r, entries, q)
 	}
@@ -273,24 +254,47 @@ func SeedAllArchivedQueues(tb testing.TB, r redis.UniversalClient, archived map[
 
 // SeedAllDeadlines initializes all of the deadlines with the given entries.
 func SeedAllDeadlines(tb testing.TB, r redis.UniversalClient, deadlines map[string][]base.Z) {
+	tb.Helper()
 	for q, entries := range deadlines {
 		SeedDeadlines(tb, r, entries, q)
 	}
 }
 
 func seedRedisList(tb testing.TB, c redis.UniversalClient, key string, msgs []*base.TaskMessage) {
-	data := MustMarshalSlice(tb, msgs)
-	for _, s := range data {
-		if err := c.LPush(key, s).Err(); err != nil {
+	tb.Helper()
+	for _, msg := range msgs {
+		encoded := MustMarshal(tb, msg)
+		if err := c.LPush(key, msg.ID.String()).Err(); err != nil {
+			tb.Fatal(err)
+		}
+		key := base.TaskKey(msg.Queue, msg.ID.String())
+		data := map[string]interface{}{
+			"msg":      encoded,
+			"timeout":  msg.Timeout,
+			"deadline": msg.Deadline,
+		}
+		if err := c.HSet(key, data).Err(); err != nil {
 			tb.Fatal(err)
 		}
 	}
 }
 
 func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string, items []base.Z) {
+	tb.Helper()
 	for _, item := range items {
-		z := &redis.Z{Member: MustMarshal(tb, item.Message), Score: float64(item.Score)}
+		msg := item.Message
+		encoded := MustMarshal(tb, msg)
+		z := &redis.Z{Member: msg.ID.String(), Score: float64(item.Score)}
 		if err := c.ZAdd(key, z).Err(); err != nil {
+			tb.Fatal(err)
+		}
+		key := base.TaskKey(msg.Queue, msg.ID.String())
+		data := map[string]interface{}{
+			"msg":      encoded,
+			"timeout":  msg.Timeout,
+			"deadline": msg.Deadline,
+		}
+		if err := c.HSet(key, data).Err(); err != nil {
 			tb.Fatal(err)
 		}
 	}
@@ -299,75 +303,89 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string, items []b
 // GetPendingMessages returns all pending messages in the given queue.
 func GetPendingMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getListMessages(tb, r, base.QueueKey(qname))
+	return getMessagesFromList(tb, r, qname, base.PendingKey)
 }
 
 // GetActiveMessages returns all active messages in the given queue.
 func GetActiveMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getListMessages(tb, r, base.ActiveKey(qname))
+	return getMessagesFromList(tb, r, qname, base.ActiveKey)
 }
 
 // GetScheduledMessages returns all scheduled task messages in the given queue.
 func GetScheduledMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getZSetMessages(tb, r, base.ScheduledKey(qname))
+	return getMessagesFromZSet(tb, r, qname, base.ScheduledKey)
 }
 
 // GetRetryMessages returns all retry messages in the given queue.
 func GetRetryMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getZSetMessages(tb, r, base.RetryKey(qname))
+	return getMessagesFromZSet(tb, r, qname, base.RetryKey)
 }
 
 // GetArchivedMessages returns all archived messages in the given queue.
 func GetArchivedMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
 	tb.Helper()
-	return getZSetMessages(tb, r, base.ArchivedKey(qname))
+	return getMessagesFromZSet(tb, r, qname, base.ArchivedKey)
 }
 
 // GetScheduledEntries returns all scheduled messages and its score in the given queue.
 func GetScheduledEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.ScheduledKey(qname))
+	return getMessagesFromZSetWithScores(tb, r, qname, base.ScheduledKey)
 }
 
 // GetRetryEntries returns all retry messages and its score in the given queue.
 func GetRetryEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.RetryKey(qname))
+	return getMessagesFromZSetWithScores(tb, r, qname, base.RetryKey)
 }
 
 // GetArchivedEntries returns all archived messages and its score in the given queue.
 func GetArchivedEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.ArchivedKey(qname))
+	return getMessagesFromZSetWithScores(tb, r, qname, base.ArchivedKey)
 }
 
 // GetDeadlinesEntries returns all task messages and its score in the deadlines set for the given queue.
 func GetDeadlinesEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
 	tb.Helper()
-	return getZSetEntries(tb, r, base.DeadlinesKey(qname))
+	return getMessagesFromZSetWithScores(tb, r, qname, base.DeadlinesKey)
 }
 
-func getListMessages(tb testing.TB, r redis.UniversalClient, list string) []*base.TaskMessage {
-	data := r.LRange(list, 0, -1).Val()
-	return MustUnmarshalSlice(tb, data)
-}
-
-func getZSetMessages(tb testing.TB, r redis.UniversalClient, zset string) []*base.TaskMessage {
-	data := r.ZRange(zset, 0, -1).Val()
-	return MustUnmarshalSlice(tb, data)
-}
-
-func getZSetEntries(tb testing.TB, r redis.UniversalClient, zset string) []base.Z {
-	data := r.ZRangeWithScores(zset, 0, -1).Val()
-	var entries []base.Z
-	for _, z := range data {
-		entries = append(entries, base.Z{
-			Message: MustUnmarshal(tb, z.Member.(string)),
-			Score:   int64(z.Score),
-		})
+// Retrieves all messages stored under `keyFn(qname)` key in redis list.
+func getMessagesFromList(tb testing.TB, r redis.UniversalClient, qname string, keyFn func(qname string) string) []*base.TaskMessage {
+	tb.Helper()
+	ids := r.LRange(keyFn(qname), 0, -1).Val()
+	var msgs []*base.TaskMessage
+	for _, id := range ids {
+		data := r.HGet(base.TaskKey(qname, id), "msg").Val()
+		msgs = append(msgs, MustUnmarshal(tb, data))
 	}
-	return entries
+	return msgs
+}
+
+// Retrieves all messages stored under `keyFn(qname)` key in redis zset (sorted-set).
+func getMessagesFromZSet(tb testing.TB, r redis.UniversalClient, qname string, keyFn func(qname string) string) []*base.TaskMessage {
+	tb.Helper()
+	ids := r.ZRange(keyFn(qname), 0, -1).Val()
+	var msgs []*base.TaskMessage
+	for _, id := range ids {
+		msg := r.HGet(base.TaskKey(qname, id), "msg").Val()
+		msgs = append(msgs, MustUnmarshal(tb, msg))
+	}
+	return msgs
+}
+
+// Retrieves all messages along with their scores stored under `keyFn(qname)` key in redis zset (sorted-set).
+func getMessagesFromZSetWithScores(tb testing.TB, r redis.UniversalClient, qname string, keyFn func(qname string) string) []base.Z {
+	tb.Helper()
+	zs := r.ZRangeWithScores(keyFn(qname), 0, -1).Val()
+	var res []base.Z
+	for _, z := range zs {
+		msg := r.HGet(base.TaskKey(qname, z.Member.(string)), "msg").Val()
+		res = append(res, base.Z{Message: MustUnmarshal(tb, msg), Score: int64(z.Score)})
+	}
+	return res
 }
