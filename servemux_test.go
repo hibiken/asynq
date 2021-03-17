@@ -68,7 +68,7 @@ func TestServeMux(t *testing.T) {
 		}
 
 		if called != tc.want {
-			t.Errorf("%q handler was called for task %q, want %q to be called", called, task.Type, tc.want)
+			t.Errorf("%q handler was called for task %q, want %q to be called", called, task.Type(), tc.want)
 		}
 	}
 }
@@ -124,7 +124,7 @@ func TestServeMuxNotFound(t *testing.T) {
 		task := NewTask(tc.typename, nil)
 		err := mux.ProcessTask(context.Background(), task)
 		if err == nil {
-			t.Errorf("ProcessTask did not return error for task %q, should return 'not found' error", task.Type)
+			t.Errorf("ProcessTask did not return error for task %q, should return 'not found' error", task.Type())
 		}
 	}
 }
@@ -164,7 +164,7 @@ func TestServeMuxMiddlewares(t *testing.T) {
 		}
 
 		if called != tc.want {
-			t.Errorf("%q handler was called for task %q, want %q to be called", called, task.Type, tc.want)
+			t.Errorf("%q handler was called for task %q, want %q to be called", called, task.Type(), tc.want)
 		}
 	}
 }

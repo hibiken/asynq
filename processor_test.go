@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"sync"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
@@ -124,7 +124,7 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 		p.terminate()
 
 		mu.Lock()
-		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Payload{})); diff != "" {
+		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Task{})); diff != "" {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 		mu.Unlock()
@@ -216,7 +216,7 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 		p.terminate()
 
 		mu.Lock()
-		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Payload{})); diff != "" {
+		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Task{})); diff != "" {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 		mu.Unlock()
@@ -228,7 +228,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
 
-	m1 := h.NewTaskMessage("large_number", map[string]interface{}{"data": 111111111111111111})
+	m1 := h.NewTaskMessage("large_number", h.KV(map[string]interface{}{"data": 111111111111111111}))
 	t1 := NewTask(m1.Type, m1.Payload)
 
 	tests := []struct {
@@ -250,10 +250,14 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 		handler := func(ctx context.Context, task *Task) error {
 			mu.Lock()
 			defer mu.Unlock()
-			if data, err := task.Payload.GetInt("data"); err != nil {
-				t.Errorf("coult not get data from payload: %v", err)
-			} else {
+			var payload map[string]int
+			if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+				t.Errorf("coult not decode payload: %v", err)
+			}
+			if data, ok := payload["data"]; ok {
 				t.Logf("data == %d", data)
+			} else {
+				t.Errorf("could not get data from payload")
 			}
 			processed = append(processed, task)
 			return nil
@@ -289,7 +293,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 		p.terminate()
 
 		mu.Lock()
-		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmpopts.IgnoreUnexported(Payload{})); diff != "" {
+		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Task{})); diff != "" {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 		mu.Unlock()
@@ -592,7 +596,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		}
 		p.terminate()
 
-		if diff := cmp.Diff(tc.wantProcessed, processed, cmp.AllowUnexported(Payload{})); diff != "" {
+		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Task{})); diff != "" {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 
@@ -611,7 +615,7 @@ func TestProcessorPerform(t *testing.T) {
 			handler: func(ctx context.Context, t *Task) error {
 				return nil
 			},
-			task:    NewTask("gen_thumbnail", map[string]interface{}{"src": "some/img/path"}),
+			task:    NewTask("gen_thumbnail", h.KV(map[string]interface{}{"src": "some/img/path"})),
 			wantErr: false,
 		},
 		{
@@ -619,7 +623,7 @@ func TestProcessorPerform(t *testing.T) {
 			handler: func(ctx context.Context, t *Task) error {
 				return fmt.Errorf("something went wrong")
 			},
-			task:    NewTask("gen_thumbnail", map[string]interface{}{"src": "some/img/path"}),
+			task:    NewTask("gen_thumbnail", h.KV(map[string]interface{}{"src": "some/img/path"})),
 			wantErr: true,
 		},
 		{
@@ -627,7 +631,7 @@ func TestProcessorPerform(t *testing.T) {
 			handler: func(ctx context.Context, t *Task) error {
 				panic("something went terribly wrong")
 			},
-			task:    NewTask("gen_thumbnail", map[string]interface{}{"src": "some/img/path"}),
+			task:    NewTask("gen_thumbnail", h.KV(map[string]interface{}{"src": "some/img/path"})),
 			wantErr: true,
 		},
 	}

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/hibiken/asynq/internal/testbroker"
 	"go.uber.org/goleak"
@@ -39,12 +40,12 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = c.Enqueue(NewTask("send_email", map[string]interface{}{"recipient_id": 123}))
+	_, err = c.Enqueue(NewTask("send_email", asynqtest.KV(map[string]interface{}{"recipient_id": 123})))
 	if err != nil {
 		t.Errorf("could not enqueue a task: %v", err)
 	}
 
-	_, err = c.Enqueue(NewTask("send_email", map[string]interface{}{"recipient_id": 456}), ProcessIn(1*time.Hour))
+	_, err = c.Enqueue(NewTask("send_email", asynqtest.KV(map[string]interface{}{"recipient_id": 456})), ProcessIn(1*time.Hour))
 	if err != nil {
 		t.Errorf("could not enqueue a task: %v", err)
 	}
@@ -169,8 +170,8 @@ func TestServerWithFlakyBroker(t *testing.T) {
 
 	h := func(ctx context.Context, task *Task) error {
 		// force task retry.
-		if task.Type == "bad_task" {
-			return fmt.Errorf("could not process %q", task.Type)
+		if task.Type() == "bad_task" {
+			return fmt.Errorf("could not process %q", task.Type())
 		}
 		time.Sleep(2 * time.Second)
 		return nil

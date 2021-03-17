@@ -6,11 +6,23 @@ package asynq
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
 	"time"
+
+	h "github.com/hibiken/asynq/internal/asynqtest"
 )
+
+// Creates a new task of type "task<n>" with payload {"data": n}.
+func makeTask(n int) *Task {
+	b, err := json.Marshal(map[string]int{"data": n})
+	if err != nil {
+		panic(err)
+	}
+	return NewTask(fmt.Sprintf("task%d", n), b)
+}
 
 // Simple E2E Benchmark testing with no scheduled tasks and retries.
 func BenchmarkEndToEndSimple(b *testing.B) {
@@ -29,7 +41,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 		})
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
-			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
+			t := NewTask(fmt.Sprintf("task%d", i), h.KV(map[string]interface{}{"data": i}))
 			if _, err := client.Enqueue(t); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
@@ -70,14 +82,12 @@ func BenchmarkEndToEnd(b *testing.B) {
 		})
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
-			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
-			if _, err := client.Enqueue(t); err != nil {
+			if _, err := client.Enqueue(makeTask(i)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
 		for i := 0; i < count; i++ {
-			t := NewTask(fmt.Sprintf("scheduled%d", i), map[string]interface{}{"data": i})
-			if _, err := client.Enqueue(t, ProcessIn(1*time.Second)); err != nil {
+			if _, err := client.Enqueue(makeTask(i), ProcessIn(1*time.Second)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
@@ -86,13 +96,18 @@ func BenchmarkEndToEnd(b *testing.B) {
 		var wg sync.WaitGroup
 		wg.Add(count * 2)
 		handler := func(ctx context.Context, t *Task) error {
-			n, err := t.Payload.GetInt("data")
-			if err != nil {
+			var p map[string]int
+			if err := json.Unmarshal(t.Payload(), &p); err != nil {
 				b.Logf("internal error: %v", err)
+			}
+			n, ok := p["data"]
+			if !ok {
+				n = 1
+				b.Logf("internal error: could not get data from payload")
 			}
 			retried, ok := GetRetryCount(ctx)
 			if !ok {
-				b.Logf("internal error: %v", err)
+				b.Logf("internal error: could not get retry count from context")
 			}
 			// Fail 1% of tasks for the first attempt.
 			if retried == 0 && n%100 == 0 {
@@ -136,20 +151,17 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 		})
 		// Create a bunch of tasks
 		for i := 0; i < highCount; i++ {
-			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
-			if _, err := client.Enqueue(t, Queue("high")); err != nil {
+			if _, err := client.Enqueue(makeTask(i), Queue("high")); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
 		for i := 0; i < defaultCount; i++ {
-			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
-			if _, err := client.Enqueue(t); err != nil {
+			if _, err := client.Enqueue(makeTask(i)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
 		for i := 0; i < lowCount; i++ {
-			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
-			if _, err := client.Enqueue(t, Queue("low")); err != nil {
+			if _, err := client.Enqueue(makeTask(i), Queue("low")); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
@@ -190,15 +202,13 @@ func BenchmarkClientWhileServerRunning(b *testing.B) {
 		})
 		// Enqueue 10,000 tasks.
 		for i := 0; i < count; i++ {
-			t := NewTask(fmt.Sprintf("task%d", i), map[string]interface{}{"data": i})
-			if _, err := client.Enqueue(t); err != nil {
+			if _, err := client.Enqueue(makeTask(i)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
 		// Schedule 10,000 tasks.
 		for i := 0; i < count; i++ {
-			t := NewTask(fmt.Sprintf("scheduled%d", i), map[string]interface{}{"data": i})
-			if _, err := client.Enqueue(t, ProcessIn(1*time.Second)); err != nil {
+			if _, err := client.Enqueue(makeTask(i), ProcessIn(1*time.Second)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
@@ -213,7 +223,7 @@ func BenchmarkClientWhileServerRunning(b *testing.B) {
 		b.Log("Starting enqueueing")
 		enqueued := 0
 		for enqueued < 100000 {
-			t := NewTask(fmt.Sprintf("enqueued%d", enqueued), map[string]interface{}{"data": enqueued})
+			t := NewTask(fmt.Sprintf("enqueued%d", enqueued), h.KV(map[string]interface{}{"data": enqueued}))
 			if _, err := client.Enqueue(t); err != nil {
 				b.Logf("could not enqueue task %d: %v", enqueued, err)
 				continue

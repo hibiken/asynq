@@ -574,7 +574,7 @@ func TestInspectorListPendingTasks(t *testing.T) {
 				tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Payload{})
+		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
 			t.Errorf("%s; ListPendingTasks(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
@@ -632,7 +632,7 @@ func TestInspectorListActiveTasks(t *testing.T) {
 			t.Errorf("%s; ListActiveTasks(%q) returned error: %v", tc.qname, tc.desc, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Payload{})
+		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
 			t.Errorf("%s; ListActiveTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
@@ -708,7 +708,7 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 			t.Errorf("%s; ListScheduledTasks(%q) returned error: %v", tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Payload{}, ScheduledTask{})
+		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{}, ScheduledTask{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
 			t.Errorf("%s; ListScheduledTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
@@ -785,7 +785,7 @@ func TestInspectorListRetryTasks(t *testing.T) {
 			t.Errorf("%s; ListRetryTasks(%q) returned error: %v", tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Payload{}, RetryTask{})
+		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{}, RetryTask{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
 			t.Errorf("%s; ListRetryTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
@@ -861,7 +861,7 @@ func TestInspectorListArchivedTasks(t *testing.T) {
 			t.Errorf("%s; ListArchivedTasks(%q) returned error: %v", tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Payload{}, ArchivedTask{})
+		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{}, ArchivedTask{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
 			t.Errorf("%s; ListArchivedTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
@@ -922,7 +922,7 @@ func TestInspectorListPagination(t *testing.T) {
 			t.Errorf("ListPendingTask('default') returned error: %v", err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Payload{})
+		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
 			t.Errorf("ListPendingTask('default') = %v, want %v; (-want,+got)\n%s",
 				got, tc.want, diff)
@@ -2598,7 +2598,7 @@ func TestInspectorSchedulerEntries(t *testing.T) {
 				{
 					Spec:    "@every 20m",
 					Type:    "bar",
-					Payload: map[string]interface{}{"fiz": "baz"},
+					Payload: h.KV(map[string]interface{}{"fiz": "baz"}),
 					Opts:    []string{`Queue("bar")`, `MaxRetry(20)`},
 					Next:    now.Add(1 * time.Minute),
 					Prev:    now.Add(-19 * time.Minute),
@@ -2614,7 +2614,7 @@ func TestInspectorSchedulerEntries(t *testing.T) {
 				},
 				{
 					Spec: "@every 20m",
-					Task: asynq.NewTask("bar", map[string]interface{}{"fiz": "baz"}),
+					Task: asynq.NewTask("bar", h.KV(map[string]interface{}{"fiz": "baz"})),
 					Opts: []asynq.Option{asynq.Queue("bar"), asynq.MaxRetry(20)},
 					Next: now.Add(1 * time.Minute),
 					Prev: now.Add(-19 * time.Minute),
@@ -2634,7 +2634,7 @@ func TestInspectorSchedulerEntries(t *testing.T) {
 			t.Errorf("SchedulerEntries() returned error: %v", err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Payload{})
+		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{})
 		if diff := cmp.Diff(tc.want, got, sortSchedulerEntry, ignoreOpt); diff != "" {
 			t.Errorf("SchedulerEntries() = %v, want %v; (-want,+got)\n%s",
 				got, tc.want, diff)

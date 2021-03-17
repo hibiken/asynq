@@ -61,8 +61,8 @@ func setup(tb testing.TB) (r *RDB) {
 func TestEnqueue(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	t1 := h.NewTaskMessage("send_email", map[string]interface{}{"to": "exampleuser@gmail.com", "from": "noreply@example.com"})
-	t2 := h.NewTaskMessageWithQueue("generate_csv", map[string]interface{}{}, "csv")
+	t1 := h.NewTaskMessage("send_email", h.KV(map[string]interface{}{"to": "exampleuser@gmail.com", "from": "noreply@example.com"}))
+	t2 := h.NewTaskMessageWithQueue("generate_csv", h.KV(map[string]interface{}{}), "csv")
 	t3 := h.NewTaskMessageWithQueue("sync", nil, "low")
 
 	tests := []struct {
@@ -101,9 +101,9 @@ func TestEnqueueUnique(t *testing.T) {
 	m1 := base.TaskMessage{
 		ID:        uuid.New(),
 		Type:      "email",
-		Payload:   map[string]interface{}{"user_id": json.Number("123")},
+		Payload:   h.KV(map[string]interface{}{"user_id": json.Number("123")}),
 		Queue:     base.DefaultQueueName,
-		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", map[string]interface{}{"user_id": 123}),
+		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.KV(map[string]interface{}{"user_id": 123})),
 	}
 
 	tests := []struct {
@@ -157,7 +157,7 @@ func TestDequeue(t *testing.T) {
 	t1 := &base.TaskMessage{
 		ID:       uuid.New(),
 		Type:     "send_email",
-		Payload:  map[string]interface{}{"subject": "hello!"},
+		Payload:  h.KV(map[string]interface{}{"subject": "hello!"}),
 		Queue:    "default",
 		Timeout:  1800,
 		Deadline: 0,
@@ -355,7 +355,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 	t1 := &base.TaskMessage{
 		ID:       uuid.New(),
 		Type:     "send_email",
-		Payload:  map[string]interface{}{"subject": "hello!"},
+		Payload:  h.KV(map[string]interface{}{"subject": "hello!"}),
 		Queue:    "default",
 		Timeout:  1800,
 		Deadline: 0,
@@ -767,7 +767,7 @@ func TestRequeue(t *testing.T) {
 func TestSchedule(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	msg := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
+	msg := h.NewTaskMessage("send_email", h.KV(map[string]interface{}{"subject": "hello"}))
 	tests := []struct {
 		msg       *base.TaskMessage
 		processAt time.Time
@@ -808,9 +808,9 @@ func TestScheduleUnique(t *testing.T) {
 	m1 := base.TaskMessage{
 		ID:        uuid.New(),
 		Type:      "email",
-		Payload:   map[string]interface{}{"user_id": 123},
+		Payload:   h.KV(map[string]interface{}{"user_id": 123}),
 		Queue:     base.DefaultQueueName,
-		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", map[string]interface{}{"user_id": 123}),
+		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.KV(map[string]interface{}{"user_id": 123})),
 	}
 
 	tests := []struct {
@@ -866,7 +866,7 @@ func TestRetry(t *testing.T) {
 	t1 := &base.TaskMessage{
 		ID:      uuid.New(),
 		Type:    "send_email",
-		Payload: map[string]interface{}{"subject": "Hola!"},
+		Payload: h.KV(map[string]interface{}{"subject": "Hola!"}),
 		Retried: 10,
 		Timeout: 1800,
 		Queue:   "default",
@@ -874,7 +874,7 @@ func TestRetry(t *testing.T) {
 	t2 := &base.TaskMessage{
 		ID:      uuid.New(),
 		Type:    "gen_thumbnail",
-		Payload: map[string]interface{}{"path": "some/path/to/image.jpg"},
+		Payload: h.KV(map[string]interface{}{"path": "some/path/to/image.jpg"}),
 		Timeout: 3000,
 		Queue:   "default",
 	}
@@ -1530,8 +1530,8 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		pid      = 4242
 		serverID = "server123"
 
-		msg1 = h.NewTaskMessage("send_email", map[string]interface{}{"user_id": "123"})
-		msg2 = h.NewTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/imgfile"})
+		msg1 = h.NewTaskMessage("send_email", h.KV(map[string]interface{}{"user_id": "123"}))
+		msg2 = h.NewTaskMessage("gen_thumbnail", h.KV(map[string]interface{}{"path": "some/path/to/imgfile"}))
 
 		ttl = 5 * time.Second
 	)
@@ -1642,8 +1642,8 @@ func TestClearServerState(t *testing.T) {
 		otherPID      = 9876
 		otherServerID = "server987"
 
-		msg1 = h.NewTaskMessage("send_email", map[string]interface{}{"user_id": "123"})
-		msg2 = h.NewTaskMessage("gen_thumbnail", map[string]interface{}{"path": "some/path/to/imgfile"})
+		msg1 = h.NewTaskMessage("send_email", h.KV(map[string]interface{}{"user_id": "123"}))
+		msg2 = h.NewTaskMessage("gen_thumbnail", h.KV(map[string]interface{}{"path": "some/path/to/imgfile"}))
 
 		ttl = 5 * time.Second
 	)

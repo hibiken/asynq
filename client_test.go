@@ -20,7 +20,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
+	task := NewTask("send_email", h.KV(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 
 	var (
 		now          = time.Now()
@@ -52,8 +52,8 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
-						Type:     task.Type,
-						Payload:  task.Payload.data,
+						Type:     task.Type(),
+						Payload:  task.Payload(),
 						Retry:    defaultMaxRetry,
 						Queue:    "default",
 						Timeout:  int64(defaultTimeout.Seconds()),
@@ -85,8 +85,8 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 				"default": {
 					{
 						Message: &base.TaskMessage{
-							Type:     task.Type,
-							Payload:  task.Payload.data,
+							Type:     task.Type(),
+							Payload:  task.Payload(),
 							Retry:    defaultMaxRetry,
 							Queue:    "default",
 							Timeout:  int64(defaultTimeout.Seconds()),
@@ -137,7 +137,7 @@ func TestClientEnqueue(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
+	task := NewTask("send_email", h.KV(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 	now := time.Now()
 
 	tests := []struct {
@@ -163,8 +163,8 @@ func TestClientEnqueue(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
-						Type:     task.Type,
-						Payload:  task.Payload.data,
+						Type:     task.Type(),
+						Payload:  task.Payload(),
 						Retry:    3,
 						Queue:    "default",
 						Timeout:  int64(defaultTimeout.Seconds()),
@@ -189,8 +189,8 @@ func TestClientEnqueue(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
-						Type:     task.Type,
-						Payload:  task.Payload.data,
+						Type:     task.Type(),
+						Payload:  task.Payload(),
 						Retry:    0, // Retry count should be set to zero
 						Queue:    "default",
 						Timeout:  int64(defaultTimeout.Seconds()),
@@ -216,8 +216,8 @@ func TestClientEnqueue(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
-						Type:     task.Type,
-						Payload:  task.Payload.data,
+						Type:     task.Type(),
+						Payload:  task.Payload(),
 						Retry:    10, // Last option takes precedence
 						Queue:    "default",
 						Timeout:  int64(defaultTimeout.Seconds()),
@@ -242,8 +242,8 @@ func TestClientEnqueue(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"custom": {
 					{
-						Type:     task.Type,
-						Payload:  task.Payload.data,
+						Type:     task.Type(),
+						Payload:  task.Payload(),
 						Retry:    defaultMaxRetry,
 						Queue:    "custom",
 						Timeout:  int64(defaultTimeout.Seconds()),
@@ -268,8 +268,8 @@ func TestClientEnqueue(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"high": {
 					{
-						Type:     task.Type,
-						Payload:  task.Payload.data,
+						Type:     task.Type(),
+						Payload:  task.Payload(),
 						Retry:    defaultMaxRetry,
 						Queue:    "high",
 						Timeout:  int64(defaultTimeout.Seconds()),
@@ -294,8 +294,8 @@ func TestClientEnqueue(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
-						Type:     task.Type,
-						Payload:  task.Payload.data,
+						Type:     task.Type(),
+						Payload:  task.Payload(),
 						Retry:    defaultMaxRetry,
 						Queue:    "default",
 						Timeout:  20,
@@ -320,8 +320,8 @@ func TestClientEnqueue(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
-						Type:     task.Type,
-						Payload:  task.Payload.data,
+						Type:     task.Type(),
+						Payload:  task.Payload(),
 						Retry:    defaultMaxRetry,
 						Queue:    "default",
 						Timeout:  int64(noTimeout.Seconds()),
@@ -347,8 +347,8 @@ func TestClientEnqueue(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
-						Type:     task.Type,
-						Payload:  task.Payload.data,
+						Type:     task.Type(),
+						Payload:  task.Payload(),
 						Retry:    defaultMaxRetry,
 						Queue:    "default",
 						Timeout:  20,
@@ -390,7 +390,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
+	task := NewTask("send_email", h.KV(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 	now := time.Now()
 
 	tests := []struct {
@@ -421,8 +421,8 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 				"default": {
 					{
 						Message: &base.TaskMessage{
-							Type:     task.Type,
-							Payload:  task.Payload.data,
+							Type:     task.Type(),
+							Payload:  task.Payload(),
 							Retry:    defaultMaxRetry,
 							Queue:    "default",
 							Timeout:  int64(defaultTimeout.Seconds()),
@@ -448,8 +448,8 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
-						Type:     task.Type,
-						Payload:  task.Payload.data,
+						Type:     task.Type(),
+						Payload:  task.Payload(),
 						Retry:    defaultMaxRetry,
 						Queue:    "default",
 						Timeout:  int64(defaultTimeout.Seconds()),
@@ -501,7 +501,7 @@ func TestClientEnqueueError(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"})
+	task := NewTask("send_email", h.KV(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 
 	tests := []struct {
 		desc string
@@ -613,7 +613,7 @@ func TestClientDefaultOptions(t *testing.T) {
 		h.FlushDB(t, r)
 		c := NewClient(getRedisConnOpt(t))
 		defer c.Close()
-		c.SetDefaultOptions(tc.task.Type, tc.defaultOpts...)
+		c.SetDefaultOptions(tc.task.Type(), tc.defaultOpts...)
 		gotRes, err := c.Enqueue(tc.task, tc.opts...)
 		if err != nil {
 			t.Fatal(err)
@@ -650,7 +650,7 @@ func TestClientEnqueueUnique(t *testing.T) {
 		ttl  time.Duration
 	}{
 		{
-			NewTask("email", map[string]interface{}{"user_id": 123}),
+			NewTask("email", h.KV(map[string]interface{}{"user_id": 123})),
 			time.Hour,
 		},
 	}
@@ -664,7 +664,7 @@ func TestClientEnqueueUnique(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type, tc.task.Payload.data)).Val()
+		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
 		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, tc.ttl)
 			continue
@@ -709,7 +709,7 @@ func TestClientEnqueueUniqueWithProcessInOption(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type, tc.task.Payload.data)).Val()
+		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
 		wantTTL := time.Duration(tc.ttl.Seconds()+tc.d.Seconds()) * time.Second
 		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)
@@ -755,7 +755,7 @@ func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type, tc.task.Payload.data)).Val()
+		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
 		wantTTL := tc.at.Add(tc.ttl).Sub(time.Now())
 		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)
@@ -774,4 +774,3 @@ func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 		}
 	}
 }
-

@@ -6,6 +6,7 @@
 package asynqtest
 
 import (
+	"encoding/json"
 	"math"
 	"sort"
 	"testing"
@@ -109,6 +110,15 @@ func NewTaskMessageWithQueue(taskType string, payload []byte, qname string) *bas
 		Timeout:  1800, // default timeout of 30 mins
 		Deadline: 0,    // no deadline
 	}
+}
+
+// KV serializes the given key-value pairs into stream of bytes.
+func KV(kv map[string]interface{}) []byte {
+	b, err := json.Marshal(kv)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 // TaskMessageAfterRetry returns an updated copy of t after retry.
