@@ -176,7 +176,6 @@ func (d processInOption) String() string     { return fmt.Sprintf("ProcessIn(%v)
 func (d processInOption) Type() OptionType   { return ProcessInOpt }
 func (d processInOption) Value() interface{} { return time.Duration(d) }
 
-
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
@@ -305,7 +304,7 @@ func (c *Client) Close() error {
 // If no ProcessAt or ProcessIn options are passed, the task will be processed immediately.
 func (c *Client) Enqueue(task *Task, opts ...Option) (*Result, error) {
 	c.mu.Lock()
-	if defaults, ok := c.opts[task.Type]; ok {
+	if defaults, ok := c.opts[task.Type()]; ok {
 		opts = append(defaults, opts...)
 	}
 	c.mu.Unlock()
@@ -327,12 +326,12 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*Result, error) {
 	}
 	var uniqueKey string
 	if opt.uniqueTTL > 0 {
-		uniqueKey = base.UniqueKey(opt.queue, task.Type, task.Payload.data)
+		uniqueKey = base.UniqueKey(opt.queue, task.Type(), task.Payload())
 	}
 	msg := &base.TaskMessage{
 		ID:        uuid.New(),
-		Type:      task.Type,
-		Payload:   task.Payload.data,
+		Type:      task.Type(),
+		Payload:   task.Payload(),
 		Queue:     opt.queue,
 		Retry:     opt.retry,
 		Deadline:  deadline.Unix(),

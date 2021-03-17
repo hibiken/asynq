@@ -62,7 +62,7 @@ func (mux *ServeMux) Handler(t *Task) (h Handler, pattern string) {
 	mux.mu.RLock()
 	defer mux.mu.RUnlock()
 
-	h, pattern = mux.match(t.Type)
+	h, pattern = mux.match(t.Type())
 	if h == nil {
 		h, pattern = NotFoundHandler(), ""
 	}

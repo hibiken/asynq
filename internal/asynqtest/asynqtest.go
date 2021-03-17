@@ -93,13 +93,13 @@ var SortStringSliceOpt = cmp.Transformer("SortStringSlice", func(in []string) []
 var IgnoreIDOpt = cmpopts.IgnoreFields(base.TaskMessage{}, "ID")
 
 // NewTaskMessage returns a new instance of TaskMessage given a task type and payload.
-func NewTaskMessage(taskType string, payload map[string]interface{}) *base.TaskMessage {
+func NewTaskMessage(taskType string, payload []byte) *base.TaskMessage {
 	return NewTaskMessageWithQueue(taskType, payload, base.DefaultQueueName)
 }
 
 // NewTaskMessageWithQueue returns a new instance of TaskMessage given a
 // task type, payload and queue name.
-func NewTaskMessageWithQueue(taskType string, payload map[string]interface{}, qname string) *base.TaskMessage {
+func NewTaskMessageWithQueue(taskType string, payload []byte, qname string) *base.TaskMessage {
 	return &base.TaskMessage{
 		ID:       uuid.New(),
 		Type:     taskType,
