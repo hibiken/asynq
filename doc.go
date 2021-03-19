@@ -11,7 +11,7 @@ specify the connection using one of RedisConnOpt types.
     redisConnOpt = asynq.RedisClientOpt{
         Addr:     "127.0.0.1:6379",
         Password: "xxxxx",
-        DB:       3,
+        DB:       2,
     }
 
 The Client is used to enqueue a task.
@@ -20,12 +20,16 @@ The Client is used to enqueue a task.
     client := asynq.NewClient(redisConnOpt)
 
     // Task is created with two parameters: its type and payload.
-    t := asynq.NewTask(
-        "send_email",
-        map[string]interface{}{"user_id": 42})
+    // Payload data is simply an array of bytes. It can be encoded in JSON, Protocol Buffer, Gob, etc.
+    b, err := json.Marshal(ExamplePayload{UserID: 42})
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    task := asynq.NewTask("example", b)
 
     // Enqueue the task to be processed immediately.
-    res, err := client.Enqueue(t)
+    res, err := client.Enqueue(task)
 
     // Schedule the task to be processed after one minute.
     res, err = client.Enqueue(t, asynq.ProcessIn(1*time.Minute))
@@ -52,10 +56,13 @@ Example of a type that implements the Handler interface.
 
     func (h *TaskHandler) ProcessTask(ctx context.Context, task *asynq.Task) error {
         switch task.Type {
-        case "send_email":
-            id, err := task.Payload.GetInt("user_id")
-            // send email
-        //...
+        case "example":
+            var data ExamplePayload
+            if err := json.Unmarshal(task.Payload(), &data); err != nil {
+                return err
+            }
+            // perform task with the data
+
         default:
             return fmt.Errorf("unexpected task type %q", task.Type)
         }
