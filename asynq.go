@@ -16,20 +16,21 @@ import (
 
 // Task represents a unit of work to be performed.
 type Task struct {
-	// Type indicates the type of task to be performed.
-	Type string
+	// typename indicates the type of task to be performed.
+	typename string
 
-	// Payload holds data needed to perform the task.
-	Payload Payload
+	// payload holds data needed to perform the task.
+	payload []byte
 }
 
+func (t *Task) Type() string    { return t.typename }
+func (t *Task) Payload() []byte { return t.payload }
+
 // NewTask returns a new Task given a type name and payload data.
-//
-// The payload values must be serializable.
-func NewTask(typename string, payload map[string]interface{}) *Task {
+func NewTask(typename string, payload []byte) *Task {
 	return &Task{
-		Type:    typename,
-		Payload: Payload{payload},
+		typename: typename,
+		payload:  payload,
 	}
 }
 
