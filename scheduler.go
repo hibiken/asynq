@@ -240,8 +240,8 @@ func (s *Scheduler) beat() {
 		e := &base.SchedulerEntry{
 			ID:      job.id.String(),
 			Spec:    job.cronspec,
-			Type:    job.task.Type,
-			Payload: job.task.Payload.data,
+			Type:    job.task.Type(),
+			Payload: job.task.Payload(),
 			Opts:    stringifyOptions(job.opts),
 			Next:    entry.Next,
 			Prev:    entry.Prev,

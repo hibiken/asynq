@@ -6,12 +6,8 @@
 package base
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -125,32 +121,8 @@ func SchedulerHistoryKey(entryID string) string {
 }
 
 // UniqueKey returns a redis key with the given type, payload, and queue name.
-func UniqueKey(qname, tasktype string, payload map[string]interface{}) string {
-	return fmt.Sprintf("asynq:{%s}:unique:%s:%s", qname, tasktype, serializePayload(payload))
-}
-
-func serializePayload(payload map[string]interface{}) string {
-	if payload == nil {
-		return "nil"
-	}
-	type entry struct {
-		k string
-		v interface{}
-	}
-	var es []entry
-	for k, v := range payload {
-		es = append(es, entry{k, v})
-	}
-	// sort entries by key
-	sort.Slice(es, func(i, j int) bool { return es[i].k < es[j].k })
-	var b strings.Builder
-	for _, e := range es {
-		if b.Len() > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString(fmt.Sprintf("%s=%v", e.k, e.v))
-	}
-	return b.String()
+func UniqueKey(qname, tasktype string, payload []byte) string {
+	return fmt.Sprintf("asynq:{%s}:unique:%s:%s", qname, tasktype, string(payload))
 }
 
 // TaskMessage is the internal representation of a task with additional metadata fields.
@@ -160,7 +132,7 @@ type TaskMessage struct {
 	Type string
 
 	// Payload holds data needed to process the task.
-	Payload map[string]interface{}
+	Payload []byte
 
 	// ID is a unique identifier for each task.
 	ID uuid.UUID
@@ -203,13 +175,9 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 	if msg == nil {
 		return nil, fmt.Errorf("cannot encode nil message")
 	}
-	payload, err := json.Marshal(msg.Payload)
-	if err != nil {
-		return nil, err
-	}
 	return proto.Marshal(&pb.TaskMessage{
 		Type:      msg.Type,
-		Payload:   payload,
+		Payload:   msg.Payload,
 		Id:        msg.ID.String(),
 		Queue:     msg.Queue,
 		Retry:     int32(msg.Retry),
@@ -227,13 +195,9 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 	if err := proto.Unmarshal(data, &pbmsg); err != nil {
 		return nil, err
 	}
-	payload, err := decodePayload(pbmsg.GetPayload())
-	if err != nil {
-		return nil, err
-	}
 	return &TaskMessage{
 		Type:      pbmsg.GetType(),
-		Payload:   payload,
+		Payload:   pbmsg.GetPayload(),
 		ID:        uuid.MustParse(pbmsg.GetId()),
 		Queue:     pbmsg.GetQueue(),
 		Retry:     int(pbmsg.GetRetry()),
@@ -383,7 +347,7 @@ type WorkerInfo struct {
 	ServerID string
 	ID       string
 	Type     string
-	Payload  map[string]interface{}
+	Payload  []byte
 	Queue    string
 	Started  time.Time
 	Deadline time.Time
@@ -393,10 +357,6 @@ type WorkerInfo struct {
 func EncodeWorkerInfo(info *WorkerInfo) ([]byte, error) {
 	if info == nil {
 		return nil, fmt.Errorf("cannot encode nil worker info")
-	}
-	payload, err := json.Marshal(info.Payload)
-	if err != nil {
-		return nil, err
 	}
 	startTime, err := ptypes.TimestampProto(info.Started)
 	if err != nil {
@@ -412,31 +372,17 @@ func EncodeWorkerInfo(info *WorkerInfo) ([]byte, error) {
 		ServerId:    info.ServerID,
 		TaskId:      info.ID,
 		TaskType:    info.Type,
-		TaskPayload: payload,
+		TaskPayload: info.Payload,
 		Queue:       info.Queue,
 		StartTime:   startTime,
 		Deadline:    deadline,
 	})
 }
 
-func decodePayload(b []byte) (map[string]interface{}, error) {
-	d := json.NewDecoder(bytes.NewReader(b))
-	d.UseNumber()
-	payload := make(map[string]interface{})
-	if err := d.Decode(&payload); err != nil {
-		return nil, err
-	}
-	return payload, nil
-}
-
 // DecodeWorkerInfo decodes the given bytes into WorkerInfo.
 func DecodeWorkerInfo(b []byte) (*WorkerInfo, error) {
 	var pbmsg pb.WorkerInfo
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
-		return nil, err
-	}
-	payload, err := decodePayload(pbmsg.GetTaskPayload())
-	if err != nil {
 		return nil, err
 	}
 	startTime, err := ptypes.Timestamp(pbmsg.GetStartTime())
@@ -453,7 +399,7 @@ func DecodeWorkerInfo(b []byte) (*WorkerInfo, error) {
 		ServerID: pbmsg.GetServerId(),
 		ID:       pbmsg.GetTaskId(),
 		Type:     pbmsg.GetTaskType(),
-		Payload:  payload,
+		Payload:  pbmsg.GetTaskPayload(),
 		Queue:    pbmsg.GetQueue(),
 		Started:  startTime,
 		Deadline: deadline,
@@ -472,7 +418,7 @@ type SchedulerEntry struct {
 	Type string
 
 	// Payload is the payload of the periodic task.
-	Payload map[string]interface{}
+	Payload []byte
 
 	// Opts is the options for the periodic task.
 	Opts []string
@@ -490,10 +436,6 @@ func EncodeSchedulerEntry(entry *SchedulerEntry) ([]byte, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("cannot encode nil scheduler entry")
 	}
-	payload, err := json.Marshal(entry.Payload)
-	if err != nil {
-		return nil, err
-	}
 	next, err := ptypes.TimestampProto(entry.Next)
 	if err != nil {
 		return nil, err
@@ -506,7 +448,7 @@ func EncodeSchedulerEntry(entry *SchedulerEntry) ([]byte, error) {
 		Id:              entry.ID,
 		Spec:            entry.Spec,
 		TaskType:        entry.Type,
-		TaskPayload:     payload,
+		TaskPayload:     entry.Payload,
 		EnqueueOptions:  entry.Opts,
 		NextEnqueueTime: next,
 		PrevEnqueueTime: prev,
@@ -517,10 +459,6 @@ func EncodeSchedulerEntry(entry *SchedulerEntry) ([]byte, error) {
 func DecodeSchedulerEntry(b []byte) (*SchedulerEntry, error) {
 	var pbmsg pb.SchedulerEntry
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
-		return nil, err
-	}
-	payload, err := decodePayload(pbmsg.GetTaskPayload())
-	if err != nil {
 		return nil, err
 	}
 	next, err := ptypes.Timestamp(pbmsg.GetNextEnqueueTime())
@@ -535,7 +473,7 @@ func DecodeSchedulerEntry(b []byte) (*SchedulerEntry, error) {
 		ID:      pbmsg.GetId(),
 		Spec:    pbmsg.GetSpec(),
 		Type:    pbmsg.GetTaskType(),
-		Payload: payload,
+		Payload: pbmsg.GetTaskPayload(),
 		Opts:    pbmsg.GetEnqueueOptions(),
 		Next:    next,
 		Prev:    prev,

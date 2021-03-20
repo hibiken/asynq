@@ -85,7 +85,7 @@ func getRedisConnOpt(tb testing.TB) RedisConnOpt {
 var sortTaskOpt = cmp.Transformer("SortMsg", func(in []*Task) []*Task {
 	out := append([]*Task(nil), in...) // Copy input to avoid mutating it
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].Type < out[j].Type
+		return out[i].Type() < out[j].Type()
 	})
 	return out
 })

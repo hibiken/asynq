@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- NewTask function now takes array of bytes as payload.
+- Task `Type` and `Payload` should be accessed by a method call.
 - Requires redis v4.0+ for multiple field/value pair support
 - Renamed pending key (TODO: need migration script
 

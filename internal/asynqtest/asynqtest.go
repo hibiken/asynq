@@ -6,6 +6,7 @@
 package asynqtest
 
 import (
+	"encoding/json"
 	"math"
 	"sort"
 	"testing"
@@ -93,13 +94,13 @@ var SortStringSliceOpt = cmp.Transformer("SortStringSlice", func(in []string) []
 var IgnoreIDOpt = cmpopts.IgnoreFields(base.TaskMessage{}, "ID")
 
 // NewTaskMessage returns a new instance of TaskMessage given a task type and payload.
-func NewTaskMessage(taskType string, payload map[string]interface{}) *base.TaskMessage {
+func NewTaskMessage(taskType string, payload []byte) *base.TaskMessage {
 	return NewTaskMessageWithQueue(taskType, payload, base.DefaultQueueName)
 }
 
 // NewTaskMessageWithQueue returns a new instance of TaskMessage given a
 // task type, payload and queue name.
-func NewTaskMessageWithQueue(taskType string, payload map[string]interface{}, qname string) *base.TaskMessage {
+func NewTaskMessageWithQueue(taskType string, payload []byte, qname string) *base.TaskMessage {
 	return &base.TaskMessage{
 		ID:       uuid.New(),
 		Type:     taskType,
@@ -109,6 +110,15 @@ func NewTaskMessageWithQueue(taskType string, payload map[string]interface{}, qn
 		Timeout:  1800, // default timeout of 30 mins
 		Deadline: 0,    // no deadline
 	}
+}
+
+// JSON serializes the given key-value pairs into stream of bytes in JSON.
+func JSON(kv map[string]interface{}) []byte {
+	b, err := json.Marshal(kv)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 // TaskMessageAfterRetry returns an updated copy of t after retry.
