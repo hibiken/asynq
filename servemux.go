@@ -62,7 +62,7 @@ func (mux *ServeMux) Handler(t *Task) (h Handler, pattern string) {
 	mux.mu.RLock()
 	defer mux.mu.RUnlock()
 
-	h, pattern = mux.match(t.Type)
+	h, pattern = mux.match(t.Type())
 	if h == nil {
 		h, pattern = NotFoundHandler(), ""
 	}
@@ -151,7 +151,7 @@ func (mux *ServeMux) Use(mws ...MiddlewareFunc) {
 
 // NotFound returns an error indicating that the handler was not found for the given task.
 func NotFound(ctx context.Context, task *Task) error {
-	return fmt.Errorf("handler not found for task %q", task.Type)
+	return fmt.Errorf("handler not found for task %q", task.Type())
 }
 
 // NotFoundHandler returns a simple task handler that returns a ``not found`` error.
