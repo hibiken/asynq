@@ -267,52 +267,68 @@ func TestSchedulerHistoryKey(t *testing.T) {
 	}
 }
 
+func toBytes(m map[string]interface{}) []byte {
+	b, err := json.Marshal(m)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
 func TestUniqueKey(t *testing.T) {
 	tests := []struct {
 		desc     string
 		qname    string
 		tasktype string
-		payload  map[string]interface{}
+		payload  []byte
 		want     string
 	}{
 		{
 			"with primitive types",
 			"default",
 			"email:send",
-			map[string]interface{}{"a": 123, "b": "hello", "c": true},
-			"asynq:{default}:unique:email:send:a=123,b=hello,c=true",
+			toBytes(map[string]interface{}{"a": 123, "b": "hello", "c": true}),
+			fmt.Sprintf("asynq:{default}:unique:email:send:%s",
+				string(toBytes(map[string]interface{}{"a": 123, "b": "hello", "c": true}))),
 		},
 		{
 			"with unsorted keys",
 			"default",
 			"email:send",
-			map[string]interface{}{"b": "hello", "c": true, "a": 123},
-			"asynq:{default}:unique:email:send:a=123,b=hello,c=true",
+			toBytes(map[string]interface{}{"b": "hello", "c": true, "a": 123}),
+			fmt.Sprintf("asynq:{default}:unique:email:send:%s",
+				string(toBytes(map[string]interface{}{"b": "hello", "c": true, "a": 123}))),
 		},
 		{
 			"with composite types",
 			"default",
 			"email:send",
-			map[string]interface{}{
+			toBytes(map[string]interface{}{
 				"address": map[string]string{"line": "123 Main St", "city": "Boston", "state": "MA"},
-				"names":   []string{"bob", "mike", "rob"}},
-			"asynq:{default}:unique:email:send:address=map[city:Boston line:123 Main St state:MA],names=[bob mike rob]",
+				"names":   []string{"bob", "mike", "rob"}}),
+			fmt.Sprintf("asynq:{default}:unique:email:send:%s",
+				string(toBytes(map[string]interface{}{
+					"address": map[string]string{"line": "123 Main St", "city": "Boston", "state": "MA"},
+					"names":   []string{"bob", "mike", "rob"}}))),
 		},
 		{
 			"with complex types",
 			"default",
 			"email:send",
-			map[string]interface{}{
+			toBytes(map[string]interface{}{
 				"time":     time.Date(2020, time.July, 28, 0, 0, 0, 0, time.UTC),
-				"duration": time.Hour},
-			"asynq:{default}:unique:email:send:duration=1h0m0s,time=2020-07-28 00:00:00 +0000 UTC",
+				"duration": time.Hour}),
+			fmt.Sprintf("asynq:{default}:unique:email:send:%s",
+				string(toBytes(map[string]interface{}{
+					"time":     time.Date(2020, time.July, 28, 0, 0, 0, 0, time.UTC),
+					"duration": time.Hour}))),
 		},
 		{
 			"with nil payload",
 			"default",
 			"reindex",
 			nil,
-			"asynq:{default}:unique:reindex:nil",
+			"asynq:{default}:unique:reindex:",
 		},
 	}
 
@@ -333,7 +349,7 @@ func TestMessageEncoding(t *testing.T) {
 		{
 			in: &TaskMessage{
 				Type:     "task1",
-				Payload:  map[string]interface{}{"a": 1, "b": "hello!", "c": true},
+				Payload:  toBytes(map[string]interface{}{"a": 1, "b": "hello!", "c": true}),
 				ID:       id,
 				Queue:    "default",
 				Retry:    10,
@@ -343,7 +359,7 @@ func TestMessageEncoding(t *testing.T) {
 			},
 			out: &TaskMessage{
 				Type:     "task1",
-				Payload:  map[string]interface{}{"a": json.Number("1"), "b": "hello!", "c": true},
+				Payload:  toBytes(map[string]interface{}{"a": json.Number("1"), "b": "hello!", "c": true}),
 				ID:       id,
 				Queue:    "default",
 				Retry:    10,
@@ -420,7 +436,7 @@ func TestWorkerInfoEncoding(t *testing.T) {
 				ServerID: "abc123",
 				ID:       uuid.NewString(),
 				Type:     "taskA",
-				Payload:  map[string]interface{}{"foo": "bar"},
+				Payload:  toBytes(map[string]interface{}{"foo": "bar"}),
 				Queue:    "default",
 				Started:  time.Now().Add(-3 * time.Hour),
 				Deadline: time.Now().Add(30 * time.Second),
@@ -455,7 +471,7 @@ func TestSchedulerEntryEncoding(t *testing.T) {
 				ID:      uuid.NewString(),
 				Spec:    "* * * * *",
 				Type:    "task_A",
-				Payload: map[string]interface{}{"foo": "bar"},
+				Payload: toBytes(map[string]interface{}{"foo": "bar"}),
 				Opts:    []string{"Queue('email')"},
 				Next:    time.Now().Add(30 * time.Second).UTC(),
 				Prev:    time.Now().Add(-2 * time.Minute).UTC(),
