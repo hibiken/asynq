@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2021-03-20
+
+### Fixed
+
+- Replace `KEYS` command with `SCAN` as recommended by [redis doc](https://redis.io/commands/KEYS).
+
 ## [0.16.0] - 2021-03-10
 
 ### Added
