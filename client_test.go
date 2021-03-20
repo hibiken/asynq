@@ -20,7 +20,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", h.KV(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
+	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 
 	var (
 		now          = time.Now()
@@ -137,7 +137,7 @@ func TestClientEnqueue(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", h.KV(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
+	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 	now := time.Now()
 
 	tests := []struct {
@@ -390,7 +390,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", h.KV(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
+	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 	now := time.Now()
 
 	tests := []struct {
@@ -501,7 +501,7 @@ func TestClientEnqueueError(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", h.KV(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
+	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 
 	tests := []struct {
 		desc string
@@ -650,7 +650,7 @@ func TestClientEnqueueUnique(t *testing.T) {
 		ttl  time.Duration
 	}{
 		{
-			NewTask("email", h.KV(map[string]interface{}{"user_id": 123})),
+			NewTask("email", h.JSON(map[string]interface{}{"user_id": 123})),
 			time.Hour,
 		},
 	}

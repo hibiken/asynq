@@ -41,8 +41,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 		})
 		// Create a bunch of tasks
 		for i := 0; i < count; i++ {
-			t := NewTask(fmt.Sprintf("task%d", i), h.KV(map[string]interface{}{"data": i}))
-			if _, err := client.Enqueue(t); err != nil {
+			if _, err := client.Enqueue(makeTask(i)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
@@ -223,7 +222,7 @@ func BenchmarkClientWhileServerRunning(b *testing.B) {
 		b.Log("Starting enqueueing")
 		enqueued := 0
 		for enqueued < 100000 {
-			t := NewTask(fmt.Sprintf("enqueued%d", enqueued), h.KV(map[string]interface{}{"data": enqueued}))
+			t := NewTask(fmt.Sprintf("enqueued%d", enqueued), h.JSON(map[string]interface{}{"data": enqueued}))
 			if _, err := client.Enqueue(t); err != nil {
 				b.Logf("could not enqueue task %d: %v", enqueued, err)
 				continue

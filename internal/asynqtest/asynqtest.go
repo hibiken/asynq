@@ -112,8 +112,8 @@ func NewTaskMessageWithQueue(taskType string, payload []byte, qname string) *bas
 	}
 }
 
-// KV serializes the given key-value pairs into stream of bytes.
-func KV(kv map[string]interface{}) []byte {
+// JSON serializes the given key-value pairs into stream of bytes in JSON.
+func JSON(kv map[string]interface{}) []byte {
 	b, err := json.Marshal(kv)
 	if err != nil {
 		panic(err)

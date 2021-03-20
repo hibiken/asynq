@@ -40,12 +40,12 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = c.Enqueue(NewTask("send_email", asynqtest.KV(map[string]interface{}{"recipient_id": 123})))
+	_, err = c.Enqueue(NewTask("send_email", asynqtest.JSON(map[string]interface{}{"recipient_id": 123})))
 	if err != nil {
 		t.Errorf("could not enqueue a task: %v", err)
 	}
 
-	_, err = c.Enqueue(NewTask("send_email", asynqtest.KV(map[string]interface{}{"recipient_id": 456})), ProcessIn(1*time.Hour))
+	_, err = c.Enqueue(NewTask("send_email", asynqtest.JSON(map[string]interface{}{"recipient_id": 456})), ProcessIn(1*time.Hour))
 	if err != nil {
 		t.Errorf("could not enqueue a task: %v", err)
 	}

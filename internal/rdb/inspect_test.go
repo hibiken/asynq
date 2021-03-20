@@ -50,9 +50,9 @@ func TestAllQueues(t *testing.T) {
 func TestCurrentStats(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	m1 := h.NewTaskMessage("send_email", h.KV(map[string]interface{}{"subject": "hello"}))
+	m1 := h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"subject": "hello"}))
 	m2 := h.NewTaskMessage("reindex", nil)
-	m3 := h.NewTaskMessage("gen_thumbnail", h.KV(map[string]interface{}{"src": "some/path/to/img"}))
+	m3 := h.NewTaskMessage("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/path/to/img"}))
 	m4 := h.NewTaskMessage("sync", nil)
 	m5 := h.NewTaskMessageWithQueue("important_notification", nil, "critical")
 	m6 := h.NewTaskMessageWithQueue("minor_notification", nil, "low")
@@ -312,7 +312,7 @@ func TestListPending(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 
-	m1 := h.NewTaskMessage("send_email", h.KV(map[string]interface{}{"subject": "hello"}))
+	m1 := h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"subject": "hello"}))
 	m2 := h.NewTaskMessage("reindex", nil)
 	m3 := h.NewTaskMessageWithQueue("important_notification", nil, "critical")
 	m4 := h.NewTaskMessageWithQueue("minor_notification", nil, "low")
@@ -3282,9 +3282,9 @@ func TestListWorkers(t *testing.T) {
 		pid      = 4567
 		serverID = "server123"
 
-		m1 = h.NewTaskMessage("send_email", h.KV(map[string]interface{}{"user_id": "abc123"}))
-		m2 = h.NewTaskMessage("gen_thumbnail", h.KV(map[string]interface{}{"path": "some/path/to/image/file"}))
-		m3 = h.NewTaskMessage("reindex", h.KV(map[string]interface{}{}))
+		m1 = h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"user_id": "abc123"}))
+		m2 = h.NewTaskMessage("gen_thumbnail", h.JSON(map[string]interface{}{"path": "some/path/to/image/file"}))
+		m3 = h.NewTaskMessage("reindex", h.JSON(map[string]interface{}{}))
 	)
 
 	tests := []struct {
@@ -3367,7 +3367,7 @@ func TestWriteListClearSchedulerEntries(t *testing.T) {
 		{
 			Spec:    "@every 20m",
 			Type:    "bar",
-			Payload: h.KV(map[string]interface{}{"fiz": "baz"}),
+			Payload: h.JSON(map[string]interface{}{"fiz": "baz"}),
 			Opts:    nil,
 			Next:    now.Add(1 * time.Minute),
 			Prev:    now.Add(-19 * time.Minute),
