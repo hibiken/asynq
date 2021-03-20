@@ -172,9 +172,17 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 }
 
 func (r *RDB) memoryUsage(qname string) (int64, error) {
-	keys, err := r.client.Keys(fmt.Sprintf("asynq:{%s}*", qname)).Result()
-	if err != nil {
-		return 0, err
+	var cursor uint64
+	var keys []string
+	for {
+		data, cursor, err := r.client.Scan(cursor, fmt.Sprintf("asynq:{%s}*", qname), 100).Result()
+		if err != nil {
+			return 0, err
+		}
+		keys = append(keys, data...)
+		if cursor == 0 {
+			break
+		}
 	}
 	var usg int64
 	for _, k := range keys {
