@@ -21,7 +21,7 @@ import (
 // A Scheduler kicks off tasks at regular intervals based on the user defined schedule.
 type Scheduler struct {
 	id         string
-	status     *base.ServerStatus
+	state      *base.ServerState
 	logger     *log.Logger
 	client     *Client
 	rdb        *rdb.RDB
@@ -61,7 +61,7 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 
 	return &Scheduler{
 		id:         generateSchedulerID(),
-		status:     base.NewServerStatus(base.StatusIdle),
+		state:      base.NewServerState(),
 		logger:     logger,
 		client:     NewClient(r),
 		rdb:        rdb.NewRDB(c),
@@ -182,10 +182,10 @@ func (s *Scheduler) Run() error {
 // Start starts the scheduler.
 // It returns an error if the scheduler is already running or has been stopped.
 func (s *Scheduler) Start() error {
-	switch s.status.Get() {
-	case base.StatusActive:
+	switch s.state.Get() {
+	case base.StateActive:
 		return fmt.Errorf("asynq: the scheduler is already running")
-	case base.StatusClosed:
+	case base.StateClosed:
 		return fmt.Errorf("asynq: the scheduler has already been stopped")
 	}
 	s.logger.Info("Scheduler starting")
@@ -193,14 +193,14 @@ func (s *Scheduler) Start() error {
 	s.cron.Start()
 	s.wg.Add(1)
 	go s.runHeartbeater()
-	s.status.Set(base.StatusActive)
+	s.state.Set(base.StateActive)
 	return nil
 }
 
 // Stop stops the scheduler.
 // It returns an error if the scheduler is not currently running.
 func (s *Scheduler) Stop() error {
-	if s.status.Get() != base.StatusActive {
+	if s.state.Get() != base.StateActive {
 		return fmt.Errorf("asynq: the scheduler is not running")
 	}
 	s.logger.Info("Scheduler shutting down")
@@ -212,7 +212,7 @@ func (s *Scheduler) Stop() error {
 	s.clearHistory()
 	s.client.Close()
 	s.rdb.Close()
-	s.status.Set(base.StatusClosed)
+	s.state.Set(base.StateClosed)
 	s.logger.Info("Scheduler stopped")
 	return nil
 }

@@ -40,8 +40,8 @@ type heartbeater struct {
 	started time.Time
 	workers map[string]*workerInfo
 
-	// status is shared with other goroutine but is concurrency safe.
-	status *base.ServerStatus
+	// state is shared with other goroutine but is concurrency safe.
+	state *base.ServerState
 
 	// channels to receive updates on active workers.
 	starting <-chan *workerInfo
@@ -55,7 +55,7 @@ type heartbeaterParams struct {
 	concurrency    int
 	queues         map[string]int
 	strictPriority bool
-	status         *base.ServerStatus
+	state          *base.ServerState
 	starting       <-chan *workerInfo
 	finished       <-chan *base.TaskMessage
 }
@@ -79,7 +79,7 @@ func newHeartbeater(params heartbeaterParams) *heartbeater {
 		queues:         params.queues,
 		strictPriority: params.strictPriority,
 
-		status:   params.status,
+		state:    params.state,
 		workers:  make(map[string]*workerInfo),
 		starting: params.starting,
 		finished: params.finished,
@@ -142,7 +142,7 @@ func (h *heartbeater) beat() {
 		Concurrency:       h.concurrency,
 		Queues:            h.queues,
 		StrictPriority:    h.strictPriority,
-		Status:            h.status.String(),
+		Status:            h.state.String(),
 		Started:           h.started,
 		ActiveWorkerCount: len(h.workers),
 	}

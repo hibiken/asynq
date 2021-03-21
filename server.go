@@ -37,7 +37,7 @@ type Server struct {
 
 	broker base.Broker
 
-	status *base.ServerStatus
+	state *base.ServerState
 
 	// wait group to wait for all goroutines to finish.
 	wg            sync.WaitGroup
@@ -278,7 +278,7 @@ const (
 )
 
 // NewServer returns a new Server given a redis connection option
-// and background processing configuration.
+// and server configuration.
 func NewServer(r RedisConnOpt, cfg Config) *Server {
 	c, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
@@ -324,7 +324,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	starting := make(chan *workerInfo)
 	finished := make(chan *base.TaskMessage)
 	syncCh := make(chan *syncRequest)
-	status := base.NewServerStatus(base.StatusIdle)
+	state := base.NewServerState()
 	cancels := base.NewCancelations()
 
 	syncer := newSyncer(syncerParams{
@@ -339,7 +339,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		concurrency:    n,
 		queues:         queues,
 		strictPriority: cfg.StrictPriority,
-		status:         status,
+		state:          state,
 		starting:       starting,
 		finished:       finished,
 	})
@@ -384,7 +384,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	return &Server{
 		logger:        logger,
 		broker:        rdb,
-		status:        status,
+		state:         state,
 		forwarder:     forwarder,
 		processor:     processor,
 		syncer:        syncer,
@@ -401,10 +401,12 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 // is successful.
 //
 // If ProcessTask return a non-nil error or panics, the task
-// will be retried after delay.
+// will be retried after delay if retry-count is remaining,
+// otherwise the task will be archived.
+//
 // One exception to this rule is when ProcessTask returns SkipRetry error.
 // If the returned error is SkipRetry or the error wraps SkipRetry, retry is
-// skipped and task will be archived instead.
+// skipped and task will be immediately archived instead.
 type Handler interface {
 	ProcessTask(context.Context, *Task) error
 }
@@ -421,21 +423,21 @@ func (fn HandlerFunc) ProcessTask(ctx context.Context, task *Task) error {
 }
 
 // ErrServerClosed indicates that the operation is now illegal because of the server has been shutdown.
-var ErrServerClosed = errors.New("asynq: server closed")
+var ErrServerClosed = errors.New("asynq: Server closed")
 
-// Run starts the background-task processing and blocks until
+// Run starts the task processing and blocks until
 // an os signal to exit the program is received. Once it receives
 // a signal, it gracefully shuts down all active workers and other
 // goroutines to process the tasks.
 //
-// Run returns any error encountered during server startup time.
+// Run returns any error encountered at server startup time.
 // If the server has already been shutdown, ErrServerClosed is returned.
 func (srv *Server) Run(handler Handler) error {
 	if err := srv.Start(handler); err != nil {
 		return err
 	}
 	srv.waitForSignals()
-	srv.Stop()
+	srv.Shutdown()
 	return nil
 }
 
@@ -445,18 +447,18 @@ func (srv *Server) Run(handler Handler) error {
 // concurrency specified at the initialization time.
 //
 // Start returns any error encountered during server startup time.
-// If the server has already been stopped, ErrServerClosed is returned.
+// If the server has already been shutdown, ErrServerClosed is returned.
 func (srv *Server) Start(handler Handler) error {
 	if handler == nil {
 		return fmt.Errorf("asynq: server cannot run with nil handler")
 	}
-	switch srv.status.Get() {
-	case base.StatusActive:
+	switch srv.state.Get() {
+	case base.StateActive:
 		return fmt.Errorf("asynq: the server is already running")
-	case base.StatusClosed:
+	case base.StateClosed:
 		return ErrServerClosed
 	}
-	srv.status.Set(base.StatusActive)
+	srv.state.Set(base.StateActive)
 	srv.processor.handler = handler
 
 	srv.logger.Info("Starting processing")
@@ -476,8 +478,8 @@ func (srv *Server) Start(handler Handler) error {
 // active workers to finish processing tasks for duration specified in Config.ShutdownTimeout.
 // If worker didn't finish processing a task during the timeout, the task will be pushed back to Redis.
 func (srv *Server) Shutdown() {
-	switch srv.status.Get() {
-	case base.StatusIdle, base.StatusClosed:
+	switch srv.state.Get() {
+	case base.StateNew, base.StateClosed:
 		// server is not running, do nothing and return.
 		return
 	}
@@ -498,7 +500,7 @@ func (srv *Server) Shutdown() {
 	srv.wg.Wait()
 
 	srv.broker.Close()
-	srv.status.Set(base.StatusClosed)
+	srv.state.Set(base.StateClosed)
 
 	srv.logger.Info("Exiting")
 }
@@ -508,6 +510,6 @@ func (srv *Server) Shutdown() {
 func (srv *Server) Stop() {
 	srv.logger.Info("Stopping processor")
 	srv.processor.stop()
-	srv.status.Set(base.StatusStopped)
+	srv.state.Set(base.StateStopped)
 	srv.logger.Info("Processor stopped")
 }

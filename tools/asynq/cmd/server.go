@@ -35,11 +35,11 @@ The command shows the following for each server:
 * Host and PID of the process in which the server is running
 * Number of active workers out of worker pool
 * Queue configuration
-* State of the worker server ("running" | "quiet")
+* State of the worker server ("active" | "stopped")
 * Time the server was started
 
-A "running" server is pulling tasks from queues and processing them.
-A "quiet" server is no longer pulling new tasks from queues`,
+A "active" server is pulling tasks from queues and processing them.
+A "stopped" server is no longer pulling new tasks from queues`,
 	Run: serverList,
 }
 
