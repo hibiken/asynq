@@ -51,7 +51,7 @@ func TestHealthChecker(t *testing.T) {
 	}
 	mu.Unlock()
 
-	hc.terminate()
+	hc.shutdown()
 }
 
 func TestHealthCheckerWhenRedisDown(t *testing.T) {
@@ -99,5 +99,5 @@ func TestHealthCheckerWhenRedisDown(t *testing.T) {
 	}
 	mu.Unlock()
 
-	hc.terminate()
+	hc.shutdown()
 }

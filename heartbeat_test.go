@@ -74,19 +74,19 @@ func TestHeartbeater(t *testing.T) {
 		ss, err := rdbClient.ListServers()
 		if err != nil {
 			t.Errorf("could not read server info from redis: %v", err)
-			hb.terminate()
+			hb.shutdown()
 			continue
 		}
 
 		if len(ss) != 1 {
 			t.Errorf("(*RDB).ListServers returned %d process info, want 1", len(ss))
-			hb.terminate()
+			hb.shutdown()
 			continue
 		}
 
 		if diff := cmp.Diff(want, ss[0], timeCmpOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
 			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ss[0], want, diff)
-			hb.terminate()
+			hb.shutdown()
 			continue
 		}
 
@@ -100,23 +100,23 @@ func TestHeartbeater(t *testing.T) {
 		ss, err = rdbClient.ListServers()
 		if err != nil {
 			t.Errorf("could not read process status from redis: %v", err)
-			hb.terminate()
+			hb.shutdown()
 			continue
 		}
 
 		if len(ss) != 1 {
 			t.Errorf("(*RDB).ListProcesses returned %d process info, want 1", len(ss))
-			hb.terminate()
+			hb.shutdown()
 			continue
 		}
 
 		if diff := cmp.Diff(want, ss[0], timeCmpOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
 			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ss[0], want, diff)
-			hb.terminate()
+			hb.shutdown()
 			continue
 		}
 
-		hb.terminate()
+		hb.shutdown()
 	}
 }
 
@@ -152,5 +152,5 @@ func TestHeartbeaterWithRedisDown(t *testing.T) {
 	// wait for heartbeater to try writing data to redis
 	time.Sleep(2 * time.Second)
 
-	hb.terminate()
+	hb.shutdown()
 }

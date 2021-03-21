@@ -47,7 +47,7 @@ func newRecoverer(params recovererParams) *recoverer {
 	}
 }
 
-func (r *recoverer) terminate() {
+func (r *recoverer) shutdown() {
 	r.logger.Debug("Recoverer shutting down...")
 	// Signal the recoverer goroutine to stop polling.
 	r.done <- struct{}{}

@@ -30,7 +30,7 @@ func ExampleServer_Run() {
 	}
 }
 
-func ExampleServer_Stop() {
+func ExampleServer_Shutdown() {
 	srv := asynq.NewServer(
 		asynq.RedisClientOpt{Addr: ":6379"},
 		asynq.Config{Concurrency: 20},
@@ -47,10 +47,10 @@ func ExampleServer_Stop() {
 	signal.Notify(sigs, unix.SIGTERM, unix.SIGINT)
 	<-sigs // wait for termination signal
 
-	srv.Stop()
+	srv.Shutdown()
 }
 
-func ExampleServer_Quiet() {
+func ExampleServer_Stop() {
 	srv := asynq.NewServer(
 		asynq.RedisClientOpt{Addr: ":6379"},
 		asynq.Config{Concurrency: 20},
@@ -73,7 +73,7 @@ func ExampleServer_Quiet() {
 			srv.Stop() // stop processing new tasks
 			continue
 		}
-		break
+		break // received SIGTERM or SIGINT signal
 	}
 
 	srv.Shutdown()

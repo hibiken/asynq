@@ -21,17 +21,18 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
-// Server is responsible for managing the task processing.
+// Server is responsible for task processing and task lifecycle management.
 //
 // Server pulls tasks off queues and processes them.
 // If the processing of a task is unsuccessful, server will schedule it for a retry.
+//
 // A task will be retried until either the task gets processed successfully
 // or until it reaches its max retry count.
 //
 // If a task exhausts its retries, it will be moved to the archive and
-// will be kept in the archive for some time until a certain condition is met
-// (e.g., archive size reaches a certain limit, or the task has been in the
-// archive for a certain amount of time).
+// will be kept in the archive set.
+// Note that the archive size is finite and once it reaches its max size,
+// oldest tasks in the archive will be deleted.
 type Server struct {
 	logger *log.Logger
 
@@ -442,11 +443,12 @@ func (srv *Server) Run(handler Handler) error {
 }
 
 // Start starts the worker server. Once the server has started,
-// it pulls tasks off queues and starts a worker goroutine for each task.
-// Tasks are processed concurrently by the workers  up to the number of
-// concurrency specified at the initialization time.
+// it pulls tasks off queues and starts a worker goroutine for each task
+// and then call Handler to process it.
+// Tasks are processed concurrently by the workers up to the number of
+// concurrency specified in Config.Concurrency.
 //
-// Start returns any error encountered during server startup time.
+// Start returns any error encountered at server startup time.
 // If the server has already been shutdown, ErrServerClosed is returned.
 func (srv *Server) Start(handler Handler) error {
 	if handler == nil {
@@ -455,6 +457,8 @@ func (srv *Server) Start(handler Handler) error {
 	switch srv.state.Get() {
 	case base.StateActive:
 		return fmt.Errorf("asynq: the server is already running")
+	case base.StateStopped:
+		return fmt.Errorf("asynq: the server is in the stopped state. Waiting for shutdown.")
 	case base.StateClosed:
 		return ErrServerClosed
 	}
@@ -485,17 +489,17 @@ func (srv *Server) Shutdown() {
 	}
 
 	srv.logger.Info("Starting graceful shutdown")
-	// Note: The order of termination is important.
+	// Note: The order of shutdown is important.
 	// Sender goroutines should be terminated before the receiver goroutines.
 	// processor -> syncer (via syncCh)
 	// processor -> heartbeater (via starting, finished channels)
-	srv.forwarder.terminate()
-	srv.processor.terminate()
-	srv.recoverer.terminate()
-	srv.syncer.terminate()
-	srv.subscriber.terminate()
-	srv.healthchecker.terminate()
-	srv.heartbeater.terminate()
+	srv.forwarder.shutdown()
+	srv.processor.shutdown()
+	srv.recoverer.shutdown()
+	srv.syncer.shutdown()
+	srv.subscriber.shutdown()
+	srv.healthchecker.shutdown()
+	srv.heartbeater.shutdown()
 
 	srv.wg.Wait()
 
@@ -506,7 +510,10 @@ func (srv *Server) Shutdown() {
 }
 
 // Stop signals the server to stop pulling new tasks off queues.
-// Stop should be used before shutting down the server.
+// Stop can be used before shutting down the server to ensure that all
+// currently active tasks are processed before server shutdown.
+//
+// Stop does not shutdown the server, make sure to call Shutdown before exit.
 func (srv *Server) Stop() {
 	srv.logger.Info("Stopping processor")
 	srv.processor.stop()

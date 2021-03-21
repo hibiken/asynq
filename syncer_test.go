@@ -35,7 +35,7 @@ func TestSyncer(t *testing.T) {
 	})
 	var wg sync.WaitGroup
 	syncer.start(&wg)
-	defer syncer.terminate()
+	defer syncer.shutdown()
 
 	for _, msg := range inProgress {
 		m := msg
@@ -66,7 +66,7 @@ func TestSyncerRetry(t *testing.T) {
 
 	var wg sync.WaitGroup
 	syncer.start(&wg)
-	defer syncer.terminate()
+	defer syncer.shutdown()
 
 	var (
 		mu      sync.Mutex
@@ -131,7 +131,7 @@ func TestSyncerDropsStaleRequests(t *testing.T) {
 	}
 
 	time.Sleep(2 * interval) // ensure that syncer runs at least once
-	syncer.terminate()
+	syncer.shutdown()
 
 	mu.Lock()
 	if n != 0 {

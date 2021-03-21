@@ -86,7 +86,7 @@ func newHeartbeater(params heartbeaterParams) *heartbeater {
 	}
 }
 
-func (h *heartbeater) terminate() {
+func (h *heartbeater) shutdown() {
 	h.logger.Debug("Heartbeater shutting down...")
 	// Signal the heartbeater goroutine to stop.
 	h.done <- struct{}{}
