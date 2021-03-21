@@ -420,8 +420,8 @@ func (fn HandlerFunc) ProcessTask(ctx context.Context, task *Task) error {
 	return fn(ctx, task)
 }
 
-// ErrServerStopped indicates that the operation is now illegal because of the server being stopped.
-var ErrServerStopped = errors.New("asynq: the server has been stopped")
+// ErrServerClosed indicates that the operation is now illegal because of the server has been shutdown.
+var ErrServerClosed = errors.New("asynq: server closed")
 
 // Run starts the background-task processing and blocks until
 // an os signal to exit the program is received. Once it receives
@@ -429,7 +429,7 @@ var ErrServerStopped = errors.New("asynq: the server has been stopped")
 // goroutines to process the tasks.
 //
 // Run returns any error encountered during server startup time.
-// If the server has already been stopped, ErrServerStopped is returned.
+// If the server has already been shutdown, ErrServerClosed is returned.
 func (srv *Server) Run(handler Handler) error {
 	if err := srv.Start(handler); err != nil {
 		return err
@@ -445,18 +445,18 @@ func (srv *Server) Run(handler Handler) error {
 // concurrency specified at the initialization time.
 //
 // Start returns any error encountered during server startup time.
-// If the server has already been stopped, ErrServerStopped is returned.
+// If the server has already been stopped, ErrServerClosed is returned.
 func (srv *Server) Start(handler Handler) error {
 	if handler == nil {
 		return fmt.Errorf("asynq: server cannot run with nil handler")
 	}
 	switch srv.status.Get() {
-	case base.StatusRunning:
+	case base.StatusActive:
 		return fmt.Errorf("asynq: the server is already running")
-	case base.StatusStopped:
-		return ErrServerStopped
+	case base.StatusClosed:
+		return ErrServerClosed
 	}
-	srv.status.Set(base.StatusRunning)
+	srv.status.Set(base.StatusActive)
 	srv.processor.handler = handler
 
 	srv.logger.Info("Starting processing")
@@ -471,13 +471,13 @@ func (srv *Server) Start(handler Handler) error {
 	return nil
 }
 
-// Stop stops the worker server.
+// Shutdown gracefully shuts down the server.
 // It gracefully closes all active workers. The server will wait for
 // active workers to finish processing tasks for duration specified in Config.ShutdownTimeout.
 // If worker didn't finish processing a task during the timeout, the task will be pushed back to Redis.
-func (srv *Server) Stop() {
+func (srv *Server) Shutdown() {
 	switch srv.status.Get() {
-	case base.StatusIdle, base.StatusStopped:
+	case base.StatusIdle, base.StatusClosed:
 		// server is not running, do nothing and return.
 		return
 	}
@@ -498,16 +498,16 @@ func (srv *Server) Stop() {
 	srv.wg.Wait()
 
 	srv.broker.Close()
-	srv.status.Set(base.StatusStopped)
+	srv.status.Set(base.StatusClosed)
 
 	srv.logger.Info("Exiting")
 }
 
-// Quiet signals the server to stop pulling new tasks off queues.
-// Quiet should be used before stopping the server.
-func (srv *Server) Quiet() {
+// Stop signals the server to stop pulling new tasks off queues.
+// Stop should be used before shutting down the server.
+func (srv *Server) Stop() {
 	srv.logger.Info("Stopping processor")
 	srv.processor.stop()
-	srv.status.Set(base.StatusQuiet)
+	srv.status.Set(base.StatusStopped)
 	srv.logger.Info("Processor stopped")
 }

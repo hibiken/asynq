@@ -183,9 +183,9 @@ func (s *Scheduler) Run() error {
 // It returns an error if the scheduler is already running or has been stopped.
 func (s *Scheduler) Start() error {
 	switch s.status.Get() {
-	case base.StatusRunning:
+	case base.StatusActive:
 		return fmt.Errorf("asynq: the scheduler is already running")
-	case base.StatusStopped:
+	case base.StatusClosed:
 		return fmt.Errorf("asynq: the scheduler has already been stopped")
 	}
 	s.logger.Info("Scheduler starting")
@@ -193,14 +193,14 @@ func (s *Scheduler) Start() error {
 	s.cron.Start()
 	s.wg.Add(1)
 	go s.runHeartbeater()
-	s.status.Set(base.StatusRunning)
+	s.status.Set(base.StatusActive)
 	return nil
 }
 
 // Stop stops the scheduler.
 // It returns an error if the scheduler is not currently running.
 func (s *Scheduler) Stop() error {
-	if s.status.Get() != base.StatusRunning {
+	if s.status.Get() != base.StatusActive {
 		return fmt.Errorf("asynq: the scheduler is not running")
 	}
 	s.logger.Info("Scheduler shutting down")
@@ -212,7 +212,7 @@ func (s *Scheduler) Stop() error {
 	s.clearHistory()
 	s.client.Close()
 	s.rdb.Close()
-	s.status.Set(base.StatusStopped)
+	s.status.Set(base.StatusClosed)
 	s.logger.Info("Scheduler stopped")
 	return nil
 }

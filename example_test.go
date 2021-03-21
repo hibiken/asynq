@@ -70,13 +70,13 @@ func ExampleServer_Quiet() {
 	for {
 		s := <-sigs
 		if s == unix.SIGTSTP {
-			srv.Quiet() // stop processing new tasks
+			srv.Stop() // stop processing new tasks
 			continue
 		}
 		break
 	}
 
-	srv.Stop()
+	srv.Shutdown()
 }
 
 func ExampleScheduler() {

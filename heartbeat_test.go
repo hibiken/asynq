@@ -55,7 +55,7 @@ func TestHeartbeater(t *testing.T) {
 		hb.host = tc.host
 		hb.pid = tc.pid
 
-		status.Set(base.StatusRunning)
+		status.Set(base.StatusActive)
 		var wg sync.WaitGroup
 		hb.start(&wg)
 
@@ -91,7 +91,7 @@ func TestHeartbeater(t *testing.T) {
 		}
 
 		// status change
-		status.Set(base.StatusStopped)
+		status.Set(base.StatusClosed)
 
 		// allow for heartbeater to write to redis
 		time.Sleep(tc.interval * 2)
@@ -138,7 +138,7 @@ func TestHeartbeaterWithRedisDown(t *testing.T) {
 		concurrency:    10,
 		queues:         map[string]int{"default": 1},
 		strictPriority: false,
-		status:         base.NewServerStatus(base.StatusRunning),
+		status:         base.NewServerStatus(base.StatusActive),
 		starting:       make(chan *workerInfo),
 		finished:       make(chan *base.TaskMessage),
 	})

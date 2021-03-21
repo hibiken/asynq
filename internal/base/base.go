@@ -233,27 +233,27 @@ const (
 	// StatusIdle indicates the server is in idle state.
 	StatusIdle ServerStatusValue = iota
 
-	// StatusRunning indicates the server is up and active.
-	StatusRunning
+	// StatusActive indicates the server is up and active.
+	StatusActive
 
-	// StatusQuiet indicates the server is up but not active.
-	StatusQuiet
-
-	// StatusStopped indicates the server server has been stopped.
+	// StatusStopped indicates the server is up but no longer processing new tasks.
 	StatusStopped
+
+	// StatusClosed indicates the server has been shutdown.
+	StatusClosed
 )
 
 var statuses = []string{
 	"idle",
-	"running",
-	"quiet",
+	"active",
 	"stopped",
+	"closed",
 }
 
 func (s *ServerStatus) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if StatusIdle <= s.val && s.val <= StatusStopped {
+	if StatusIdle <= s.val && s.val <= StatusClosed {
 		return statuses[s.val]
 	}
 	return "unknown status"
