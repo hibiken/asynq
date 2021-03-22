@@ -170,17 +170,18 @@ func (s *Scheduler) Unregister(entryID string) error {
 }
 
 // Run starts the scheduler until an os signal to exit the program is received.
-// It returns an error if scheduler is already running or has been stopped.
+// It returns an error if scheduler is already running or has been shutdown.
 func (s *Scheduler) Run() error {
 	if err := s.Start(); err != nil {
 		return err
 	}
 	s.waitForSignals()
-	return s.Stop()
+	s.Shutdown()
+	return nil
 }
 
 // Start starts the scheduler.
-// It returns an error if the scheduler is already running or has been stopped.
+// It returns an error if the scheduler is already running or has been shutdown.
 func (s *Scheduler) Start() error {
 	switch s.state.Get() {
 	case base.StateActive:
@@ -197,12 +198,8 @@ func (s *Scheduler) Start() error {
 	return nil
 }
 
-// Stop stops the scheduler.
-// It returns an error if the scheduler is not currently running.
-func (s *Scheduler) Stop() error {
-	if s.state.Get() != base.StateActive {
-		return fmt.Errorf("asynq: the scheduler is not running")
-	}
+// Shutdown stops and shuts down the scheduler.
+func (s *Scheduler) Shutdown() {
 	s.logger.Info("Scheduler shutting down")
 	close(s.done) // signal heartbeater to stop
 	ctx := s.cron.Stop()
@@ -214,7 +211,6 @@ func (s *Scheduler) Stop() error {
 	s.rdb.Close()
 	s.state.Set(base.StateClosed)
 	s.logger.Info("Scheduler stopped")
-	return nil
 }
 
 func (s *Scheduler) runHeartbeater() {
