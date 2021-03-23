@@ -216,6 +216,11 @@ const (
 	TaskStateArchived
 )
 
+func (i *Inspector) GetTaskInfo(taskID string) (TaskInfo, error) {
+	// TODO: implement this
+	return nil, nil
+}
+
 // PendingTask is a task in a queue and is ready to be processed.
 type PendingTask struct {
 	*asynq.Task

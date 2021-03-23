@@ -218,11 +218,11 @@ func main() {
     //            Options passed at enqueue time override default ones.
     // ---------------------------------------------------------------------------
 
-    res, err = c.Enqueue(t, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
+    taskID, err = c.Enqueue(t, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
     }
-    fmt.Printf("Enqueued Result: %+v\n", res)
+    log.Printf("Enqueued task: %s", taskID)
 }
 ```
 
