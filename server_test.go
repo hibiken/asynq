@@ -50,7 +50,7 @@ func TestServer(t *testing.T) {
 		t.Errorf("could not enqueue a task: %v", err)
 	}
 
-	srv.Stop()
+	srv.Shutdown()
 }
 
 func TestServerRun(t *testing.T) {
@@ -82,16 +82,16 @@ func TestServerRun(t *testing.T) {
 	}
 }
 
-func TestServerErrServerStopped(t *testing.T) {
+func TestServerErrServerClosed(t *testing.T) {
 	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
 	handler := NewServeMux()
 	if err := srv.Start(handler); err != nil {
 		t.Fatal(err)
 	}
-	srv.Stop()
+	srv.Shutdown()
 	err := srv.Start(handler)
-	if err != ErrServerStopped {
-		t.Errorf("Restarting server: (*Server).Start(handler) = %v, want ErrServerStopped error", err)
+	if err != ErrServerClosed {
+		t.Errorf("Restarting server: (*Server).Start(handler) = %v, want ErrServerClosed error", err)
 	}
 }
 
@@ -100,7 +100,7 @@ func TestServerErrNilHandler(t *testing.T) {
 	err := srv.Start(nil)
 	if err == nil {
 		t.Error("Starting server with nil handler: (*Server).Start(nil) did not return error")
-		srv.Stop()
+		srv.Shutdown()
 	}
 }
 
@@ -114,7 +114,7 @@ func TestServerErrServerRunning(t *testing.T) {
 	if err == nil {
 		t.Error("Calling (*Server).Start(handler) on already running server did not return error")
 	}
-	srv.Stop()
+	srv.Shutdown()
 }
 
 func TestServerWithRedisDown(t *testing.T) {
@@ -146,7 +146,7 @@ func TestServerWithRedisDown(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 
-	srv.Stop()
+	srv.Shutdown()
 }
 
 func TestServerWithFlakyBroker(t *testing.T) {
@@ -207,7 +207,7 @@ func TestServerWithFlakyBroker(t *testing.T) {
 
 	time.Sleep(3 * time.Second)
 
-	srv.Stop()
+	srv.Shutdown()
 }
 
 func TestLogLevel(t *testing.T) {

@@ -46,7 +46,7 @@ func TestSubscriber(t *testing.T) {
 		})
 		var wg sync.WaitGroup
 		subscriber.start(&wg)
-		defer subscriber.terminate()
+		defer subscriber.shutdown()
 
 		// wait for subscriber to establish connection to pubsub channel
 		time.Sleep(time.Second)
@@ -91,7 +91,7 @@ func TestSubscriberWithRedisDown(t *testing.T) {
 	testBroker.Sleep() // simulate a situation where subscriber cannot connect to redis.
 	var wg sync.WaitGroup
 	subscriber.start(&wg)
-	defer subscriber.terminate()
+	defer subscriber.shutdown()
 
 	time.Sleep(2 * time.Second) // subscriber should wait and retry connecting to redis.
 

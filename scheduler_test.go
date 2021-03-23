@@ -67,9 +67,7 @@ func TestSchedulerRegister(t *testing.T) {
 			t.Fatal(err)
 		}
 		time.Sleep(tc.wait)
-		if err := scheduler.Stop(); err != nil {
-			t.Fatal(err)
-		}
+		scheduler.Shutdown()
 
 		got := asynqtest.GetPendingMessages(t, r, tc.queue)
 		if diff := cmp.Diff(tc.want, got, asynqtest.IgnoreIDOpt); diff != "" {
@@ -106,9 +104,7 @@ func TestSchedulerWhenRedisDown(t *testing.T) {
 	}
 	// Scheduler should attempt to enqueue the task three times (every 3s).
 	time.Sleep(10 * time.Second)
-	if err := scheduler.Stop(); err != nil {
-		t.Fatal(err)
-	}
+	scheduler.Shutdown()
 
 	mu.Lock()
 	if counter != 3 {
@@ -150,9 +146,7 @@ func TestSchedulerUnregister(t *testing.T) {
 			t.Fatal(err)
 		}
 		time.Sleep(tc.wait)
-		if err := scheduler.Stop(); err != nil {
-			t.Fatal(err)
-		}
+		scheduler.Shutdown()
 
 		got := asynqtest.GetPendingMessages(t, r, tc.queue)
 		if len(got) != 0 {

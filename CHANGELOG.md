@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - NewTask function now takes array of bytes as payload.
 - Task `Type` and `Payload` should be accessed by a method call.
+- `Server` API has changed. Renamed `Quiet` to `Stop`. Renamed `Stop` to `Shutdown`. _Note:_ As a result of this renaming, the behavior of `Stop` has changed. Please update the exising code to call `Shutdown` where it used to call `Stop`.
+- `Scheduler` API has changed. Renamed `Stop` to `Shutdown`.
 - Requires redis v4.0+ for multiple field/value pair support
 - Renamed pending key (TODO: need migration script
 

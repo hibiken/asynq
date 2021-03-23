@@ -38,7 +38,7 @@ func TestHeartbeater(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 
-		status := base.NewServerStatus(base.StatusIdle)
+		state := base.NewServerState()
 		hb := newHeartbeater(heartbeaterParams{
 			logger:         testLogger,
 			broker:         rdbClient,
@@ -46,7 +46,7 @@ func TestHeartbeater(t *testing.T) {
 			concurrency:    tc.concurrency,
 			queues:         tc.queues,
 			strictPriority: false,
-			status:         status,
+			state:          state,
 			starting:       make(chan *workerInfo),
 			finished:       make(chan *base.TaskMessage),
 		})
@@ -55,7 +55,7 @@ func TestHeartbeater(t *testing.T) {
 		hb.host = tc.host
 		hb.pid = tc.pid
 
-		status.Set(base.StatusRunning)
+		state.Set(base.StateActive)
 		var wg sync.WaitGroup
 		hb.start(&wg)
 
@@ -65,7 +65,7 @@ func TestHeartbeater(t *testing.T) {
 			Queues:      tc.queues,
 			Concurrency: tc.concurrency,
 			Started:     time.Now(),
-			Status:      "running",
+			Status:      "active",
 		}
 
 		// allow for heartbeater to write to redis
@@ -74,49 +74,49 @@ func TestHeartbeater(t *testing.T) {
 		ss, err := rdbClient.ListServers()
 		if err != nil {
 			t.Errorf("could not read server info from redis: %v", err)
-			hb.terminate()
+			hb.shutdown()
 			continue
 		}
 
 		if len(ss) != 1 {
 			t.Errorf("(*RDB).ListServers returned %d process info, want 1", len(ss))
-			hb.terminate()
+			hb.shutdown()
 			continue
 		}
 
 		if diff := cmp.Diff(want, ss[0], timeCmpOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
 			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ss[0], want, diff)
-			hb.terminate()
+			hb.shutdown()
 			continue
 		}
 
 		// status change
-		status.Set(base.StatusStopped)
+		state.Set(base.StateClosed)
 
 		// allow for heartbeater to write to redis
 		time.Sleep(tc.interval * 2)
 
-		want.Status = "stopped"
+		want.Status = "closed"
 		ss, err = rdbClient.ListServers()
 		if err != nil {
 			t.Errorf("could not read process status from redis: %v", err)
-			hb.terminate()
+			hb.shutdown()
 			continue
 		}
 
 		if len(ss) != 1 {
 			t.Errorf("(*RDB).ListProcesses returned %d process info, want 1", len(ss))
-			hb.terminate()
+			hb.shutdown()
 			continue
 		}
 
 		if diff := cmp.Diff(want, ss[0], timeCmpOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
 			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ss[0], want, diff)
-			hb.terminate()
+			hb.shutdown()
 			continue
 		}
 
-		hb.terminate()
+		hb.shutdown()
 	}
 }
 
@@ -131,6 +131,8 @@ func TestHeartbeaterWithRedisDown(t *testing.T) {
 	r := rdb.NewRDB(setup(t))
 	defer r.Close()
 	testBroker := testbroker.NewTestBroker(r)
+	state := base.NewServerState()
+	state.Set(base.StateActive)
 	hb := newHeartbeater(heartbeaterParams{
 		logger:         testLogger,
 		broker:         testBroker,
@@ -138,7 +140,7 @@ func TestHeartbeaterWithRedisDown(t *testing.T) {
 		concurrency:    10,
 		queues:         map[string]int{"default": 1},
 		strictPriority: false,
-		status:         base.NewServerStatus(base.StatusRunning),
+		state:          state,
 		starting:       make(chan *workerInfo),
 		finished:       make(chan *base.TaskMessage),
 	})
@@ -150,5 +152,5 @@ func TestHeartbeaterWithRedisDown(t *testing.T) {
 	// wait for heartbeater to try writing data to redis
 	time.Sleep(2 * time.Second)
 
-	hb.terminate()
+	hb.shutdown()
 }

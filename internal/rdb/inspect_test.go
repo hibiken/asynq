@@ -3305,7 +3305,7 @@ func TestListServers(t *testing.T) {
 		ServerID:          "server123",
 		Concurrency:       10,
 		Queues:            map[string]int{"default": 1},
-		Status:            "running",
+		Status:            "active",
 		Started:           started1,
 		ActiveWorkerCount: 0,
 	}

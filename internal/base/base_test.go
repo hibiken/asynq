@@ -400,7 +400,7 @@ func TestServerInfoEncoding(t *testing.T) {
 				Concurrency:       10,
 				Queues:            map[string]int{"default": 1, "critical": 2},
 				StrictPriority:    false,
-				Status:            "running",
+				Status:            "active",
 				Started:           time.Now().Add(-3 * time.Hour),
 				ActiveWorkerCount: 8,
 			},
@@ -530,7 +530,7 @@ func TestSchedulerEnqueueEventEncoding(t *testing.T) {
 // Test for status being accessed by multiple goroutines.
 // Run with -race flag to check for data race.
 func TestStatusConcurrentAccess(t *testing.T) {
-	status := NewServerStatus(StatusIdle)
+	status := NewServerState()
 
 	var wg sync.WaitGroup
 
@@ -544,7 +544,7 @@ func TestStatusConcurrentAccess(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		status.Set(StatusStopped)
+		status.Set(StateClosed)
 		_ = status.String()
 	}()
 
