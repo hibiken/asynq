@@ -254,41 +254,6 @@ func (c *Client) SetDefaultOptions(taskType string, opts ...Option) {
 	c.opts[taskType] = opts
 }
 
-// A Result holds enqueued task's metadata.
-type Result struct {
-	// ID is a unique identifier for the task.
-	ID string
-
-	// EnqueuedAt is the time the task was enqueued in UTC.
-	EnqueuedAt time.Time
-
-	// ProcessAt indicates when the task should be processed.
-	ProcessAt time.Time
-
-	// Retry is the maximum number of retry for the task.
-	Retry int
-
-	// Queue is a name of the queue the task is enqueued to.
-	Queue string
-
-	// Timeout is the timeout value for the task.
-	// Counting for timeout starts when a worker starts processing the task.
-	// If task processing doesn't complete within the timeout, the task will be retried.
-	// The value zero means no timeout.
-	//
-	// If deadline is set, min(now+timeout, deadline) is used, where the now is the time when
-	// a worker starts processing the task.
-	Timeout time.Duration
-
-	// Deadline is the deadline value for the task.
-	// If task processing doesn't complete before the deadline, the task will be retried.
-	// The value time.Unix(0, 0) means no deadline.
-	//
-	// If timeout is set, min(now+timeout, deadline) is used, where the now is the time when
-	// a worker starts processing the task.
-	Deadline time.Time
-}
-
 // Close closes the connection with redis.
 func (c *Client) Close() error {
 	return c.rdb.Close()
@@ -296,13 +261,14 @@ func (c *Client) Close() error {
 
 // Enqueue enqueues the given task to be processed asynchronously.
 //
-// Enqueue returns nil if the task is enqueued successfully, otherwise returns a non-nil error.
+// Enqueue returns a task ID if the task is enqueued successfully, otherwise returns a non-nil error.
 //
 // The argument opts specifies the behavior of task processing.
 // If there are conflicting Option values the last one overrides others.
-// By deafult, max retry is set to 25 and timeout is set to 30 minutes.
+//
+// By deafult, task is enqueued to the "default" queue, max retry is set to 25 and timeout is set to 30 minutes.
 // If no ProcessAt or ProcessIn options are passed, the task will be processed immediately.
-func (c *Client) Enqueue(task *Task, opts ...Option) (*Result, error) {
+func (c *Client) Enqueue(task *Task, opts ...Option) (taskID string, err error) {
 	c.mu.Lock()
 	if defaults, ok := c.opts[task.Type()]; ok {
 		opts = append(defaults, opts...)
@@ -310,7 +276,7 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*Result, error) {
 	c.mu.Unlock()
 	opt, err := composeOptions(opts...)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	deadline := noDeadline
 	if !opt.deadline.IsZero() {
@@ -347,19 +313,11 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*Result, error) {
 	}
 	switch {
 	case err == rdb.ErrDuplicateTask:
-		return nil, fmt.Errorf("%w", ErrDuplicateTask)
+		return "", fmt.Errorf("%w", ErrDuplicateTask)
 	case err != nil:
-		return nil, err
+		return "", err
 	}
-	return &Result{
-		ID:         msg.ID.String(),
-		EnqueuedAt: time.Now().UTC(),
-		ProcessAt:  opt.processAt,
-		Queue:      msg.Queue,
-		Retry:      msg.Retry,
-		Timeout:    timeout,
-		Deadline:   deadline,
-	}, nil
+	return msg.ID.String(), nil
 }
 
 func (c *Client) enqueue(msg *base.TaskMessage, uniqueTTL time.Duration) error {

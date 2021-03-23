@@ -32,7 +32,6 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 		task          *Task
 		processAt     time.Time // value for ProcessAt option
 		opts          []Option  // other options
-		wantRes       *Result
 		wantPending   map[string][]*base.TaskMessage
 		wantScheduled map[string][]base.Z
 	}{
@@ -41,14 +40,6 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 			task:      task,
 			processAt: now,
 			opts:      []Option{},
-			wantRes: &Result{
-				EnqueuedAt: now.UTC(),
-				ProcessAt:  now,
-				Queue:      "default",
-				Retry:      defaultMaxRetry,
-				Timeout:    defaultTimeout,
-				Deadline:   noDeadline,
-			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
@@ -70,14 +61,6 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 			task:      task,
 			processAt: oneHourLater,
 			opts:      []Option{},
-			wantRes: &Result{
-				EnqueuedAt: now.UTC(),
-				ProcessAt:  oneHourLater,
-				Queue:      "default",
-				Retry:      defaultMaxRetry,
-				Timeout:    defaultTimeout,
-				Deadline:   noDeadline,
-			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
@@ -103,18 +86,10 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 		h.FlushDB(t, r) // clean up db before each test case.
 
 		opts := append(tc.opts, ProcessAt(tc.processAt))
-		gotRes, err := client.Enqueue(tc.task, opts...)
+		_, err := client.Enqueue(tc.task, opts...)
 		if err != nil {
 			t.Error(err)
 			continue
-		}
-		cmpOptions := []cmp.Option{
-			cmpopts.IgnoreFields(Result{}, "ID"),
-			cmpopts.EquateApproxTime(500 * time.Millisecond),
-		}
-		if diff := cmp.Diff(tc.wantRes, gotRes, cmpOptions...); diff != "" {
-			t.Errorf("%s;\nEnqueue(task, ProcessAt(%v)) returned %v, want %v; (-want,+got)\n%s",
-				tc.desc, tc.processAt, gotRes, tc.wantRes, diff)
 		}
 
 		for qname, want := range tc.wantPending {
@@ -138,13 +113,11 @@ func TestClientEnqueue(t *testing.T) {
 	defer client.Close()
 
 	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
-	now := time.Now()
 
 	tests := []struct {
 		desc        string
 		task        *Task
 		opts        []Option
-		wantRes     *Result
 		wantPending map[string][]*base.TaskMessage
 	}{
 		{
@@ -152,13 +125,6 @@ func TestClientEnqueue(t *testing.T) {
 			task: task,
 			opts: []Option{
 				MaxRetry(3),
-			},
-			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "default",
-				Retry:     3,
-				Timeout:   defaultTimeout,
-				Deadline:  noDeadline,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -178,13 +144,6 @@ func TestClientEnqueue(t *testing.T) {
 			task: task,
 			opts: []Option{
 				MaxRetry(-2),
-			},
-			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "default",
-				Retry:     0,
-				Timeout:   defaultTimeout,
-				Deadline:  noDeadline,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -206,13 +165,6 @@ func TestClientEnqueue(t *testing.T) {
 				MaxRetry(2),
 				MaxRetry(10),
 			},
-			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "default",
-				Retry:     10,
-				Timeout:   defaultTimeout,
-				Deadline:  noDeadline,
-			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
@@ -231,13 +183,6 @@ func TestClientEnqueue(t *testing.T) {
 			task: task,
 			opts: []Option{
 				Queue("custom"),
-			},
-			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "custom",
-				Retry:     defaultMaxRetry,
-				Timeout:   defaultTimeout,
-				Deadline:  noDeadline,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"custom": {
@@ -258,13 +203,6 @@ func TestClientEnqueue(t *testing.T) {
 			opts: []Option{
 				Queue("HIGH"),
 			},
-			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "high",
-				Retry:     defaultMaxRetry,
-				Timeout:   defaultTimeout,
-				Deadline:  noDeadline,
-			},
 			wantPending: map[string][]*base.TaskMessage{
 				"high": {
 					{
@@ -284,13 +222,6 @@ func TestClientEnqueue(t *testing.T) {
 			opts: []Option{
 				Timeout(20 * time.Second),
 			},
-			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "default",
-				Retry:     defaultMaxRetry,
-				Timeout:   20 * time.Second,
-				Deadline:  noDeadline,
-			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
@@ -309,13 +240,6 @@ func TestClientEnqueue(t *testing.T) {
 			task: task,
 			opts: []Option{
 				Deadline(time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC)),
-			},
-			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "default",
-				Retry:     defaultMaxRetry,
-				Timeout:   noTimeout,
-				Deadline:  time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC),
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -337,13 +261,6 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout(20 * time.Second),
 				Deadline(time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC)),
 			},
-			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "default",
-				Retry:     defaultMaxRetry,
-				Timeout:   20 * time.Second,
-				Deadline:  time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC),
-			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
@@ -362,18 +279,10 @@ func TestClientEnqueue(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r) // clean up db before each test case.
 
-		gotRes, err := client.Enqueue(tc.task, tc.opts...)
+		_, err := client.Enqueue(tc.task, tc.opts...)
 		if err != nil {
 			t.Error(err)
 			continue
-		}
-		cmpOptions := []cmp.Option{
-			cmpopts.IgnoreFields(Result{}, "ID", "EnqueuedAt"),
-			cmpopts.EquateApproxTime(500 * time.Millisecond),
-		}
-		if diff := cmp.Diff(tc.wantRes, gotRes, cmpOptions...); diff != "" {
-			t.Errorf("%s;\nEnqueue(task) returned %v, want %v; (-want,+got)\n%s",
-				tc.desc, gotRes, tc.wantRes, diff)
 		}
 
 		for qname, want := range tc.wantPending {
@@ -391,14 +300,12 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 	defer client.Close()
 
 	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
-	now := time.Now()
 
 	tests := []struct {
 		desc          string
 		task          *Task
 		delay         time.Duration // value for ProcessIn option
 		opts          []Option      // other options
-		wantRes       *Result
 		wantPending   map[string][]*base.TaskMessage
 		wantScheduled map[string][]base.Z
 	}{
@@ -407,13 +314,6 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 			task:  task,
 			delay: 1 * time.Hour,
 			opts:  []Option{},
-			wantRes: &Result{
-				ProcessAt: now.Add(1 * time.Hour),
-				Queue:     "default",
-				Retry:     defaultMaxRetry,
-				Timeout:   defaultTimeout,
-				Deadline:  noDeadline,
-			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
@@ -438,13 +338,6 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 			task:  task,
 			delay: 0,
 			opts:  []Option{},
-			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "default",
-				Retry:     defaultMaxRetry,
-				Timeout:   defaultTimeout,
-				Deadline:  noDeadline,
-			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
 					{
@@ -467,18 +360,10 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 		h.FlushDB(t, r) // clean up db before each test case.
 
 		opts := append(tc.opts, ProcessIn(tc.delay))
-		gotRes, err := client.Enqueue(tc.task, opts...)
+		_, err := client.Enqueue(tc.task, opts...)
 		if err != nil {
 			t.Error(err)
 			continue
-		}
-		cmpOptions := []cmp.Option{
-			cmpopts.IgnoreFields(Result{}, "ID", "EnqueuedAt"),
-			cmpopts.EquateApproxTime(500 * time.Millisecond),
-		}
-		if diff := cmp.Diff(tc.wantRes, gotRes, cmpOptions...); diff != "" {
-			t.Errorf("%s;\nEnqueue(task, ProcessIn(%v)) returned %v, want %v; (-want,+got)\n%s",
-				tc.desc, tc.delay, gotRes, tc.wantRes, diff)
 		}
 
 		for qname, want := range tc.wantPending {
@@ -530,14 +415,11 @@ func TestClientEnqueueError(t *testing.T) {
 func TestClientDefaultOptions(t *testing.T) {
 	r := setup(t)
 
-	now := time.Now()
-
 	tests := []struct {
 		desc        string
 		defaultOpts []Option // options set at the client level.
 		opts        []Option // options used at enqueue time.
 		task        *Task
-		wantRes     *Result
 		queue       string // queue that the message should go into.
 		want        *base.TaskMessage
 	}{
@@ -546,14 +428,7 @@ func TestClientDefaultOptions(t *testing.T) {
 			defaultOpts: []Option{Queue("feed")},
 			opts:        []Option{},
 			task:        NewTask("feed:import", nil),
-			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "feed",
-				Retry:     defaultMaxRetry,
-				Timeout:   defaultTimeout,
-				Deadline:  noDeadline,
-			},
-			queue: "feed",
+			queue:       "feed",
 			want: &base.TaskMessage{
 				Type:     "feed:import",
 				Payload:  nil,
@@ -568,14 +443,7 @@ func TestClientDefaultOptions(t *testing.T) {
 			defaultOpts: []Option{Queue("feed"), MaxRetry(5)},
 			opts:        []Option{},
 			task:        NewTask("feed:import", nil),
-			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "feed",
-				Retry:     5,
-				Timeout:   defaultTimeout,
-				Deadline:  noDeadline,
-			},
-			queue: "feed",
+			queue:       "feed",
 			want: &base.TaskMessage{
 				Type:     "feed:import",
 				Payload:  nil,
@@ -590,14 +458,7 @@ func TestClientDefaultOptions(t *testing.T) {
 			defaultOpts: []Option{Queue("feed"), MaxRetry(5)},
 			opts:        []Option{Queue("critical")},
 			task:        NewTask("feed:import", nil),
-			wantRes: &Result{
-				ProcessAt: now,
-				Queue:     "critical",
-				Retry:     5,
-				Timeout:   defaultTimeout,
-				Deadline:  noDeadline,
-			},
-			queue: "critical",
+			queue:       "critical",
 			want: &base.TaskMessage{
 				Type:     "feed:import",
 				Payload:  nil,
@@ -614,17 +475,9 @@ func TestClientDefaultOptions(t *testing.T) {
 		c := NewClient(getRedisConnOpt(t))
 		defer c.Close()
 		c.SetDefaultOptions(tc.task.Type(), tc.defaultOpts...)
-		gotRes, err := c.Enqueue(tc.task, tc.opts...)
+		_, err := c.Enqueue(tc.task, tc.opts...)
 		if err != nil {
 			t.Fatal(err)
-		}
-		cmpOptions := []cmp.Option{
-			cmpopts.IgnoreFields(Result{}, "ID", "EnqueuedAt"),
-			cmpopts.EquateApproxTime(500 * time.Millisecond),
-		}
-		if diff := cmp.Diff(tc.wantRes, gotRes, cmpOptions...); diff != "" {
-			t.Errorf("%s;\nEnqueue(task, opts...) returned %v, want %v; (-want,+got)\n%s",
-				tc.desc, gotRes, tc.wantRes, diff)
 		}
 		pending := h.GetPendingMessages(t, r, tc.queue)
 		if len(pending) != 1 {

@@ -29,10 +29,10 @@ The Client is used to enqueue a task.
     task := asynq.NewTask("example", b)
 
     // Enqueue the task to be processed immediately.
-    res, err := client.Enqueue(task)
+    taskID, err := client.Enqueue(task)
 
     // Schedule the task to be processed after one minute.
-    res, err = client.Enqueue(t, asynq.ProcessIn(1*time.Minute))
+    taskID, err = client.Enqueue(t, asynq.ProcessIn(1*time.Minute))
 
 The Server is used to run the task processing workers with a given
 handler.

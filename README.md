@@ -177,11 +177,11 @@ func main() {
     if err != nil {
         log.Fatalf("could not create task: %v", err)
     }
-    res, err := c.Enqueue(t)
+    taskID, err := c.Enqueue(t)
     if err != nil {
         log.Fatalf("could not enqueue task: %v", err)
     }
-    fmt.Printf("Enqueued Result: %+v\n", res)
+    log.Printf("Enqueued task: %s", taskID)
 
 
     // ------------------------------------------------------------
@@ -189,11 +189,11 @@ func main() {
     //            Use ProcessIn or ProcessAt option.
     // ------------------------------------------------------------
 
-    res, err = c.Enqueue(t, asynq.ProcessIn(24*time.Hour))
+    taskID, err = c.Enqueue(t, asynq.ProcessIn(24*time.Hour))
     if err != nil {
         log.Fatalf("could not schedule task: %v", err)
     }
-    fmt.Printf("Enqueued Result: %+v\n", res)
+    log.Printf("Enqueued task: %s", taskID)
 
 
     // ----------------------------------------------------------------------------
@@ -207,11 +207,11 @@ func main() {
     if err != nil {
         log.Fatalf("could not create task: %v", err)
     }
-    res, err = c.Enqueue(t)
+    taskID, err = c.Enqueue(t)
     if err != nil {
         log.Fatalf("could not enqueue task: %v", err)
     }
-    fmt.Printf("Enqueued Result: %+v\n", res)
+    log.Printf("Enqueued task: %s", taskID)
 
     // ---------------------------------------------------------------------------
     // Example 4: Pass options to tune task processing behavior at enqueue time.
