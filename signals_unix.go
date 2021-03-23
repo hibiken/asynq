@@ -22,7 +22,7 @@ func (srv *Server) waitForSignals() {
 	for {
 		sig := <-sigs
 		if sig == unix.SIGTSTP {
-			srv.Quiet()
+			srv.Stop()
 			continue
 		}
 		break

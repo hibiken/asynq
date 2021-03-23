@@ -45,7 +45,7 @@ func newHealthChecker(params healthcheckerParams) *healthchecker {
 	}
 }
 
-func (hc *healthchecker) terminate() {
+func (hc *healthchecker) shutdown() {
 	if hc.healthcheckFunc == nil {
 		return
 	}

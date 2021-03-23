@@ -1475,7 +1475,7 @@ func TestWriteServerState(t *testing.T) {
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
 		Started:           time.Now().UTC(),
-		Status:            "running",
+		Status:            "active",
 		ActiveWorkerCount: 0,
 	}
 
@@ -1565,7 +1565,7 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
 		Started:           time.Now().Add(-10 * time.Minute).UTC(),
-		Status:            "running",
+		Status:            "active",
 		ActiveWorkerCount: len(workers),
 	}
 
@@ -1667,7 +1667,7 @@ func TestClearServerState(t *testing.T) {
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
 		Started:           time.Now().Add(-10 * time.Minute),
-		Status:            "running",
+		Status:            "active",
 		ActiveWorkerCount: len(workers1),
 	}
 
@@ -1690,7 +1690,7 @@ func TestClearServerState(t *testing.T) {
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
 		Started:           time.Now().Add(-15 * time.Minute),
-		Status:            "running",
+		Status:            "active",
 		ActiveWorkerCount: len(workers2),
 	}
 

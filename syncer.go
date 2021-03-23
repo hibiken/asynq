@@ -46,7 +46,7 @@ func newSyncer(params syncerParams) *syncer {
 	}
 }
 
-func (s *syncer) terminate() {
+func (s *syncer) shutdown() {
 	s.logger.Debug("Syncer shutting down...")
 	// Signal the syncer goroutine to stop.
 	s.done <- struct{}{}
