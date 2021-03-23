@@ -239,7 +239,7 @@ func TestRecoverer(t *testing.T) {
 		var wg sync.WaitGroup
 		recoverer.start(&wg)
 		time.Sleep(2 * time.Second)
-		recoverer.terminate()
+		recoverer.shutdown()
 
 		for qname, want := range tc.wantActive {
 			gotActive := h.GetActiveMessages(t, r, qname)

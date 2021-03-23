@@ -215,52 +215,55 @@ type Z struct {
 	Score   int64
 }
 
-// ServerStatus represents status of a server.
-// ServerStatus methods are concurrency safe.
-type ServerStatus struct {
+// ServerState represents state of a server.
+// ServerState methods are concurrency safe.
+type ServerState struct {
 	mu  sync.Mutex
-	val ServerStatusValue
+	val ServerStateValue
 }
 
-// NewServerStatus returns a new status instance given an initial value.
-func NewServerStatus(v ServerStatusValue) *ServerStatus {
-	return &ServerStatus{val: v}
+// NewServerState returns a new state instance.
+// Initial state is set to StateNew.
+func NewServerState() *ServerState {
+	return &ServerState{val: StateNew}
 }
 
-type ServerStatusValue int
+type ServerStateValue int
 
 const (
-	// StatusIdle indicates the server is in idle state.
-	StatusIdle ServerStatusValue = iota
+	// StateNew represents a new server. Server begins in
+	// this state and then transition to StatusActive when
+	// Start or Run is callled.
+	StateNew ServerStateValue = iota
 
-	// StatusRunning indicates the server is up and active.
-	StatusRunning
+	// StateActive indicates the server is up and active.
+	StateActive
 
-	// StatusQuiet indicates the server is up but not active.
-	StatusQuiet
+	// StateStopped indicates the server is up but no longer processing new tasks.
+	StateStopped
 
-	// StatusStopped indicates the server server has been stopped.
-	StatusStopped
+	// StateClosed indicates the server has been shutdown.
+	StateClosed
 )
 
-var statuses = []string{
-	"idle",
-	"running",
-	"quiet",
+var serverStates = []string{
+	"new",
+	"active",
 	"stopped",
+	"closed",
 }
 
-func (s *ServerStatus) String() string {
+func (s *ServerState) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if StatusIdle <= s.val && s.val <= StatusStopped {
-		return statuses[s.val]
+	if StateNew <= s.val && s.val <= StateClosed {
+		return serverStates[s.val]
 	}
 	return "unknown status"
 }
 
 // Get returns the status value.
-func (s *ServerStatus) Get() ServerStatusValue {
+func (s *ServerState) Get() ServerStateValue {
 	s.mu.Lock()
 	v := s.val
 	s.mu.Unlock()
@@ -268,7 +271,7 @@ func (s *ServerStatus) Get() ServerStatusValue {
 }
 
 // Set sets the status value.
-func (s *ServerStatus) Set(v ServerStatusValue) {
+func (s *ServerState) Set(v ServerStateValue) {
 	s.mu.Lock()
 	s.val = v
 	s.mu.Unlock()

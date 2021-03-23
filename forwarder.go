@@ -45,7 +45,7 @@ func newForwarder(params forwarderParams) *forwarder {
 	}
 }
 
-func (f *forwarder) terminate() {
+func (f *forwarder) shutdown() {
 	f.logger.Debug("Forwarder shutting down...")
 	// Signal the forwarder goroutine to stop polling.
 	f.done <- struct{}{}

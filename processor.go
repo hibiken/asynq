@@ -123,8 +123,8 @@ func (p *processor) stop() {
 	})
 }
 
-// NOTE: once terminated, processor cannot be re-started.
-func (p *processor) terminate() {
+// NOTE: once shutdown, processor cannot be re-started.
+func (p *processor) shutdown() {
 	p.stop()
 
 	time.AfterFunc(p.shutdownTimeout, func() { close(p.abort) })

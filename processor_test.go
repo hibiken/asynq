@@ -113,7 +113,7 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 		for _, msg := range tc.incoming {
 			err := rdbClient.Enqueue(msg)
 			if err != nil {
-				p.terminate()
+				p.shutdown()
 				t.Fatal(err)
 			}
 		}
@@ -121,7 +121,7 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 		if l := r.LLen(base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
 			t.Errorf("%q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), l)
 		}
-		p.terminate()
+		p.shutdown()
 
 		mu.Lock()
 		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Task{})); diff != "" {
@@ -213,7 +213,7 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 				t.Errorf("%q has %d tasks, want 0", base.ActiveKey(qname), l)
 			}
 		}
-		p.terminate()
+		p.shutdown()
 
 		mu.Lock()
 		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Task{})); diff != "" {
@@ -290,7 +290,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 		if l := r.LLen(base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
 			t.Errorf("%q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), l)
 		}
-		p.terminate()
+		p.shutdown()
 
 		mu.Lock()
 		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Task{})); diff != "" {
@@ -418,12 +418,12 @@ func TestProcessorRetry(t *testing.T) {
 		for _, msg := range tc.incoming {
 			err := rdbClient.Enqueue(msg)
 			if err != nil {
-				p.terminate()
+				p.shutdown()
 				t.Fatal(err)
 			}
 		}
 		time.Sleep(tc.wait) // FIXME: This makes test flaky.
-		p.terminate()
+		p.shutdown()
 
 		cmpOpt := h.EquateInt64Approx(1) // allow up to a second difference in zset score
 		gotRetry := h.GetRetryEntries(t, r, base.DefaultQueueName)
@@ -594,7 +594,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 				t.Errorf("%q has %d tasks, want 0", base.ActiveKey(qname), l)
 			}
 		}
-		p.terminate()
+		p.shutdown()
 
 		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Task{})); diff != "" {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)

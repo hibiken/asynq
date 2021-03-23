@@ -21,23 +21,24 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
-// Server is responsible for managing the task processing.
+// Server is responsible for task processing and task lifecycle management.
 //
 // Server pulls tasks off queues and processes them.
 // If the processing of a task is unsuccessful, server will schedule it for a retry.
+//
 // A task will be retried until either the task gets processed successfully
 // or until it reaches its max retry count.
 //
 // If a task exhausts its retries, it will be moved to the archive and
-// will be kept in the archive for some time until a certain condition is met
-// (e.g., archive size reaches a certain limit, or the task has been in the
-// archive for a certain amount of time).
+// will be kept in the archive set.
+// Note that the archive size is finite and once it reaches its max size,
+// oldest tasks in the archive will be deleted.
 type Server struct {
 	logger *log.Logger
 
 	broker base.Broker
 
-	status *base.ServerStatus
+	state *base.ServerState
 
 	// wait group to wait for all goroutines to finish.
 	wg            sync.WaitGroup
@@ -278,7 +279,7 @@ const (
 )
 
 // NewServer returns a new Server given a redis connection option
-// and background processing configuration.
+// and server configuration.
 func NewServer(r RedisConnOpt, cfg Config) *Server {
 	c, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
@@ -324,7 +325,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	starting := make(chan *workerInfo)
 	finished := make(chan *base.TaskMessage)
 	syncCh := make(chan *syncRequest)
-	status := base.NewServerStatus(base.StatusIdle)
+	state := base.NewServerState()
 	cancels := base.NewCancelations()
 
 	syncer := newSyncer(syncerParams{
@@ -339,7 +340,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		concurrency:    n,
 		queues:         queues,
 		strictPriority: cfg.StrictPriority,
-		status:         status,
+		state:          state,
 		starting:       starting,
 		finished:       finished,
 	})
@@ -384,7 +385,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	return &Server{
 		logger:        logger,
 		broker:        rdb,
-		status:        status,
+		state:         state,
 		forwarder:     forwarder,
 		processor:     processor,
 		syncer:        syncer,
@@ -400,11 +401,13 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 // ProcessTask should return nil if the processing of a task
 // is successful.
 //
-// If ProcessTask return a non-nil error or panics, the task
-// will be retried after delay.
-// One exception to this rule is when ProcessTask returns SkipRetry error.
-// If the returned error is SkipRetry or the error wraps SkipRetry, retry is
-// skipped and task will be archived instead.
+// If ProcessTask returns a non-nil error or panics, the task
+// will be retried after delay if retry-count is remaining,
+// otherwise the task will be archived.
+//
+// One exception to this rule is when ProcessTask returns a SkipRetry error.
+// If the returned error is SkipRetry or an error wraps SkipRetry, retry is
+// skipped and the task will be immediately archived instead.
 type Handler interface {
 	ProcessTask(context.Context, *Task) error
 }
@@ -420,43 +423,46 @@ func (fn HandlerFunc) ProcessTask(ctx context.Context, task *Task) error {
 	return fn(ctx, task)
 }
 
-// ErrServerStopped indicates that the operation is now illegal because of the server being stopped.
-var ErrServerStopped = errors.New("asynq: the server has been stopped")
+// ErrServerClosed indicates that the operation is now illegal because of the server has been shutdown.
+var ErrServerClosed = errors.New("asynq: Server closed")
 
-// Run starts the background-task processing and blocks until
+// Run starts the task processing and blocks until
 // an os signal to exit the program is received. Once it receives
 // a signal, it gracefully shuts down all active workers and other
 // goroutines to process the tasks.
 //
-// Run returns any error encountered during server startup time.
-// If the server has already been stopped, ErrServerStopped is returned.
+// Run returns any error encountered at server startup time.
+// If the server has already been shutdown, ErrServerClosed is returned.
 func (srv *Server) Run(handler Handler) error {
 	if err := srv.Start(handler); err != nil {
 		return err
 	}
 	srv.waitForSignals()
-	srv.Stop()
+	srv.Shutdown()
 	return nil
 }
 
 // Start starts the worker server. Once the server has started,
-// it pulls tasks off queues and starts a worker goroutine for each task.
-// Tasks are processed concurrently by the workers  up to the number of
-// concurrency specified at the initialization time.
+// it pulls tasks off queues and starts a worker goroutine for each task
+// and then call Handler to process it.
+// Tasks are processed concurrently by the workers up to the number of
+// concurrency specified in Config.Concurrency.
 //
-// Start returns any error encountered during server startup time.
-// If the server has already been stopped, ErrServerStopped is returned.
+// Start returns any error encountered at server startup time.
+// If the server has already been shutdown, ErrServerClosed is returned.
 func (srv *Server) Start(handler Handler) error {
 	if handler == nil {
 		return fmt.Errorf("asynq: server cannot run with nil handler")
 	}
-	switch srv.status.Get() {
-	case base.StatusRunning:
+	switch srv.state.Get() {
+	case base.StateActive:
 		return fmt.Errorf("asynq: the server is already running")
-	case base.StatusStopped:
-		return ErrServerStopped
+	case base.StateStopped:
+		return fmt.Errorf("asynq: the server is in the stopped state. Waiting for shutdown.")
+	case base.StateClosed:
+		return ErrServerClosed
 	}
-	srv.status.Set(base.StatusRunning)
+	srv.state.Set(base.StateActive)
 	srv.processor.handler = handler
 
 	srv.logger.Info("Starting processing")
@@ -471,43 +477,46 @@ func (srv *Server) Start(handler Handler) error {
 	return nil
 }
 
-// Stop stops the worker server.
+// Shutdown gracefully shuts down the server.
 // It gracefully closes all active workers. The server will wait for
 // active workers to finish processing tasks for duration specified in Config.ShutdownTimeout.
 // If worker didn't finish processing a task during the timeout, the task will be pushed back to Redis.
-func (srv *Server) Stop() {
-	switch srv.status.Get() {
-	case base.StatusIdle, base.StatusStopped:
+func (srv *Server) Shutdown() {
+	switch srv.state.Get() {
+	case base.StateNew, base.StateClosed:
 		// server is not running, do nothing and return.
 		return
 	}
 
 	srv.logger.Info("Starting graceful shutdown")
-	// Note: The order of termination is important.
+	// Note: The order of shutdown is important.
 	// Sender goroutines should be terminated before the receiver goroutines.
 	// processor -> syncer (via syncCh)
 	// processor -> heartbeater (via starting, finished channels)
-	srv.forwarder.terminate()
-	srv.processor.terminate()
-	srv.recoverer.terminate()
-	srv.syncer.terminate()
-	srv.subscriber.terminate()
-	srv.healthchecker.terminate()
-	srv.heartbeater.terminate()
+	srv.forwarder.shutdown()
+	srv.processor.shutdown()
+	srv.recoverer.shutdown()
+	srv.syncer.shutdown()
+	srv.subscriber.shutdown()
+	srv.healthchecker.shutdown()
+	srv.heartbeater.shutdown()
 
 	srv.wg.Wait()
 
 	srv.broker.Close()
-	srv.status.Set(base.StatusStopped)
+	srv.state.Set(base.StateClosed)
 
 	srv.logger.Info("Exiting")
 }
 
-// Quiet signals the server to stop pulling new tasks off queues.
-// Quiet should be used before stopping the server.
-func (srv *Server) Quiet() {
+// Stop signals the server to stop pulling new tasks off queues.
+// Stop can be used before shutting down the server to ensure that all
+// currently active tasks are processed before server shutdown.
+//
+// Stop does not shutdown the server, make sure to call Shutdown before exit.
+func (srv *Server) Stop() {
 	srv.logger.Info("Stopping processor")
 	srv.processor.stop()
-	srv.status.Set(base.StatusQuiet)
+	srv.state.Set(base.StateStopped)
 	srv.logger.Info("Processor stopped")
 }

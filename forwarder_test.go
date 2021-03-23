@@ -111,7 +111,7 @@ func TestForwarder(t *testing.T) {
 		var wg sync.WaitGroup
 		s.start(&wg)
 		time.Sleep(tc.wait)
-		s.terminate()
+		s.shutdown()
 
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledMessages(t, r, qname)
