@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-redis/redis/v7"
 )
@@ -68,6 +69,26 @@ type RedisClientOpt struct {
 	// See: https://redis.io/commands/select.
 	DB int
 
+	// Dial timeout for establishing new connections.
+	// Default is 5 seconds.
+	DialTimeout time.Duration
+
+	// Timeout for socket reads.
+	// If timeout is reached, read commands will fail with a timeout error
+	// instead of blocking.
+	//
+	// Use value -1 for no timeout and 0 for default.
+	// Default is 3 seconds.
+	ReadTimeout time.Duration
+
+	// Timeout for socket writes.
+	// If timeout is reached, write commands will fail with a timeout error
+	// instead of blocking.
+	//
+	// Use value -1 for no timeout and 0 for default.
+	// Default is ReadTimout.
+	WriteTimeout time.Duration
+
 	// Maximum number of socket connections.
 	// Default is 10 connections per every CPU as reported by runtime.NumCPU.
 	PoolSize int
@@ -79,13 +100,16 @@ type RedisClientOpt struct {
 
 func (opt RedisClientOpt) MakeRedisClient() interface{} {
 	return redis.NewClient(&redis.Options{
-		Network:   opt.Network,
-		Addr:      opt.Addr,
-		Username:  opt.Username,
-		Password:  opt.Password,
-		DB:        opt.DB,
-		PoolSize:  opt.PoolSize,
-		TLSConfig: opt.TLSConfig,
+		Network:      opt.Network,
+		Addr:         opt.Addr,
+		Username:     opt.Username,
+		Password:     opt.Password,
+		DB:           opt.DB,
+		DialTimeout:  opt.DialTimeout,
+		ReadTimeout:  opt.ReadTimeout,
+		WriteTimeout: opt.WriteTimeout,
+		PoolSize:     opt.PoolSize,
+		TLSConfig:    opt.TLSConfig,
 	})
 }
 
@@ -116,6 +140,26 @@ type RedisFailoverClientOpt struct {
 	// See: https://redis.io/commands/select.
 	DB int
 
+	// Dial timeout for establishing new connections.
+	// Default is 5 seconds.
+	DialTimeout time.Duration
+
+	// Timeout for socket reads.
+	// If timeout is reached, read commands will fail with a timeout error
+	// instead of blocking.
+	//
+	// Use value -1 for no timeout and 0 for default.
+	// Default is 3 seconds.
+	ReadTimeout time.Duration
+
+	// Timeout for socket writes.
+	// If timeout is reached, write commands will fail with a timeout error
+	// instead of blocking.
+	//
+	// Use value -1 for no timeout and 0 for default.
+	// Default is ReadTimeout
+	WriteTimeout time.Duration
+
 	// Maximum number of socket connections.
 	// Default is 10 connections per every CPU as reported by runtime.NumCPU.
 	PoolSize int
@@ -133,6 +177,9 @@ func (opt RedisFailoverClientOpt) MakeRedisClient() interface{} {
 		Username:         opt.Username,
 		Password:         opt.Password,
 		DB:               opt.DB,
+		DialTimeout:      opt.DialTimeout,
+		ReadTimeout:      opt.ReadTimeout,
+		WriteTimeout:     opt.WriteTimeout,
 		PoolSize:         opt.PoolSize,
 		TLSConfig:        opt.TLSConfig,
 	})
@@ -157,6 +204,26 @@ type RedisClusterClientOpt struct {
 	// See: https://redis.io/commands/auth.
 	Password string
 
+	// Dial timeout for establishing new connections.
+	// Default is 5 seconds.
+	DialTimeout time.Duration
+
+	// Timeout for socket reads.
+	// If timeout is reached, read commands will fail with a timeout error
+	// instead of blocking.
+	//
+	// Use value -1 for no timeout and 0 for default.
+	// Default is 3 seconds.
+	ReadTimeout time.Duration
+
+	// Timeout for socket writes.
+	// If timeout is reached, write commands will fail with a timeout error
+	// instead of blocking.
+	//
+	// Use value -1 for no timeout and 0 for default.
+	// Default is ReadTimeout.
+	WriteTimeout time.Duration
+
 	// TLS Config used to connect to a server.
 	// TLS will be negotiated only if this field is set.
 	TLSConfig *tls.Config
@@ -168,6 +235,9 @@ func (opt RedisClusterClientOpt) MakeRedisClient() interface{} {
 		MaxRedirects: opt.MaxRedirects,
 		Username:     opt.Username,
 		Password:     opt.Password,
+		DialTimeout:  opt.DialTimeout,
+		ReadTimeout:  opt.ReadTimeout,
+		WriteTimeout: opt.WriteTimeout,
 		TLSConfig:    opt.TLSConfig,
 	})
 }
