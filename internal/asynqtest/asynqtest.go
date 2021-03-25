@@ -6,6 +6,7 @@
 package asynqtest
 
 import (
+	"encoding/json"
 	"math"
 	"sort"
 	"testing"
