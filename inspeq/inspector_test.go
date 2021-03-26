@@ -1912,7 +1912,7 @@ func TestInspectorDeleteTaskByKeyDeletesPendingTask(t *testing.T) {
 	tests := []struct {
 		pending     map[string][]*base.TaskMessage
 		qname       string
-		key         string
+		id          string
 		wantPending map[string][]*base.TaskMessage
 	}{
 		{
@@ -1921,7 +1921,7 @@ func TestInspectorDeleteTaskByKeyDeletesPendingTask(t *testing.T) {
 				"custom":  {m3},
 			},
 			qname: "default",
-			key:   createPendingTask(m2).Key(),
+			id:    createPendingTask(m2).ID,
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1},
 				"custom":  {m3},
@@ -1933,7 +1933,7 @@ func TestInspectorDeleteTaskByKeyDeletesPendingTask(t *testing.T) {
 				"custom":  {m3},
 			},
 			qname: "custom",
-			key:   createPendingTask(m3).Key(),
+			id:    createPendingTask(m3).ID,
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 				"custom":  {},
@@ -1945,9 +1945,8 @@ func TestInspectorDeleteTaskByKeyDeletesPendingTask(t *testing.T) {
 		h.FlushDB(t, r)
 		h.SeedAllPendingQueues(t, r, tc.pending)
 
-		if err := inspector.DeleteTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("DeleteTaskByKey(%q, %q) returned error: %v",
-				tc.qname, tc.key, err)
+		if err := inspector.DeleteTask(tc.qname, tc.id); err != nil {
+			t.Errorf("DeleteTask(%q, %q) returned error: %v", tc.qname, tc.id, err)
 			continue
 		}
 
@@ -1978,7 +1977,7 @@ func TestInspectorDeleteTaskByKeyDeletesScheduledTask(t *testing.T) {
 	tests := []struct {
 		scheduled     map[string][]base.Z
 		qname         string
-		key           string
+		id            string
 		wantScheduled map[string][]base.Z
 	}{
 		{
@@ -1987,7 +1986,7 @@ func TestInspectorDeleteTaskByKeyDeletesScheduledTask(t *testing.T) {
 				"custom":  {z3},
 			},
 			qname: "default",
-			key:   createScheduledTask(z2).Key(),
+			id:    createScheduledTask(z2).ID,
 			wantScheduled: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -1999,8 +1998,8 @@ func TestInspectorDeleteTaskByKeyDeletesScheduledTask(t *testing.T) {
 		h.FlushDB(t, r)
 		h.SeedAllScheduledQueues(t, r, tc.scheduled)
 
-		if err := inspector.DeleteTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("DeleteTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.DeleteTask(tc.qname, tc.id); err != nil {
+			t.Errorf("DeleteTask(%q, %q) returned error: %v", tc.qname, tc.id, err)
 		}
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledEntries(t, r, qname)
@@ -2028,7 +2027,7 @@ func TestInspectorDeleteTaskByKeyDeletesRetryTask(t *testing.T) {
 	tests := []struct {
 		retry     map[string][]base.Z
 		qname     string
-		key       string
+		id        string
 		wantRetry map[string][]base.Z
 	}{
 		{
@@ -2037,7 +2036,7 @@ func TestInspectorDeleteTaskByKeyDeletesRetryTask(t *testing.T) {
 				"custom":  {z3},
 			},
 			qname: "default",
-			key:   createRetryTask(z2).Key(),
+			id:    createRetryTask(z2).ID,
 			wantRetry: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2049,8 +2048,8 @@ func TestInspectorDeleteTaskByKeyDeletesRetryTask(t *testing.T) {
 		h.FlushDB(t, r)
 		h.SeedAllRetryQueues(t, r, tc.retry)
 
-		if err := inspector.DeleteTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("DeleteTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.DeleteTask(tc.qname, tc.id); err != nil {
+			t.Errorf("DeleteTask(%q, %q) returned error: %v", tc.qname, tc.id, err)
 			continue
 		}
 		for qname, want := range tc.wantRetry {
@@ -2078,7 +2077,7 @@ func TestInspectorDeleteTaskByKeyDeletesArchivedTask(t *testing.T) {
 	tests := []struct {
 		archived     map[string][]base.Z
 		qname        string
-		key          string
+		id           string
 		wantArchived map[string][]base.Z
 	}{
 		{
@@ -2087,7 +2086,7 @@ func TestInspectorDeleteTaskByKeyDeletesArchivedTask(t *testing.T) {
 				"custom":  {z3},
 			},
 			qname: "default",
-			key:   createArchivedTask(z2).Key(),
+			id:    createArchivedTask(z2).ID,
 			wantArchived: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2099,8 +2098,8 @@ func TestInspectorDeleteTaskByKeyDeletesArchivedTask(t *testing.T) {
 		h.FlushDB(t, r)
 		h.SeedAllArchivedQueues(t, r, tc.archived)
 
-		if err := inspector.DeleteTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("DeleteTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.DeleteTask(tc.qname, tc.id); err != nil {
+			t.Errorf("DeleteTask(%q, %q) returned error: %v", tc.qname, tc.id, err)
 			continue
 		}
 		for qname, want := range tc.wantArchived {

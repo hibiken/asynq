@@ -738,65 +738,37 @@ func (r *RDB) removeAndArchiveAll(src, dst string) (int64, error) {
 	return n, nil
 }
 
-// DeleteArchivedTask deletes an archived task that matches the given id and score from the given queue.
-// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) DeleteArchivedTask(qname string, id uuid.UUID) error {
-	return r.deleteTask(base.ArchivedKey(qname), qname, id.String())
-}
-
-// DeleteRetryTask deletes a retry task that matches the given id and score from the given queue.
-// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) DeleteRetryTask(qname string, id uuid.UUID) error {
-	return r.deleteTask(base.RetryKey(qname), qname, id.String())
-}
-
-// DeleteScheduledTask deletes a scheduled task that matches the given id and score from the given queue.
-// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) DeleteScheduledTask(qname string, id uuid.UUID) error {
-	return r.deleteTask(base.ScheduledKey(qname), qname, id.String())
-}
-
-// KEYS[1] -> asynq:{<qname>}:pending
-// KEYS[2] -> asynq:{<qname>}:t:<task_id>
+// KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // ARGV[1] -> task ID
-var deletePendingTaskCmd = redis.NewScript(`
-if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
-	return 0
-end
-return redis.call("DEL", KEYS[2])
-`)
-
-// DeletePendingTask deletes a pending tasks that matches the given id from the given queue.
-// If there's no match, it returns ErrTaskNotFound.
-func (r *RDB) DeletePendingTask(qname string, id uuid.UUID) error {
-	keys := []string{base.PendingKey(qname), base.TaskKey(qname, id.String())}
-	res, err := deletePendingTaskCmd.Run(r.client, keys, id.String()).Result()
-	if err != nil {
-		return err
-	}
-	n, ok := res.(int64)
-	if !ok {
-		return fmt.Errorf("command error: unexpected return value %v", res)
-	}
-	if n == 0 {
-		return ErrTaskNotFound
-	}
-	return nil
-}
-
-// KEYS[1] -> ZSET key to remove the task from (e.g. asynq:{<qname>}:retry)
-// KEYS[2] -> asynq:{<qname>}:t:<task_id>
-// ARGV[1] -> task ID
+// ARGV[2] -> redis key prefix (asynq:{<qname>}:)
 var deleteTaskCmd = redis.NewScript(`
-if redis.call("ZREM", KEYS[1], ARGV[1]) == 0 then
+if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
 end
-return redis.call("DEL", KEYS[2])
+local state = redis.call("HGET", KEYS[1], "state")
+local n
+if state == "PENDING" then
+	n = redis.call("LREM", (ARGV[2] .. "pending"), 0, ARGV[1])
+elseif state == "SCHEDULED" then
+	n = redis.call("ZREM", (ARGV[2] .. "scheduled"), ARGV[1])
+elseif state == "RETRY" then
+	n = redis.call("ZREM", (ARGV[2] .. "retry"), ARGV[1])
+elseif state == "ARCHIVED" then
+	n = redis.call("ZREM", (ARGV[2] .. "archived"), ARGV[1])
+else
+    return redis.error_reply("unknown task state: " .. tostring(state))
+end
+if n == 0 then
+	return 0
+end
+return redis.call("DEL", KEYS[1])
 `)
 
-func (r *RDB) deleteTask(key, qname, id string) error {
-	keys := []string{key, base.TaskKey(qname, id)}
-	argv := []interface{}{id}
+// DeleteTask deletes a task that matches the given id from the given queue.
+// If a task that matches the id does not exist, it returns ErrTaskNotFound.
+func (r *RDB) DeleteTask(qname, id string) error {
+	keys := []string{base.TaskKey(qname, id)}
+	argv := []interface{}{id, base.QueueKeyPrefix(qname)}
 	res, err := deleteTaskCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
 		return err

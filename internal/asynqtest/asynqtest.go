@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"math"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/go-redis/redis/v7"
@@ -17,6 +18,28 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 )
+
+type taskState int
+
+const (
+	stateActive taskState = iota
+	statePending
+	stateScheduled
+	stateRetry
+	stateArchived
+)
+
+var taskStateNames = map[taskState]string{
+	stateActive:    "active",
+	statePending:   "pending",
+	stateScheduled: "scheduled",
+	stateRetry:     "retry",
+	stateArchived:  "archived",
+}
+
+func (s taskState) String() string {
+	return taskStateNames[s]
+}
 
 // EquateInt64Approx returns a Comparer option that treats int64 values
 // to be equal if they are within the given margin.
@@ -182,42 +205,42 @@ func FlushDB(tb testing.TB, r redis.UniversalClient) {
 func SeedPendingQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname string) {
 	tb.Helper()
 	r.SAdd(base.AllQueues, qname)
-	seedRedisList(tb, r, base.PendingKey(qname), msgs)
+	seedRedisList(tb, r, qname, msgs, statePending)
 }
 
 // SeedActiveQueue initializes the active queue with the given messages.
 func SeedActiveQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname string) {
 	tb.Helper()
 	r.SAdd(base.AllQueues, qname)
-	seedRedisList(tb, r, base.ActiveKey(qname), msgs)
+	seedRedisList(tb, r, qname, msgs, stateActive)
 }
 
 // SeedScheduledQueue initializes the scheduled queue with the given messages.
 func SeedScheduledQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
 	tb.Helper()
 	r.SAdd(base.AllQueues, qname)
-	seedRedisZSet(tb, r, base.ScheduledKey(qname), entries)
+	seedRedisZSet(tb, r, qname, entries, stateScheduled)
 }
 
 // SeedRetryQueue initializes the retry queue with the given messages.
 func SeedRetryQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
 	tb.Helper()
 	r.SAdd(base.AllQueues, qname)
-	seedRedisZSet(tb, r, base.RetryKey(qname), entries)
+	seedRedisZSet(tb, r, qname, entries, stateRetry)
 }
 
 // SeedArchivedQueue initializes the archived queue with the given messages.
 func SeedArchivedQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
 	tb.Helper()
 	r.SAdd(base.AllQueues, qname)
-	seedRedisZSet(tb, r, base.ArchivedKey(qname), entries)
+	seedRedisZSet(tb, r, qname, entries, stateArchived)
 }
 
 // SeedDeadlines initializes the deadlines set with the given entries.
 func SeedDeadlines(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
 	tb.Helper()
 	r.SAdd(base.AllQueues, qname)
-	seedRedisZSet(tb, r, base.DeadlinesKey(qname), entries)
+	seedRedisZSet(tb, r, qname, entries, stateActive)
 }
 
 // SeedAllPendingQueues initializes all of the specified queues with the given messages.
@@ -270,8 +293,17 @@ func SeedAllDeadlines(tb testing.TB, r redis.UniversalClient, deadlines map[stri
 	}
 }
 
-func seedRedisList(tb testing.TB, c redis.UniversalClient, key string, msgs []*base.TaskMessage) {
+func seedRedisList(tb testing.TB, c redis.UniversalClient, qname string, msgs []*base.TaskMessage, state taskState) {
 	tb.Helper()
+	var key string
+	switch state {
+	case statePending:
+		key = base.PendingKey(qname)
+	case stateActive:
+		key = base.ActiveKey(qname)
+	default:
+		tb.Fatalf("cannot seed redis LIST with task state %s", state)
+	}
 	for _, msg := range msgs {
 		encoded := MustMarshal(tb, msg)
 		if err := c.LPush(key, msg.ID.String()).Err(); err != nil {
@@ -282,6 +314,7 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string, msgs []*b
 			"msg":      encoded,
 			"timeout":  msg.Timeout,
 			"deadline": msg.Deadline,
+			"state":    strings.ToUpper(state.String()),
 		}
 		if err := c.HSet(key, data).Err(); err != nil {
 			tb.Fatal(err)
@@ -289,8 +322,19 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string, msgs []*b
 	}
 }
 
-func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string, items []base.Z) {
+func seedRedisZSet(tb testing.TB, c redis.UniversalClient, qname string, items []base.Z, state taskState) {
 	tb.Helper()
+	var key string
+	switch state {
+	case stateScheduled:
+		key = base.ScheduledKey(qname)
+	case stateRetry:
+		key = base.RetryKey(qname)
+	case stateArchived:
+		key = base.ArchivedKey(qname)
+	default:
+		tb.Fatalf("cannot seed redis ZSET with task state %s", state)
+	}
 	for _, item := range items {
 		msg := item.Message
 		encoded := MustMarshal(tb, msg)
@@ -303,6 +347,7 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string, items []b
 			"msg":      encoded,
 			"timeout":  msg.Timeout,
 			"deadline": msg.Deadline,
+			"state":    strings.ToUpper(state.String()),
 		}
 		if err := c.HSet(key, data).Err(); err != nil {
 			tb.Fatal(err)

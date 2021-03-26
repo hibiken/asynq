@@ -135,6 +135,7 @@ func (i *Inspector) History(qname string, n int) ([]*DailyStats, error) {
 }
 
 // ErrQueueNotFound indicates that the specified queue does not exist.
+// TODO: Consider renaming
 type ErrQueueNotFound struct {
 	qname string
 }
@@ -144,6 +145,7 @@ func (e *ErrQueueNotFound) Error() string {
 }
 
 // ErrQueueNotEmpty indicates that the specified queue is not empty.
+// TODO: Consider renaming
 type ErrQueueNotEmpty struct {
 	qname string
 }
@@ -595,28 +597,13 @@ func (i *Inspector) DeleteAllArchivedTasks(qname string) (int, error) {
 	return int(n), err
 }
 
-// DeleteTaskByKey deletes a task with the given key from the given queue.
-// TODO: We don't need score any more. Update this to delete task by ID
-func (i *Inspector) DeleteTaskByKey(qname, key string) error {
+// DeleteTaskByKey deletes a task with the given id from the given queue.
+func (i *Inspector) DeleteTask(qname, id string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return err
 	}
-	prefix, id, _, err := parseTaskKey(key)
-	if err != nil {
-		return err
-	}
-	switch prefix {
-	case keyPrefixPending:
-		return i.rdb.DeletePendingTask(qname, id)
-	case keyPrefixScheduled:
-		return i.rdb.DeleteScheduledTask(qname, id)
-	case keyPrefixRetry:
-		return i.rdb.DeleteRetryTask(qname, id)
-	case keyPrefixArchived:
-		return i.rdb.DeleteArchivedTask(qname, id)
-	default:
-		return fmt.Errorf("invalid key")
-	}
+	// TODO: Return ErrTaskNotFound or meaningful error
+	return i.rdb.DeleteTask(qname, id)
 }
 
 // RunAllScheduledTasks transition all scheduled tasks to pending state from the given queue,

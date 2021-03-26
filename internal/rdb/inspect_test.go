@@ -2472,9 +2472,9 @@ func TestDeleteArchivedTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.DeleteArchivedTask(tc.qname, tc.id)
+		got := r.DeleteTask(tc.qname, tc.id.String())
 		if got != tc.want {
-			t.Errorf("r.DeleteArchivedTask(%q, %v) = %v, want %v", tc.qname, tc.id, got, tc.want)
+			t.Errorf("r.DeleteTask(%q, %v) = %v, want %v", tc.qname, tc.id, got, tc.want)
 			continue
 		}
 
@@ -2553,9 +2553,9 @@ func TestDeleteRetryTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		got := r.DeleteRetryTask(tc.qname, tc.id)
+		got := r.DeleteTask(tc.qname, tc.id.String())
 		if got != tc.want {
-			t.Errorf("r.DeleteRetryTask(%q, %v) = %v, want %v", tc.qname, tc.id, got, tc.want)
+			t.Errorf("r.DeleteTask(%q, %v) = %v, want %v", tc.qname, tc.id, got, tc.want)
 			continue
 		}
 
@@ -2634,9 +2634,9 @@ func TestDeleteScheduledTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got := r.DeleteScheduledTask(tc.qname, tc.id)
+		got := r.DeleteTask(tc.qname, tc.id.String())
 		if got != tc.want {
-			t.Errorf("r.DeleteScheduledTask(%q, %v) = %v, want %v", tc.qname, tc.id, got, tc.want)
+			t.Errorf("r.DeleteTask(%q, %v) = %v, want %v", tc.qname, tc.id, got, tc.want)
 			continue
 		}
 
@@ -2704,9 +2704,9 @@ func TestDeletePendingTask(t *testing.T) {
 		h.FlushDB(t, r.client)
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 
-		got := r.DeletePendingTask(tc.qname, tc.id)
+		got := r.DeleteTask(tc.qname, tc.id.String())
 		if got != tc.want {
-			t.Errorf("r.DeletePendingTask(%q, %v) = %v, want %v", tc.qname, tc.id, got, tc.want)
+			t.Errorf("r.DeleteTask(%q, %v) = %v, want %v", tc.qname, tc.id, got, tc.want)
 			continue
 		}
 
