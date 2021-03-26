@@ -551,79 +551,6 @@ func (r *RDB) removeAndRunAll(zset, qkey string) (int64, error) {
 	return n, nil
 }
 
-// ArchiveRetryTask finds a retry task that matches the given id
-// from the given queue and archives it.
-// If there's no match, it returns ErrTaskNotFound.
-func (r *RDB) ArchiveRetryTask(qname string, id uuid.UUID) error {
-	n, err := r.removeAndArchive(base.RetryKey(qname), base.ArchivedKey(qname), id.String())
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrTaskNotFound
-	}
-	return nil
-}
-
-// ArchiveScheduledTask finds a scheduled task that matches the given id
-// from the given queue and archives it.
-// If there's no match, it returns ErrTaskNotFound.
-func (r *RDB) ArchiveScheduledTask(qname string, id uuid.UUID) error {
-	n, err := r.removeAndArchive(base.ScheduledKey(qname), base.ArchivedKey(qname), id.String())
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrTaskNotFound
-	}
-	return nil
-}
-
-// KEYS[1] -> asynq:{<qname>}
-// KEYS[2] -> asynq:{<qname>}:archived
-// ARGV[1] -> ID of the task to archive
-// ARGV[2] -> current timestamp
-// ARGV[3] -> cutoff timestamp (e.g., 90 days ago)
-// ARGV[4] -> max number of tasks in archive (e.g., 100)
-var archivePendingCmd = redis.NewScript(`
-if redis.call("LREM", KEYS[1], 1, ARGV[1]) == 0 then
-	return 0
-end
-redis.call("ZADD", KEYS[2], ARGV[2], ARGV[1])
-redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[3])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[4])
-return 1
-`)
-
-// ArchivePendingTask finds a pending task that matches the given id
-// from the given queue and archives it.
-// If there's no match, it returns ErrTaskNotFound.
-func (r *RDB) ArchivePendingTask(qname string, id uuid.UUID) error {
-	keys := []string{
-		base.PendingKey(qname),
-		base.ArchivedKey(qname),
-	}
-	now := time.Now()
-	argv := []interface{}{
-		id.String(),
-		now.Unix(),
-		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
-		maxArchiveSize,
-	}
-	res, err := archivePendingCmd.Run(r.client, keys, argv...).Result()
-	if err != nil {
-		return err
-	}
-	n, ok := res.(int64)
-	if !ok {
-		return fmt.Errorf("command error: unexpected return value %v", res)
-	}
-	if n == 0 {
-		return ErrTaskNotFound
-	}
-	return nil
-}
-
 // ArchiveAllRetryTasks archives all retry tasks from the given queue and
 // returns the number of tasks that were moved.
 func (r *RDB) ArchiveAllRetryTasks(qname string) (int64, error) {
@@ -672,36 +599,66 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 	return n, nil
 }
 
-// KEYS[1] -> ZSET to move task from (e.g., retry queue)
+// KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:archived
-// ARGV[1] -> id of the task to archive
-// ARGV[2] -> current timestamp
-// ARGV[3] -> cutoff timestamp (e.g., 90 days ago)
-// ARGV[4] -> max number of tasks in archived state (e.g., 100)
-var removeAndArchiveCmd = redis.NewScript(`
-if redis.call("ZREM", KEYS[1], ARGV[1]) == 0 then
+// ARGV[1] -> task ID
+// ARGV[2] -> redis key prefix (asynq:{<qname>}:)
+// ARGV[3] -> current timestamp in unix time
+// ARGV[4] -> cutoff timestamp (e.g., 90 days ago)
+// ARGV[5] -> max number of tasks in archived state (e.g., 100)
+var archiveTaskCmd = redis.NewScript(`
+if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
 end
-redis.call("ZADD", KEYS[2], ARGV[2], ARGV[1])
-redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[3])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[4])
+local state = redis.call("HGET", KEYS[1], "state")
+local n
+if state == "PENDING" then
+	n = redis.call("LREM", (ARGV[2] .. "pending"), 1, ARGV[1])
+elseif state == "SCHEDULED" then
+	n = redis.call("ZREM", (ARGV[2] .. "scheduled"), ARGV[1])
+elseif state == "RETRY" then
+	n = redis.call("ZREM", (ARGV[2] .. "retry"), ARGV[1])
+elseif state == "ARCHIVED" then
+	return redis.error_reply("task is already archived")
+elseif state == "ACTIVE" then
+	return redis.error_reply("cannot archive active task")
+else
+	return redis.error_reply("unknown task state: " .. tostring(state))
+end
+if n == 0 then
+	return 0
+end
+redis.call("ZADD", KEYS[2], ARGV[3], ARGV[1])
+redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[4])
+redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[5])
 return 1
 `)
 
-func (r *RDB) removeAndArchive(src, dst, id string) (int64, error) {
+func (r *RDB) ArchiveTask(qname, id string) error {
+	keys := []string{
+		base.TaskKey(qname, id),
+		base.ArchivedKey(qname),
+	}
 	now := time.Now()
-	limit := now.AddDate(0, 0, -archivedExpirationInDays).Unix() // 90 days ago
-	res, err := removeAndArchiveCmd.Run(r.client,
-		[]string{src, dst},
-		id, now.Unix(), limit, maxArchiveSize).Result()
+	argv := []interface{}{
+		id,
+		base.QueueKeyPrefix(qname),
+		now.Unix(),
+		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
+		maxArchiveSize,
+	}
+	res, err := archiveTaskCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
-		return 0, err
+		return err
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return 0, fmt.Errorf("could not cast %v to int64", res)
+		return fmt.Errorf("command error: unexpected return value %v", res)
 	}
-	return n, nil
+	if n == 0 {
+		return ErrTaskNotFound
+	}
+	return nil
 }
 
 // KEYS[1] -> ZSET to move task from (e.g., asynq:{<qname>}:retry)
@@ -755,6 +712,8 @@ elseif state == "RETRY" then
 	n = redis.call("ZREM", (ARGV[2] .. "retry"), ARGV[1])
 elseif state == "ARCHIVED" then
 	n = redis.call("ZREM", (ARGV[2] .. "archived"), ARGV[1])
+elseif state == "ACTIVE"
+	return redis.error_reply("cannot delete active task")
 else
     return redis.error_reply("unknown task state: " .. tostring(state))
 end

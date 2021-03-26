@@ -179,29 +179,40 @@ func (i *Inspector) DeleteQueue(qname string, force bool) error {
 type TaskInfo interface {
 	// ID returns the unique identifier of the task.
 	ID() string
+
 	// Type returns the type name of the task.
 	Type() string
+
 	// Payload returns the payload data of the task.
 	Payload() []byte
+
 	// State returns a TaskState representing the state of the task.
 	State() TaskState
+
 	// Queue returns the name of the queue the task belongs to.
 	Queue() string
+
 	// MaxRetry returns the maximum number of times the task can be retried.
 	MaxRetry() int
+
 	// Retried returns the number of times the task has been retried.
 	Retried() int
+
 	// Deadline returns the deadline set for the task.
 	Deadline() time.Time
+
 	// Timeout returns the timeout duration set for the task.
 	Timeout() time.Duration
+
 	// NextProcessAt returns the time the task will be ready to be processed.
 	// Zero value of time.Time is used when task is in pending, active, or archived
 	// state.
 	NextProcessAt() time.Time
+
 	// LastFailedAt returns the time the task last failed.
 	// Zero value of time.Time is used if the task has not failed.
 	LastFailedAt() time.Time
+
 	// LastErr returns the error message from the last failure.
 	// Empty string is returned if the task has not failed.
 	LastErr() string
@@ -218,7 +229,7 @@ const (
 	TaskStateArchived
 )
 
-func (i *Inspector) GetTaskInfo(taskID string) (TaskInfo, error) {
+func (i *Inspector) GetTaskInfo(qname, id string) (TaskInfo, error) {
 	// TODO: implement this
 	return nil, nil
 }
