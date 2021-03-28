@@ -608,7 +608,7 @@ func (i *Inspector) DeleteAllArchivedTasks(qname string) (int, error) {
 	return int(n), err
 }
 
-// DeleteTaskByKey deletes a task with the given id from the given queue.
+// DeleteTask deletes a task with the given id from the given queue.
 func (i *Inspector) DeleteTask(qname, id string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return err
@@ -647,28 +647,13 @@ func (i *Inspector) RunAllArchivedTasks(qname string) (int, error) {
 	return int(n), err
 }
 
-// RunTaskByKey transition a task to pending state given task key and queue name.
-// TODO: Update this to run task by ID.
-func (i *Inspector) RunTaskByKey(qname, key string) error {
+// RunTask transition a task to pending state given task id and queue name.
+func (i *Inspector) RunTask(qname, id string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return err
 	}
-	prefix, id, _, err := parseTaskKey(key)
-	if err != nil {
-		return err
-	}
-	switch prefix {
-	case keyPrefixScheduled:
-		return i.rdb.RunScheduledTask(qname, id)
-	case keyPrefixRetry:
-		return i.rdb.RunRetryTask(qname, id)
-	case keyPrefixArchived:
-		return i.rdb.RunArchivedTask(qname, id)
-	case keyPrefixPending:
-		return fmt.Errorf("task is already pending for run")
-	default:
-		return fmt.Errorf("invalid key")
-	}
+	// TODO: Return ErrTaskNotFound and other meaningful error
+	return i.rdb.RunTask(qname, id)
 }
 
 // ArchiveAllPendingTasks archives all pending tasks from the given queue,
@@ -701,28 +686,13 @@ func (i *Inspector) ArchiveAllRetryTasks(qname string) (int, error) {
 	return int(n), err
 }
 
-// ArchiveTaskByKey archives a task with the given key in the given queue.
-// TODO: Update this to Archive task by ID.
-func (i *Inspector) ArchiveTaskByKey(qname, key string) error {
+// ArchiveTask archives a task with the given id in the given queue.
+func (i *Inspector) ArchiveTask(qname, id string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return err
 	}
-	prefix, id, _, err := parseTaskKey(key)
-	if err != nil {
-		return err
-	}
-	switch prefix {
-	case keyPrefixPending:
-		return i.rdb.ArchivePendingTask(qname, id)
-	case keyPrefixScheduled:
-		return i.rdb.ArchiveScheduledTask(qname, id)
-	case keyPrefixRetry:
-		return i.rdb.ArchiveRetryTask(qname, id)
-	case keyPrefixArchived:
-		return fmt.Errorf("task is already archived")
-	default:
-		return fmt.Errorf("invalid key")
-	}
+	// TODO: return ErrTaskNotFound or other meaningful error
+	return i.rdb.ArchiveTask(qname, id)
 }
 
 // CancelActiveTask sends a signal to cancel processing of the task with

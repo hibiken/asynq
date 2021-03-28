@@ -2111,7 +2111,7 @@ func TestInspectorDeleteTaskByKeyDeletesArchivedTask(t *testing.T) {
 	}
 }
 
-func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
+func TestInspectorRunTaskRunsScheduledTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2128,7 +2128,7 @@ func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
 		scheduled     map[string][]base.Z
 		pending       map[string][]*base.TaskMessage
 		qname         string
-		key           string
+		id            string
 		wantScheduled map[string][]base.Z
 		wantPending   map[string][]*base.TaskMessage
 	}{
@@ -2142,7 +2142,7 @@ func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "default",
-			key:   createScheduledTask(z2).Key(),
+			id:    createScheduledTask(z2).ID,
 			wantScheduled: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2159,8 +2159,8 @@ func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r, tc.scheduled)
 		h.SeedAllPendingQueues(t, r, tc.pending)
 
-		if err := inspector.RunTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("RunTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.RunTask(tc.qname, tc.id); err != nil {
+			t.Errorf("RunTask(%q, %q) returned error: %v", tc.qname, tc.id, err)
 			continue
 		}
 		for qname, want := range tc.wantScheduled {
@@ -2181,7 +2181,7 @@ func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
 	}
 }
 
-func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
+func TestInspectorRunTaskRunsRetryTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2198,7 +2198,7 @@ func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
 		retry       map[string][]base.Z
 		pending     map[string][]*base.TaskMessage
 		qname       string
-		key         string
+		id          string
 		wantRetry   map[string][]base.Z
 		wantPending map[string][]*base.TaskMessage
 	}{
@@ -2212,7 +2212,7 @@ func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			key:   createRetryTask(z2).Key(),
+			id:    createRetryTask(z2).ID,
 			wantRetry: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2229,8 +2229,8 @@ func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
 		h.SeedAllRetryQueues(t, r, tc.retry)
 		h.SeedAllPendingQueues(t, r, tc.pending)
 
-		if err := inspector.RunTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("RunTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.RunTask(tc.qname, tc.id); err != nil {
+			t.Errorf("RunTask(%q, %q) returned error: %v", tc.qname, tc.id, err)
 			continue
 		}
 		for qname, want := range tc.wantRetry {
@@ -2250,7 +2250,7 @@ func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
 	}
 }
 
-func TestInspectorRunTaskByKeyRunsArchivedTask(t *testing.T) {
+func TestInspectorRunTaskRunsArchivedTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2267,7 +2267,7 @@ func TestInspectorRunTaskByKeyRunsArchivedTask(t *testing.T) {
 		archived     map[string][]base.Z
 		pending      map[string][]*base.TaskMessage
 		qname        string
-		key          string
+		id           string
 		wantArchived map[string][]base.Z
 		wantPending  map[string][]*base.TaskMessage
 	}{
@@ -2283,7 +2283,7 @@ func TestInspectorRunTaskByKeyRunsArchivedTask(t *testing.T) {
 				"low":      {},
 			},
 			qname: "critical",
-			key:   createArchivedTask(z2).Key(),
+			id:    createArchivedTask(z2).ID,
 			wantArchived: map[string][]base.Z{
 				"default":  {z1},
 				"critical": {},
@@ -2302,8 +2302,8 @@ func TestInspectorRunTaskByKeyRunsArchivedTask(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r, tc.archived)
 		h.SeedAllPendingQueues(t, r, tc.pending)
 
-		if err := inspector.RunTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("RunTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.RunTask(tc.qname, tc.id); err != nil {
+			t.Errorf("RunTask(%q, %q) returned error: %v", tc.qname, tc.id, err)
 			continue
 		}
 		for qname, want := range tc.wantArchived {
@@ -2323,7 +2323,7 @@ func TestInspectorRunTaskByKeyRunsArchivedTask(t *testing.T) {
 	}
 }
 
-func TestInspectorArchiveTaskByKeyArchivesPendingTask(t *testing.T) {
+func TestInspectorArchiveTaskArchivesPendingTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2336,7 +2336,7 @@ func TestInspectorArchiveTaskByKeyArchivesPendingTask(t *testing.T) {
 		pending      map[string][]*base.TaskMessage
 		archived     map[string][]base.Z
 		qname        string
-		key          string
+		id           string
 		wantPending  map[string][]*base.TaskMessage
 		wantArchived map[string][]base.Z
 	}{
@@ -2350,7 +2350,7 @@ func TestInspectorArchiveTaskByKeyArchivesPendingTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "default",
-			key:   createPendingTask(m1).Key(),
+			id:    createPendingTask(m1).ID,
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 				"custom":  {m2, m3},
@@ -2372,7 +2372,7 @@ func TestInspectorArchiveTaskByKeyArchivesPendingTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			key:   createPendingTask(m2).Key(),
+			id:    createPendingTask(m2).ID,
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1},
 				"custom":  {m3},
@@ -2391,9 +2391,9 @@ func TestInspectorArchiveTaskByKeyArchivesPendingTask(t *testing.T) {
 		h.SeedAllPendingQueues(t, r, tc.pending)
 		h.SeedAllArchivedQueues(t, r, tc.archived)
 
-		if err := inspector.ArchiveTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("ArchiveTaskByKey(%q, %q) returned error: %v",
-				tc.qname, tc.key, err)
+		if err := inspector.ArchiveTask(tc.qname, tc.id); err != nil {
+			t.Errorf("ArchiveTask(%q, %q) returned error: %v",
+				tc.qname, tc.id, err)
 			continue
 		}
 		for qname, want := range tc.wantPending {
@@ -2414,7 +2414,7 @@ func TestInspectorArchiveTaskByKeyArchivesPendingTask(t *testing.T) {
 	}
 }
 
-func TestInspectorArchiveTaskByKeyArchivesScheduledTask(t *testing.T) {
+func TestInspectorArchiveTaskArchivesScheduledTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2431,7 +2431,7 @@ func TestInspectorArchiveTaskByKeyArchivesScheduledTask(t *testing.T) {
 		scheduled     map[string][]base.Z
 		archived      map[string][]base.Z
 		qname         string
-		key           string
+		id            string
 		want          string
 		wantScheduled map[string][]base.Z
 		wantArchived  map[string][]base.Z
@@ -2446,7 +2446,7 @@ func TestInspectorArchiveTaskByKeyArchivesScheduledTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			key:   createScheduledTask(z2).Key(),
+			id:    createScheduledTask(z2).ID,
 			wantScheduled: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2468,8 +2468,8 @@ func TestInspectorArchiveTaskByKeyArchivesScheduledTask(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r, tc.scheduled)
 		h.SeedAllArchivedQueues(t, r, tc.archived)
 
-		if err := inspector.ArchiveTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("ArchiveTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.ArchiveTask(tc.qname, tc.id); err != nil {
+			t.Errorf("ArchiveTask(%q, %q) returned error: %v", tc.qname, tc.id, err)
 			continue
 		}
 		for qname, want := range tc.wantScheduled {
@@ -2490,7 +2490,7 @@ func TestInspectorArchiveTaskByKeyArchivesScheduledTask(t *testing.T) {
 	}
 }
 
-func TestInspectorArchiveTaskByKeyArchivesRetryTask(t *testing.T) {
+func TestInspectorArchiveTaskArchivesRetryTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2507,7 +2507,7 @@ func TestInspectorArchiveTaskByKeyArchivesRetryTask(t *testing.T) {
 		retry        map[string][]base.Z
 		archived     map[string][]base.Z
 		qname        string
-		key          string
+		id           string
 		wantRetry    map[string][]base.Z
 		wantArchived map[string][]base.Z
 	}{
@@ -2521,7 +2521,7 @@ func TestInspectorArchiveTaskByKeyArchivesRetryTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			key:   createRetryTask(z2).Key(),
+			id:    createRetryTask(z2).ID,
 			wantRetry: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2543,8 +2543,8 @@ func TestInspectorArchiveTaskByKeyArchivesRetryTask(t *testing.T) {
 		h.SeedAllRetryQueues(t, r, tc.retry)
 		h.SeedAllArchivedQueues(t, r, tc.archived)
 
-		if err := inspector.ArchiveTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("ArchiveTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.ArchiveTask(tc.qname, tc.id); err != nil {
+			t.Errorf("ArchiveTask(%q, %q) returned error: %v", tc.qname, tc.id, err)
 			continue
 		}
 		for qname, want := range tc.wantRetry {

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
-	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/spf13/cast"
 )
@@ -447,48 +446,6 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, erro
 	return zs, nil
 }
 
-// RunArchivedTask finds an archived task that matches the given id and score from
-// the given queue and enqueues it for processing.
-// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) RunArchivedTask(qname string, id uuid.UUID) error {
-	n, err := r.removeAndRun(base.ArchivedKey(qname), base.PendingKey(qname), id.String())
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrTaskNotFound
-	}
-	return nil
-}
-
-// RunRetryTask finds a retry task that matches the given id and score from
-// the given queue and enqueues it for processing.
-// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) RunRetryTask(qname string, id uuid.UUID) error {
-	n, err := r.removeAndRun(base.RetryKey(qname), base.PendingKey(qname), id.String())
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrTaskNotFound
-	}
-	return nil
-}
-
-// RunScheduledTask finds a scheduled task that matches the given id and score from
-// from the given queue and enqueues it for processing.
-// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) RunScheduledTask(qname string, id uuid.UUID) error {
-	n, err := r.removeAndRun(base.ScheduledKey(qname), base.PendingKey(qname), id.String())
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrTaskNotFound
-	}
-	return nil
-}
-
 // RunAllScheduledTasks enqueues all scheduled tasks from the given queue
 // and returns the number of tasks enqueued.
 func (r *RDB) RunAllScheduledTasks(qname string) (int64, error) {
@@ -519,16 +476,60 @@ redis.call("LPUSH", KEYS[2], ARGV[1])
 return 1
 `)
 
-func (r *RDB) removeAndRun(zset, qkey, id string) (int64, error) {
-	res, err := removeAndRunCmd.Run(r.client, []string{zset, qkey}, id).Result()
+// KEYS[1] -> asynq:{<qname>}:t:<task_id>
+// KEYS[2] -> asynq:{<qname>}:pending
+// ARGV[1] -> task ID
+// ARGV[2] -> redis key prefix (asynq:{<qname>}:)
+var runTaskCmd = redis.NewScript(`
+if redis.call("EXISTS", KEYS[1]) == 0 then
+	return 0
+end
+local state = redis.call("HGET", KEYS[1], "state")
+local n = 0
+if state == "ACTIVE" then
+	return redis.error_reply("task is already active")
+elseif state == "PENDING" then
+	return redis.error_reply("task is already pending")
+elseif state == "SCHEDULED" then
+	n = redis.call("ZREM", (ARGV[2] .. "scheduled"), ARGV[1])
+elseif state == "RETRY" then
+	n = redis.call("ZREM", (ARGV[2] .. "retry"), ARGV[1])
+elseif state == "ARCHIVED" then
+	n = redis.call("ZREM", (ARGV[2] .. "archived"), ARGV[1])
+else
+	return redis.error_reply("unknown task state: " .. tostring(state))
+end
+if n == 0 then
+	return 0
+end
+redis.call("LPUSH", KEYS[2], ARGV[1])
+return 1
+`)
+
+// RunTask finds a task that matches the given id from the given queue
+// and stage it for processing (i.e. transition the task to pending state).
+// If no match is found, it returns ErrTaskNotFound.
+func (r *RDB) RunTask(qname, id string) error {
+	keys := []string{
+		base.TaskKey(qname, id),
+		base.PendingKey(qname),
+	}
+	argv := []interface{}{
+		id,
+		base.QueueKeyPrefix(qname),
+	}
+	res, err := runTaskCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
-		return 0, err
+		return err
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return 0, fmt.Errorf("could not cast %v to int64", res)
+		return fmt.Errorf("command error: unexpected return value %v", res)
 	}
-	return n, nil
+	if n == 0 {
+		return ErrTaskNotFound
+	}
+	return nil
 }
 
 var removeAndRunAllCmd = redis.NewScript(`
@@ -712,7 +713,7 @@ elseif state == "RETRY" then
 	n = redis.call("ZREM", (ARGV[2] .. "retry"), ARGV[1])
 elseif state == "ARCHIVED" then
 	n = redis.call("ZREM", (ARGV[2] .. "archived"), ARGV[1])
-elseif state == "ACTIVE"
+elseif state == "ACTIVE" then
 	return redis.error_reply("cannot delete active task")
 else
     return redis.error_reply("unknown task state: " .. tostring(state))
