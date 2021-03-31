@@ -5,6 +5,7 @@
 package rdb
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -304,6 +305,162 @@ func TestRedisInfo(t *testing.T) {
 	for _, key := range wantKeys {
 		if _, ok := info[key]; !ok {
 			t.Errorf("RDB.RedisInfo() = %v is missing entry for %q", info, key)
+		}
+	}
+}
+
+func TestGetTaskInfo(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
+
+	now := time.Now()
+	oneHourFromNow := now.Add(1 * time.Hour)
+	oneHourAgo := now.Add(-1 * time.Hour)
+
+	// state of the queues
+	queueState := struct {
+		active    map[string][]*base.TaskMessage
+		pending   map[string][]*base.TaskMessage
+		scheduled map[string][]base.Z
+		retry     map[string][]base.Z
+		archived  map[string][]base.Z
+	}{
+
+		active: map[string][]*base.TaskMessage{
+			"default": {m1},
+			"custom":  {},
+		},
+		pending: map[string][]*base.TaskMessage{
+			"default": {},
+			"custom":  {m3},
+		},
+		scheduled: map[string][]base.Z{
+			"default": {{Message: m2, Score: oneHourFromNow.Unix()}},
+			"custom":  {},
+		},
+		retry: map[string][]base.Z{
+			"default": {},
+			"custom":  {},
+		},
+		archived: map[string][]base.Z{
+			"default": {},
+			"custom":  {{Message: m4, Score: oneHourAgo.Unix()}},
+		},
+	}
+	// seed redis with fixtures.
+	h.FlushDB(t, r.client)
+	h.SeedAllActiveQueues(t, r.client, queueState.active)
+	h.SeedAllPendingQueues(t, r.client, queueState.pending)
+	h.SeedAllScheduledQueues(t, r.client, queueState.scheduled)
+	h.SeedAllRetryQueues(t, r.client, queueState.retry)
+	h.SeedAllArchivedQueues(t, r.client, queueState.archived)
+
+	tests := []struct {
+		qname string
+		id    uuid.UUID
+		want  *base.TaskInfo
+	}{
+		{
+			qname: "default",
+			id:    m1.ID,
+			want: &base.TaskInfo{
+				TaskMessage:   m1,
+				State:         "active",
+				NextProcessAt: 0,
+				LastFailedAt:  0,
+			},
+		},
+		{
+			qname: "default",
+			id:    m2.ID,
+			want: &base.TaskInfo{
+				TaskMessage:   m2,
+				State:         "scheduled",
+				NextProcessAt: oneHourFromNow.Unix(),
+				LastFailedAt:  0,
+			},
+		},
+		{
+			qname: "custom",
+			id:    m3.ID,
+			want: &base.TaskInfo{
+				TaskMessage:   m3,
+				State:         "pending",
+				NextProcessAt: now.Unix(),
+				LastFailedAt:  0,
+			},
+		},
+		{
+			qname: "custom",
+			id:    m4.ID,
+			want: &base.TaskInfo{
+				TaskMessage:   m4,
+				State:         "archived",
+				NextProcessAt: 0,
+				LastFailedAt:  oneHourAgo.Unix(),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+
+		got, err := r.GetTaskInfo(tc.qname, tc.id.String())
+		if err != nil {
+			t.Errorf("GetTaskInfo(%q, %q) failed: %v",
+				tc.qname, tc.id.String(), err)
+			continue
+		}
+
+		if diff := cmp.Diff(tc.want, got); diff != "" {
+			t.Errorf("GetTaskInfo(%q, %q) = %v, want %v; (-want,+got)\n%s",
+				tc.qname, tc.id.String(), got, tc.want, diff)
+		}
+	}
+}
+
+func TestGetTaskInfoError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	m := h.NewTaskMessageWithQueue("test1", nil, "custom")
+	h.SeedPendingQueue(t, r.client, []*base.TaskMessage{m}, "custom")
+
+	tests := []struct {
+		desc    string
+		qname   string
+		id      uuid.UUID
+		wantErr error
+	}{
+		{
+			desc:    "searching for task in a wrong queue",
+			qname:   "default",
+			id:      m.ID,
+			wantErr: ErrTaskNotFound,
+		},
+		{
+			desc:    "searching with non-existent task ID",
+			qname:   "custom",
+			id:      uuid.New(),
+			wantErr: ErrTaskNotFound,
+		},
+	}
+
+	for _, tc := range tests {
+		_, err := r.GetTaskInfo(tc.qname, tc.id.String())
+		if err == nil {
+			t.Errorf("%s; GetTaskInfo(%q, %q) returned nil error, want %v",
+				tc.desc, tc.qname, tc.id.String(), tc.wantErr)
+			continue
+		}
+
+		if !errors.Is(err, tc.wantErr) {
+			t.Errorf("%s; GetTaskInfo(%q, %q) returned %v error, want %v",
+				tc.desc, tc.qname, tc.id.String(), err, tc.wantErr)
 		}
 	}
 }

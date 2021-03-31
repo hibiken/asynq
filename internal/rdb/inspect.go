@@ -6,6 +6,7 @@ package rdb
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -285,6 +286,65 @@ func reverse(x []string) {
 		opp := len(x) - 1 - i
 		x[i], x[opp] = x[opp], x[i]
 	}
+}
+
+// Parses val as base10 64-bit integer if val contains a value.
+// Uses default value if val is nil.
+//
+// Assumes val contains either string value or nil.
+func parseIntOrDefault(val interface{}, defaultVal int64) (int64, error) {
+	if val == nil {
+		return defaultVal, nil
+	}
+	return strconv.ParseInt(val.(string), 10, 64)
+}
+
+// GetTaskInfo finds a task with the given id from the given queue.
+// Returns TaskInfo of the task if a task is found, otherwise returns ErrTaskNotFound.
+func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
+	key := base.TaskKey(qname, id)
+	exists, err := r.client.Exists(key).Result()
+	if err != nil {
+		return nil, err
+	}
+	if exists == 0 {
+		return nil, ErrTaskNotFound
+	}
+	// The "msg", "state" fields are non-nil;
+	// whereas the "process_at", "last_failed_at" fields can be nil.
+	res, err := r.client.HMGet(key, "msg", "state", "process_at", "last_failed_at").Result()
+	if err != nil {
+		return nil, err
+	}
+	if len(res) != 4 {
+		return nil, fmt.Errorf("asynq internal error: HMGET command returned %d elements", len(res))
+	}
+	encoded := res[0]
+	if encoded == nil {
+		return nil, fmt.Errorf("asynq internal error: HMGET field 'msg' was nil")
+	}
+	msg, err := base.DecodeMessage([]byte(encoded.(string)))
+	if err != nil {
+		return nil, err
+	}
+	state := res[1]
+	if state == nil {
+		return nil, fmt.Errorf("asynq internal error: HMGET field 'state' was nil")
+	}
+	processAt, err := parseIntOrDefault(res[2], 0)
+	if err != nil {
+		return nil, err
+	}
+	lastFailedAt, err := parseIntOrDefault(res[3], 0)
+	if err != nil {
+		return nil, err
+	}
+	return &base.TaskInfo{
+		TaskMessage:   msg,
+		State:         strings.ToLower(state.(string)),
+		NextProcessAt: processAt,
+		LastFailedAt:  lastFailedAt,
+	}, nil
 }
 
 // Pagination specifies the page size and page number

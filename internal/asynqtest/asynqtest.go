@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
@@ -305,16 +306,27 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, qname string, msgs []
 		tb.Fatalf("cannot seed redis LIST with task state %s", state)
 	}
 	for _, msg := range msgs {
+		if msg.Queue != qname {
+			tb.Fatalf("msg.Queue and queue name do not match! You are trying to seed queue %q with message %+v", qname, msg)
+		}
 		encoded := MustMarshal(tb, msg)
 		if err := c.LPush(key, msg.ID.String()).Err(); err != nil {
 			tb.Fatal(err)
 		}
 		key := base.TaskKey(msg.Queue, msg.ID.String())
+		var processAt int64
+		if state == statePending {
+			processAt = time.Now().Unix()
+		}
+		if state == stateActive {
+			processAt = 0
+		}
 		data := map[string]interface{}{
-			"msg":      encoded,
-			"timeout":  msg.Timeout,
-			"deadline": msg.Deadline,
-			"state":    strings.ToUpper(state.String()),
+			"msg":        encoded,
+			"timeout":    msg.Timeout,
+			"deadline":   msg.Deadline,
+			"state":      strings.ToUpper(state.String()),
+			"process_at": processAt,
 		}
 		if err := c.HSet(key, data).Err(); err != nil {
 			tb.Fatal(err)
@@ -337,17 +349,32 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, qname string, items [
 	}
 	for _, item := range items {
 		msg := item.Message
+		if msg.Queue != qname {
+			tb.Fatalf("msg.Queue and queue name do not match! You are trying to seed queue %q with message %+v", qname, msg)
+		}
 		encoded := MustMarshal(tb, msg)
 		z := &redis.Z{Member: msg.ID.String(), Score: float64(item.Score)}
 		if err := c.ZAdd(key, z).Err(); err != nil {
 			tb.Fatal(err)
 		}
 		key := base.TaskKey(msg.Queue, msg.ID.String())
+		var (
+			processAt    int64
+			lastFailedAt int64
+		)
+		if state == stateScheduled || state == stateRetry {
+			processAt = item.Score
+		}
+		if state == stateArchived {
+			lastFailedAt = item.Score
+		}
 		data := map[string]interface{}{
-			"msg":      encoded,
-			"timeout":  msg.Timeout,
-			"deadline": msg.Deadline,
-			"state":    strings.ToUpper(state.String()),
+			"msg":            encoded,
+			"timeout":        msg.Timeout,
+			"deadline":       msg.Deadline,
+			"state":          strings.ToUpper(state.String()),
+			"process_at":     processAt,
+			"last_failed_at": lastFailedAt,
 		}
 		if err := c.HSet(key, data).Err(); err != nil {
 			tb.Fatal(err)

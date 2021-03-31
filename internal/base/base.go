@@ -237,6 +237,31 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 	}, nil
 }
 
+type TaskInfo struct {
+	*TaskMessage
+
+	// State of the task.
+	// Possible values are the following:
+	// - active
+	// - pending
+	// - scheduled
+	// - retry
+	// - archived
+	State string
+
+	// NextProcessAt specifies the next processing time for the task in Unix time,
+	// the number of seconds elapsed since January 1, 1970 UTC.
+	//
+	// Value zero is used when task is in active or archived state.
+	NextProcessAt int64
+
+	// LastFailedAt specifieds the last time task failed in Unix time,
+	// the number of seconds elapsed since January 1, 1970 UTC.
+	//
+	// Value zero is used if the task has not failed.
+	LastFailedAt int64
+}
+
 // Z represents sorted set member.
 type Z struct {
 	Message *TaskMessage

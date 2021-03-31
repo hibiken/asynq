@@ -195,7 +195,7 @@ if redis.call("EXISTS", KEYS[2]) == 0 then
 		else
 			return redis.error_reply("asynq internal error: both timeout and deadline are not set")
 		end
-		redis.call("HSET", key, "state", "ACTIVE")
+		redis.call("HSET", key, "state", "ACTIVE", "process_at", 0)
 		redis.call("ZADD", KEYS[4], score, id)
 		return {msg, score}
 	end
