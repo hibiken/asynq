@@ -175,46 +175,90 @@ func (i *Inspector) DeleteQueue(qname string, force bool) error {
 }
 
 // TaskInfo describes a task.
-type TaskInfo interface {
-	// ID returns the unique identifier of the task.
-	ID() string
+type TaskInfo struct {
+	info *base.TaskInfo
+}
 
-	// Type returns the type name of the task.
-	Type() string
+// ID returns the unique identifier of the task.
+func (t *TaskInfo) ID() string {
+	return t.info.ID.String()
+}
 
-	// Payload returns the payload data of the task.
-	Payload() []byte
+// Type returns the type name of the task.
+func (t *TaskInfo) Type() string {
+	return t.info.Type
+}
 
-	// State returns a TaskState representing the state of the task.
-	State() TaskState
+// Payload returns the payload data of the task.
+func (t *TaskInfo) Payload() []byte {
+	return t.info.Payload
+}
 
-	// Queue returns the name of the queue the task belongs to.
-	Queue() string
+// State returns a TaskState representing the state of the task.
+func (t *TaskInfo) State() TaskState {
+	switch t.info.State {
+	case "active":
+		return TaskStateActive
+	case "pending":
+		return TaskStatePending
+	case "scheduled":
+		return TaskStateScheduled
+	case "retry":
+		return TaskStateRetry
+	case "archived":
+		return TaskStateArchived
+	}
+	panic("asynq internal error: unknown state")
+}
 
-	// MaxRetry returns the maximum number of times the task can be retried.
-	MaxRetry() int
+// Queue returns the name of the queue the task belongs to.
+func (t *TaskInfo) Queue() string {
+	return t.info.Queue
+}
 
-	// Retried returns the number of times the task has been retried.
-	Retried() int
+// MaxRetry returns the maximum number of times the task can be retried.
+func (t *TaskInfo) MaxRetry() int {
+	return t.info.Retry
+}
 
-	// Deadline returns the deadline set for the task.
-	Deadline() time.Time
+// Retried returns the number of times the task has been retried.
+func (t *TaskInfo) Retried() int {
+	return t.info.Retried
+}
 
-	// Timeout returns the timeout duration set for the task.
-	Timeout() time.Duration
+// Deadline returns the deadline set for the task.
+func (t *TaskInfo) Deadline() time.Time {
+	return time.Unix(t.info.Deadline, 0)
+}
 
-	// NextProcessAt returns the time the task will be ready to be processed.
-	// Zero value of time.Time is used when task is in pending, active, or archived
-	// state.
-	NextProcessAt() time.Time
+// Timeout returns the timeout duration set for the task.
+func (t *TaskInfo) Timeout() time.Duration {
+	return time.Duration(t.info.Timeout) * time.Second
+}
 
-	// LastFailedAt returns the time the task last failed.
-	// Zero value of time.Time is used if the task has not failed.
-	LastFailedAt() time.Time
+// NextProcessAt returns the time the task will be ready to be processed.
+// Zero value of time.Time is used when task is in active or archived
+// state.
+func (t *TaskInfo) NextProcessAt() time.Time {
+	if t.info.NextProcessAt == 0 {
+		return time.Time{}
+	}
+	return time.Unix(t.info.NextProcessAt, 0)
+}
 
-	// LastErr returns the error message from the last failure.
-	// Empty string is returned if the task has not failed.
-	LastErr() string
+// LastFailedAt returns the time the task last failed.
+// Zero value of time.Time is used if the task has not failed.
+func (t *TaskInfo) LastFailedAt() time.Time {
+	if t.info.LastFailedAt == 0 {
+		return time.Time{}
+	}
+	return time.Unix(t.info.LastFailedAt, 0)
+}
+
+// LastErr returns the error message from the last failure.
+// Empty string is returned if the task has not failed.
+func (t *TaskInfo) LastErr() string {
+	return t.info.ErrorMsg
 }
 
 // TaskState represents the state of a task.
@@ -228,9 +272,12 @@ const (
 	TaskStateArchived
 )
 
-func (i *Inspector) GetTaskInfo(qname, id string) (TaskInfo, error) {
-	// TODO: implement this
-	return nil, nil
+func (i *Inspector) GetTaskInfo(qname, id string) (*TaskInfo, error) {
+	info, err := i.rdb.GetTaskInfo(qname, id)
+	if err != nil {
+		return nil, err
+	}
+	return &TaskInfo{info}, nil
 }
 
 // PendingTask is a task in a queue and is ready to be processed.
