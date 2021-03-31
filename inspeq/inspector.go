@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v7"
-	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
@@ -295,64 +294,6 @@ type ArchivedTask struct {
 	LastError    string
 
 	score int64
-}
-
-// Format string used for task key.
-// Format is <prefix>:<uuid>:<score>.
-const taskKeyFormat = "%s:%v:%v"
-
-// Prefix used for task key.
-const (
-	keyPrefixPending   = "p"
-	keyPrefixScheduled = "s"
-	keyPrefixRetry     = "r"
-	keyPrefixArchived  = "a"
-
-	allKeyPrefixes = keyPrefixPending + keyPrefixScheduled + keyPrefixRetry + keyPrefixArchived
-)
-
-// Key returns a key used to delete, and archive the pending task.
-func (t *PendingTask) Key() string {
-	// Note: Pending tasks are stored in redis LIST, therefore no score.
-	// Use zero for the score to use the same key format.
-	return fmt.Sprintf(taskKeyFormat, keyPrefixPending, t.ID, 0)
-}
-
-// Key returns a key used to delete, run, and archive the scheduled task.
-func (t *ScheduledTask) Key() string {
-	return fmt.Sprintf(taskKeyFormat, keyPrefixScheduled, t.ID, t.score)
-}
-
-// Key returns a key used to delete, run, and archive the retry task.
-func (t *RetryTask) Key() string {
-	return fmt.Sprintf(taskKeyFormat, keyPrefixRetry, t.ID, t.score)
-}
-
-// Key returns a key used to delete and run the archived task.
-func (t *ArchivedTask) Key() string {
-	return fmt.Sprintf(taskKeyFormat, keyPrefixArchived, t.ID, t.score)
-}
-
-// parseTaskKey parses a key string and returns each part of key with proper
-// type if valid, otherwise it reports an error.
-func parseTaskKey(key string) (prefix string, id uuid.UUID, score int64, err error) {
-	parts := strings.Split(key, ":")
-	if len(parts) != 3 {
-		return "", uuid.Nil, 0, fmt.Errorf("invalid id")
-	}
-	id, err = uuid.Parse(parts[1])
-	if err != nil {
-		return "", uuid.Nil, 0, fmt.Errorf("invalid id")
-	}
-	score, err = strconv.ParseInt(parts[2], 10, 64)
-	if err != nil {
-		return "", uuid.Nil, 0, fmt.Errorf("invalid id")
-	}
-	prefix = parts[0]
-	if len(prefix) != 1 || !strings.Contains(allKeyPrefixes, prefix) {
-		return "", uuid.Nil, 0, fmt.Errorf("invalid id")
-	}
-	return prefix, id, score, nil
 }
 
 // ListOption specifies behavior of list operation.
