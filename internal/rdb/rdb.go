@@ -444,6 +444,7 @@ func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl tim
 // ARGV[2] -> updated base.TaskMessage value
 // ARGV[3] -> retry_at UNIX timestamp
 // ARGV[4] -> stats expiration timestamp
+// ARGV[5] -> current time in Unix seconds
 var retryCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[2], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
@@ -455,7 +456,8 @@ redis.call("ZADD", KEYS[4], ARGV[3], ARGV[1])
 redis.call("HSET", KEYS[1],
            "msg", ARGV[2],
            "state", "RETRY",
-           "process_at", ARGV[3])
+           "process_at", ARGV[3],
+		   "last_failed_at", ARGV[5])
 local n = redis.call("INCR", KEYS[5])
 if tonumber(n) == 1 then
 	redis.call("EXPIREAT", KEYS[5], ARGV[4])
@@ -491,6 +493,7 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) e
 		encoded,
 		processAt.Unix(),
 		expireAt.Unix(),
+		time.Now().Unix(),
 	}
 	return retryCmd.Run(r.client, keys, argv...).Err()
 }

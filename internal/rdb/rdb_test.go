@@ -1208,7 +1208,7 @@ func TestArchive(t *testing.T) {
 		}
 		for queue, want := range tc.wantArchived {
 			gotArchived := h.GetArchivedEntries(t, r.client, queue)
-			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q after calling (*RDB).Archive: (-want, +got):\n%s", base.ArchivedKey(queue), diff)
 			}
 		}

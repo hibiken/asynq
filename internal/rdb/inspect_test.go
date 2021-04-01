@@ -731,7 +731,7 @@ func TestListScheduled(t *testing.T) {
 	tests := []struct {
 		scheduled map[string][]base.Z
 		qname     string
-		want      []base.Z
+		want      []*base.TaskInfo
 	}{
 		{
 			scheduled: map[string][]base.Z{
@@ -746,10 +746,10 @@ func TestListScheduled(t *testing.T) {
 			},
 			qname: "default",
 			// should be sorted by score in ascending order
-			want: []base.Z{
-				{Message: m3, Score: p3.Unix()},
-				{Message: m1, Score: p1.Unix()},
-				{Message: m2, Score: p2.Unix()},
+			want: []*base.TaskInfo{
+				{TaskMessage: m3, State: "scheduled", NextProcessAt: p3.Unix(), LastFailedAt: 0},
+				{TaskMessage: m1, State: "scheduled", NextProcessAt: p1.Unix(), LastFailedAt: 0},
+				{TaskMessage: m2, State: "scheduled", NextProcessAt: p2.Unix(), LastFailedAt: 0},
 			},
 		},
 		{
@@ -764,8 +764,8 @@ func TestListScheduled(t *testing.T) {
 				},
 			},
 			qname: "custom",
-			want: []base.Z{
-				{Message: m4, Score: p4.Unix()},
+			want: []*base.TaskInfo{
+				{TaskMessage: m4, State: "scheduled", NextProcessAt: p4.Unix(), LastFailedAt: 0},
 			},
 		},
 		{
@@ -773,7 +773,7 @@ func TestListScheduled(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []base.Z(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 	}
 
@@ -787,7 +787,7 @@ func TestListScheduled(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, unixTimeCmpOpt); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
 		}
@@ -838,13 +838,13 @@ func TestListScheduledPagination(t *testing.T) {
 			continue
 		}
 
-		first := got[0].Message
+		first := got[0].TaskMessage
 		if first.Type != tc.wantFirst {
 			t.Errorf("%s; %s returned a list with first message %q, want %q",
 				tc.desc, op, first.Type, tc.wantFirst)
 		}
 
-		last := got[len(got)-1].Message
+		last := got[len(got)-1].TaskMessage
 		if last.Type != tc.wantLast {
 			t.Errorf("%s; %s returned a list with the last message %q, want %q",
 				tc.desc, op, last.Type, tc.wantLast)
@@ -882,14 +882,15 @@ func TestListRetry(t *testing.T) {
 		Retry:    25,
 		Retried:  3,
 	}
-	p1 := time.Now().Add(5 * time.Minute)
-	p2 := time.Now().Add(24 * time.Hour)
-	p3 := time.Now().Add(24 * time.Hour)
+	now := time.Now()
+	p1 := now.Add(5 * time.Minute)
+	p2 := now.Add(24 * time.Hour)
+	p3 := now.Add(24 * time.Hour)
 
 	tests := []struct {
 		retry map[string][]base.Z
 		qname string
-		want  []base.Z
+		want  []*base.TaskInfo
 	}{
 		{
 			retry: map[string][]base.Z{
@@ -902,9 +903,9 @@ func TestListRetry(t *testing.T) {
 				},
 			},
 			qname: "default",
-			want: []base.Z{
-				{Message: m1, Score: p1.Unix()},
-				{Message: m2, Score: p2.Unix()},
+			want: []*base.TaskInfo{
+				{TaskMessage: m1, State: "retry", NextProcessAt: p1.Unix(), LastFailedAt: now.Unix()},
+				{TaskMessage: m2, State: "retry", NextProcessAt: p2.Unix(), LastFailedAt: now.Unix()},
 			},
 		},
 		{
@@ -918,8 +919,8 @@ func TestListRetry(t *testing.T) {
 				},
 			},
 			qname: "custom",
-			want: []base.Z{
-				{Message: m3, Score: p3.Unix()},
+			want: []*base.TaskInfo{
+				{TaskMessage: m3, State: "retry", NextProcessAt: p3.Unix(), LastFailedAt: now.Unix()},
 			},
 		},
 		{
@@ -927,7 +928,7 @@ func TestListRetry(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []base.Z(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 	}
 
@@ -941,7 +942,7 @@ func TestListRetry(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, unixTimeCmpOpt); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
 				op, got, err, tc.want, diff)
 			continue
@@ -997,13 +998,13 @@ func TestListRetryPagination(t *testing.T) {
 			continue
 		}
 
-		first := got[0].Message
+		first := got[0].TaskMessage
 		if first.Type != tc.wantFirst {
 			t.Errorf("%s; %s returned a list with first message %q, want %q",
 				tc.desc, op, first.Type, tc.wantFirst)
 		}
 
-		last := got[len(got)-1].Message
+		last := got[len(got)-1].TaskMessage
 		if last.Type != tc.wantLast {
 			t.Errorf("%s; %s returned a list with the last message %q, want %q",
 				tc.desc, op, last.Type, tc.wantLast)
@@ -1042,7 +1043,7 @@ func TestListArchived(t *testing.T) {
 	tests := []struct {
 		archived map[string][]base.Z
 		qname    string
-		want     []base.Z
+		want     []*base.TaskInfo
 	}{
 		{
 			archived: map[string][]base.Z{
@@ -1055,9 +1056,9 @@ func TestListArchived(t *testing.T) {
 				},
 			},
 			qname: "default",
-			want: []base.Z{
-				{Message: m2, Score: f2.Unix()}, // FIXME: shouldn't be sorted in the other order?
-				{Message: m1, Score: f1.Unix()},
+			want: []*base.TaskInfo{
+				{TaskMessage: m2, State: "archived", NextProcessAt: 0, LastFailedAt: f2.Unix()}, // FIXME: shouldn't these be sorted in the other order?
+				{TaskMessage: m1, State: "archived", NextProcessAt: 0, LastFailedAt: f1.Unix()},
 			},
 		},
 		{
@@ -1071,8 +1072,8 @@ func TestListArchived(t *testing.T) {
 				},
 			},
 			qname: "custom",
-			want: []base.Z{
-				{Message: m3, Score: f3.Unix()},
+			want: []*base.TaskInfo{
+				{TaskMessage: m3, State: "archived", NextProcessAt: 0, LastFailedAt: f3.Unix()},
 			},
 		},
 		{
@@ -1080,7 +1081,7 @@ func TestListArchived(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []base.Z(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 	}
 
@@ -1094,7 +1095,7 @@ func TestListArchived(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, unixTimeCmpOpt); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
 				op, got, err, tc.want, diff)
 			continue
@@ -1147,13 +1148,13 @@ func TestListArchivedPagination(t *testing.T) {
 			continue
 		}
 
-		first := got[0].Message
+		first := got[0].TaskMessage
 		if first.Type != tc.wantFirst {
 			t.Errorf("%s; %s returned a list with first message %q, want %q",
 				tc.desc, op, first.Type, tc.wantFirst)
 		}
 
-		last := got[len(got)-1].Message
+		last := got[len(got)-1].TaskMessage
 		if last.Type != tc.wantLast {
 			t.Errorf("%s; %s returned a list with the last message %q, want %q",
 				tc.desc, op, last.Type, tc.wantLast)
@@ -1162,8 +1163,8 @@ func TestListArchivedPagination(t *testing.T) {
 }
 
 var (
-	timeCmpOpt   = cmpopts.EquateApproxTime(2 * time.Second) // allow for 2 seconds margin in time.Time
-	zScoreCmpOpt = h.EquateInt64Approx(2)                    // allow for 2 seconds margin in Z.Score
+	timeCmpOpt     = cmpopts.EquateApproxTime(2 * time.Second) // allow for 2 seconds margin in time.Time
+	unixTimeCmpOpt = h.EquateInt64Approx(2)                    // allow for 2 seconds margin in int64 representing unix time
 )
 
 func TestRunArchivedTask(t *testing.T) {
@@ -1893,7 +1894,7 @@ func TestArchiveRetryTask(t *testing.T) {
 
 		for qname, want := range tc.wantRetry {
 			gotRetry := h.GetRetryEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.RetryKey(qname), diff)
 			}
@@ -1901,7 +1902,7 @@ func TestArchiveRetryTask(t *testing.T) {
 
 		for qname, want := range tc.wantArchived {
 			gotDead := h.GetArchivedEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
 			}
@@ -2015,7 +2016,7 @@ func TestArchiveScheduledTask(t *testing.T) {
 
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ScheduledKey(qname), diff)
 			}
@@ -2023,7 +2024,7 @@ func TestArchiveScheduledTask(t *testing.T) {
 
 		for qname, want := range tc.wantArchived {
 			gotDead := h.GetArchivedEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
 			}
@@ -2129,7 +2130,7 @@ func TestArchivePendingTask(t *testing.T) {
 
 		for qname, want := range tc.wantArchived {
 			gotDead := h.GetArchivedEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
 			}
@@ -2261,7 +2262,7 @@ func TestArchiveAllPendingTasks(t *testing.T) {
 
 		for qname, want := range tc.wantArchived {
 			gotDead := h.GetArchivedEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
 			}
@@ -2399,7 +2400,7 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 
 		for qname, want := range tc.wantRetry {
 			gotRetry := h.GetRetryEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.RetryKey(qname), diff)
 			}
@@ -2407,7 +2408,7 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 
 		for qname, want := range tc.wantArchived {
 			gotDead := h.GetArchivedEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
 			}
@@ -2546,7 +2547,7 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ScheduledKey(qname), diff)
 			}
@@ -2554,7 +2555,7 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 
 		for qname, want := range tc.wantArchived {
 			gotDead := h.GetArchivedEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
 			}

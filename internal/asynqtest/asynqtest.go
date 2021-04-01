@@ -344,6 +344,8 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, qname string, items [
 		key = base.RetryKey(qname)
 	case stateArchived:
 		key = base.ArchivedKey(qname)
+	case stateActive:
+		key = base.DeadlinesKey(qname)
 	default:
 		tb.Fatalf("cannot seed redis ZSET with task state %s", state)
 	}
@@ -362,8 +364,12 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, qname string, items [
 			processAt    int64
 			lastFailedAt int64
 		)
-		if state == stateScheduled || state == stateRetry {
+		if state == stateScheduled {
 			processAt = item.Score
+		}
+		if state == stateRetry {
+			processAt = item.Score
+			lastFailedAt = time.Now().Unix()
 		}
 		if state == stateArchived {
 			lastFailedAt = item.Score

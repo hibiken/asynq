@@ -392,7 +392,7 @@ func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskInfo, error)
 // ARGV[2] -> stop offset
 // ARGV[3] -> task key prefix
 var listMessagesCmd = redis.NewScript(`
-local ids = redis.call("LRange", KEYS[1], ARGV[1], ARGV[2])
+local ids = redis.call("LRANGE", KEYS[1], ARGV[1], ARGV[2])
 local res = {}
 for _, id in ipairs(ids) do
 	local key = ARGV[3] .. id
@@ -435,7 +435,7 @@ func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskInfo,
 
 // ListScheduled returns all tasks from the given queue that are scheduled
 // to be processed in the future.
-func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]base.Z, error) {
+func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
 		return nil, fmt.Errorf("queue %q does not exist", qname)
 	}
@@ -444,7 +444,7 @@ func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]base.Z, error) {
 
 // ListRetry returns all tasks from the given queue that have failed before
 // and willl be retried in the future.
-func (r *RDB) ListRetry(qname string, pgn Pagination) ([]base.Z, error) {
+func (r *RDB) ListRetry(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
 		return nil, fmt.Errorf("queue %q does not exist", qname)
 	}
@@ -452,7 +452,7 @@ func (r *RDB) ListRetry(qname string, pgn Pagination) ([]base.Z, error) {
 }
 
 // ListArchived returns all tasks from the given queue that have exhausted its retry limit.
-func (r *RDB) ListArchived(qname string, pgn Pagination) ([]base.Z, error) {
+func (r *RDB) ListArchived(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
 		return nil, fmt.Errorf("queue %q does not exist", qname)
 	}
@@ -468,18 +468,17 @@ func (r *RDB) ListArchived(qname string, pgn Pagination) ([]base.Z, error) {
 // [msg1, score1, msg2, score2, ..., msgN, scoreN]
 var listZSetEntriesCmd = redis.NewScript(`
 local res = {}
-local id_score_pairs = redis.call("ZRANGE", KEYS[1], ARGV[1], ARGV[2], "WITHSCORES")
-for i = 1, table.getn(id_score_pairs), 2 do
-	local key = ARGV[3] .. id_score_pairs[i]
-	table.insert(res, redis.call("HGET", key, "msg"))
-	table.insert(res, id_score_pairs[i+1])
+local ids = redis.call("ZRANGE", KEYS[1], ARGV[1], ARGV[2])
+for _, id in ipairs(ids) do
+	local key = ARGV[3] .. id
+	table.insert(res, redis.call("HMGET", key, "msg", "state", "process_at", "last_failed_at"))
 end
 return res
 `)
 
 // listZSetEntries returns a list of message and score pairs in Redis sorted-set
 // with the given key.
-func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, error) {
+func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	res, err := listZSetEntriesCmd.Run(r.client, []string{key},
 		pgn.start(), pgn.stop(), base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
@@ -489,6 +488,7 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, erro
 	if err != nil {
 		return nil, err
 	}
+<<<<<<< HEAD
 	var zs []base.Z
 	for i := 0; i < len(data); i += 2 {
 		s, err := cast.ToStringE(data[i])
@@ -508,12 +508,21 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, erro
 		}
 >>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		msg, err := base.DecodeMessage([]byte(s))
+=======
+	var tasks []*base.TaskInfo
+	for _, s := range data {
+		vals, err := cast.ToSliceE(s)
+		if err != nil {
+			return nil, err
+		}
+		info, err := makeTaskInfo(vals)
+>>>>>>> 4c699a2... Update RDB.ListScheduled, ListRetry, and ListArchived to return list of
 		if err != nil {
 			continue // bad data, ignore and continue
 		}
-		zs = append(zs, base.Z{Message: msg, Score: score})
+		tasks = append(tasks, info)
 	}
-	return zs, nil
+	return tasks, nil
 }
 
 // RunAllScheduledTasks enqueues all scheduled tasks from the given queue
