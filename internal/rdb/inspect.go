@@ -281,11 +281,47 @@ func parseInfo(infoStr string) (map[string]string, error) {
 	return info, nil
 }
 
-func reverse(x []string) {
+func reverse(x []interface{}) {
 	for i := len(x)/2 - 1; i >= 0; i-- {
 		opp := len(x) - 1 - i
 		x[i], x[opp] = x[opp], x[i]
 	}
+}
+
+// makeTaskInfo takes values returned from HMGET(TASK_KEY, "msg", "state", "process_at", "last_failed_at")
+// command and return a TaskInfo. It assumes that `vals` contains four values for each field.
+func makeTaskInfo(vals []interface{}) (*base.TaskInfo, error) {
+	if len(vals) != 4 {
+		return nil, fmt.Errorf("asynq internal error: HMGET command returned %d elements", len(vals))
+	}
+	// Note: The "msg", "state" fields are non-nil;
+	// whereas the "process_at", "last_failed_at" fields can be nil.
+	encoded := vals[0]
+	if encoded == nil {
+		return nil, fmt.Errorf("asynq internal error: HMGET field 'msg' was nil")
+	}
+	msg, err := base.DecodeMessage([]byte(encoded.(string)))
+	if err != nil {
+		return nil, err
+	}
+	state := vals[1]
+	if state == nil {
+		return nil, fmt.Errorf("asynq internal error: HMGET field 'state' was nil")
+	}
+	processAt, err := parseIntOrDefault(vals[2], 0)
+	if err != nil {
+		return nil, err
+	}
+	lastFailedAt, err := parseIntOrDefault(vals[3], 0)
+	if err != nil {
+		return nil, err
+	}
+	return &base.TaskInfo{
+		TaskMessage:   msg,
+		State:         strings.ToLower(state.(string)),
+		NextProcessAt: processAt,
+		LastFailedAt:  lastFailedAt,
+	}, nil
 }
 
 // Parses val as base10 64-bit integer if val contains a value.
@@ -310,41 +346,11 @@ func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 	if exists == 0 {
 		return nil, ErrTaskNotFound
 	}
-	// The "msg", "state" fields are non-nil;
-	// whereas the "process_at", "last_failed_at" fields can be nil.
 	res, err := r.client.HMGet(key, "msg", "state", "process_at", "last_failed_at").Result()
 	if err != nil {
 		return nil, err
 	}
-	if len(res) != 4 {
-		return nil, fmt.Errorf("asynq internal error: HMGET command returned %d elements", len(res))
-	}
-	encoded := res[0]
-	if encoded == nil {
-		return nil, fmt.Errorf("asynq internal error: HMGET field 'msg' was nil")
-	}
-	msg, err := base.DecodeMessage([]byte(encoded.(string)))
-	if err != nil {
-		return nil, err
-	}
-	state := res[1]
-	if state == nil {
-		return nil, fmt.Errorf("asynq internal error: HMGET field 'state' was nil")
-	}
-	processAt, err := parseIntOrDefault(res[2], 0)
-	if err != nil {
-		return nil, err
-	}
-	lastFailedAt, err := parseIntOrDefault(res[3], 0)
-	if err != nil {
-		return nil, err
-	}
-	return &base.TaskInfo{
-		TaskMessage:   msg,
-		State:         strings.ToLower(state.(string)),
-		NextProcessAt: processAt,
-		LastFailedAt:  lastFailedAt,
-	}, nil
+	return makeTaskInfo(res)
 }
 
 // Pagination specifies the page size and page number
@@ -366,7 +372,7 @@ func (p Pagination) stop() int64 {
 }
 
 // ListPending returns pending tasks that are ready to be processed.
-func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
+func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
 		return nil, fmt.Errorf("queue %q does not exist", qname)
 	}
@@ -374,7 +380,7 @@ func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskMessage, er
 }
 
 // ListActive returns all tasks that are currently being processed for the given queue.
-func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
+func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
 		return nil, fmt.Errorf("queue %q does not exist", qname)
 	}
@@ -390,13 +396,13 @@ local ids = redis.call("LRange", KEYS[1], ARGV[1], ARGV[2])
 local res = {}
 for _, id in ipairs(ids) do
 	local key = ARGV[3] .. id
-	table.insert(res, redis.call("HGET", key, "msg"))
+	table.insert(res, redis.call("HMGET", key, "msg", "state", "process_at", "last_failed_at"))
 end
 return res
 `)
 
-// listMessages returns a list of TaskMessage in Redis list with the given key.
-func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskMessage, error) {
+// listMessages returns a list of TaskInfo in Redis list with the given key.
+func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	// Note: Because we use LPUSH to redis list, we need to calculate the
 	// correct range and reverse the list to get the tasks with pagination.
 	stop := -pgn.start() - 1
@@ -406,20 +412,24 @@ func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskMessa
 	if err != nil {
 		return nil, err
 	}
-	data, err := cast.ToStringSliceE(res)
+	data, err := cast.ToSliceE(res)
 	if err != nil {
 		return nil, err
 	}
 	reverse(data)
-	var msgs []*base.TaskMessage
+	var tasks []*base.TaskInfo
 	for _, s := range data {
-		m, err := base.DecodeMessage([]byte(s))
+		vals, err := cast.ToSliceE(s)
 		if err != nil {
-			continue // bad data, ignore and continue
+			return nil, err
 		}
-		msgs = append(msgs, m)
+		info, err := makeTaskInfo(vals)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, info)
 	}
-	return msgs, nil
+	return tasks, nil
 
 }
 

@@ -474,24 +474,29 @@ func TestListPending(t *testing.T) {
 	m3 := h.NewTaskMessageWithQueue("important_notification", nil, "critical")
 	m4 := h.NewTaskMessageWithQueue("minor_notification", nil, "low")
 
+	now := time.Now()
+
 	tests := []struct {
 		pending map[string][]*base.TaskMessage
 		qname   string
-		want    []*base.TaskMessage
+		want    []*base.TaskInfo
 	}{
 		{
 			pending: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {m1, m2},
 			},
 			qname: base.DefaultQueueName,
-			want:  []*base.TaskMessage{m1, m2},
+			want: []*base.TaskInfo{
+				{TaskMessage: m1, State: "pending", NextProcessAt: now.Unix(), LastFailedAt: 0},
+				{TaskMessage: m2, State: "pending", NextProcessAt: now.Unix(), LastFailedAt: 0},
+			},
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: nil,
 			},
 			qname: base.DefaultQueueName,
-			want:  []*base.TaskMessage(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -500,7 +505,10 @@ func TestListPending(t *testing.T) {
 				"low":                 {m4},
 			},
 			qname: base.DefaultQueueName,
-			want:  []*base.TaskMessage{m1, m2},
+			want: []*base.TaskInfo{
+				{TaskMessage: m1, State: "pending", NextProcessAt: now.Unix(), LastFailedAt: 0},
+				{TaskMessage: m2, State: "pending", NextProcessAt: now.Unix(), LastFailedAt: 0},
+			},
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -509,7 +517,9 @@ func TestListPending(t *testing.T) {
 				"low":                 {m4},
 			},
 			qname: "critical",
-			want:  []*base.TaskMessage{m3},
+			want: []*base.TaskInfo{
+				{TaskMessage: m3, State: "pending", NextProcessAt: now.Unix(), LastFailedAt: 0},
+			},
 		},
 	}
 
@@ -607,36 +617,39 @@ func TestListActive(t *testing.T) {
 	m4 := h.NewTaskMessageWithQueue("task2", nil, "low")
 
 	tests := []struct {
-		inProgress map[string][]*base.TaskMessage
-		qname      string
-		want       []*base.TaskMessage
+		active map[string][]*base.TaskMessage
+		qname  string
+		want   []*base.TaskInfo
 	}{
 		{
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default":  {m1, m2},
 				"critical": {m3},
 				"low":      {m4},
 			},
 			qname: "default",
-			want:  []*base.TaskMessage{m1, m2},
+			want: []*base.TaskInfo{
+				{TaskMessage: m1, State: "active", NextProcessAt: 0, LastFailedAt: 0},
+				{TaskMessage: m2, State: "active", NextProcessAt: 0, LastFailedAt: 0},
+			},
 		},
 		{
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			qname: "default",
-			want:  []*base.TaskMessage(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.active)
 
 		got, err := r.ListActive(tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListActive(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
-			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.inProgress)
+			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.active)
 			continue
 		}
 		if diff := cmp.Diff(tc.want, got); diff != "" {
