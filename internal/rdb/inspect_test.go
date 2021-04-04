@@ -1806,8 +1806,8 @@ func TestArchiveRetryTask(t *testing.T) {
 		qname        string
 		id           uuid.UUID
 		want         error
-		wantRetry    map[string][]base.Z
-		wantArchived map[string][]base.Z
+		wantRetry    map[string][]*base.TaskInfo
+		wantArchived map[string][]*base.TaskInfo
 	}{
 		{
 			retry: map[string][]base.Z{
@@ -1822,11 +1822,15 @@ func TestArchiveRetryTask(t *testing.T) {
 			qname: "default",
 			id:    m1.ID,
 			want:  nil,
-			wantRetry: map[string][]base.Z{
-				"default": {{Message: m2, Score: t2.Unix()}},
+			wantRetry: map[string][]*base.TaskInfo{
+				"default": {
+					{TaskMessage: m2, State: "retry", NextProcessAt: t2.Unix(), LastFailedAt: 0},
+				},
 			},
-			wantArchived: map[string][]base.Z{
-				"default": {{Message: m1, Score: time.Now().Unix()}},
+			wantArchived: map[string][]*base.TaskInfo{
+				"default": {
+					{TaskMessage: m1, State: "archived", NextProcessAt: 0, LastFailedAt: time.Now().Unix()},
+				},
 			},
 		},
 		{
@@ -1839,11 +1843,15 @@ func TestArchiveRetryTask(t *testing.T) {
 			qname: "default",
 			id:    uuid.New(),
 			want:  ErrTaskNotFound,
-			wantRetry: map[string][]base.Z{
-				"default": {{Message: m1, Score: t1.Unix()}},
+			wantRetry: map[string][]*base.TaskInfo{
+				"default": {
+					{TaskMessage: m1, State: "retry", NextProcessAt: t1.Unix(), LastFailedAt: 0},
+				},
 			},
-			wantArchived: map[string][]base.Z{
-				"default": {{Message: m2, Score: t2.Unix()}},
+			wantArchived: map[string][]*base.TaskInfo{
+				"default": {
+					{TaskMessage: m2, State: "archived", NextProcessAt: 0, LastFailedAt: t2.Unix()},
+				},
 			},
 		},
 		{
@@ -1864,18 +1872,20 @@ func TestArchiveRetryTask(t *testing.T) {
 			qname: "custom",
 			id:    m3.ID,
 			want:  nil,
-			wantRetry: map[string][]base.Z{
+			wantRetry: map[string][]*base.TaskInfo{
 				"default": {
-					{Message: m1, Score: t1.Unix()},
-					{Message: m2, Score: t2.Unix()},
+					{TaskMessage: m1, State: "retry", NextProcessAt: t1.Unix(), LastFailedAt: 0},
+					{TaskMessage: m2, State: "retry", NextProcessAt: t2.Unix(), LastFailedAt: 0},
 				},
 				"custom": {
-					{Message: m4, Score: t4.Unix()},
+					{TaskMessage: m4, State: "retry", NextProcessAt: t4.Unix(), LastFailedAt: 0},
 				},
 			},
-			wantArchived: map[string][]base.Z{
+			wantArchived: map[string][]*base.TaskInfo{
 				"default": {},
-				"custom":  {{Message: m3, Score: time.Now().Unix()}},
+				"custom": {
+					{TaskMessage: m3, State: "archived", NextProcessAt: 0, LastFailedAt: time.Now().Unix()},
+				},
 			},
 		},
 	}

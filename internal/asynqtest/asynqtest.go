@@ -477,3 +477,25 @@ func getMessagesFromZSetWithScores(tb testing.TB, r redis.UniversalClient, qname
 	}
 	return res
 }
+
+// GetRetryEntries returns all retry messages and its score in the given queue.
+func GetRetryTasks(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskInfo {
+	tb.Helper()
+	zs := r.ZRangeWithScores(base.RetryKey(qname), 0, -1).Val()
+	var tasks []*base.TaskInfo
+	for _, z := range zs {
+		vals := r.HMGet(base.TaskKey(qname, z.Member.(string)), "msg", "state", "process_at", "last_failed_at").Val()
+		if len(vals) != 4 {
+			tb.Fatalf("unexpected number of values returned from HMGET command, got %d elements, want 4", len(vals))
+		}
+		if vals[0] == redis.Nil {
+			tb.Fatalf("msg field contained nil for task ID %v", z.Member)
+		}
+		if vals[1] == redis.Nil {
+			tb.Fatalf("state field contained nil for task ID %v", z.Member)
+		}
+		// TODO: continue from here
+
+	}
+	return res
+}

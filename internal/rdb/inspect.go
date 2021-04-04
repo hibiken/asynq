@@ -664,6 +664,7 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 // ARGV[3] -> current timestamp in unix time
 // ARGV[4] -> cutoff timestamp (e.g., 90 days ago)
 // ARGV[5] -> max number of tasks in archived state (e.g., 100)
+// FIXME: Need to update state field of the task under task-key
 var archiveTaskCmd = redis.NewScript(`
 if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
