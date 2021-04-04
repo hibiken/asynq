@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2021-04-04
+
+### Fixed
+
+- Fix bug in internal `RDB.memoryUsage` method.
+
 ## [0.17.0] - 2021-03-24
 
 ### Added
