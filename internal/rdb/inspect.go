@@ -488,27 +488,6 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]*base.TaskIn
 	if err != nil {
 		return nil, err
 	}
-<<<<<<< HEAD
-	var zs []base.Z
-	for i := 0; i < len(data); i += 2 {
-		s, err := cast.ToStringE(data[i])
-		if err != nil {
-			return nil, err
-<<<<<<< HEAD
-		}
-		score, err := cast.ToInt64E(data[i+1])
-		if err != nil {
-			return nil, err
-		}
-=======
-		}
-		score, err := cast.ToInt64E(data[i+1])
-		if err != nil {
-			return nil, err
-		}
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
-		msg, err := base.DecodeMessage([]byte(s))
-=======
 	var tasks []*base.TaskInfo
 	for _, s := range data {
 		vals, err := cast.ToSliceE(s)
@@ -516,7 +495,6 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]*base.TaskIn
 			return nil, err
 		}
 		info, err := makeTaskInfo(vals)
->>>>>>> 4c699a2... Update RDB.ListScheduled, ListRetry, and ListArchived to return list of
 		if err != nil {
 			continue // bad data, ignore and continue
 		}

@@ -6,7 +6,6 @@
 package base
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -180,21 +179,10 @@ type TaskMessage struct {
 func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 	if msg == nil {
 		return nil, fmt.Errorf("cannot encode nil message")
-<<<<<<< HEAD
 	}
 	return proto.Marshal(&pb.TaskMessage{
 		Type:      msg.Type,
 		Payload:   msg.Payload,
-=======
-	}
-	payload, err := json.Marshal(msg.Payload)
-	if err != nil {
-		return nil, err
-	}
-	return proto.Marshal(&pb.TaskMessage{
-		Type:      msg.Type,
-		Payload:   payload,
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		Id:        msg.ID.String(),
 		Queue:     msg.Queue,
 		Retry:     int32(msg.Retry),
@@ -210,22 +198,11 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 func DecodeMessage(data []byte) (*TaskMessage, error) {
 	var pbmsg pb.TaskMessage
 	if err := proto.Unmarshal(data, &pbmsg); err != nil {
-<<<<<<< HEAD
-=======
-		return nil, err
-	}
-	payload, err := decodePayload(pbmsg.GetPayload())
-	if err != nil {
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		return nil, err
 	}
 	return &TaskMessage{
 		Type:      pbmsg.GetType(),
-<<<<<<< HEAD
 		Payload:   pbmsg.GetPayload(),
-=======
-		Payload:   payload,
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		ID:        uuid.MustParse(pbmsg.GetId()),
 		Queue:     pbmsg.GetQueue(),
 		Retry:     int(pbmsg.GetRetry()),
@@ -403,11 +380,7 @@ type WorkerInfo struct {
 	ServerID string
 	ID       string
 	Type     string
-<<<<<<< HEAD
 	Payload  []byte
-=======
-	Payload  map[string]interface{}
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 	Queue    string
 	Started  time.Time
 	Deadline time.Time
@@ -418,13 +391,6 @@ func EncodeWorkerInfo(info *WorkerInfo) ([]byte, error) {
 	if info == nil {
 		return nil, fmt.Errorf("cannot encode nil worker info")
 	}
-<<<<<<< HEAD
-=======
-	payload, err := json.Marshal(info.Payload)
-	if err != nil {
-		return nil, err
-	}
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 	startTime, err := ptypes.TimestampProto(info.Started)
 	if err != nil {
 		return nil, err
@@ -439,43 +405,19 @@ func EncodeWorkerInfo(info *WorkerInfo) ([]byte, error) {
 		ServerId:    info.ServerID,
 		TaskId:      info.ID,
 		TaskType:    info.Type,
-<<<<<<< HEAD
 		TaskPayload: info.Payload,
-=======
-		TaskPayload: payload,
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		Queue:       info.Queue,
 		StartTime:   startTime,
 		Deadline:    deadline,
 	})
 }
 
-<<<<<<< HEAD
-=======
-func decodePayload(b []byte) (map[string]interface{}, error) {
-	d := json.NewDecoder(bytes.NewReader(b))
-	d.UseNumber()
-	payload := make(map[string]interface{})
-	if err := d.Decode(&payload); err != nil {
-		return nil, err
-	}
-	return payload, nil
-}
-
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 // DecodeWorkerInfo decodes the given bytes into WorkerInfo.
 func DecodeWorkerInfo(b []byte) (*WorkerInfo, error) {
 	var pbmsg pb.WorkerInfo
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
 		return nil, err
 	}
-<<<<<<< HEAD
-=======
-	payload, err := decodePayload(pbmsg.GetTaskPayload())
-	if err != nil {
-		return nil, err
-	}
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 	startTime, err := ptypes.Timestamp(pbmsg.GetStartTime())
 	if err != nil {
 		return nil, err
@@ -490,11 +432,7 @@ func DecodeWorkerInfo(b []byte) (*WorkerInfo, error) {
 		ServerID: pbmsg.GetServerId(),
 		ID:       pbmsg.GetTaskId(),
 		Type:     pbmsg.GetTaskType(),
-<<<<<<< HEAD
 		Payload:  pbmsg.GetTaskPayload(),
-=======
-		Payload:  payload,
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		Queue:    pbmsg.GetQueue(),
 		Started:  startTime,
 		Deadline: deadline,
@@ -531,13 +469,6 @@ func EncodeSchedulerEntry(entry *SchedulerEntry) ([]byte, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("cannot encode nil scheduler entry")
 	}
-<<<<<<< HEAD
-=======
-	payload, err := json.Marshal(entry.Payload)
-	if err != nil {
-		return nil, err
-	}
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 	next, err := ptypes.TimestampProto(entry.Next)
 	if err != nil {
 		return nil, err
@@ -550,11 +481,7 @@ func EncodeSchedulerEntry(entry *SchedulerEntry) ([]byte, error) {
 		Id:              entry.ID,
 		Spec:            entry.Spec,
 		TaskType:        entry.Type,
-<<<<<<< HEAD
 		TaskPayload:     entry.Payload,
-=======
-		TaskPayload:     payload,
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		EnqueueOptions:  entry.Opts,
 		NextEnqueueTime: next,
 		PrevEnqueueTime: prev,
@@ -567,13 +494,6 @@ func DecodeSchedulerEntry(b []byte) (*SchedulerEntry, error) {
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
 		return nil, err
 	}
-<<<<<<< HEAD
-=======
-	payload, err := decodePayload(pbmsg.GetTaskPayload())
-	if err != nil {
-		return nil, err
-	}
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 	next, err := ptypes.Timestamp(pbmsg.GetNextEnqueueTime())
 	if err != nil {
 		return nil, err
@@ -586,11 +506,7 @@ func DecodeSchedulerEntry(b []byte) (*SchedulerEntry, error) {
 		ID:      pbmsg.GetId(),
 		Spec:    pbmsg.GetSpec(),
 		Type:    pbmsg.GetTaskType(),
-<<<<<<< HEAD
 		Payload: pbmsg.GetTaskPayload(),
-=======
-		Payload: payload,
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		Opts:    pbmsg.GetEnqueueOptions(),
 		Next:    next,
 		Prev:    prev,

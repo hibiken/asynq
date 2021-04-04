@@ -400,11 +400,7 @@ func TestServerInfoEncoding(t *testing.T) {
 				Concurrency:       10,
 				Queues:            map[string]int{"default": 1, "critical": 2},
 				StrictPriority:    false,
-<<<<<<< HEAD
 				Status:            "active",
-=======
-				Status:            "running",
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 				Started:           time.Now().Add(-3 * time.Hour),
 				ActiveWorkerCount: 8,
 			},
@@ -440,11 +436,7 @@ func TestWorkerInfoEncoding(t *testing.T) {
 				ServerID: "abc123",
 				ID:       uuid.NewString(),
 				Type:     "taskA",
-<<<<<<< HEAD
 				Payload:  toBytes(map[string]interface{}{"foo": "bar"}),
-=======
-				Payload:  map[string]interface{}{"foo": "bar"},
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 				Queue:    "default",
 				Started:  time.Now().Add(-3 * time.Hour),
 				Deadline: time.Now().Add(30 * time.Second),
@@ -479,11 +471,7 @@ func TestSchedulerEntryEncoding(t *testing.T) {
 				ID:      uuid.NewString(),
 				Spec:    "* * * * *",
 				Type:    "task_A",
-<<<<<<< HEAD
 				Payload: toBytes(map[string]interface{}{"foo": "bar"}),
-=======
-				Payload: map[string]interface{}{"foo": "bar"},
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 				Opts:    []string{"Queue('email')"},
 				Next:    time.Now().Add(30 * time.Second).UTC(),
 				Prev:    time.Now().Add(-2 * time.Minute).UTC(),

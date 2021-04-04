@@ -101,11 +101,7 @@ func TestEnqueueUnique(t *testing.T) {
 	m1 := base.TaskMessage{
 		ID:        uuid.New(),
 		Type:      "email",
-<<<<<<< HEAD
 		Payload:   h.JSON(map[string]interface{}{"user_id": json.Number("123")}),
-=======
-		Payload:   map[string]interface{}{"user_id": json.Number("123")},
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		Queue:     base.DefaultQueueName,
 		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]interface{}{"user_id": 123})),
 	}
@@ -161,11 +157,7 @@ func TestDequeue(t *testing.T) {
 	t1 := &base.TaskMessage{
 		ID:       uuid.New(),
 		Type:     "send_email",
-<<<<<<< HEAD
 		Payload:  h.JSON(map[string]interface{}{"subject": "hello!"}),
-=======
-		Payload:  map[string]interface{}{"subject": "hello!"},
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		Queue:    "default",
 		Timeout:  1800,
 		Deadline: 0,
@@ -775,11 +767,7 @@ func TestRequeue(t *testing.T) {
 func TestSchedule(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-<<<<<<< HEAD
 	msg := h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"subject": "hello"}))
-=======
-	msg := h.NewTaskMessage("send_email", map[string]interface{}{"subject": "hello"})
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 	tests := []struct {
 		msg       *base.TaskMessage
 		processAt time.Time
@@ -1487,11 +1475,7 @@ func TestWriteServerState(t *testing.T) {
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
 		Started:           time.Now().UTC(),
-<<<<<<< HEAD
 		Status:            "active",
-=======
-		Status:            "running",
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		ActiveWorkerCount: 0,
 	}
 
@@ -1581,11 +1565,7 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
 		Started:           time.Now().Add(-10 * time.Minute).UTC(),
-<<<<<<< HEAD
 		Status:            "active",
-=======
-		Status:            "running",
->>>>>>> 138bd7f... Refactor redis keys and store messages in protobuf
 		ActiveWorkerCount: len(workers),
 	}
 
