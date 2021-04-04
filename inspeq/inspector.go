@@ -638,13 +638,12 @@ func (i *Inspector) Servers() ([]*ServerInfo, error) {
 			continue
 		}
 		wrkInfo := &WorkerInfo{
-			Started:  w.Started,
-			Deadline: w.Deadline,
-			Task: &ActiveTask{
-				Task:  asynq.NewTask(w.Type, w.Payload),
-				ID:    w.ID,
-				Queue: w.Queue,
-			},
+			Started:     w.Started,
+			Deadline:    w.Deadline,
+			TaskID:      w.ID,
+			TaskType:    w.Type,
+			TaskPayload: w.Payload,
+			Queue:       w.Queue,
 		}
 		srvInfo.ActiveWorkers = append(srvInfo.ActiveWorkers, wrkInfo)
 	}
@@ -681,8 +680,18 @@ type ServerInfo struct {
 
 // WorkerInfo describes a running worker processing a task.
 type WorkerInfo struct {
-	// The task the worker is processing.
-	Task *ActiveTask
+	// ID of the task the worker is processing.
+	TaskID string
+
+	// Type of the task the worker is processing.
+	TaskType string
+
+	// Payload of the task the work is processing.
+	TaskPayload []byte
+
+	// Queue the worker got its task from.
+	Queue string
+
 	// Time the worker started processing the task.
 	Started time.Time
 	// Time the worker needs to finish processing the task by.
