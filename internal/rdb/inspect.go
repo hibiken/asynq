@@ -688,6 +688,7 @@ if n == 0 then
 	return 0
 end
 redis.call("ZADD", KEYS[2], ARGV[3], ARGV[1])
+redis.call("HSET", KEYS[1], "state", "ARCHIVED", "process_at", 0)
 redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[4])
 redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[5])
 return 1

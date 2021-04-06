@@ -1795,12 +1795,14 @@ func TestArchiveRetryTask(t *testing.T) {
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
-	t1 := time.Now().Add(1 * time.Minute)
-	t2 := time.Now().Add(1 * time.Hour)
-	t3 := time.Now().Add(2 * time.Hour)
-	t4 := time.Now().Add(3 * time.Hour)
+	now := time.Now()
+	t1 := now.Add(1 * time.Minute)
+	t2 := now.Add(1 * time.Hour)
+	t3 := now.Add(2 * time.Hour)
+	t4 := now.Add(3 * time.Hour)
 
 	tests := []struct {
+		desc         string
 		retry        map[string][]base.Z
 		archived     map[string][]base.Z
 		qname        string
@@ -1810,6 +1812,7 @@ func TestArchiveRetryTask(t *testing.T) {
 		wantArchived map[string][]*base.TaskInfo
 	}{
 		{
+			desc: "archives task in the default queue",
 			retry: map[string][]base.Z{
 				"default": {
 					{Message: m1, Score: t1.Unix()},
@@ -1824,7 +1827,7 @@ func TestArchiveRetryTask(t *testing.T) {
 			want:  nil,
 			wantRetry: map[string][]*base.TaskInfo{
 				"default": {
-					{TaskMessage: m2, State: "retry", NextProcessAt: t2.Unix(), LastFailedAt: 0},
+					{TaskMessage: m2, State: "retry", NextProcessAt: t2.Unix(), LastFailedAt: now.Unix()},
 				},
 			},
 			wantArchived: map[string][]*base.TaskInfo{
@@ -1834,6 +1837,7 @@ func TestArchiveRetryTask(t *testing.T) {
 			},
 		},
 		{
+			desc: "returns ErrTaskNotFound with non-existent task ID",
 			retry: map[string][]base.Z{
 				"default": {{Message: m1, Score: t1.Unix()}},
 			},
@@ -1845,7 +1849,7 @@ func TestArchiveRetryTask(t *testing.T) {
 			want:  ErrTaskNotFound,
 			wantRetry: map[string][]*base.TaskInfo{
 				"default": {
-					{TaskMessage: m1, State: "retry", NextProcessAt: t1.Unix(), LastFailedAt: 0},
+					{TaskMessage: m1, State: "retry", NextProcessAt: t1.Unix(), LastFailedAt: now.Unix()},
 				},
 			},
 			wantArchived: map[string][]*base.TaskInfo{
@@ -1855,6 +1859,7 @@ func TestArchiveRetryTask(t *testing.T) {
 			},
 		},
 		{
+			desc: "archives tasks in a custom named queue",
 			retry: map[string][]base.Z{
 				"default": {
 					{Message: m1, Score: t1.Unix()},
@@ -1874,11 +1879,11 @@ func TestArchiveRetryTask(t *testing.T) {
 			want:  nil,
 			wantRetry: map[string][]*base.TaskInfo{
 				"default": {
-					{TaskMessage: m1, State: "retry", NextProcessAt: t1.Unix(), LastFailedAt: 0},
-					{TaskMessage: m2, State: "retry", NextProcessAt: t2.Unix(), LastFailedAt: 0},
+					{TaskMessage: m1, State: "retry", NextProcessAt: t1.Unix(), LastFailedAt: now.Unix()},
+					{TaskMessage: m2, State: "retry", NextProcessAt: t2.Unix(), LastFailedAt: now.Unix()},
 				},
 				"custom": {
-					{TaskMessage: m4, State: "retry", NextProcessAt: t4.Unix(), LastFailedAt: 0},
+					{TaskMessage: m4, State: "retry", NextProcessAt: t4.Unix(), LastFailedAt: now.Unix()},
 				},
 			},
 			wantArchived: map[string][]*base.TaskInfo{
@@ -1897,24 +1902,24 @@ func TestArchiveRetryTask(t *testing.T) {
 
 		got := r.ArchiveTask(tc.qname, tc.id.String())
 		if got != tc.want {
-			t.Errorf("(*RDB).ArchiveTask(%q, %v) = %v, want %v",
-				tc.qname, tc.id, got, tc.want)
+			t.Errorf("%s; (*RDB).ArchiveTask(%q, %v) = %v, want %v",
+				tc.desc, tc.qname, tc.id, got, tc.want)
 			continue
 		}
 
 		for qname, want := range tc.wantRetry {
-			gotRetry := h.GetRetryEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
-				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
-					base.RetryKey(qname), diff)
+			gotRetry := h.GetRetryTaskInfos(t, r.client, qname)
+			if diff := cmp.Diff(want, gotRetry, h.SortTaskInfos, unixTimeCmpOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q; (-want,+got)\n%s",
+					tc.desc, base.RetryKey(qname), diff)
 			}
 		}
 
 		for qname, want := range tc.wantArchived {
-			gotDead := h.GetArchivedEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotDead, h.SortZSetEntryOpt, unixTimeCmpOpt); diff != "" {
-				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
-					base.ArchivedKey(qname), diff)
+			gotArchived := h.GetArchivedTaskInfos(t, r.client, qname)
+			if diff := cmp.Diff(want, gotArchived, h.SortTaskInfos, unixTimeCmpOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q; (-want,+got)\n%s",
+					tc.desc, base.ArchivedKey(qname), diff)
 			}
 		}
 	}

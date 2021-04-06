@@ -7,8 +7,10 @@ package asynqtest
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -64,6 +66,15 @@ var SortZSetEntryOpt = cmp.Transformer("SortZSetEntries", func(in []base.Z) []ba
 	out := append([]base.Z(nil), in...) // Copy input to avoid mutating it
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Message.ID.String() < out[j].Message.ID.String()
+	})
+	return out
+})
+
+// SortTaskInfos is an cmp.Option to sort TaskInfo for comparing slice of task infos.
+var SortTaskInfos = cmp.Transformer("SortTaskInfos", func(in []*base.TaskInfo) []*base.TaskInfo {
+	out := append([]*base.TaskInfo(nil), in...) // Copy input to avoid mutating it
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].ID.String() < out[j].ID.String()
 	})
 	return out
 })
@@ -478,24 +489,77 @@ func getMessagesFromZSetWithScores(tb testing.TB, r redis.UniversalClient, qname
 	return res
 }
 
-// GetRetryEntries returns all retry messages and its score in the given queue.
-func GetRetryTasks(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskInfo {
+// GetRetryTaskInfos returns all retry tasks' TaskInfo from the given queue.
+func GetRetryTaskInfos(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskInfo {
 	tb.Helper()
-	zs := r.ZRangeWithScores(base.RetryKey(qname), 0, -1).Val()
-	var tasks []*base.TaskInfo
-	for _, z := range zs {
-		vals := r.HMGet(base.TaskKey(qname, z.Member.(string)), "msg", "state", "process_at", "last_failed_at").Val()
-		if len(vals) != 4 {
-			tb.Fatalf("unexpected number of values returned from HMGET command, got %d elements, want 4", len(vals))
-		}
-		if vals[0] == redis.Nil {
-			tb.Fatalf("msg field contained nil for task ID %v", z.Member)
-		}
-		if vals[1] == redis.Nil {
-			tb.Fatalf("state field contained nil for task ID %v", z.Member)
-		}
-		// TODO: continue from here
+	return getTaskInfosFromZSet(tb, r, qname, base.RetryKey)
+}
 
+// GetArchivedTaskInfos returns all archived tasks' TaskInfo from the given queue.
+func GetArchivedTaskInfos(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskInfo {
+	tb.Helper()
+	return getTaskInfosFromZSet(tb, r, qname, base.ArchivedKey)
+}
+
+func getTaskInfosFromZSet(tb testing.TB, r redis.UniversalClient, qname string,
+	keyFn func(qname string) string) []*base.TaskInfo {
+	tb.Helper()
+	ids := r.ZRange(keyFn(qname), 0, -1).Val()
+	var tasks []*base.TaskInfo
+	for _, id := range ids {
+		vals := r.HMGet(base.TaskKey(qname, id), "msg", "state", "process_at", "last_failed_at").Val()
+		info, err := makeTaskInfo(vals)
+		if err != nil {
+			tb.Fatalf("could not make task info from values returned by HMGET: %v", err)
+		}
+		tasks = append(tasks, info)
 	}
-	return res
+	return tasks
+}
+
+// makeTaskInfo takes values returned from HMGET(TASK_KEY, "msg", "state", "process_at", "last_failed_at")
+// command and return a TaskInfo. It assumes that `vals` contains four values for each field.
+func makeTaskInfo(vals []interface{}) (*base.TaskInfo, error) {
+	if len(vals) != 4 {
+		return nil, fmt.Errorf("asynq internal error: HMGET command returned %d elements", len(vals))
+	}
+	// Note: The "msg", "state" fields are non-nil;
+	// whereas the "process_at", "last_failed_at" fields can be nil.
+	encoded := vals[0]
+	if encoded == nil {
+		return nil, fmt.Errorf("asynq internal error: HMGET field 'msg' was nil")
+	}
+	msg, err := base.DecodeMessage([]byte(encoded.(string)))
+	if err != nil {
+		return nil, err
+	}
+	state := vals[1]
+	if state == nil {
+		return nil, fmt.Errorf("asynq internal error: HMGET field 'state' was nil")
+	}
+	processAt, err := parseIntOrDefault(vals[2], 0)
+	if err != nil {
+		return nil, err
+	}
+	lastFailedAt, err := parseIntOrDefault(vals[3], 0)
+	if err != nil {
+		return nil, err
+	}
+	return &base.TaskInfo{
+		TaskMessage:   msg,
+		State:         strings.ToLower(state.(string)),
+		NextProcessAt: processAt,
+		LastFailedAt:  lastFailedAt,
+	}, nil
+}
+
+// Parses val as base10 64-bit integer if val contains a value.
+// Uses default value if val is nil.
+//
+// Assumes val contains either string value or nil.
+func parseIntOrDefault(val interface{}, defaultVal int64) (int64, error) {
+	if val == nil {
+		return defaultVal, nil
+	}
+	return strconv.ParseInt(val.(string), 10, 64)
 }
