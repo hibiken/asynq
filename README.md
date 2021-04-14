@@ -18,7 +18,7 @@ Highlevel overview of how Asynq works:
 
 Task queues are used as a mechanism to distribute work across multiple machines. A system can consist of multiple worker servers and brokers, giving way to high availability and horizontal scaling.
 
-**Simple schema of the process**
+**Example use case**
 
 ![Task Queue Diagram](https://user-images.githubusercontent.com/11155743/114697318-727c5100-9d26-11eb-98d3-0e0cc38b613d.jpg)
 
@@ -254,7 +254,7 @@ func main() {
 
 For a more detailed walk-through of the library, see our [Getting Started](https://github.com/hibiken/asynq/wiki/Getting-Started) guide.
 
-To learn more about `asynq` features and APIs, please see [godoc](https://godoc.org/github.com/hibiken/asynq).
+To learn more about `asynq` features and APIs, see the package [godoc](https://godoc.org/github.com/hibiken/asynq).
 
 ## Web UI
 
@@ -297,16 +297,6 @@ For details on how to use the tool, refer to the tool's [README](/tools/asynq/RE
 We are open to, and grateful for, any contributions (GitHub issues/PRs, feedback on [Gitter channel](https://gitter.im/go-asynq/community), etc) made by the community.
 
 Please see the [Contribution Guide](/CONTRIBUTING.md) before contributing.
-
-## Acknowledgements
-
-- [Sidekiq](https://github.com/mperham/sidekiq): Many of the design ideas are taken from sidekiq and its Web UI
-- [RQ](https://github.com/rq/rq): Client APIs are inspired by rq library.
-- [Cobra](https://github.com/spf13/cobra): Asynq CLI is built with cobra
-
-## Stargazers
-
-![Stargazers Asynq](https://starchart.cc/hibiken/asynq.svg)
 
 ## License
 
