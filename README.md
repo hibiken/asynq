@@ -1,6 +1,6 @@
-![Logo + Description](https://user-images.githubusercontent.com/11155743/114692413-44e0d900-9d21-11eb-8444-a427982df584.png)
+<img src="https://user-images.githubusercontent.com/11155743/114697792-ffbfa580-9d26-11eb-8e5b-33bef69476dc.png" alt="Asynq logo" width="360px" />
 
-# Asynq
+# Simple, reliable & efficient distributed task queue in Go
 
 [![GoDoc](https://godoc.org/github.com/hibiken/asynq?status.svg)](https://godoc.org/github.com/hibiken/asynq)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hibiken/asynq)](https://goreportcard.com/report/github.com/hibiken/asynq)
@@ -19,13 +19,7 @@ Highlevel overview of how Asynq works:
 Task queues are used as a mechanism to distribute work across multiple machines.
 A system can consist of multiple worker servers and brokers, giving way to high availability and horizontal scaling.
 
-![Task Queue Diagram](https://user-images.githubusercontent.com/11155743/114691882-cc7a1800-9d20-11eb-8f71-0522d83769c3.jpg)
-
-## Stability and Compatibility
-
-> ☝️ **Important Note**: Current major version is zero (`v0.x.x`) to accomodate rapid development and fast iteration while getting early feedback from users (_feedback on APIs are appreciated!_). The public API could change without a major version update before `v1.0.0` release.
-
-**Status**: The library is currently undergoing **heavy development** with frequent, breaking API changes.
+![Task Queue Diagram](https://user-images.githubusercontent.com/11155743/114697318-727c5100-9d26-11eb-98d3-0e0cc38b613d.jpg)
 
 ## Features
 
@@ -46,6 +40,12 @@ A system can consist of multiple worker servers and brokers, giving way to high 
 - [Support Redis Sentinels](https://github.com/hibiken/asynq/wiki/Automatic-Failover) for high availability
 - [Web UI](#web-ui) to inspect and remote-control queues and tasks
 - [CLI](#command-line-tool) to inspect and remote-control queues and tasks
+
+## Stability and Compatibility
+
+**Status**: The library is currently undergoing **heavy development** with frequent, breaking API changes.
+
+> ☝️ **Important Note**: Current major version is zero (`v0.x.x`) to accomodate rapid development and fast iteration while getting early feedback from users (_feedback on APIs are appreciated!_). The public API could change without a major version update before `v1.0.0` release.
 
 ## Quickstart
 
@@ -212,7 +212,8 @@ func main() {
 }
 ```
 
-Next, start a worker server to process these tasks in the background.  
+Next, start a worker server to process these tasks in the background.
+
 To start the background workers, use [`Server`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Server) and provide your [`Handler`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Handler) to process the tasks.
 
 You can optionally use [`ServeMux`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#ServeMux) to create a handler, just as you would with [`"net/http"`](https://golang.org/pkg/net/http/) Handler.
@@ -263,15 +264,20 @@ To Learn more about `asynq` features and APIs, see our [Wiki](https://github.com
 ## Web UI
 
 [Asynqmon](https://github.com/hibiken/asynqmon) is a web based tool for monitoring and administrating Asynq queues and tasks.
-Please see the tool's [README](https://github.com/hibiken/asynqmon) for details.
 
-Here's a few screenshots of the web UI.
+Please see the tool's [README](https://github.com/hibiken/asynqmon) for details. Here's a few screenshots of the Web UI:
 
 **Queues view**  
-![Web UI QueuesView](/docs/assets/asynqmon-queues-view.png)
+
+![Web UI Queues View](https://user-images.githubusercontent.com/11155743/114697016-07327f00-9d26-11eb-808c-0ac841dc888e.png)
 
 **Tasks view**  
-![Web UI TasksView](/docs/assets/asynqmon-task-view.png)
+
+![Web UI TasksView](https://user-images.githubusercontent.com/11155743/114697070-1f0a0300-9d26-11eb-855c-d3ec263865b7.png)
+
+**Settings and adaptive dark mode**
+
+![Web UI Settings and adaptive dark mode](https://user-images.githubusercontent.com/11155743/114697149-3517c380-9d26-11eb-9f7a-ae2dd00aad5b.png)
 
 ## Command Line Tool
 
