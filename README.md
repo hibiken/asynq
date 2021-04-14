@@ -259,8 +259,6 @@ To learn more about `asynq` features and APIs, please see [godoc](https://godoc.
 
 [Asynqmon](https://github.com/hibiken/asynqmon) is a web based tool for monitoring and administrating Asynq queues and tasks.
 
-> ☝️ Please see the tool's [README](https://github.com/hibiken/asynqmon) for details. 
-
 Here's a few screenshots of the Web UI:
 
 **Queues view**  
@@ -274,6 +272,8 @@ Here's a few screenshots of the Web UI:
 **Settings and adaptive dark mode**
 
 ![Web UI Settings and adaptive dark mode](https://user-images.githubusercontent.com/11155743/114697149-3517c380-9d26-11eb-9f7a-ae2dd00aad5b.png)
+
+For details on how to use the tool, refer to the tool's [README](https://github.com/hibiken/asynqmon#readme). 
 
 ## Command Line Tool
 
