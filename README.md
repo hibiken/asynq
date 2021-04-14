@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Gitter chat](https://badges.gitter.im/go-asynq/gitter.svg)](https://gitter.im/go-asynq/community)
 
-Asynq is a Go library for queueing tasks and processing them asynchronously with workers. It's backed by Redis and is designed to be scalable yet easy to get started.
+Asynq is a Go library for queueing tasks and processing them asynchronously with workers. It's backed by [Redis](https://redis.io/) and is designed to be scalable yet easy to get started.
 
 Highlevel overview of how Asynq works:
 
@@ -16,8 +16,9 @@ Highlevel overview of how Asynq works:
 - Server pulls task off queues and starts a worker goroutine for each task
 - Tasks are processed concurrently by multiple workers
 
-Task queues are used as a mechanism to distribute work across multiple machines.
-A system can consist of multiple worker servers and brokers, giving way to high availability and horizontal scaling.
+Task queues are used as a mechanism to distribute work across multiple machines. A system can consist of multiple worker servers and brokers, giving way to high availability and horizontal scaling.
+
+**Simple schema of the process**
 
 ![Task Queue Diagram](https://user-images.githubusercontent.com/11155743/114697318-727c5100-9d26-11eb-98d3-0e0cc38b613d.jpg)
 
