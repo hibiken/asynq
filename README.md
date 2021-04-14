@@ -60,7 +60,7 @@ go get -u github.com/hibiken/asynq
 Make sure you're running a Redis server locally. Version `3.0` or higher is required. 
 
 ```sh
-$ redis-server
+redis-server
 ```
 
 Next, write a package that encapsulates task creation and task handling.
@@ -212,9 +212,7 @@ func main() {
 }
 ```
 
-Next, start a worker server to process these tasks in the background.
-
-To start the background workers, use [`Server`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Server) and provide your [`Handler`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Handler) to process the tasks.
+Next, start a worker server to process these tasks in the background. To start the background workers, use [`Server`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Server) and provide your [`Handler`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Handler) to process the tasks.
 
 You can optionally use [`ServeMux`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#ServeMux) to create a handler, just as you would with [`"net/http"`](https://golang.org/pkg/net/http/) Handler.
 
@@ -257,15 +255,17 @@ func main() {
 }
 ```
 
-For a more detailed walk-through of the library, see our [Getting Started Guide](https://github.com/hibiken/asynq/wiki/Getting-Started).
+For a more detailed walk-through of the library, see our [Getting Started](https://github.com/hibiken/asynq/wiki/Getting-Started) guide.
 
-To Learn more about `asynq` features and APIs, see our [Wiki](https://github.com/hibiken/asynq/wiki) and [godoc](https://godoc.org/github.com/hibiken/asynq).
+To learn more about `asynq` features and APIs, please see [godoc](https://godoc.org/github.com/hibiken/asynq).
 
 ## Web UI
 
 [Asynqmon](https://github.com/hibiken/asynqmon) is a web based tool for monitoring and administrating Asynq queues and tasks.
 
-Please see the tool's [README](https://github.com/hibiken/asynqmon) for details. Here's a few screenshots of the Web UI:
+> ☝️ Please see the tool's [README](https://github.com/hibiken/asynqmon) for details. 
+
+Here's a few screenshots of the Web UI:
 
 **Queues view**  
 
@@ -289,7 +289,7 @@ To install the CLI tool, run the following command:
 go get -u github.com/hibiken/asynq/tools/asynq
 ```
 
-Here's an example of running the `stats` command.
+Here's an example of running the `asynq stats` command:
 
 ![Gif](/docs/assets/demo.gif)
 
@@ -297,7 +297,7 @@ For details on how to use the tool, refer to the tool's [README](/tools/asynq/RE
 
 ## Contributing
 
-We are open to, and grateful for, any contributions (Github issues/pull-requests, feedback on [Gitter channel](https://gitter.im/go-asynq/community), etc) made by the community.
+We are open to, and grateful for, any contributions (GitHub issues/PRs, feedback on [Gitter channel](https://gitter.im/go-asynq/community), etc) made by the community.
 
 Please see the [Contribution Guide](/CONTRIBUTING.md) before contributing.
 
