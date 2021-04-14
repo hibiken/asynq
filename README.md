@@ -1,12 +1,12 @@
+![Logo + Description](https://user-images.githubusercontent.com/11155743/114692413-44e0d900-9d21-11eb-8444-a427982df584.png)
+
 # Asynq
 
-![Build Status](https://github.com/hibiken/asynq/workflows/build/badge.svg)
 [![GoDoc](https://godoc.org/github.com/hibiken/asynq?status.svg)](https://godoc.org/github.com/hibiken/asynq)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hibiken/asynq)](https://goreportcard.com/report/github.com/hibiken/asynq)
+![Build Status](https://github.com/hibiken/asynq/workflows/build/badge.svg)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Gitter chat](https://badges.gitter.im/go-asynq/gitter.svg)](https://gitter.im/go-asynq/community)
-
-## Overview
 
 Asynq is a Go library for queueing tasks and processing them asynchronously with workers. It's backed by Redis and is designed to be scalable yet easy to get started.
 
@@ -16,16 +16,16 @@ Highlevel overview of how Asynq works:
 - Server pulls task off queues and starts a worker goroutine for each task
 - Tasks are processed concurrently by multiple workers
 
-Task queues are used as a mechanism to distribute work across multiple machines.  
+Task queues are used as a mechanism to distribute work across multiple machines.
 A system can consist of multiple worker servers and brokers, giving way to high availability and horizontal scaling.
 
-![Task Queue Diagram](/docs/assets/overview.png)
+![Task Queue Diagram](https://user-images.githubusercontent.com/11155743/114691882-cc7a1800-9d20-11eb-8f71-0522d83769c3.jpg)
 
 ## Stability and Compatibility
 
-**Important Note**: Current major version is zero (v0.x.x) to accomodate rapid development and fast iteration while getting early feedback from users (Feedback on APIs are appreciated!). The public API could change without a major version update before v1.0.0 release.
+> ☝️ **Important Note**: Current major version is zero (`v0.x.x`) to accomodate rapid development and fast iteration while getting early feedback from users (_feedback on APIs are appreciated!_). The public API could change without a major version update before `v1.0.0` release.
 
-**Status**: The library is currently undergoing heavy development with frequent, breaking API changes.
+**Status**: The library is currently undergoing **heavy development** with frequent, breaking API changes.
 
 ## Features
 
@@ -49,7 +49,15 @@ A system can consist of multiple worker servers and brokers, giving way to high 
 
 ## Quickstart
 
-First, make sure you are running a Redis server locally.
+Make sure you have Go installed ([download](https://golang.org/dl/)). Version `1.13` or higher is required. 
+
+Initialize your project by creating a folder and then running `go mod init github.com/your/repo` ([learn more](https://blog.golang.org/using-go-modules)) inside the folder. Then install Asynq library with the [`go get`](https://golang.org/cmd/go/#hdr-Add_dependencies_to_current_module_and_install_them) command:
+
+```sh
+go get -u github.com/hibiken/asynq
+```
+
+Make sure you're running a Redis server locally. Version `3.0` or higher is required. 
 
 ```sh
 $ redis-server
@@ -269,44 +277,34 @@ Here's a few screenshots of the web UI.
 
 Asynq ships with a command line tool to inspect the state of queues and tasks.
 
-Here's an example of running the `stats` command.
-
-![Gif](/docs/assets/demo.gif)
-
-For details on how to use the tool, refer to the tool's [README](/tools/asynq/README.md).
-
-## Installation
-
-To install `asynq` library, run the following command:
-
-```sh
-go get -u github.com/hibiken/asynq
-```
-
 To install the CLI tool, run the following command:
 
 ```sh
 go get -u github.com/hibiken/asynq/tools/asynq
 ```
 
-## Requirements
+Here's an example of running the `stats` command.
 
-| Dependency                 | Version |
-| -------------------------- | ------- |
-| [Redis](https://redis.io/) | v3.0+   |
-| [Go](https://golang.org/)  | v1.13+  |
+![Gif](/docs/assets/demo.gif)
+
+For details on how to use the tool, refer to the tool's [README](/tools/asynq/README.md).
 
 ## Contributing
 
-We are open to, and grateful for, any contributions (Github issues/pull-requests, feedback on Gitter channel, etc) made by the community.
+We are open to, and grateful for, any contributions (Github issues/pull-requests, feedback on [Gitter channel](https://gitter.im/go-asynq/community), etc) made by the community.
+
 Please see the [Contribution Guide](/CONTRIBUTING.md) before contributing.
 
 ## Acknowledgements
 
-- [Sidekiq](https://github.com/mperham/sidekiq) : Many of the design ideas are taken from sidekiq and its Web UI
-- [RQ](https://github.com/rq/rq) : Client APIs are inspired by rq library.
-- [Cobra](https://github.com/spf13/cobra) : Asynq CLI is built with cobra
+- [Sidekiq](https://github.com/mperham/sidekiq): Many of the design ideas are taken from sidekiq and its Web UI
+- [RQ](https://github.com/rq/rq): Client APIs are inspired by rq library.
+- [Cobra](https://github.com/spf13/cobra): Asynq CLI is built with cobra
+
+## Stargazers
+
+![Stargazers Asynq](https://starchart.cc/hibiken/asynq.svg)
 
 ## License
 
-Asynq is released under the MIT license. See [LICENSE](https://github.com/hibiken/asynq/blob/master/LICENSE).
+Copyright (c) 2019-present [Ken Hibino](https://github.com/hibiken) and [Contributors](https://github.com/hibiken/asynq/graphs/contributors). `Asynq` is free and open-source software licensed under the [MIT License](https://github.com/hibiken/asynq/blob/master/LICENSE). Official logo was created by [Vic Shóstak](https://github.com/koddr) and distributed under [Creative Commons](https://creativecommons.org/publicdomain/zero/1.0/) license (CC0 1.0 Universal).
