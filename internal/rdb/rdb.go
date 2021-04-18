@@ -55,7 +55,11 @@ func (r *RDB) Ping() error {
 // ARGV[3] -> task timeout in seconds (0 if not timeout)
 // ARGV[4] -> task deadline in unix time (0 if no deadline)
 var enqueueCmd = redis.NewScript(`
-redis.call("HSET", KEYS[1], "msg", ARGV[1], "timeout", ARGV[3], "deadline", ARGV[4])
+redis.call("HSET", KEYS[1],
+           "msg", ARGV[1],
+           "state", "pending",
+           "timeout", ARGV[3],
+           "deadline", ARGV[4])
 redis.call("LPUSH", KEYS[2], ARGV[2])
 return 1
 `)
