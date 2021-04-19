@@ -99,7 +99,11 @@ local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
 if not ok then
   return 0
 end
-redis.call("HSET", KEYS[2], "msg", ARGV[3], "timeout", ARGV[4], "deadline", ARGV[5])
+redis.call("HSET", KEYS[2],
+           "msg", ARGV[3],
+		   "state", "pending",
+           "timeout", ARGV[4],
+		   "deadline", ARGV[5])
 redis.call("LPUSH", KEYS[3], ARGV[1])
 return 1
 `)
