@@ -333,7 +333,11 @@ func (r *RDB) Requeue(msg *base.TaskMessage) error {
 // ARGV[4] -> task timeout in seconds (0 if not timeout)
 // ARGV[5] -> task deadline in unix time (0 if no deadline)
 var scheduleCmd = redis.NewScript(`
-redis.call("HSET", KEYS[1], "msg", ARGV[1], "timeout", ARGV[4], "deadline", ARGV[5])
+redis.call("HSET", KEYS[1],
+           "msg", ARGV[1],
+           "state", "scheduled",
+           "timeout", ARGV[4],
+           "deadline", ARGV[5])
 redis.call("ZADD", KEYS[2], ARGV[2], ARGV[3])
 return 1
 `)
