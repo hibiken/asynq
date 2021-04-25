@@ -379,7 +379,11 @@ local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
 if not ok then
   return 0
 end
-redis.call("HSET", KEYS[2], "msg", ARGV[4], "timeout", ARGV[5], "deadline", ARGV[6])
+redis.call("HSET", KEYS[2],
+           "msg", ARGV[4],
+           "state", "scheduled",
+           "timeout", ARGV[5],
+           "deadline", ARGV[6])
 redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1])
 return 1
 `)
