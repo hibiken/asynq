@@ -307,6 +307,7 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 // KEYS[1] -> asynq:{<qname>}:active
 // KEYS[2] -> asynq:{<qname>}:deadlines
 // KEYS[3] -> asynq:{<qname>}:pending
+// KEYS[4] -> asynq:{<qname>}:t:<task_id>
 // ARGV[1] -> task ID
 // Note: Use RPUSH to push to the head of the queue.
 var requeueCmd = redis.NewScript(`
@@ -317,13 +318,18 @@ if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
 redis.call("RPUSH", KEYS[3], ARGV[1])
+redis.call("HSET", KEYS[4], "state", "pending")
 return redis.status_reply("OK")`)
 
 // Requeue moves the task from active queue to the specified queue.
 func (r *RDB) Requeue(msg *base.TaskMessage) error {
-	return requeueCmd.Run(r.client,
-		[]string{base.ActiveKey(msg.Queue), base.DeadlinesKey(msg.Queue), base.PendingKey(msg.Queue)},
-		msg.ID.String()).Err()
+	keys := []string{
+		base.ActiveKey(msg.Queue),
+		base.DeadlinesKey(msg.Queue),
+		base.PendingKey(msg.Queue),
+		base.TaskKey(msg.Queue, msg.ID.String()),
+	}
+	return requeueCmd.Run(r.client, keys, msg.ID.String()).Err()
 }
 
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
