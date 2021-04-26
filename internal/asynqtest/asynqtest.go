@@ -423,7 +423,7 @@ func getMessagesFromZSetWithScores(tb testing.TB, r redis.UniversalClient,
 		msg := r.HGet(taskKey, "msg").Val()
 		res = append(res, base.Z{Message: MustUnmarshal(tb, msg), Score: int64(z.Score)})
 		if gotState := r.HGet(taskKey, "state").Val(); gotState != state {
-			tb.Errorf("task (id=%q) is in state %q, want %q", taskID, gotState, state)
+			tb.Errorf("task (id=%q) is in %q state, want %q", taskID, gotState, state)
 		}
 	}
 	return res

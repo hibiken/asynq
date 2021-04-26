@@ -175,6 +175,7 @@ if redis.call("EXISTS", KEYS[2]) == 0 then
 	local id = redis.call("RPOPLPUSH", KEYS[1], KEYS[3])
 	if id then
 		local key = ARGV[2] .. id
+		redis.call("HSET", key, "state", "active")
 		local data = redis.call("HMGET", key, "msg", "timeout", "deadline")
 		local msg = data[1]	
 		local timeout = tonumber(data[2])
