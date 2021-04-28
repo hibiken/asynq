@@ -20,7 +20,7 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 
 **Example use case**
 
-![Task Queue Diagram](https://user-images.githubusercontent.com/11155743/114697318-727c5100-9d26-11eb-98d3-0e0cc38b613d.jpg)
+![Task Queue Diagram](https://user-images.githubusercontent.com/11155743/116358505-656f5f80-a806-11eb-9c16-94e49dab0f99.jpg)
 
 ## Features
 
