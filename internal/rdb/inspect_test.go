@@ -1075,9 +1075,9 @@ func TestRunArchivedTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.RunArchivedTask(tc.qname, tc.id)
+		got := r.RunTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("r.RunDeadTask(%q, %s) = %v, want %v", tc.qname, tc.id, got, tc.want)
+			t.Errorf("r.RunTask(%q, %s) = %v, want %v", tc.qname, tc.id, got, tc.want)
 			continue
 		}
 
@@ -1176,9 +1176,9 @@ func TestRunRetryTask(t *testing.T) {
 		h.FlushDB(t, r.client)                      // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry) // initialize retry queue
 
-		got := r.RunRetryTask(tc.qname, tc.id)
+		got := r.RunTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("r.RunRetryTask(%q, %s) = %v, want %v", tc.qname, tc.id, got, tc.want)
+			t.Errorf("r.RunTask(%q, %s) = %v, want %v", tc.qname, tc.id, got, tc.want)
 			continue
 		}
 
@@ -1277,9 +1277,9 @@ func TestRunScheduledTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got := r.RunScheduledTask(tc.qname, tc.id)
+		got := r.RunTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("r.RunRetryTask(%q, %s) = %v, want %v", tc.qname, tc.id, got, tc.want)
+			t.Errorf("r.RunTask(%q, %s) = %v, want %v", tc.qname, tc.id, got, tc.want)
 			continue
 		}
 

@@ -45,9 +45,14 @@ func ValidateQueueName(qname string) error {
 	return nil
 }
 
+// QueueKeyPrefix returns a prefix for all keys in the given queue.
+func QueueKeyPrefix(qname string) string {
+	return fmt.Sprintf("asynq:{%s}:", qname)
+}
+
 // TaskKeyPrefix returns a prefix for task key.
 func TaskKeyPrefix(qname string) string {
-	return fmt.Sprintf("asynq:{%s}:t:", qname)
+	return fmt.Sprintf("%st:", QueueKeyPrefix(qname))
 }
 
 // TaskKey returns a redis key for the given task message.
@@ -57,47 +62,47 @@ func TaskKey(qname, id string) string {
 
 // PendingKey returns a redis key for the given queue name.
 func PendingKey(qname string) string {
-	return fmt.Sprintf("asynq:{%s}:pending", qname)
+	return fmt.Sprintf("%spending", QueueKeyPrefix(qname))
 }
 
 // ActiveKey returns a redis key for the active tasks.
 func ActiveKey(qname string) string {
-	return fmt.Sprintf("asynq:{%s}:active", qname)
+	return fmt.Sprintf("%sactive", QueueKeyPrefix(qname))
 }
 
 // ScheduledKey returns a redis key for the scheduled tasks.
 func ScheduledKey(qname string) string {
-	return fmt.Sprintf("asynq:{%s}:scheduled", qname)
+	return fmt.Sprintf("%sscheduled", QueueKeyPrefix(qname))
 }
 
 // RetryKey returns a redis key for the retry tasks.
 func RetryKey(qname string) string {
-	return fmt.Sprintf("asynq:{%s}:retry", qname)
+	return fmt.Sprintf("%sretry", QueueKeyPrefix(qname))
 }
 
 // ArchivedKey returns a redis key for the archived tasks.
 func ArchivedKey(qname string) string {
-	return fmt.Sprintf("asynq:{%s}:archived", qname)
+	return fmt.Sprintf("%sarchived", QueueKeyPrefix(qname))
 }
 
 // DeadlinesKey returns a redis key for the deadlines.
 func DeadlinesKey(qname string) string {
-	return fmt.Sprintf("asynq:{%s}:deadlines", qname)
+	return fmt.Sprintf("%sdeadlines", QueueKeyPrefix(qname))
 }
 
 // PausedKey returns a redis key to indicate that the given queue is paused.
 func PausedKey(qname string) string {
-	return fmt.Sprintf("asynq:{%s}:paused", qname)
+	return fmt.Sprintf("%spaused", QueueKeyPrefix(qname))
 }
 
 // ProcessedKey returns a redis key for processed count for the given day for the queue.
 func ProcessedKey(qname string, t time.Time) string {
-	return fmt.Sprintf("asynq:{%s}:processed:%s", qname, t.UTC().Format("2006-01-02"))
+	return fmt.Sprintf("%sprocessed:%s", QueueKeyPrefix(qname), t.UTC().Format("2006-01-02"))
 }
 
 // FailedKey returns a redis key for failure count for the given day for the queue.
 func FailedKey(qname string, t time.Time) string {
-	return fmt.Sprintf("asynq:{%s}:failed:%s", qname, t.UTC().Format("2006-01-02"))
+	return fmt.Sprintf("%sfailed:%s", QueueKeyPrefix(qname), t.UTC().Format("2006-01-02"))
 }
 
 // ServerInfoKey returns a redis key for process info.
@@ -122,7 +127,7 @@ func SchedulerHistoryKey(entryID string) string {
 
 // UniqueKey returns a redis key with the given type, payload, and queue name.
 func UniqueKey(qname, tasktype string, payload []byte) string {
-	return fmt.Sprintf("asynq:{%s}:unique:%s:%s", qname, tasktype, string(payload))
+	return fmt.Sprintf("%sunique:%s:%s", QueueKeyPrefix(qname), tasktype, string(payload))
 }
 
 // TaskMessage is the internal representation of a task with additional metadata fields.
