@@ -439,39 +439,10 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, erro
 	return zs, nil
 }
 
-// RunArchivedTask finds an archived task that matches the given id and score from
-// the given queue and enqueues it for processing.
-// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) RunArchivedTask(qname string, id uuid.UUID) error {
-	n, err := r.removeAndRun(base.ArchivedKey(qname), base.PendingKey(qname), id.String())
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrTaskNotFound
-	}
-	return nil
-}
-
-// RunRetryTask finds a retry task that matches the given id and score from
-// the given queue and enqueues it for processing.
-// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) RunRetryTask(qname string, id uuid.UUID) error {
-	n, err := r.removeAndRun(base.RetryKey(qname), base.PendingKey(qname), id.String())
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrTaskNotFound
-	}
-	return nil
-}
-
-// RunScheduledTask finds a scheduled task that matches the given id and score from
-// from the given queue and enqueues it for processing.
-// If a task that matches the id and score does not exist, it returns ErrTaskNotFound.
-func (r *RDB) RunScheduledTask(qname string, id uuid.UUID) error {
-	n, err := r.removeAndRun(base.ScheduledKey(qname), base.PendingKey(qname), id.String())
+// RunTask finds a task that matches the id from the given queue and stages it for processing.
+// If a task that matches the id does not exist, it returns ErrTaskNotFound.
+func (r *RDB) RunTask(qname string, id uuid.UUID) error {
+	n, err := r.runTask(qname, id.String())
 	if err != nil {
 		return err
 	}
@@ -499,26 +470,45 @@ func (r *RDB) RunAllArchivedTasks(qname string) (int64, error) {
 	return r.removeAndRunAll(base.ArchivedKey(qname), base.PendingKey(qname))
 }
 
-// KEYS[1] -> sorted set to remove the id from
+// KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:pending
 // ARGV[1] -> task ID
-var removeAndRunCmd = redis.NewScript(`
-local n = redis.call("ZREM", KEYS[1], ARGV[1])
-if n == 0 then
+// ARGV[2] -> queue key prefix; asynq:{<qname>}:
+var runTaskCmd = redis.NewScript(`
+if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
 end
+local state = redis.call("HGET", KEYS[1], "state")
+if state == "active" then
+	return redis.error_reply("task is already running")
+elseif state == "pending" then
+	return redis.error_reply("task is already pending to be run")
+end
+local n = redis.call("ZREM", ARGV[2] .. state, ARGV[1])
+if n == 0 then
+	return redis.error_reply("internal error: task id not found in zset " .. tostring(state))
+end
 redis.call("LPUSH", KEYS[2], ARGV[1])
+redis.call("HSET", KEYS[1], "state", "pending")
 return 1
 `)
 
-func (r *RDB) removeAndRun(zset, qkey, id string) (int64, error) {
-	res, err := removeAndRunCmd.Run(r.client, []string{zset, qkey}, id).Result()
+func (r *RDB) runTask(qname, id string) (int64, error) {
+	keys := []string{
+		base.TaskKey(qname, id),
+		base.PendingKey(qname),
+	}
+	argv := []interface{}{
+		id,
+		base.QueueKeyPrefix(qname),
+	}
+	res, err := runTaskCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
 		return 0, err
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return 0, fmt.Errorf("could not cast %v to int64", res)
+		return 0, fmt.Errorf("internal error: could not cast %v to int64", res)
 	}
 	return n, nil
 }
