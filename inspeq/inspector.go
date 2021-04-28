@@ -613,11 +613,11 @@ func (i *Inspector) RunTaskByKey(qname, key string) error {
 	}
 	switch prefix {
 	case keyPrefixScheduled:
-		return i.rdb.RunScheduledTask(qname, id)
+		return i.rdb.RunTask(qname, id)
 	case keyPrefixRetry:
-		return i.rdb.RunRetryTask(qname, id)
+		return i.rdb.RunTask(qname, id)
 	case keyPrefixArchived:
-		return i.rdb.RunArchivedTask(qname, id)
+		return i.rdb.RunTask(qname, id)
 	case keyPrefixPending:
 		return fmt.Errorf("task is already pending for run")
 	default:
