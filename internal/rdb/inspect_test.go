@@ -1714,9 +1714,9 @@ func TestArchiveRetryTask(t *testing.T) {
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.ArchiveRetryTask(tc.qname, tc.id)
+		got := r.ArchiveTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("(*RDB).ArchiveRetryTask(%q, %v) = %v, want %v",
+			t.Errorf("(*RDB).ArchiveTask(%q, %v) = %v, want %v",
 				tc.qname, tc.id, got, tc.want)
 			continue
 		}
@@ -1836,9 +1836,9 @@ func TestArchiveScheduledTask(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.ArchiveScheduledTask(tc.qname, tc.id)
+		got := r.ArchiveTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("(*RDB).ArchiveScheduledTask(%q, %v) = %v, want %v",
+			t.Errorf("(*RDB).ArchiveTask(%q, %v) = %v, want %v",
 				tc.qname, tc.id, got, tc.want)
 			continue
 		}
@@ -1942,9 +1942,9 @@ func TestArchivePendingTask(t *testing.T) {
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.ArchivePendingTask(tc.qname, tc.id)
+		got := r.ArchiveTask(tc.qname, tc.id)
 		if got != tc.want {
-			t.Errorf("(*RDB).ArchivePendingTask(%q, %v) = %v, want %v",
+			t.Errorf("(*RDB).ArchiveTask(%q, %v) = %v, want %v",
 				tc.qname, tc.id, got, tc.want)
 			continue
 		}
