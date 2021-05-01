@@ -105,7 +105,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		return nil, err
 	}
 	if !exists {
-		return nil, &ErrQueueNotFound{qname}
+		return nil, &QueueNotFoundError{qname}
 	}
 	now := time.Now()
 	res, err := currentStatsCmd.Run(r.client, []string{
@@ -219,7 +219,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 		return nil, err
 	}
 	if !exists {
-		return nil, &ErrQueueNotFound{qname}
+		return nil, &QueueNotFoundError{qname}
 	}
 	const day = 24 * time.Hour
 	now := time.Now().UTC()
@@ -594,6 +594,9 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 	return n, nil
 }
 
+// archiveTaskCmd is a Lua script that arhives a task given a task id.
+//
+// Input:
 // KEYS[1] -> task key (asynq:{<qname>}:t:<task_id>)
 // KEYS[2] -> archived key (asynq:{<qname>}:archived)
 // ARGV[1] -> id of the task to archive
@@ -601,6 +604,9 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 // ARGV[3] -> cutoff timestamp (e.g., 90 days ago)
 // ARGV[4] -> max number of tasks in archived state (e.g., 100)
 // ARGV[5] -> queue key prefix (asynq:{<qname>}:)
+//
+// Output:
+// TODO: document return value of the script
 var archiveTaskCmd = redis.NewScript(`
 if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
@@ -826,22 +832,26 @@ func (r *RDB) DeleteAllPendingTasks(qname string) (int64, error) {
 	return n, nil
 }
 
-// ErrQueueNotFound indicates specified queue does not exist.
-type ErrQueueNotFound struct {
-	qname string
+// QueueNotFoundError indicates specified queue does not exist.
+type QueueNotFoundError struct {
+	Name string // name of the queue
 }
 
-func (e *ErrQueueNotFound) Error() string {
-	return fmt.Sprintf("queue %q does not exist", e.qname)
+func (e *QueueNotFoundError) Unwrap() error { return base.ErrNotFound }
+
+func (e *QueueNotFoundError) Error() string {
+	return fmt.Sprintf("queue %q does not exist", e.Name)
 }
 
-// ErrQueueNotEmpty indicates specified queue is not empty.
-type ErrQueueNotEmpty struct {
-	qname string
+// QueueNotEmptyError indicates specified queue is not empty.
+type QueueNotEmptyError struct {
+	Name string // name of the queue
 }
 
-func (e *ErrQueueNotEmpty) Error() string {
-	return fmt.Sprintf("queue %q is not empty", e.qname)
+func (e *QueueNotEmptyError) Unwrap() error { return base.ErrFailedPrecondition }
+
+func (e *QueueNotEmptyError) Error() string {
+	return fmt.Sprintf("queue %q is not empty", e.Name)
 }
 
 // Only check whether active queue is empty before removing.
@@ -931,7 +941,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 		return err
 	}
 	if !exists {
-		return &ErrQueueNotFound{qname}
+		return &QueueNotFoundError{qname}
 	}
 	var script *redis.Script
 	if force {
@@ -949,7 +959,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 	}
 	if err := script.Run(r.client, keys, base.TaskKeyPrefix(qname)).Err(); err != nil {
 		if err.Error() == "QUEUE NOT EMPTY" {
-			return &ErrQueueNotEmpty{qname}
+			return &QueueNotEmptyError{qname}
 		}
 		return err
 	}
