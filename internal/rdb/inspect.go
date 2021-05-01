@@ -533,19 +533,6 @@ func (r *RDB) removeAndRunAll(zset, qkey string) (int64, error) {
 	return n, nil
 }
 
-// ArchiveTask finds a task that matches the id from the given queue and archives it.
-// If there's no match, it returns ErrTaskNotFound.
-func (r *RDB) ArchiveTask(qname string, id uuid.UUID) error {
-	n, err := r.archiveTask(qname, id.String())
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return ErrTaskNotFound
-	}
-	return nil
-}
-
 // ArchiveAllRetryTasks archives all retry tasks from the given queue and
 // returns the number of tasks that were moved.
 func (r *RDB) ArchiveAllRetryTasks(qname string) (int64, error) {
@@ -594,37 +581,49 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 	return n, nil
 }
 
-// archiveTaskCmd is a Lua script that arhives a task given a task id.
+// archiveTaskCmd is a Lua script that archives a task given a task id.
 //
 // Input:
 // KEYS[1] -> task key (asynq:{<qname>}:t:<task_id>)
 // KEYS[2] -> archived key (asynq:{<qname>}:archived)
+// KEYS[3] -> all queues key
+// --
 // ARGV[1] -> id of the task to archive
 // ARGV[2] -> current timestamp
 // ARGV[3] -> cutoff timestamp (e.g., 90 days ago)
 // ARGV[4] -> max number of tasks in archived state (e.g., 100)
 // ARGV[5] -> queue key prefix (asynq:{<qname>}:)
+// ARGV[6] -> queue name
 //
 // Output:
-// TODO: document return value of the script
+// Numeric code indicating the status:
+// Returns 1 if task is successfully archived.
+// Returns 0 if task is not found.
+// Returns -1 if task is already archived.
+// Returns -2 if task is in active state.
+// Returns -3 if queue doesn't exist.
+// Returns error reply if unexpected error occurs.
 var archiveTaskCmd = redis.NewScript(`
+if redis.call("SISMEMBER", KEYS[3], ARGV[6]) == 0 then
+	return -3
+end
 if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
 end
 local state = redis.call("HGET", KEYS[1], "state")
 if state == "active" then
-	return redis.error_reply("Cannot archive active task. Use cancel instead.")
+	return -2
 end
 if state == "archived" then
-	return redis.error_reply("Task is already archived")
+	return -1
 end
 if state == "pending" then
 	if redis.call("LREM", ARGV[5] .. state, 1, ARGV[1]) == 0 then
-		return redis.error_reply("internal error: task id not found in list " .. tostring(state))
+		return redis.error_reply("task id not found in list " .. tostring(state))
 	end
 else 
 	if redis.call("ZREM", ARGV[5] .. state, ARGV[1]) == 0 then
-		return redis.error_reply("internal error: task id not found in zset " .. tostring(state))
+		return redis.error_reply("task id not found in zset " .. tostring(state))
 	end
 end
 redis.call("ZADD", KEYS[2], ARGV[2], ARGV[1])
@@ -634,28 +633,50 @@ redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[4])
 return 1
 `)
 
-func (r *RDB) archiveTask(qname, id string) (int64, error) {
+// ArchiveTask finds a task that matches the id from the given queue and archives it.
+// It returns nil if it successfully archived the task.
+//
+// If a queue with the given name doesn't exist, it returns ErrQueueNotFound.
+// If a task with the given id doesn't exist in the queue, it returns ErrTaskNotFound
+// If a task is already archived, it returns ErrTaskAlreadyArchived.
+// If a task is in active state it returns non-nil error.
+func (r *RDB) ArchiveTask(qname string, id uuid.UUID) error {
 	keys := []string{
-		base.TaskKey(qname, id),
+		base.TaskKey(qname, id.String()),
 		base.ArchivedKey(qname),
+		base.AllQueues,
 	}
 	now := time.Now()
 	argv := []interface{}{
-		id,
+		id.String(),
 		now.Unix(),
 		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
 		maxArchiveSize,
 		base.QueueKeyPrefix(qname),
+		qname,
 	}
 	res, err := archiveTaskCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
-		return 0, err
+		return err
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return 0, fmt.Errorf("internal error: could not cast %v to int64", res)
+		return fmt.Errorf("%w: could not cast %v to int64", base.ErrInternal, res)
 	}
-	return n, nil
+	switch n {
+	case 1:
+		return nil
+	case 0:
+		return ErrTaskNotFound
+	case -1:
+		return ErrTaskAlreadyArchived
+	case -2:
+		return fmt.Errorf("%w: cannot archive task in active state. use CancelTask instead.", base.ErrFailedPrecondition)
+	case -3:
+		return ErrQueueNotFound
+	default:
+		return fmt.Errorf("%w: unexpected return value from archiveTaskCmd script: %d", base.ErrInternal, n)
+	}
 }
 
 // KEYS[1] -> ZSET to move task from (e.g., asynq:{<qname>}:retry)
