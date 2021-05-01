@@ -5,6 +5,7 @@
 package rdb
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -1715,7 +1716,7 @@ func TestArchiveRetryTask(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
 		got := r.ArchiveTask(tc.qname, tc.id)
-		if got != tc.want {
+		if !errors.Is(got, tc.want) {
 			t.Errorf("(*RDB).ArchiveTask(%q, %v) = %v, want %v",
 				tc.qname, tc.id, got, tc.want)
 			continue
@@ -1787,9 +1788,26 @@ func TestArchiveScheduledTask(t *testing.T) {
 			archived: map[string][]base.Z{
 				"default": {{Message: m2, Score: t2.Unix()}},
 			},
+			qname: "nonexistent",
+			id:    m2.ID,
+			want:  ErrQueueNotFound,
+			wantScheduled: map[string][]base.Z{
+				"default": {{Message: m1, Score: t1.Unix()}},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {{Message: m2, Score: t2.Unix()}},
+			},
+		},
+		{
+			scheduled: map[string][]base.Z{
+				"default": {{Message: m1, Score: t1.Unix()}},
+			},
+			archived: map[string][]base.Z{
+				"default": {{Message: m2, Score: t2.Unix()}},
+			},
 			qname: "default",
 			id:    m2.ID,
-			want:  ErrTaskNotFound,
+			want:  ErrTaskAlreadyArchived,
 			wantScheduled: map[string][]base.Z{
 				"default": {{Message: m1, Score: t1.Unix()}},
 			},
@@ -1837,7 +1855,7 @@ func TestArchiveScheduledTask(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
 		got := r.ArchiveTask(tc.qname, tc.id)
-		if got != tc.want {
+		if !errors.Is(got, tc.want) {
 			t.Errorf("(*RDB).ArchiveTask(%q, %v) = %v, want %v",
 				tc.qname, tc.id, got, tc.want)
 			continue
@@ -1905,7 +1923,7 @@ func TestArchivePendingTask(t *testing.T) {
 				"default": {{Message: m2, Score: oneHourAgo.Unix()}},
 			},
 			qname: "default",
-			id:    m2.ID,
+			id:    uuid.New(),
 			want:  ErrTaskNotFound,
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1},
@@ -1943,7 +1961,7 @@ func TestArchivePendingTask(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
 		got := r.ArchiveTask(tc.qname, tc.id)
-		if got != tc.want {
+		if !errors.Is(got, tc.want) {
 			t.Errorf("(*RDB).ArchiveTask(%q, %v) = %v, want %v",
 				tc.qname, tc.id, got, tc.want)
 			continue
