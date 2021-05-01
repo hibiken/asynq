@@ -5,6 +5,7 @@
 package inspeq
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -134,23 +135,12 @@ func (i *Inspector) History(qname string, n int) ([]*DailyStats, error) {
 	return res, nil
 }
 
-// ErrQueueNotFound indicates that the specified queue does not exist.
-type ErrQueueNotFound struct {
-	qname string
-}
-
-func (e *ErrQueueNotFound) Error() string {
-	return fmt.Sprintf("queue %q does not exist", e.qname)
-}
-
-// ErrQueueNotEmpty indicates that the specified queue is not empty.
-type ErrQueueNotEmpty struct {
-	qname string
-}
-
-func (e *ErrQueueNotEmpty) Error() string {
-	return fmt.Sprintf("queue %q is not empty", e.qname)
-}
+var (
+	// ErrQueueNotFound indicates that the specified queue does not exist.
+	ErrQueueNotFound = errors.New("queue not found")
+	// ErrQueueNotEmpty indicates that the specified queue is not empty.
+	ErrQueueNotEmpty = errors.New("queue is not empty")
+)
 
 // DeleteQueue removes the specified queue.
 //
@@ -164,11 +154,11 @@ func (e *ErrQueueNotEmpty) Error() string {
 // returns ErrQueueNotEmpty.
 func (i *Inspector) DeleteQueue(qname string, force bool) error {
 	err := i.rdb.RemoveQueue(qname, force)
-	if _, ok := err.(*rdb.ErrQueueNotFound); ok {
-		return &ErrQueueNotFound{qname}
+	if _, ok := err.(*rdb.QueueNotFoundError); ok {
+		return fmt.Errorf("%w: queue=%q", ErrQueueNotFound, qname)
 	}
-	if _, ok := err.(*rdb.ErrQueueNotEmpty); ok {
-		return &ErrQueueNotEmpty{qname}
+	if _, ok := err.(*rdb.QueueNotEmptyError); ok {
+		return fmt.Errorf("%w: queue=%q", ErrQueueNotEmpty, qname)
 	}
 	return err
 }
