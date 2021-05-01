@@ -7,6 +7,7 @@ package base
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -589,3 +590,10 @@ type Broker interface {
 	PublishCancelation(id string) error
 	Close() error
 }
+
+// List of canonical errors.
+var (
+	ErrNotFound           = errors.New("not found")
+	ErrFailedPrecondition = errors.New("failed precondition")
+	ErrInternal           = errors.New("internal error")
+)
