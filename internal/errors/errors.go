@@ -6,12 +6,20 @@
 // asynq and its internal packages.
 package errors
 
+// Note: This package is inspired by a blog post about error handling in project Upspin
+// https://commandcenter.blogspot.com/2017/12/error-handling-in-upspin.html.
+
 import (
 	"errors"
 	"fmt"
+	"log"
+	"runtime"
 	"strings"
 )
 
+// Error is the type that implements the error interface.
+// It contains a number of fields, each of different type.
+// An Error value may leave some values unset.
 type Error struct {
 	Code Code
 	Op   Op
@@ -53,6 +61,7 @@ const (
 	Internal
 	AlreadyExists
 	Unknown
+	// Note: If you add a new value here, make sure to update String method.
 )
 
 func (c Code) String() string {
@@ -67,6 +76,8 @@ func (c Code) String() string {
 		return "INTERNAL_ERROR"
 	case AlreadyExists:
 		return "ALREADY_EXISTS"
+	case Unknown:
+		return "UNKNOWN"
 	}
 	panic(fmt.Sprintf("unknown error code %d", c))
 }
@@ -75,7 +86,30 @@ func (c Code) String() string {
 // such as "rdb.Enqueue".
 type Op string
 
+// E builds an error value from its arguments.
+// There must be at least one argument or E panics.
+// The type of each argument determines its meaning.
+// If more than one argument of a given type is presented,
+// only the last one is recorded.
+//
+// The types are:
+//	errors.Op
+//		The operation being performed, usually the method
+//		being invoked (Get, Put, etc.).
+//	errors.Code
+//		The canonical error code, such as NOT_FOUND.
+//	string
+//		Treated as an error message and assigned to the
+//		Err field after a call to errors.New.
+//	error
+//		The underlying error that triggered this one.
+//
+// If the error is printed, only those items that have been
+// set to non-zero values will appear in the result.
 func E(args ...interface{}) error {
+	if len(args) == 0 {
+		panic("call to errors.E with no arguments")
+	}
 	e := &Error{}
 	for _, arg := range args {
 		switch arg := arg.(type) {
@@ -87,6 +121,10 @@ func E(args ...interface{}) error {
 			e.Err = arg
 		case string:
 			e.Err = errors.New(arg)
+		default:
+			_, file, line, _ := runtime.Caller(1)
+			log.Printf("errors.E: bad call from %s:%d: %v", file, line, args)
+			return fmt.Errorf("unknown type %T, value %v in error call", arg, arg)
 		}
 	}
 	return e
