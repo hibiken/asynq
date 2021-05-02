@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cast"
 )
 
+// TODO: remove this & use internal/errors package instead.
 var (
 	// ErrNoProcessableTask indicates that there are no tasks ready to be processed.
 	ErrNoProcessableTask = errors.New("no tasks are ready for processing")

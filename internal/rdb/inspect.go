@@ -12,6 +12,7 @@ import (
 	"github.com/go-redis/redis/v7"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/errors"
 	"github.com/spf13/cast"
 )
 
@@ -636,11 +637,12 @@ return 1
 // ArchiveTask finds a task that matches the id from the given queue and archives it.
 // It returns nil if it successfully archived the task.
 //
-// If a queue with the given name doesn't exist, it returns ErrQueueNotFound.
-// If a task with the given id doesn't exist in the queue, it returns ErrTaskNotFound
-// If a task is already archived, it returns ErrTaskAlreadyArchived.
+// If a queue with the given name doesn't exist, it returns QueueNotFoundError.
+// If a task with the given id doesn't exist in the queue, it returns TaskNotFoundError
+// If a task is already archived, it returns TaskAlreadyArchivedError.
 // If a task is in active state it returns non-nil error.
 func (r *RDB) ArchiveTask(qname string, id uuid.UUID) error {
+	var op errors.Op = "rdb.ArchiveTask"
 	keys := []string{
 		base.TaskKey(qname, id.String()),
 		base.ArchivedKey(qname),
@@ -657,25 +659,25 @@ func (r *RDB) ArchiveTask(qname string, id uuid.UUID) error {
 	}
 	res, err := archiveTaskCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
-		return err
+		return errors.E(op, errors.Unknown, err)
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return fmt.Errorf("%w: could not cast %v to int64", base.ErrInternal, res)
+		return errors.E(op, errors.Internal, fmt.Sprintf("could not cast the return value %v from archiveTaskCmd to int64.", res))
 	}
 	switch n {
 	case 1:
 		return nil
 	case 0:
-		return ErrTaskNotFound
+		return errors.E(op, errors.NotFound, &errors.TaskNotFoundError{Queue: qname, ID: id.String()})
 	case -1:
-		return ErrTaskAlreadyArchived
+		return errors.E(op, errors.FailedPrecondition, &errors.TaskAlreadyArchivedError{Queue: qname, ID: id.String()})
 	case -2:
-		return fmt.Errorf("%w: cannot archive task in active state. use CancelTask instead.", base.ErrFailedPrecondition)
+		return errors.E(op, errors.FailedPrecondition, "cannot archive task in active state. use CancelTask instead.")
 	case -3:
-		return ErrQueueNotFound
+		return errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	default:
-		return fmt.Errorf("%w: unexpected return value from archiveTaskCmd script: %d", base.ErrInternal, n)
+		return errors.E(op, errors.Internal, fmt.Sprintf("unexpected return value from archiveTaskCmd script: %d", n))
 	}
 }
 
