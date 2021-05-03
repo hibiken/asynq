@@ -23,9 +23,6 @@ var (
 	// ErrTaskNotFound indicates that a task that matches the given identifier was not found.
 	ErrTaskNotFound = fmt.Errorf("%w: could not find a task in the queue", base.ErrNotFound)
 
-	// ErrTaskAlreadyArchived indicates that the task in question is already in archive state.
-	ErrTaskAlreadyArchived = fmt.Errorf("%w: task is already archived", base.ErrFailedPrecondition)
-
 	// ErrDuplicateTask indicates that another task with the same unique key holds the uniqueness lock.
 	ErrDuplicateTask = errors.New("task already exists")
 
