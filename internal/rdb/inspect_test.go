@@ -1010,7 +1010,6 @@ func TestRunArchivedTask(t *testing.T) {
 		archived     map[string][]base.Z
 		qname        string
 		id           uuid.UUID
-		want         error // expected return value from calling RunArchivedTask
 		wantArchived map[string][]*base.TaskMessage
 		wantPending  map[string][]*base.TaskMessage
 	}{
@@ -1023,29 +1022,11 @@ func TestRunArchivedTask(t *testing.T) {
 			},
 			qname: "default",
 			id:    t2.ID,
-			want:  nil,
 			wantArchived: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {t2},
-			},
-		},
-		{
-			archived: map[string][]base.Z{
-				"default": {
-					{Message: t1, Score: s1},
-					{Message: t2, Score: s2},
-				},
-			},
-			qname: "default",
-			id:    uuid.New(),
-			want:  ErrTaskNotFound,
-			wantArchived: map[string][]*base.TaskMessage{
-				"default": {t1, t2},
-			},
-			wantPending: map[string][]*base.TaskMessage{
-				"default": {},
 			},
 		},
 		{
@@ -1060,7 +1041,6 @@ func TestRunArchivedTask(t *testing.T) {
 			},
 			qname: "critical",
 			id:    t3.ID,
-			want:  nil,
 			wantArchived: map[string][]*base.TaskMessage{
 				"default":  {t1, t2},
 				"critical": {},
@@ -1076,9 +1056,8 @@ func TestRunArchivedTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.RunTask(tc.qname, tc.id)
-		if got != tc.want {
-			t.Errorf("r.RunTask(%q, %s) = %v, want %v", tc.qname, tc.id, got, tc.want)
+		if got := r.RunTask(tc.qname, tc.id); got != nil {
+			t.Errorf("r.RunTask(%q, %s) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
 
@@ -1111,7 +1090,6 @@ func TestRunRetryTask(t *testing.T) {
 		retry       map[string][]base.Z
 		qname       string
 		id          uuid.UUID
-		want        error // expected return value from calling RunRetryTask
 		wantRetry   map[string][]*base.TaskMessage
 		wantPending map[string][]*base.TaskMessage
 	}{
@@ -1124,29 +1102,11 @@ func TestRunRetryTask(t *testing.T) {
 			},
 			qname: "default",
 			id:    t2.ID,
-			want:  nil,
 			wantRetry: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {t2},
-			},
-		},
-		{
-			retry: map[string][]base.Z{
-				"default": {
-					{Message: t1, Score: s1},
-					{Message: t2, Score: s2},
-				},
-			},
-			qname: "default",
-			id:    uuid.New(),
-			want:  ErrTaskNotFound,
-			wantRetry: map[string][]*base.TaskMessage{
-				"default": {t1, t2},
-			},
-			wantPending: map[string][]*base.TaskMessage{
-				"default": {},
 			},
 		},
 		{
@@ -1161,7 +1121,6 @@ func TestRunRetryTask(t *testing.T) {
 			},
 			qname: "low",
 			id:    t3.ID,
-			want:  nil,
 			wantRetry: map[string][]*base.TaskMessage{
 				"default": {t1, t2},
 				"low":     {},
@@ -1177,9 +1136,8 @@ func TestRunRetryTask(t *testing.T) {
 		h.FlushDB(t, r.client)                      // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry) // initialize retry queue
 
-		got := r.RunTask(tc.qname, tc.id)
-		if got != tc.want {
-			t.Errorf("r.RunTask(%q, %s) = %v, want %v", tc.qname, tc.id, got, tc.want)
+		if got := r.RunTask(tc.qname, tc.id); got != nil {
+			t.Errorf("r.RunTask(%q, %s) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
 
@@ -1212,7 +1170,6 @@ func TestRunScheduledTask(t *testing.T) {
 		scheduled     map[string][]base.Z
 		qname         string
 		id            uuid.UUID
-		want          error // expected return value from calling RunScheduledTask
 		wantScheduled map[string][]*base.TaskMessage
 		wantPending   map[string][]*base.TaskMessage
 	}{
@@ -1225,29 +1182,11 @@ func TestRunScheduledTask(t *testing.T) {
 			},
 			qname: "default",
 			id:    t2.ID,
-			want:  nil,
 			wantScheduled: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {t2},
-			},
-		},
-		{
-			scheduled: map[string][]base.Z{
-				"default": {
-					{Message: t1, Score: s1},
-					{Message: t2, Score: s2},
-				},
-			},
-			qname: "default",
-			id:    uuid.New(),
-			want:  ErrTaskNotFound,
-			wantScheduled: map[string][]*base.TaskMessage{
-				"default": {t1, t2},
-			},
-			wantPending: map[string][]*base.TaskMessage{
-				"default": {},
 			},
 		},
 		{
@@ -1262,7 +1201,6 @@ func TestRunScheduledTask(t *testing.T) {
 			},
 			qname: "notifications",
 			id:    t3.ID,
-			want:  nil,
 			wantScheduled: map[string][]*base.TaskMessage{
 				"default":       {t1, t2},
 				"notifications": {},
@@ -1278,9 +1216,8 @@ func TestRunScheduledTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got := r.RunTask(tc.qname, tc.id)
-		if got != tc.want {
-			t.Errorf("r.RunTask(%q, %s) = %v, want %v", tc.qname, tc.id, got, tc.want)
+		if got := r.RunTask(tc.qname, tc.id); got != nil {
+			t.Errorf("r.RunTask(%q, %s) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
 
@@ -1298,6 +1235,162 @@ func TestRunScheduledTask(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRunTaskError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	t1 := h.NewTaskMessage("send_email", nil)
+	s1 := time.Now().Add(-5 * time.Minute).Unix()
+
+	tests := []struct {
+		desc          string
+		active        map[string][]*base.TaskMessage
+		pending       map[string][]*base.TaskMessage
+		scheduled     map[string][]base.Z
+		qname         string
+		id            uuid.UUID
+		match         func(err error) bool
+		wantActive    map[string][]*base.TaskMessage
+		wantPending   map[string][]*base.TaskMessage
+		wantScheduled map[string][]*base.TaskMessage
+	}{
+		{
+			desc: "It should return QueueNotFoundError if the queue doesn't exist",
+			active: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			pending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			scheduled: map[string][]base.Z{
+				"default": {
+					{Message: t1, Score: s1},
+				},
+			},
+			qname: "nonexistent",
+			id:    t1.ID,
+			match: errors.IsQueueNotFound,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+		},
+		{
+			desc: "It should return TaskNotFound if the task is not found in the queue",
+			active: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			pending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			scheduled: map[string][]base.Z{
+				"default": {
+					{Message: t1, Score: s1},
+				},
+			},
+			qname: "default",
+			id:    uuid.New(),
+			match: errors.IsTaskNotFound,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+		},
+		{
+			desc: "It should return FailedPrecondition error if task is already active",
+			active: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			pending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			scheduled: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			id:    t1.ID,
+			match: func(err error) bool { return errors.CanonicalCode(err) == errors.FailedPrecondition },
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+		},
+		{
+			desc: "It should return FailedPrecondition error if task is already pending",
+			active: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			pending: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			scheduled: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			id:    t1.ID,
+			match: func(err error) bool { return errors.CanonicalCode(err) == errors.FailedPrecondition },
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllActiveQueues(t, r.client, tc.active)
+		h.SeedAllPendingQueues(t, r.client, tc.pending)
+		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+
+		got := r.RunTask(tc.qname, tc.id)
+		if !tc.match(got) {
+			t.Errorf("%s: unexpected return value %v", tc.desc, got)
+			continue
+		}
+
+		for qname, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want, +got)\n%s", base.ActiveKey(qname), diff)
+			}
+		}
+
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
+			}
+		}
+
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := h.GetScheduledMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotScheduled, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q, (-want, +got)\n%s", base.ScheduledKey(qname), diff)
+			}
+		}
+	}
+
 }
 
 func TestRunAllScheduledTasks(t *testing.T) {
