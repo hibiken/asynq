@@ -2006,16 +2006,21 @@ func TestArchiveTaskError(t *testing.T) {
 
 	tests := []struct {
 		desc          string
+		active        map[string][]*base.TaskMessage
 		scheduled     map[string][]base.Z
 		archived      map[string][]base.Z
 		qname         string
 		id            uuid.UUID
 		match         func(err error) bool
+		wantActive    map[string][]*base.TaskMessage
 		wantScheduled map[string][]base.Z
 		wantArchived  map[string][]base.Z
 	}{
 		{
 			desc: "It should return QueueNotFoundError if provided queue name doesn't exist",
+			active: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 			scheduled: map[string][]base.Z{
 				"default": {{Message: m1, Score: t1.Unix()}},
 			},
@@ -2025,6 +2030,9 @@ func TestArchiveTaskError(t *testing.T) {
 			qname: "nonexistent",
 			id:    m2.ID,
 			match: errors.IsQueueNotFound,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 			wantScheduled: map[string][]base.Z{
 				"default": {{Message: m1, Score: t1.Unix()}},
 			},
@@ -2034,6 +2042,9 @@ func TestArchiveTaskError(t *testing.T) {
 		},
 		{
 			desc: "It should return TaskNotFoundError if provided task ID doesn't exist in the queue",
+			active: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 			scheduled: map[string][]base.Z{
 				"default": {{Message: m1, Score: t1.Unix()}},
 			},
@@ -2043,6 +2054,9 @@ func TestArchiveTaskError(t *testing.T) {
 			qname: "default",
 			id:    uuid.New(),
 			match: errors.IsTaskNotFound,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 			wantScheduled: map[string][]base.Z{
 				"default": {{Message: m1, Score: t1.Unix()}},
 			},
@@ -2052,6 +2066,9 @@ func TestArchiveTaskError(t *testing.T) {
 		},
 		{
 			desc: "It should return TaskAlreadyArchivedError if task is already in archived state",
+			active: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 			scheduled: map[string][]base.Z{
 				"default": {{Message: m1, Score: t1.Unix()}},
 			},
@@ -2061,6 +2078,9 @@ func TestArchiveTaskError(t *testing.T) {
 			qname: "default",
 			id:    m2.ID,
 			match: errors.IsTaskAlreadyArchived,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 			wantScheduled: map[string][]base.Z{
 				"default": {{Message: m1, Score: t1.Unix()}},
 			},
@@ -2068,10 +2088,35 @@ func TestArchiveTaskError(t *testing.T) {
 				"default": {{Message: m2, Score: t2.Unix()}},
 			},
 		},
+		{
+			desc: "It should return FailedPrecondition error if task is active",
+			active: map[string][]*base.TaskMessage{
+				"default": {m1},
+			},
+			scheduled: map[string][]base.Z{
+				"default": {},
+			},
+			archived: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			id:    m1.ID,
+			match: func(err error) bool { return errors.CanonicalCode(err) == errors.FailedPrecondition },
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {m1},
+			},
+			wantScheduled: map[string][]base.Z{
+				"default": {},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {},
+			},
+		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
+		h.SeedAllActiveQueues(t, r.client, tc.active)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
@@ -2079,6 +2124,14 @@ func TestArchiveTaskError(t *testing.T) {
 		if !tc.match(got) {
 			t.Errorf("%s: returned error didn't match: got=%v", tc.desc, got)
 			continue
+		}
+
+		for qname, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s",
+					base.ActiveKey(qname), diff)
+			}
 		}
 
 		for qname, want := range tc.wantScheduled {
@@ -2785,46 +2838,86 @@ func TestDeleteTaskError(t *testing.T) {
 
 	tests := []struct {
 		desc          string
+		active        map[string][]*base.TaskMessage
 		scheduled     map[string][]base.Z
 		qname         string
 		id            uuid.UUID
 		match         func(err error) bool
+		wantActive    map[string][]*base.TaskMessage
 		wantScheduled map[string][]*base.TaskMessage
 	}{
 		{
 			desc: "It should return TaskNotFoundError if task doesn't exist the queue",
+			active: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 			scheduled: map[string][]base.Z{
 				"default": {{Message: m1, Score: t1.Unix()}},
 			},
 			qname: "default",
 			id:    uuid.New(),
 			match: errors.IsTaskNotFound,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 			wantScheduled: map[string][]*base.TaskMessage{
 				"default": {m1},
 			},
 		},
 		{
 			desc: "It should return QueueNotFoundError if the queue doesn't exist",
+			active: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 			scheduled: map[string][]base.Z{
 				"default": {{Message: m1, Score: t1.Unix()}},
 			},
 			qname: "nonexistent",
 			id:    uuid.New(),
 			match: errors.IsQueueNotFound,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
 			wantScheduled: map[string][]*base.TaskMessage{
 				"default": {m1},
+			},
+		},
+		{
+			desc: "It should return FailedPrecondition error if task is active",
+			active: map[string][]*base.TaskMessage{
+				"default": {m1},
+			},
+			scheduled: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			id:    m1.ID,
+			match: func(err error) bool { return errors.CanonicalCode(err) == errors.FailedPrecondition },
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {m1},
+			},
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default": {},
 			},
 		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllActiveQueues(t, r.client, tc.active)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
 		got := r.DeleteTask(tc.qname, tc.id)
 		if !tc.match(got) {
 			t.Errorf("%s: r.DeleteTask(qname, id) returned %v", tc.desc, got)
 			continue
+		}
+
+		for qname, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ActiveKey(qname), diff)
+			}
 		}
 
 		for qname, want := range tc.wantScheduled {

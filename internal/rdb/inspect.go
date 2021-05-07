@@ -686,7 +686,7 @@ return 1
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
 // If a task with the given id doesn't exist in the queue, it returns TaskNotFoundError
 // If a task is already archived, it returns TaskAlreadyArchivedError.
-// If a task is in active state it returns non-nil error.
+// If a task is in active state it returns non-nil error with FailedPrecondition code.
 func (r *RDB) ArchiveTask(qname string, id uuid.UUID) error {
 	var op errors.Op = "rdb.ArchiveTask"
 	keys := []string{
