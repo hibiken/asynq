@@ -563,20 +563,30 @@ func (r *RDB) removeAndRunAll(zset, qkey string) (int64, error) {
 
 // ArchiveAllRetryTasks archives all retry tasks from the given queue and
 // returns the number of tasks that were moved.
+// If a queue with the given name doesn't exist, it returns QueueNotFoundError.
 func (r *RDB) ArchiveAllRetryTasks(qname string) (int64, error) {
+	var op errors.Op = "rdb.ArchiveAllRetryTasks"
 	n, err := r.archiveAll(base.RetryKey(qname), base.ArchivedKey(qname), qname)
+	if errors.IsQueueNotFound(err) {
+		return 0, errors.E(op, errors.NotFound, err)
+	}
 	if err != nil {
-		return 0, errors.E(errors.Op("rdb.ArchiveAllRetryTasks"), errors.Internal, err)
+		return 0, errors.E(op, errors.Internal, err)
 	}
 	return n, nil
 }
 
 // ArchiveAllScheduledTasks archives all scheduled tasks from the given queue and
 // returns the number of tasks that were moved.
+// If a queue with the given name doesn't exist, it returns QueueNotFoundError.
 func (r *RDB) ArchiveAllScheduledTasks(qname string) (int64, error) {
+	var op errors.Op = "rdb.ArchiveAllScheduledTasks"
 	n, err := r.archiveAll(base.ScheduledKey(qname), base.ArchivedKey(qname), qname)
+	if errors.IsQueueNotFound(err) {
+		return 0, errors.E(op, errors.NotFound, err)
+	}
 	if err != nil {
-		return 0, errors.E(errors.Op("rdb.ArchiveAllScheduledTasks"), errors.Internal, err)
+		return 0, errors.E(op, errors.Internal, err)
 	}
 	return n, nil
 }
@@ -587,14 +597,21 @@ func (r *RDB) ArchiveAllScheduledTasks(qname string) (int64, error) {
 // Input:
 // KEYS[1] -> asynq:{<qname>}:pending
 // KEYS[2] -> asynq:{<qname>}:archived
+// KEYS[3] -> all queues key
+// --
 // ARGV[1] -> current timestamp
 // ARGV[2] -> cutoff timestamp (e.g., 90 days ago)
 // ARGV[3] -> max number of tasks in archive (e.g., 100)
 // ARGV[4] -> task key prefix (asynq:{<qname>}:t:)
+// ARGV[5] -> queue name
 //
 // Output:
-// integer: Number of tasks archiveda
+// integer: Number of tasks archived
+// Returns -1 if queue doesn't exist
 var archiveAllPendingCmd = redis.NewScript(`
+if redis.call("SISMEMBER", KEYS[3], ARGV[5]) == 0 then
+	return -1
+end
 local ids = redis.call("LRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
@@ -607,15 +624,21 @@ return table.getn(ids)`)
 
 // ArchiveAllPendingTasks archives all pending tasks from the given queue and
 // returns the number of tasks moved.
+// If a queue with the given name doesn't exist, it returns QueueNotFoundError.
 func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 	var op errors.Op = "rdb.ArchiveAllPendingTasks"
-	keys := []string{base.PendingKey(qname), base.ArchivedKey(qname)}
+	keys := []string{
+		base.PendingKey(qname),
+		base.ArchivedKey(qname),
+		base.AllQueues,
+	}
 	now := time.Now()
 	argv := []interface{}{
 		now.Unix(),
 		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
 		maxArchiveSize,
 		base.TaskKeyPrefix(qname),
+		qname,
 	}
 	res, err := archiveAllPendingCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
@@ -624,6 +647,9 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 	n, ok := res.(int64)
 	if !ok {
 		return 0, errors.E(op, errors.Internal, fmt.Sprintf("unexpected return value from script %v", res))
+	}
+	if n == -1 {
+		return 0, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	return n, nil
 }
@@ -733,14 +759,21 @@ func (r *RDB) ArchiveTask(qname string, id uuid.UUID) error {
 // Input:
 // KEYS[1] -> ZSET to move task from (e.g., asynq:{<qname>}:retry)
 // KEYS[2] -> asynq:{<qname>}:archived
+// KEYS[3] -> all queues key
+// --
 // ARGV[1] -> current timestamp
 // ARGV[2] -> cutoff timestamp (e.g., 90 days ago)
 // ARGV[3] -> max number of tasks in archive (e.g., 100)
 // ARGV[4] -> task key prefix (asynq:{<qname>}:t:)
+// ARGV[5] -> queue name
 //
 // Output:
 // integer: number of tasks archived
+// Returns -1 if queue doesn't exist
 var archiveAllCmd = redis.NewScript(`
+if redis.call("SISMEMBER", KEYS[3], ARGV[5]) == 0 then
+	return -1
+end
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
@@ -752,20 +785,29 @@ redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
 
 func (r *RDB) archiveAll(src, dst, qname string) (int64, error) {
+	keys := []string{
+		src,
+		dst,
+		base.AllQueues,
+	}
 	now := time.Now()
 	argv := []interface{}{
 		now.Unix(),
 		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
 		maxArchiveSize,
 		base.TaskKeyPrefix(qname),
+		qname,
 	}
-	res, err := archiveAllCmd.Run(r.client, []string{src, dst}, argv...).Result()
+	res, err := archiveAllCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
 		return 0, err
 	}
 	n, ok := res.(int64)
 	if !ok {
 		return 0, fmt.Errorf("unexpected return value from script: %v", res)
+	}
+	if n == -1 {
+		return 0, &errors.QueueNotFoundError{Queue: qname}
 	}
 	return n, nil
 }
