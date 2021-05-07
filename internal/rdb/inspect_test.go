@@ -2577,6 +2577,35 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 	}
 }
 
+func TestArchiveAllTasksError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	tests := []struct {
+		desc  string
+		qname string
+		match func(err error) bool
+	}{
+		{
+			desc:  "It returns QueueNotFoundError if queue doesn't exist",
+			qname: "nonexistent",
+			match: errors.IsQueueNotFound,
+		},
+	}
+
+	for _, tc := range tests {
+		if _, got := r.ArchiveAllPendingTasks(tc.qname); !tc.match(got) {
+			t.Errorf("%s: ArchiveAllPendingTasks returned %v", tc.desc, got)
+		}
+		if _, got := r.ArchiveAllScheduledTasks(tc.qname); !tc.match(got) {
+			t.Errorf("%s: ArchiveAllScheduledTasks returned %v", tc.desc, got)
+		}
+		if _, got := r.ArchiveAllRetryTasks(tc.qname); !tc.match(got) {
+			t.Errorf("%s: ArchiveAllRetryTasks returned %v", tc.desc, got)
+		}
+	}
+}
+
 func TestDeleteArchivedTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
