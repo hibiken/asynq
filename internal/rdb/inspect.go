@@ -309,18 +309,28 @@ func (p Pagination) stop() int64 {
 
 // ListPending returns pending tasks that are ready to be processed.
 func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
+	var op errors.Op = "rdb.ListPending"
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
-		return nil, fmt.Errorf("queue %q does not exist", qname)
+		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	return r.listMessages(base.PendingKey(qname), qname, pgn)
+	res, err := r.listMessages(base.PendingKey(qname), qname, pgn)
+	if err != nil {
+		return nil, errors.E(op, errors.CanonicalCode(err), err)
+	}
+	return res, nil
 }
 
 // ListActive returns all tasks that are currently being processed for the given queue.
 func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
+	var op errors.Op = "rdb.ListActive"
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
-		return nil, fmt.Errorf("queue %q does not exist", qname)
+		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	return r.listMessages(base.ActiveKey(qname), qname, pgn)
+	res, err := r.listMessages(base.ActiveKey(qname), qname, pgn)
+	if err != nil {
+		return nil, errors.E(op, errors.CanonicalCode(err), err)
+	}
+	return res, nil
 }
 
 // KEYS[1] -> key for id list (e.g. asynq:{<qname>}:pending)
@@ -346,11 +356,11 @@ func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskMessa
 	res, err := listMessagesCmd.Run(r.client,
 		[]string{key}, start, stop, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
-		return nil, err
+		return nil, errors.E(errors.Unknown, err)
 	}
 	data, err := cast.ToStringSliceE(res)
 	if err != nil {
-		return nil, err
+		return nil, errors.E(errors.Internal, fmt.Errorf("cast error: Lua script returned unexpected value: %v", res))
 	}
 	reverse(data)
 	var msgs []*base.TaskMessage
@@ -368,27 +378,42 @@ func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskMessa
 // ListScheduled returns all tasks from the given queue that are scheduled
 // to be processed in the future.
 func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]base.Z, error) {
+	var op errors.Op = "rdb.ListScheduled"
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
-		return nil, fmt.Errorf("queue %q does not exist", qname)
+		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	return r.listZSetEntries(base.ScheduledKey(qname), qname, pgn)
+	res, err := r.listZSetEntries(base.ScheduledKey(qname), qname, pgn)
+	if err != nil {
+		return nil, errors.E(op, errors.CanonicalCode(err), err)
+	}
+	return res, nil
 }
 
 // ListRetry returns all tasks from the given queue that have failed before
 // and willl be retried in the future.
 func (r *RDB) ListRetry(qname string, pgn Pagination) ([]base.Z, error) {
+	var op errors.Op = "rdb.ListRetry"
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
-		return nil, fmt.Errorf("queue %q does not exist", qname)
+		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	return r.listZSetEntries(base.RetryKey(qname), qname, pgn)
+	res, err := r.listZSetEntries(base.RetryKey(qname), qname, pgn)
+	if err != nil {
+		return nil, errors.E(op, errors.CanonicalCode(err), err)
+	}
+	return res, nil
 }
 
 // ListArchived returns all tasks from the given queue that have exhausted its retry limit.
 func (r *RDB) ListArchived(qname string, pgn Pagination) ([]base.Z, error) {
+	var op errors.Op = "rdb.ListArchived"
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
-		return nil, fmt.Errorf("queue %q does not exist", qname)
+		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	return r.listZSetEntries(base.ArchivedKey(qname), qname, pgn)
+	res, err := r.listZSetEntries(base.ArchivedKey(qname), qname, pgn)
+	if err != nil {
+		return nil, errors.E(op, errors.CanonicalCode(err), err)
+	}
+	return res, nil
 }
 
 // KEYS[1] -> key for ids set (e.g. asynq:{<qname>}:scheduled)
@@ -415,21 +440,21 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, erro
 	res, err := listZSetEntriesCmd.Run(r.client, []string{key},
 		pgn.start(), pgn.stop(), base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
-		return nil, err
+		return nil, errors.E(errors.Unknown, err)
 	}
 	data, err := cast.ToSliceE(res)
 	if err != nil {
-		return nil, err
+		return nil, errors.E(errors.Internal, fmt.Errorf("cast error: Lua script returned unexpected value: %v", res))
 	}
 	var zs []base.Z
 	for i := 0; i < len(data); i += 2 {
 		s, err := cast.ToStringE(data[i])
 		if err != nil {
-			return nil, err
+			return nil, errors.E(errors.Internal, fmt.Errorf("cast error: Lua script returned unexpected value: %v", res))
 		}
 		score, err := cast.ToInt64E(data[i+1])
 		if err != nil {
-			return nil, err
+			return nil, errors.E(errors.Internal, fmt.Errorf("cast error: Lua script returned unexpected value: %v", res))
 		}
 		msg, err := base.DecodeMessage([]byte(s))
 		if err != nil {

@@ -992,6 +992,42 @@ func TestListArchivedPagination(t *testing.T) {
 	}
 }
 
+func TestListTasksError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	tests := []struct {
+		desc  string
+		qname string
+		match func(err error) bool
+	}{
+		{
+			desc:  "It returns QueueNotFoundError if queue doesn't exist",
+			qname: "nonexistent",
+			match: errors.IsQueueNotFound,
+		},
+	}
+
+	for _, tc := range tests {
+		pgn := Pagination{Page: 0, Size: 20}
+		if _, got := r.ListActive(tc.qname, pgn); !tc.match(got) {
+			t.Errorf("%s: ListActive returned %v", tc.desc, got)
+		}
+		if _, got := r.ListPending(tc.qname, pgn); !tc.match(got) {
+			t.Errorf("%s: ListPending returned %v", tc.desc, got)
+		}
+		if _, got := r.ListScheduled(tc.qname, pgn); !tc.match(got) {
+			t.Errorf("%s: ListScheduled returned %v", tc.desc, got)
+		}
+		if _, got := r.ListRetry(tc.qname, pgn); !tc.match(got) {
+			t.Errorf("%s: ListRetry returned %v", tc.desc, got)
+		}
+		if _, got := r.ListArchived(tc.qname, pgn); !tc.match(got) {
+			t.Errorf("%s: ListArchived returned %v", tc.desc, got)
+		}
+	}
+}
+
 var (
 	timeCmpOpt   = cmpopts.EquateApproxTime(2 * time.Second) // allow for 2 seconds margin in time.Time
 	zScoreCmpOpt = h.EquateInt64Approx(2)                    // allow for 2 seconds margin in Z.Score
