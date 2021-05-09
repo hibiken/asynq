@@ -1128,18 +1128,28 @@ func (e *QueueNotEmptyError) Error() string {
 	return fmt.Sprintf("queue %q is not empty", e.Name)
 }
 
-// Only check whether active queue is empty before removing.
+// removeQueueForceCmd removes the given queue regardless of
+// whether the queue is empty.
+// It only check whether active queue is empty before removing.
+//
+// Input:
 // KEYS[1] -> asynq:{<qname>}
 // KEYS[2] -> asynq:{<qname>}:active
 // KEYS[3] -> asynq:{<qname>}:scheduled
 // KEYS[4] -> asynq:{<qname>}:retry
 // KEYS[5] -> asynq:{<qname>}:archived
 // KEYS[6] -> asynq:{<qname>}:deadlines
+// --
 // ARGV[1] -> task key prefix
+//
+// Output:
+// Numeric code to indicate the status.
+// Returns 1 if successfully removed.
+// Returns -2 if the queue has active tasks.
 var removeQueueForceCmd = redis.NewScript(`
 local active = redis.call("LLEN", KEYS[2])
 if active > 0 then
-    return redis.error_reply("Queue has tasks active")
+    return -2
 end
 for _, id in ipairs(redis.call("LRANGE", KEYS[1], 0, -1)) do
 	redis.call("DEL", ARGV[1] .. id)
@@ -1162,16 +1172,25 @@ redis.call("DEL", KEYS[3])
 redis.call("DEL", KEYS[4])
 redis.call("DEL", KEYS[5])
 redis.call("DEL", KEYS[6])
-return redis.status_reply("OK")`)
+return 1`)
 
-// Checks whether queue is empty before removing.
+// removeQueueCmd removes the given queue.
+// It checks whether queue is empty before removing.
+//
+// Input:
 // KEYS[1] -> asynq:{<qname>}:pending
 // KEYS[2] -> asynq:{<qname>}:active
 // KEYS[3] -> asynq:{<qname>}:scheduled
 // KEYS[4] -> asynq:{<qname>}:retry
 // KEYS[5] -> asynq:{<qname>}:archived
 // KEYS[6] -> asynq:{<qname>}:deadlines
+// --
 // ARGV[1] -> task key prefix
+//
+// Output:
+// Numeric code to indicate the status
+// Returns 1 if successfully removed.
+// Returns -1 if queue is not empty
 var removeQueueCmd = redis.NewScript(`
 local ids = {}
 for _, id in ipairs(redis.call("LRANGE", KEYS[1], 0, -1)) do
@@ -1190,7 +1209,7 @@ for _, id in ipairs(redis.call("ZRANGE", KEYS[5], 0, -1)) do
 	table.insert(ids, id)
 end
 if table.getn(ids) > 0 then
-	return redis.error_reply("QUEUE NOT EMPTY")
+	return -1
 end
 for _, id in ipairs(ids) do
 	redis.call("DEL", ARGV[1] .. id)
@@ -1201,7 +1220,7 @@ redis.call("DEL", KEYS[3])
 redis.call("DEL", KEYS[4])
 redis.call("DEL", KEYS[5])
 redis.call("DEL", KEYS[6])
-return redis.status_reply("OK")`)
+return 1`)
 
 // RemoveQueue removes the specified queue.
 //
@@ -1210,12 +1229,13 @@ return redis.status_reply("OK")`)
 // If force is set to false, it will only remove the queue if
 // the queue is empty.
 func (r *RDB) RemoveQueue(qname string, force bool) error {
+	var op errors.Op = "rdb.RemoveQueue"
 	exists, err := r.client.SIsMember(base.AllQueues, qname).Result()
 	if err != nil {
 		return err
 	}
 	if !exists {
-		return &QueueNotFoundError{qname}
+		return errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	var script *redis.Script
 	if force {
@@ -1231,13 +1251,27 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 		base.ArchivedKey(qname),
 		base.DeadlinesKey(qname),
 	}
-	if err := script.Run(r.client, keys, base.TaskKeyPrefix(qname)).Err(); err != nil {
-		if err.Error() == "QUEUE NOT EMPTY" {
-			return &QueueNotEmptyError{qname}
-		}
-		return err
+	res, err := script.Run(r.client, keys, base.TaskKeyPrefix(qname)).Result()
+	if err != nil {
+		return errors.E(op, errors.Unknown, err)
 	}
-	return r.client.SRem(base.AllQueues, qname).Err()
+	n, ok := res.(int64)
+	if !ok {
+		return errors.E(op, errors.Internal, fmt.Sprintf("unexpeced return value from Lua script: %v", res))
+	}
+	switch n {
+	case 1:
+		if err := r.client.SRem(base.AllQueues, qname).Err(); err != nil {
+			return errors.E(op, errors.Unknown, err)
+		}
+		return nil
+	case -1:
+		return errors.E(op, errors.NotFound, &errors.QueueNotEmptyError{Queue: qname})
+	case -2:
+		return errors.E(op, errors.FailedPrecondition, "cannot remove queue with active tasks")
+	default:
+		return errors.E(op, errors.Unknown, fmt.Sprintf("unexpected return value from Lua script: %d", n))
+	}
 }
 
 // Note: Script also removes stale keys.
