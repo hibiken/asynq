@@ -182,6 +182,21 @@ func IsQueueNotFound(err error) bool {
 	return As(err, &target)
 }
 
+// QueueNotEmptyError indicates that the given queue is not empty.
+type QueueNotEmptyError struct {
+	Queue string // queue name
+}
+
+func (e *QueueNotEmptyError) Error() string {
+	return fmt.Sprintf("queue %q is not empty", e.Queue)
+}
+
+// IsQueueNotEmpty reports whether any error in err's chain is of type QueueNotEmptyError.
+func IsQueueNotEmpty(err error) bool {
+	var target *QueueNotEmptyError
+	return As(err, &target)
+}
+
 // TaskAlreadyArchivedError indicates that the task in question is already archived.
 type TaskAlreadyArchivedError struct {
 	Queue string // queue name

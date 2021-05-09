@@ -3420,6 +3420,7 @@ func TestRemoveQueueError(t *testing.T) {
 		archived   map[string][]base.Z
 		qname      string // queue to remove
 		force      bool
+		match      func(err error) bool
 	}{
 		{
 			desc: "removing non-existent queue",
@@ -3445,6 +3446,7 @@ func TestRemoveQueueError(t *testing.T) {
 			},
 			qname: "nonexistent",
 			force: false,
+			match: errors.IsQueueNotFound,
 		},
 		{
 			desc: "removing non-empty queue",
@@ -3470,6 +3472,7 @@ func TestRemoveQueueError(t *testing.T) {
 			},
 			qname: "custom",
 			force: false,
+			match: errors.IsQueueNotEmpty,
 		},
 		{
 			desc: "force removing queue with active tasks",
@@ -3496,6 +3499,7 @@ func TestRemoveQueueError(t *testing.T) {
 			qname: "custom",
 			// Even with force=true, it should error if there are active tasks.
 			force: true,
+			match: func(err error) bool { return errors.CanonicalCode(err) == errors.FailedPrecondition },
 		},
 	}
 
@@ -3508,8 +3512,8 @@ func TestRemoveQueueError(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
 		got := r.RemoveQueue(tc.qname, tc.force)
-		if got == nil {
-			t.Errorf("%s;(*RDB).RemoveQueue(%q) = nil, want error", tc.desc, tc.qname)
+		if !tc.match(got) {
+			t.Errorf("%s; returned error didn't match expected value; got=%v", tc.desc, got)
 			continue
 		}
 
