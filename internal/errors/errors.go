@@ -213,6 +213,24 @@ func IsTaskAlreadyArchived(err error) bool {
 	return As(err, &target)
 }
 
+// RedisCommandError indicates that the given redis command returned error.
+type RedisCommandError struct {
+	Command string // redis command (e.g. LRANGE, ZADD, etc)
+	Err     error  // underlying error
+}
+
+func (e *RedisCommandError) Error() string {
+	return fmt.Sprintf("redis command error: %s failed: %v", strings.ToUpper(e.Command), e.Err)
+}
+
+func (e *RedisCommandError) Unwrap() error { return e.Err }
+
+// IsRedisCommandError reports whether any error in err's chain is of type RedisCommandError.
+func IsRedisCommandError(err error) bool {
+	var target *RedisCommandError
+	return As(err, &target)
+}
+
 /*************************************************
     Standard Library errors package functions
 *************************************************/

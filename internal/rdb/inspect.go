@@ -183,7 +183,7 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 	for {
 		data, cursor, err = r.client.Scan(cursor, fmt.Sprintf("asynq:{%s}*", qname), 100).Result()
 		if err != nil {
-			return 0, errors.E(op, errors.Unknown, fmt.Sprintf("redis command error: SCAN failed: %v", err))
+			return 0, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "scan", Err: err})
 		}
 		keys = append(keys, data...)
 		if cursor == 0 {
@@ -194,7 +194,7 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 	for _, k := range keys {
 		n, err := r.client.MemoryUsage(k).Result()
 		if err != nil {
-			return 0, errors.E(op, errors.Unknown, fmt.Sprintf("redis command error: MEMORY USAGE failed: %v", err))
+			return 0, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "memory usage", Err: err})
 		}
 		usg += n
 	}
@@ -220,7 +220,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 	}
 	exists, err := r.client.SIsMember(base.AllQueues, qname).Result()
 	if err != nil {
-		return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis command error: SISMEMBER failed: %v", err))
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
 	}
 	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
