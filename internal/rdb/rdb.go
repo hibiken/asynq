@@ -6,28 +6,18 @@
 package rdb
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/errors"
 	"github.com/spf13/cast"
 )
 
-// TODO: remove this & use internal/errors package instead.
 var (
 	// ErrNoProcessableTask indicates that there are no tasks ready to be processed.
 	ErrNoProcessableTask = errors.New("no tasks are ready for processing")
-
-	// ErrTaskNotFound indicates that a task that matches the given identifier was not found.
-	ErrTaskNotFound = fmt.Errorf("%w: could not find a task in the queue", base.ErrNotFound)
-
-	// ErrDuplicateTask indicates that another task with the same unique key holds the uniqueness lock.
-	ErrDuplicateTask = errors.New("task already exists")
-
-	// ErrQueueNotFound indicates that a queue with the given name does not exist.
-	ErrQueueNotFound = fmt.Errorf("%w: queue does not exist", base.ErrNotFound)
 )
 
 const statsTTL = 90 * 24 * time.Hour // 90 days
@@ -115,12 +105,13 @@ return 1
 // EnqueueUnique inserts the given task if the task's uniqueness lock can be acquired.
 // It returns ErrDuplicateTask if the lock cannot be acquired.
 func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
+	var op errors.Op = "rdb.EnqueueUnique"
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
-		return err
+		return errors.E(op, errors.Internal, "cannot encode task message: %v", err)
 	}
 	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
-		return err
+		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
 	keys := []string{
 		msg.UniqueKey,
@@ -136,14 +127,14 @@ func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
 	}
 	res, err := enqueueUniqueCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
-		return err
+		return errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return fmt.Errorf("could not cast %v to int64", res)
+		return errors.E(op, errors.Internal, fmt.Sprintf("unexpected return value from Lua script: %v", res))
 	}
 	if n == 0 {
-		return ErrDuplicateTask
+		return errors.E(op, errors.AlreadyExists, errors.ErrDuplicateTask)
 	}
 	return nil
 }
@@ -402,12 +393,13 @@ return 1
 // ScheduleUnique adds the task to the backlog queue to be processed in the future if the uniqueness lock can be acquired.
 // It returns ErrDuplicateTask if the lock cannot be acquired.
 func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl time.Duration) error {
+	var op errors.Op = "rdb.ScheduleUnique"
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
-		return err
+		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode task message: %v", err))
 	}
 	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
-		return err
+		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
 	keys := []string{
 		msg.UniqueKey,
@@ -424,14 +416,14 @@ func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl tim
 	}
 	res, err := scheduleUniqueCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
-		return err
+		return errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return fmt.Errorf("could not cast %v to int64", res)
+		return errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
 	}
 	if n == 0 {
-		return ErrDuplicateTask
+		return errors.E(op, errors.AlreadyExists, errors.ErrDuplicateTask)
 	}
 	return nil
 }

@@ -7,7 +7,6 @@ package rdb
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/errors"
 )
 
 // variables used for package testing.
@@ -190,9 +190,8 @@ func TestEnqueueUnique(t *testing.T) {
 
 		// Enqueue the second message, should fail.
 		got := r.EnqueueUnique(tc.msg, tc.ttl)
-		if got != ErrDuplicateTask {
-			t.Errorf("Second message: (*RDB).EnqueueUnique(%v, %v) = %v, want %v",
-				tc.msg, tc.ttl, got, ErrDuplicateTask)
+		if !errors.Is(got, errors.ErrDuplicateTask) {
+			t.Errorf("Second message: (*RDB).EnqueueUnique(msg, ttl) = %v, want %v", got, errors.ErrDuplicateTask)
 			continue
 		}
 		gotTTL := r.client.TTL(tc.msg.UniqueKey).Val()
@@ -908,7 +907,7 @@ func TestScheduleUnique(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 
-		desc := fmt.Sprintf("(*RDB).ScheduleUnique(%v, %v, %v)", tc.msg, tc.processAt, tc.ttl)
+		desc := "(*RDB).ScheduleUnique(msg, processAt, ttl)"
 		err := r.ScheduleUnique(tc.msg, tc.processAt, tc.ttl)
 		if err != nil {
 			t.Errorf("Frist task: %s = %v, want nil", desc, err)
@@ -963,8 +962,8 @@ func TestScheduleUnique(t *testing.T) {
 
 		// Enqueue the second message, should fail.
 		got := r.ScheduleUnique(tc.msg, tc.processAt, tc.ttl)
-		if got != ErrDuplicateTask {
-			t.Errorf("Second task: %s = %v, want %v", desc, got, ErrDuplicateTask)
+		if !errors.Is(got, errors.ErrDuplicateTask) {
+			t.Errorf("Second task: %s = %v, want %v", desc, got, errors.ErrDuplicateTask)
 			continue
 		}
 
