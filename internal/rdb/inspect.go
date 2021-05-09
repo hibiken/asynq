@@ -101,12 +101,13 @@ return res`)
 
 // CurrentStats returns a current state of the queues.
 func (r *RDB) CurrentStats(qname string) (*Stats, error) {
+	var op errors.Op = "rdb.CurrentStats"
 	exists, err := r.client.SIsMember(base.AllQueues, qname).Result()
 	if err != nil {
-		return nil, err
+		return nil, errors.E(op, errors.Unknown, err)
 	}
 	if !exists {
-		return nil, &QueueNotFoundError{qname}
+		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	now := time.Now()
 	res, err := currentStatsCmd.Run(r.client, []string{
@@ -120,11 +121,11 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		base.PausedKey(qname),
 	}).Result()
 	if err != nil {
-		return nil, err
+		return nil, errors.E(op, errors.Unknown, err)
 	}
 	data, err := cast.ToSliceE(res)
 	if err != nil {
-		return nil, err
+		return nil, errors.E(op, errors.Internal, "cast error: unexpected return value from Lua script")
 	}
 	stats := &Stats{
 		Queue:     qname,
@@ -165,13 +166,14 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 	stats.Size = size
 	memusg, err := r.memoryUsage(qname)
 	if err != nil {
-		return nil, err
+		return nil, errors.E(op, errors.CanonicalCode(err), err)
 	}
 	stats.MemoryUsage = memusg
 	return stats, nil
 }
 
 func (r *RDB) memoryUsage(qname string) (int64, error) {
+	var op errors.Op = "rdb.memoryUsage"
 	var (
 		keys   []string
 		data   []string
@@ -181,7 +183,7 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 	for {
 		data, cursor, err = r.client.Scan(cursor, fmt.Sprintf("asynq:{%s}*", qname), 100).Result()
 		if err != nil {
-			return 0, err
+			return 0, errors.E(op, errors.Unknown, fmt.Sprintf("redis command error: SCAN failed: %v", err))
 		}
 		keys = append(keys, data...)
 		if cursor == 0 {
@@ -192,7 +194,7 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 	for _, k := range keys {
 		n, err := r.client.MemoryUsage(k).Result()
 		if err != nil {
-			return 0, err
+			return 0, errors.E(op, errors.Unknown, fmt.Sprintf("redis command error: MEMORY USAGE failed: %v", err))
 		}
 		usg += n
 	}
@@ -212,15 +214,16 @@ return res`)
 
 // HistoricalStats returns a list of stats from the last n days for the given queue.
 func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
+	var op errors.Op = "rdb.HistoricalStats"
 	if n < 1 {
-		return nil, fmt.Errorf("the number of days must be positive")
+		return nil, errors.E(op, errors.FailedPrecondition, "the number of days must be positive")
 	}
 	exists, err := r.client.SIsMember(base.AllQueues, qname).Result()
 	if err != nil {
-		return nil, err
+		return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis command error: SISMEMBER failed: %v", err))
 	}
 	if !exists {
-		return nil, &QueueNotFoundError{qname}
+		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	const day = 24 * time.Hour
 	now := time.Now().UTC()
@@ -234,11 +237,11 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 	}
 	res, err := historicalStatsCmd.Run(r.client, keys).Result()
 	if err != nil {
-		return nil, err
+		return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
 	}
 	data, err := cast.ToIntSliceE(res)
 	if err != nil {
-		return nil, err
+		return nil, errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
 	}
 	var stats []*DailyStats
 	for i := 0; i < len(data); i += 2 {
@@ -1104,28 +1107,6 @@ func (r *RDB) DeleteAllPendingTasks(qname string) (int64, error) {
 		return 0, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	return n, nil
-}
-
-// QueueNotFoundError indicates specified queue does not exist.
-type QueueNotFoundError struct {
-	Name string // name of the queue
-}
-
-func (e *QueueNotFoundError) Unwrap() error { return base.ErrNotFound }
-
-func (e *QueueNotFoundError) Error() string {
-	return fmt.Sprintf("queue %q does not exist", e.Name)
-}
-
-// QueueNotEmptyError indicates specified queue is not empty.
-type QueueNotEmptyError struct {
-	Name string // name of the queue
-}
-
-func (e *QueueNotEmptyError) Unwrap() error { return base.ErrFailedPrecondition }
-
-func (e *QueueNotEmptyError) Error() string {
-	return fmt.Sprintf("queue %q is not empty", e.Name)
 }
 
 // removeQueueForceCmd removes the given queue regardless of
