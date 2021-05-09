@@ -147,8 +147,16 @@ func CanonicalCode(err error) Code {
 }
 
 /******************************************
-    Domin Specific Error Types
+    Domin Specific Error Types & Values
 *******************************************/
+
+var (
+	// ErrNoProcessableTask indicates that there are no tasks ready to be processed.
+	ErrNoProcessableTask = errors.New("no tasks are ready for processing")
+
+	// ErrDuplicateTask indicates that another task with the same unique key holds the uniqueness lock.
+	ErrDuplicateTask = errors.New("task already exists")
+)
 
 // TaskNotFoundError indicates that a task with the given ID does not exist
 // in the given queue.
