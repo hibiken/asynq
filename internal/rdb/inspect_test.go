@@ -224,8 +224,8 @@ func TestCurrentStatsWithNonExistentQueue(t *testing.T) {
 
 	qname := "non-existent"
 	got, err := r.CurrentStats(qname)
-	if err == nil {
-		t.Fatalf("r.CurrentStats(%q) = %v, %v, want nil, %v", qname, got, err, &QueueNotFoundError{qname})
+	if !errors.IsQueueNotFound(err) {
+		t.Fatalf("r.CurrentStats(%q) = %v, %v, want nil, %v", qname, got, err, &errors.QueueNotFoundError{Queue: qname})
 	}
 }
 
