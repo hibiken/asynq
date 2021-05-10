@@ -15,11 +15,6 @@ import (
 	"github.com/spf13/cast"
 )
 
-var (
-	// ErrNoProcessableTask indicates that there are no tasks ready to be processed.
-	ErrNoProcessableTask = errors.New("no tasks are ready for processing")
-)
-
 const statsTTL = 90 * 24 * time.Hour // 90 days
 
 // RDB is a client interface to query and mutate task queues.
@@ -139,32 +134,24 @@ func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
 	return nil
 }
 
-// Dequeue queries given queues in order and pops a task message
-// off a queue if one exists and returns the message and deadline.
-// Dequeue skips a queue if the queue is paused.
-// If all queues are empty, ErrNoProcessableTask error is returned.
-func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, deadline time.Time, err error) {
-	encoded, d, err := r.dequeue(qnames...)
-	if err != nil {
-		return nil, time.Time{}, err
-	}
-	if msg, err = base.DecodeMessage([]byte(encoded)); err != nil {
-		return nil, time.Time{}, err
-	}
-	return msg, time.Unix(d, 0), nil
-}
-
+// Input:
 // KEYS[1] -> asynq:{<qname>}:pending
 // KEYS[2] -> asynq:{<qname>}:paused
 // KEYS[3] -> asynq:{<qname>}:active
 // KEYS[4] -> asynq:{<qname>}:deadlines
+// --
 // ARGV[1] -> current time in Unix time
 // ARGV[2] -> task key prefix
 //
-// dequeueCmd checks whether a queue is paused first, before
+// Output:
+// Returns nil if no processable task is found in the given queue.
+// Returns tuple {msg , deadline} if task is found, where `msg` is the encoded
+// TaskMessage, and `deadline` is Unix time in seconds.
+//
+// Note: dequeueCmd checks whether a queue is paused first, before
 // calling RPOPLPUSH to pop a task from the queue.
 // It computes the task deadline by inspecting Timout and Deadline fields,
-// and inserts the task with deadlines set.
+// and inserts the task to the deadlines zset with the computed deadline.
 var dequeueCmd = redis.NewScript(`
 if redis.call("EXISTS", KEYS[2]) == 0 then
 	local id = redis.call("RPOPLPUSH", KEYS[1], KEYS[3])
@@ -191,7 +178,12 @@ if redis.call("EXISTS", KEYS[2]) == 0 then
 end
 return nil`)
 
-func (r *RDB) dequeue(qnames ...string) (encoded string, deadline int64, err error) {
+// Dequeue queries given queues in order and pops a task message
+// off a queue if one exists and returns the message and deadline.
+// Dequeue skips a queue if the queue is paused.
+// If all queues are empty, ErrNoProcessableTask error is returned.
+func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, deadline time.Time, err error) {
+	var op errors.Op = "rdb.Dequeue"
 	for _, qname := range qnames {
 		keys := []string{
 			base.PendingKey(qname),
@@ -207,24 +199,29 @@ func (r *RDB) dequeue(qnames ...string) (encoded string, deadline int64, err err
 		if err == redis.Nil {
 			continue
 		} else if err != nil {
-			return "", 0, err
+			return nil, time.Time{}, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
 		}
 		data, err := cast.ToSliceE(res)
 		if err != nil {
-			return "", 0, err
+			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
 		}
 		if len(data) != 2 {
-			return "", 0, fmt.Errorf("asynq: internal error: dequeue command returned %d values", len(data))
+			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("Lua script returned %d values; expected 2", len(data)))
 		}
-		if encoded, err = cast.ToStringE(data[0]); err != nil {
-			return "", 0, err
+		encoded, err := cast.ToStringE(data[0])
+		if err != nil {
+			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
 		}
-		if deadline, err = cast.ToInt64E(data[1]); err != nil {
-			return "", 0, err
+		d, err := cast.ToInt64E(data[1])
+		if err != nil {
+			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
 		}
-		return encoded, deadline, nil
+		if msg, err = base.DecodeMessage([]byte(encoded)); err != nil {
+			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cannot decode message: %v", err))
+		}
+		return msg, time.Unix(d, 0), nil
 	}
-	return "", 0, ErrNoProcessableTask
+	return nil, time.Time{}, errors.E(op, errors.NotFound, errors.ErrNoProcessableTask)
 }
 
 // KEYS[1] -> asynq:{<qname>}:active
