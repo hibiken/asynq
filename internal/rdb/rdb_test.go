@@ -112,7 +112,7 @@ func TestEnqueue(t *testing.T) {
 		}
 		deadline := r.client.HGet(taskKey, "deadline").Val() // "deadline" field
 		if want := strconv.Itoa(int(tc.msg.Deadline)); deadline != want {
-			t.Errorf("deadline field under task-ke is set to %v, want %v", deadline, want)
+			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
 		}
 
 		// Check queue is in the AllQueues set.

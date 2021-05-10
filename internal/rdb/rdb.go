@@ -95,9 +95,9 @@ if not ok then
 end
 redis.call("HSET", KEYS[2],
            "msg", ARGV[3],
-		   "state", "pending",
+           "state", "pending",
            "timeout", ARGV[4],
-		   "deadline", ARGV[5])
+           "deadline", ARGV[5])
 redis.call("LPUSH", KEYS[3], ARGV[1])
 return 1
 `)
