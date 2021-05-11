@@ -5,7 +5,6 @@
 package asynq
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -14,6 +13,7 @@ import (
 	"github.com/go-redis/redis/v7"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
@@ -346,7 +346,7 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*Result, error) {
 		err = c.schedule(msg, opt.processAt, opt.uniqueTTL)
 	}
 	switch {
-	case err == rdb.ErrDuplicateTask:
+	case errors.Is(err, errors.ErrDuplicateTask):
 		return nil, fmt.Errorf("%w", ErrDuplicateTask)
 	case err != nil:
 		return nil, err

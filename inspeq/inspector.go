@@ -5,7 +5,6 @@
 package inspeq
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
@@ -154,10 +154,10 @@ var (
 // returns ErrQueueNotEmpty.
 func (i *Inspector) DeleteQueue(qname string, force bool) error {
 	err := i.rdb.RemoveQueue(qname, force)
-	if _, ok := err.(*rdb.QueueNotFoundError); ok {
+	if errors.IsQueueNotFound(err) {
 		return fmt.Errorf("%w: queue=%q", ErrQueueNotFound, qname)
 	}
-	if _, ok := err.(*rdb.QueueNotEmptyError); ok {
+	if errors.IsQueueNotEmpty(err) {
 		return fmt.Errorf("%w: queue=%q", ErrQueueNotEmpty, qname)
 	}
 	return err
@@ -549,13 +549,13 @@ func (i *Inspector) DeleteTaskByKey(qname, key string) error {
 	}
 	switch prefix {
 	case keyPrefixPending:
-		return i.rdb.DeletePendingTask(qname, id)
+		return i.rdb.DeleteTask(qname, id)
 	case keyPrefixScheduled:
-		return i.rdb.DeleteScheduledTask(qname, id)
+		return i.rdb.DeleteTask(qname, id)
 	case keyPrefixRetry:
-		return i.rdb.DeleteRetryTask(qname, id)
+		return i.rdb.DeleteTask(qname, id)
 	case keyPrefixArchived:
-		return i.rdb.DeleteArchivedTask(qname, id)
+		return i.rdb.DeleteTask(qname, id)
 	default:
 		return fmt.Errorf("invalid key")
 	}
@@ -657,11 +657,11 @@ func (i *Inspector) ArchiveTaskByKey(qname, key string) error {
 	}
 	switch prefix {
 	case keyPrefixPending:
-		return i.rdb.ArchivePendingTask(qname, id)
+		return i.rdb.ArchiveTask(qname, id)
 	case keyPrefixScheduled:
-		return i.rdb.ArchiveScheduledTask(qname, id)
+		return i.rdb.ArchiveTask(qname, id)
 	case keyPrefixRetry:
-		return i.rdb.ArchiveRetryTask(qname, id)
+		return i.rdb.ArchiveTask(qname, id)
 	case keyPrefixArchived:
 		return fmt.Errorf("task is already archived")
 	default:
