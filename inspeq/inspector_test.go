@@ -5,6 +5,7 @@
 package inspeq
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"math"
@@ -271,7 +272,7 @@ func TestInspectorDeleteQueueErrorQueueNotEmpty(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r, tc.archived)
 
 		err := inspector.DeleteQueue(tc.qname, tc.force)
-		if _, ok := err.(*ErrQueueNotEmpty); !ok {
+		if !errors.Is(err, ErrQueueNotEmpty) {
 			t.Errorf("DeleteQueue(%v, %t) did not return ErrQueueNotEmpty",
 				tc.qname, tc.force)
 		}
@@ -327,7 +328,7 @@ func TestInspectorDeleteQueueErrorQueueNotFound(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r, tc.archived)
 
 		err := inspector.DeleteQueue(tc.qname, tc.force)
-		if _, ok := err.(*ErrQueueNotFound); !ok {
+		if !errors.Is(err, ErrQueueNotFound) {
 			t.Errorf("DeleteQueue(%v, %t) did not return ErrQueueNotFound",
 				tc.qname, tc.force)
 		}

@@ -6,7 +6,6 @@ package asynq
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"runtime"
@@ -17,8 +16,8 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/log"
-	"github.com/hibiken/asynq/internal/rdb"
 	"golang.org/x/time/rate"
 )
 
@@ -163,7 +162,7 @@ func (p *processor) exec() {
 		qnames := p.queues()
 		msg, deadline, err := p.broker.Dequeue(qnames...)
 		switch {
-		case err == rdb.ErrNoProcessableTask:
+		case errors.Is(err, errors.ErrNoProcessableTask):
 			p.logger.Debug("All queues are empty")
 			// Queues are empty, this is a normal behavior.
 			// Sleep to avoid slamming redis and let scheduler move tasks into queues.
