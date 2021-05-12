@@ -36,6 +36,33 @@ const (
 	CancelChannel = "asynq:cancel"     // PubSub channel
 )
 
+// TaskState denotes the state of a task.
+type TaskState int
+
+const (
+	TaskStateActive TaskState = iota + 1
+	TaskStatePending
+	TaskStateScheduled
+	TaskStateRetry
+	TaskStateArchived
+)
+
+func (s TaskState) String() string {
+	switch s {
+	case TaskStateActive:
+		return "active"
+	case TaskStatePending:
+		return "pending"
+	case TaskStateScheduled:
+		return "scheduled"
+	case TaskStateRetry:
+		return "retry"
+	case TaskStateArchived:
+		return "archived"
+	}
+	panic(fmt.Sprintf("internal error: unknown task state %d", s))
+}
+
 // ValidateQueueName validates a given qname to be used as a queue name.
 // Returns nil if valid, otherwise returns non-nil error.
 func ValidateQueueName(qname string) error {
