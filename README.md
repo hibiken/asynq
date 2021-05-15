@@ -177,11 +177,11 @@ func main() {
     if err != nil {
         log.Fatalf("could not create task: %v", err)
     }
-    res, err := c.Enqueue(t)
+    info, err := c.Enqueue(t)
     if err != nil {
         log.Fatalf("could not enqueue task: %v", err)
     }
-    fmt.Printf("Enqueued Result: %+v\n", res)
+    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID(), info.Queue())
 
 
     // ------------------------------------------------------------
@@ -189,11 +189,11 @@ func main() {
     //            Use ProcessIn or ProcessAt option.
     // ------------------------------------------------------------
 
-    res, err = c.Enqueue(t, asynq.ProcessIn(24*time.Hour))
+    info, err = c.Enqueue(t, asynq.ProcessIn(24*time.Hour))
     if err != nil {
         log.Fatalf("could not schedule task: %v", err)
     }
-    fmt.Printf("Enqueued Result: %+v\n", res)
+    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID(), info.Queue())
 
 
     // ----------------------------------------------------------------------------
@@ -207,22 +207,22 @@ func main() {
     if err != nil {
         log.Fatalf("could not create task: %v", err)
     }
-    res, err = c.Enqueue(t)
+    info, err = c.Enqueue(t)
     if err != nil {
         log.Fatalf("could not enqueue task: %v", err)
     }
-    fmt.Printf("Enqueued Result: %+v\n", res)
+    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID(), info.Queue())
 
     // ---------------------------------------------------------------------------
     // Example 4: Pass options to tune task processing behavior at enqueue time.
     //            Options passed at enqueue time override default ones.
     // ---------------------------------------------------------------------------
 
-    res, err = c.Enqueue(t, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
+    info, err = c.Enqueue(t, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
     }
-    fmt.Printf("Enqueued Result: %+v\n", res)
+    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID(), info.Queue())
 }
 ```
 
