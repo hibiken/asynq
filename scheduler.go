@@ -117,7 +117,7 @@ type enqueueJob struct {
 }
 
 func (j *enqueueJob) Run() {
-	res, err := j.client.Enqueue(j.task, j.opts...)
+	info, err := j.client.Enqueue(j.task, j.opts...)
 	if err != nil {
 		j.logger.Errorf("scheduler could not enqueue a task %+v: %v", j.task, err)
 		if j.errHandler != nil {
@@ -125,10 +125,10 @@ func (j *enqueueJob) Run() {
 		}
 		return
 	}
-	j.logger.Debugf("scheduler enqueued a task: %+v", res)
+	j.logger.Debugf("scheduler enqueued a task: %+v", info)
 	event := &base.SchedulerEnqueueEvent{
-		TaskID:     res.ID,
-		EnqueuedAt: res.EnqueuedAt.In(j.location),
+		TaskID:     info.ID(),
+		EnqueuedAt: time.Now().In(j.location),
 	}
 	err = j.rdb.RecordSchedulerEnqueueEvent(j.id.String(), event)
 	if err != nil {
