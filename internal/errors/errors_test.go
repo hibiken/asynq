@@ -6,7 +6,9 @@ package errors
 
 import "testing"
 
-func TestErrorString(t *testing.T) {
+func TestErrorDebugString(t *testing.T) {
+	// DebugString should include Op since its meant to be used by
+	// maintainers/contributors of the asynq package.
 	tests := []struct {
 		desc string
 		err  error
@@ -21,6 +23,33 @@ func TestErrorString(t *testing.T) {
 			desc: "With Op, Code and error",
 			err:  E(Op("rdb.DeleteTask"), NotFound, &TaskNotFoundError{Queue: "default", ID: "123"}),
 			want: `rdb.DeleteTask: NOT_FOUND: cannot find task with id=123 in queue "default"`,
+		},
+	}
+
+	for _, tc := range tests {
+		if got := tc.err.(*Error).DebugString(); got != tc.want {
+			t.Errorf("%s: got=%q, want=%q", tc.desc, got, tc.want)
+		}
+	}
+}
+
+func TestErrorString(t *testing.T) {
+	// String method should omit Op since op is an internal detail
+	// and we don't want to provide it to users of the package.
+	tests := []struct {
+		desc string
+		err  error
+		want string
+	}{
+		{
+			desc: "With Op, Code, and string",
+			err:  E(Op("rdb.DeleteTask"), NotFound, "cannot find task with id=123"),
+			want: "NOT_FOUND: cannot find task with id=123",
+		},
+		{
+			desc: "With Op, Code and error",
+			err:  E(Op("rdb.DeleteTask"), NotFound, &TaskNotFoundError{Queue: "default", ID: "123"}),
+			want: `NOT_FOUND: cannot find task with id=123 in queue "default"`,
 		},
 	}
 
