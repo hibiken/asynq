@@ -140,7 +140,12 @@ var (
 	ErrQueueNotFound = errors.New("queue not found")
 	// ErrQueueNotEmpty indicates that the specified queue is not empty.
 	ErrQueueNotEmpty = errors.New("queue is not empty")
+	// ErrTaskNotFound indicates that the specified task cannot be found in the queue.
+	ErrTaskNotFound = errors.New("task not found")
 )
+
+type taskNotFoundError struct {
+}
 
 // DeleteQueue removes the specified queue.
 //
@@ -591,28 +596,31 @@ func (i *Inspector) RunAllArchivedTasks(qname string) (int, error) {
 	return int(n), err
 }
 
-// RunTaskByKey transition a task to pending state given task key and queue name.
-// TODO: Update this to run task by ID.
-func (i *Inspector) RunTaskByKey(qname, key string) error {
+// RunTask updates the task to pending state given a queue name and task id.
+// The task needs to be in scheduled, retry, or archived state, otherwise RunTask
+// will return an error.
+//
+// If a queue with the given name doesn't exist, it returns ErrQueueNotFound.
+// If a task with the given id doesn't exist in the queue, it returns ErrTaskNotFound.
+// If the task is in pending or active state, it returns a non-nil error.
+func (i *Inspector) RunTask(qname, id string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
-		return err
+		return fmt.Errorf("asynq: %v", err)
 	}
-	prefix, id, _, err := parseTaskKey(key)
+	taskid, err := uuid.Parse(id)
 	if err != nil {
-		return err
+		return fmt.Errorf("asynq: %s is not a valid task id", id)
 	}
-	switch prefix {
-	case keyPrefixScheduled:
-		return i.rdb.RunTask(qname, id)
-	case keyPrefixRetry:
-		return i.rdb.RunTask(qname, id)
-	case keyPrefixArchived:
-		return i.rdb.RunTask(qname, id)
-	case keyPrefixPending:
-		return fmt.Errorf("task is already pending for run")
-	default:
-		return fmt.Errorf("invalid key")
+	err = i.rdb.RunTask(qname, taskid)
+	switch {
+	case errors.IsQueueNotFound(err):
+		return fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case errors.IsTaskNotFound(err):
+		return fmt.Errorf("asynq: %w", ErrTaskNotFound)
+	case err != nil:
+		return fmt.Errorf("asynq: %v", err)
 	}
+	return nil
 }
 
 // ArchiveAllPendingTasks archives all pending tasks from the given queue,
