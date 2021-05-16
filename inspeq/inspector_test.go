@@ -17,6 +17,7 @@ import (
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
@@ -2113,7 +2114,7 @@ func TestInspectorDeleteTaskByKeyDeletesArchivedTask(t *testing.T) {
 	}
 }
 
-func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
+func TestInspectorRunTaskRunsScheduledTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2130,7 +2131,7 @@ func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
 		scheduled     map[string][]base.Z
 		pending       map[string][]*base.TaskMessage
 		qname         string
-		key           string
+		id            string
 		wantScheduled map[string][]base.Z
 		wantPending   map[string][]*base.TaskMessage
 	}{
@@ -2144,7 +2145,7 @@ func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "default",
-			key:   createScheduledTask(z2).Key(),
+			id:    createScheduledTask(z2).ID,
 			wantScheduled: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2161,8 +2162,8 @@ func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r, tc.scheduled)
 		h.SeedAllPendingQueues(t, r, tc.pending)
 
-		if err := inspector.RunTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("RunTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.RunTask(tc.qname, tc.id); err != nil {
+			t.Errorf("RunTask(%q, %q) returned error: %v", tc.qname, tc.id, err)
 			continue
 		}
 		for qname, want := range tc.wantScheduled {
@@ -2183,7 +2184,7 @@ func TestInspectorRunTaskByKeyRunsScheduledTask(t *testing.T) {
 	}
 }
 
-func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
+func TestInspectorRunTaskRunsRetryTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2200,7 +2201,7 @@ func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
 		retry       map[string][]base.Z
 		pending     map[string][]*base.TaskMessage
 		qname       string
-		key         string
+		id          string
 		wantRetry   map[string][]base.Z
 		wantPending map[string][]*base.TaskMessage
 	}{
@@ -2214,7 +2215,7 @@ func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			key:   createRetryTask(z2).Key(),
+			id:    createRetryTask(z2).ID,
 			wantRetry: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2231,8 +2232,8 @@ func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
 		h.SeedAllRetryQueues(t, r, tc.retry)
 		h.SeedAllPendingQueues(t, r, tc.pending)
 
-		if err := inspector.RunTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("RunTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.RunTask(tc.qname, tc.id); err != nil {
+			t.Errorf("RunTaskBy(%q, %q) returned error: %v", tc.qname, tc.id, err)
 			continue
 		}
 		for qname, want := range tc.wantRetry {
@@ -2252,7 +2253,7 @@ func TestInspectorRunTaskByKeyRunsRetryTask(t *testing.T) {
 	}
 }
 
-func TestInspectorRunTaskByKeyRunsArchivedTask(t *testing.T) {
+func TestInspectorRunTaskRunsArchivedTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2269,7 +2270,7 @@ func TestInspectorRunTaskByKeyRunsArchivedTask(t *testing.T) {
 		archived     map[string][]base.Z
 		pending      map[string][]*base.TaskMessage
 		qname        string
-		key          string
+		id           string
 		wantArchived map[string][]base.Z
 		wantPending  map[string][]*base.TaskMessage
 	}{
@@ -2285,7 +2286,7 @@ func TestInspectorRunTaskByKeyRunsArchivedTask(t *testing.T) {
 				"low":      {},
 			},
 			qname: "critical",
-			key:   createArchivedTask(z2).Key(),
+			id:    createArchivedTask(z2).ID,
 			wantArchived: map[string][]base.Z{
 				"default":  {z1},
 				"critical": {},
@@ -2304,8 +2305,108 @@ func TestInspectorRunTaskByKeyRunsArchivedTask(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r, tc.archived)
 		h.SeedAllPendingQueues(t, r, tc.pending)
 
-		if err := inspector.RunTaskByKey(tc.qname, tc.key); err != nil {
-			t.Errorf("RunTaskByKey(%q, %q) returned error: %v", tc.qname, tc.key, err)
+		if err := inspector.RunTask(tc.qname, tc.id); err != nil {
+			t.Errorf("RunTask(%q, %q) returned error: %v", tc.qname, tc.id, err)
+			continue
+		}
+		for qname, want := range tc.wantArchived {
+			wantArchived := h.GetArchivedEntries(t, r, qname)
+			if diff := cmp.Diff(want, wantArchived, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected archived tasks in queue %q: (-want, +got)\n%s",
+					qname, diff)
+			}
+		}
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
+				t.Errorf("unexpected pending tasks in queue %q: (-want, +got)\n%s",
+					qname, diff)
+			}
+		}
+	}
+}
+
+func TestInspectorRunTaskError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessageWithQueue("task2", nil, "critical")
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "low")
+	now := time.Now()
+	z1 := base.Z{Message: m1, Score: now.Add(-5 * time.Minute).Unix()}
+	z2 := base.Z{Message: m2, Score: now.Add(-15 * time.Minute).Unix()}
+	z3 := base.Z{Message: m3, Score: now.Add(-2 * time.Minute).Unix()}
+
+	inspector := New(getRedisConnOpt(t))
+
+	tests := []struct {
+		archived     map[string][]base.Z
+		pending      map[string][]*base.TaskMessage
+		qname        string
+		id           string
+		wantErr      error
+		wantArchived map[string][]base.Z
+		wantPending  map[string][]*base.TaskMessage
+	}{
+		{
+			archived: map[string][]base.Z{
+				"default":  {z1},
+				"critical": {z2},
+				"low":      {z3},
+			},
+			pending: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
+			qname:   "nonexistent",
+			id:      createArchivedTask(z2).ID,
+			wantErr: ErrQueueNotFound,
+			wantArchived: map[string][]base.Z{
+				"default":  {z1},
+				"critical": {z2},
+				"low":      {z3},
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
+		},
+		{
+			archived: map[string][]base.Z{
+				"default":  {z1},
+				"critical": {z2},
+				"low":      {z3},
+			},
+			pending: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
+			qname:   "default",
+			id:      uuid.NewString(),
+			wantErr: ErrTaskNotFound,
+			wantArchived: map[string][]base.Z{
+				"default":  {z1},
+				"critical": {z2},
+				"low":      {z3},
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		h.SeedAllArchivedQueues(t, r, tc.archived)
+		h.SeedAllPendingQueues(t, r, tc.pending)
+
+		if err := inspector.RunTask(tc.qname, tc.id); !errors.Is(err, tc.wantErr) {
+			t.Errorf("RunTask(%q, %q) = %v, want %v", tc.qname, tc.id, err, tc.wantErr)
 			continue
 		}
 		for qname, want := range tc.wantArchived {
