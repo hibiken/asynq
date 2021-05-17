@@ -543,27 +543,25 @@ func (i *Inspector) DeleteAllArchivedTasks(qname string) (int, error) {
 }
 
 // DeleteTaskByKey deletes a task with the given key from the given queue.
-// TODO: We don't need score any more. Update this to delete task by ID
-func (i *Inspector) DeleteTaskByKey(qname, key string) error {
+func (i *Inspector) DeleteTask(qname, id string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
-		return err
+		return fmt.Errorf("asynq: %v", err)
 	}
-	prefix, id, _, err := parseTaskKey(key)
+	taskid, err := uuid.Parse(id)
 	if err != nil {
-		return err
+		return fmt.Errorf("asynq: %s is not a valid task id", id)
 	}
-	switch prefix {
-	case keyPrefixPending:
-		return i.rdb.DeleteTask(qname, id)
-	case keyPrefixScheduled:
-		return i.rdb.DeleteTask(qname, id)
-	case keyPrefixRetry:
-		return i.rdb.DeleteTask(qname, id)
-	case keyPrefixArchived:
-		return i.rdb.DeleteTask(qname, id)
-	default:
-		return fmt.Errorf("invalid key")
+	err = i.rdb.DeleteTask(qname, taskid)
+	switch {
+	case errors.IsQueueNotFound(err):
+		return fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case errors.IsTaskNotFound(err):
+		return fmt.Errorf("asynq: %w", ErrTaskNotFound)
+	case err != nil:
+		return fmt.Errorf("asynq: %v", err)
 	}
+	return nil
+
 }
 
 // RunAllScheduledTasks transition all scheduled tasks to pending state from the given queue,
