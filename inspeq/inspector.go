@@ -542,7 +542,13 @@ func (i *Inspector) DeleteAllArchivedTasks(qname string) (int, error) {
 	return int(n), err
 }
 
-// DeleteTaskByKey deletes a task with the given key from the given queue.
+// DeleteTask deletes a task with the given id from the given queue.
+// The task needs to be in pending, scheduled, retry, or archived state,
+// otherwise DeleteTask will return an error.
+//
+// If a queue with the given name doesn't exist, it returns ErrQueueNotFound.
+// If a task with the given id doesn't exist in the queue, it returns ErrTaskNotFound.
+// If the task is in active state, it returns a non-nil error.
 func (i *Inspector) DeleteTask(qname, id string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return fmt.Errorf("asynq: %v", err)
@@ -651,28 +657,31 @@ func (i *Inspector) ArchiveAllRetryTasks(qname string) (int, error) {
 	return int(n), err
 }
 
-// ArchiveTaskByKey archives a task with the given key in the given queue.
-// TODO: Update this to Archive task by ID.
-func (i *Inspector) ArchiveTaskByKey(qname, key string) error {
+// ArchiveTask archives a task with the given id in the given queue.
+// The task needs to be in pending, scheduled, or retry state, otherwise ArchiveTask
+// will return an error.
+//
+// If a queue with the given name doesn't exist, it returns ErrQueueNotFound.
+// If a task with the given id doesn't exist in the queue, it returns ErrTaskNotFound.
+// If the task is in already archived, it returns a non-nil error.
+func (i *Inspector) ArchiveTask(qname, id string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
-		return err
+		return fmt.Errorf("asynq: err")
 	}
-	prefix, id, _, err := parseTaskKey(key)
+	taskid, err := uuid.Parse(id)
 	if err != nil {
-		return err
+		return fmt.Errorf("asynq: %s is not a valid task id", id)
 	}
-	switch prefix {
-	case keyPrefixPending:
-		return i.rdb.ArchiveTask(qname, id)
-	case keyPrefixScheduled:
-		return i.rdb.ArchiveTask(qname, id)
-	case keyPrefixRetry:
-		return i.rdb.ArchiveTask(qname, id)
-	case keyPrefixArchived:
-		return fmt.Errorf("task is already archived")
-	default:
-		return fmt.Errorf("invalid key")
+	err = i.rdb.ArchiveTask(qname, taskid)
+	switch {
+	case errors.IsQueueNotFound(err):
+		return fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case errors.IsTaskNotFound(err):
+		return fmt.Errorf("asynq: %w", ErrTaskNotFound)
+	case err != nil:
+		return fmt.Errorf("asynq: %v", err)
 	}
+	return nil
 }
 
 // CancelActiveTask sends a signal to cancel processing of the task with
