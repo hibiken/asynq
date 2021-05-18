@@ -16,7 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Requires redis v4.0+ for multiple field/value pair support
 - Renamed pending key (TODO: need migration script)
 - `Client.Enqueue` now returns `TaskInfo`
-- Renamed pending key (TODO: need migration script
+- `Inspector.RunTaskByKey` is replaced with `Inspector.RunTask`
+- `Inspector.DeleteTaskByKey` is replaced with `Inspector.DeleteTask`
+- `Inspector.ArchiveTaskByKey` is replaced with `Inspector.ArchiveTask`
 
 ## [0.17.2] - 2021-06-06
 
