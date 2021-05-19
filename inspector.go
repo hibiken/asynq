@@ -167,127 +167,6 @@ func (i *Inspector) DeleteQueue(qname string, force bool) error {
 	return err
 }
 
-// PendingTask is a task in a queue and is ready to be processed.
-type PendingTask struct {
-	*Task
-	ID        string
-	Queue     string
-	MaxRetry  int
-	Retried   int
-	LastError string
-}
-
-// ActiveTask is a task that's currently being processed.
-type ActiveTask struct {
-	*Task
-	ID        string
-	Queue     string
-	MaxRetry  int
-	Retried   int
-	LastError string
-}
-
-// ScheduledTask is a task scheduled to be processed in the future.
-type ScheduledTask struct {
-	*Task
-	ID            string
-	Queue         string
-	MaxRetry      int
-	Retried       int
-	LastError     string
-	NextProcessAt time.Time
-
-	score int64
-}
-
-// RetryTask is a task scheduled to be retried in the future.
-type RetryTask struct {
-	*Task
-	ID            string
-	Queue         string
-	NextProcessAt time.Time
-	MaxRetry      int
-	Retried       int
-	LastError     string
-	// TODO: LastFailedAt  time.Time
-
-	score int64
-}
-
-// ArchivedTask is a task archived for debugging and inspection purposes, and
-// it won't be retried automatically.
-// A task can be archived when the task exhausts its retry counts or manually
-// archived by a user via the CLI or Inspector.
-type ArchivedTask struct {
-	*Task
-	ID           string
-	Queue        string
-	MaxRetry     int
-	Retried      int
-	LastFailedAt time.Time
-	LastError    string
-
-	score int64
-}
-
-// Format string used for task key.
-// Format is <prefix>:<uuid>:<score>.
-const taskKeyFormat = "%s:%v:%v"
-
-// Prefix used for task key.
-const (
-	keyPrefixPending   = "p"
-	keyPrefixScheduled = "s"
-	keyPrefixRetry     = "r"
-	keyPrefixArchived  = "a"
-
-	allKeyPrefixes = keyPrefixPending + keyPrefixScheduled + keyPrefixRetry + keyPrefixArchived
-)
-
-// Key returns a key used to delete, and archive the pending task.
-func (t *PendingTask) Key() string {
-	// Note: Pending tasks are stored in redis LIST, therefore no score.
-	// Use zero for the score to use the same key format.
-	return fmt.Sprintf(taskKeyFormat, keyPrefixPending, t.ID, 0)
-}
-
-// Key returns a key used to delete, run, and archive the scheduled task.
-func (t *ScheduledTask) Key() string {
-	return fmt.Sprintf(taskKeyFormat, keyPrefixScheduled, t.ID, t.score)
-}
-
-// Key returns a key used to delete, run, and archive the retry task.
-func (t *RetryTask) Key() string {
-	return fmt.Sprintf(taskKeyFormat, keyPrefixRetry, t.ID, t.score)
-}
-
-// Key returns a key used to delete and run the archived task.
-func (t *ArchivedTask) Key() string {
-	return fmt.Sprintf(taskKeyFormat, keyPrefixArchived, t.ID, t.score)
-}
-
-// parseTaskKey parses a key string and returns each part of key with proper
-// type if valid, otherwise it reports an error.
-func parseTaskKey(key string) (prefix string, id uuid.UUID, score int64, err error) {
-	parts := strings.Split(key, ":")
-	if len(parts) != 3 {
-		return "", uuid.Nil, 0, fmt.Errorf("invalid id")
-	}
-	id, err = uuid.Parse(parts[1])
-	if err != nil {
-		return "", uuid.Nil, 0, fmt.Errorf("invalid id")
-	}
-	score, err = strconv.ParseInt(parts[2], 10, 64)
-	if err != nil {
-		return "", uuid.Nil, 0, fmt.Errorf("invalid id")
-	}
-	prefix = parts[0]
-	if len(prefix) != 1 || !strings.Contains(allKeyPrefixes, prefix) {
-		return "", uuid.Nil, 0, fmt.Errorf("invalid id")
-	}
-	return prefix, id, score, nil
-}
-
 // ListOption specifies behavior of list operation.
 type ListOption interface{}
 
@@ -724,13 +603,12 @@ func (i *Inspector) Servers() ([]*ServerInfo, error) {
 			continue
 		}
 		wrkInfo := &WorkerInfo{
-			Started:  w.Started,
-			Deadline: w.Deadline,
-			Task: &ActiveTask{
-				Task:  NewTask(w.Type, w.Payload),
-				ID:    w.ID,
-				Queue: w.Queue,
-			},
+			TaskID:      w.ID,
+			TaskType:    w.Type,
+			TaskPayload: w.Payload,
+			Queue:       w.Queue,
+			Started:     w.Started,
+			Deadline:    w.Deadline,
 		}
 		srvInfo.ActiveWorkers = append(srvInfo.ActiveWorkers, wrkInfo)
 	}
@@ -767,8 +645,14 @@ type ServerInfo struct {
 
 // WorkerInfo describes a running worker processing a task.
 type WorkerInfo struct {
-	// The task the worker is processing.
-	Task *ActiveTask
+	// ID of the task the worker is processing.
+	TaskID string
+	// Type of the task the worker is processing.
+	TaskType string
+	// Payload of the task the worker is processing.
+	TaskPayload []byte
+	// Queue from which the worker got its task.
+	Queue string
 	// Time the worker started processing the task.
 	Started time.Time
 	// Time the worker needs to finish processing the task by.
