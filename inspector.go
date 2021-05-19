@@ -359,8 +359,10 @@ func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*TaskI
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	msgs, err := i.rdb.ListPending(qname, pgn)
-	if err != nil {
-		// TODO: Handle ErrQueueNotFound
+	switch {
+	case errors.IsQueueNotFound(err):
+		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case err != nil:
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	now := time.Now()
@@ -385,8 +387,10 @@ func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*TaskIn
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	msgs, err := i.rdb.ListActive(qname, pgn)
-	if err != nil {
-		// TODO: Handle QueueNotFound
+	switch {
+	case errors.IsQueueNotFound(err):
+		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case err != nil:
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
@@ -410,8 +414,10 @@ func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*Tas
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	zs, err := i.rdb.ListScheduled(qname, pgn)
-	if err != nil {
-		// TODO: handle ErrQueueNotFound
+	switch {
+	case errors.IsQueueNotFound(err):
+		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case err != nil:
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
@@ -436,8 +442,10 @@ func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*TaskInf
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	zs, err := i.rdb.ListRetry(qname, pgn)
-	if err != nil {
-		// TODO: handle ErrQueueNotFound
+	switch {
+	case errors.IsQueueNotFound(err):
+		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case err != nil:
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
@@ -462,8 +470,10 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Task
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	zs, err := i.rdb.ListArchived(qname, pgn)
-	if err != nil {
-		// TODO: handle ErrQueueNotFound
+	switch {
+	case errors.IsQueueNotFound(err):
+		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case err != nil:
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
