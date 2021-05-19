@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Inspector.RunTaskByKey` is replaced with `Inspector.RunTask`
 - `Inspector.DeleteTaskByKey` is replaced with `Inspector.DeleteTask`
 - `Inspector.ArchiveTaskByKey` is replaced with `Inspector.ArchiveTask`
+- `inspeq` package is removed. All types and functions from the package is moved to `asynq` package.
 
 ## [0.17.2] - 2021-06-06
 
