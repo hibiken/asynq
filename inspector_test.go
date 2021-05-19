@@ -2,110 +2,28 @@
 // Use of this source code is governed by a MIT license
 // that can be found in the LICENSE file.
 
-package inspeq
+package asynq
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"math"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
-// variables used for package testing.
-var (
-	redisAddr string
-	redisDB   int
-
-	useRedisCluster   bool
-	redisClusterAddrs string // comma-separated list of host:port
-
-	testLogLevel = asynq.FatalLevel
-)
-
-var testLogger *log.Logger
-
-func init() {
-	flag.StringVar(&redisAddr, "redis_addr", "localhost:6379", "redis address to use in testing")
-	flag.IntVar(&redisDB, "redis_db", 13, "redis db number to use in testing")
-	flag.BoolVar(&useRedisCluster, "redis_cluster", false, "use redis cluster as a broker in testing")
-	flag.StringVar(&redisClusterAddrs, "redis_cluster_addrs", "localhost:7000,localhost:7001,localhost:7002", "comma separated list of redis server addresses")
-	flag.Var(&testLogLevel, "loglevel", "log level to use in testing")
-
-	testLogger = log.NewLogger(nil)
-	testLogger.SetLevel(toInternalLogLevel(testLogLevel))
-}
-
-func toInternalLogLevel(l asynq.LogLevel) log.Level {
-	switch l {
-	case asynq.DebugLevel:
-		return log.DebugLevel
-	case asynq.InfoLevel:
-		return log.InfoLevel
-	case asynq.WarnLevel:
-		return log.WarnLevel
-	case asynq.ErrorLevel:
-		return log.ErrorLevel
-	case asynq.FatalLevel:
-		return log.FatalLevel
-	}
-	panic(fmt.Sprintf("inspeq: unexpected log level: %v", l))
-}
-
-func setup(tb testing.TB) (r redis.UniversalClient) {
-	tb.Helper()
-	if useRedisCluster {
-		addrs := strings.Split(redisClusterAddrs, ",")
-		if len(addrs) == 0 {
-			tb.Fatal("No redis cluster addresses provided. Please set addresses using --redis_cluster_addrs flag.")
-		}
-		r = redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs: addrs,
-		})
-	} else {
-		r = redis.NewClient(&redis.Options{
-			Addr: redisAddr,
-			DB:   redisDB,
-		})
-	}
-	// Start each test with a clean slate.
-	h.FlushDB(tb, r)
-	return r
-}
-
-func getRedisConnOpt(tb testing.TB) asynq.RedisConnOpt {
-	tb.Helper()
-	if useRedisCluster {
-		addrs := strings.Split(redisClusterAddrs, ",")
-		if len(addrs) == 0 {
-			tb.Fatal("No redis cluster addresses provided. Please set addresses using --redis_cluster_addrs flag.")
-		}
-		return asynq.RedisClusterClientOpt{
-			Addrs: addrs,
-		}
-	}
-	return asynq.RedisClientOpt{
-		Addr: redisAddr,
-		DB:   redisDB,
-	}
-}
 func TestInspectorQueues(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		queues []string
@@ -138,7 +56,7 @@ func TestInspectorQueues(t *testing.T) {
 func TestInspectorDeleteQueue(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 	defer inspector.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
@@ -227,7 +145,7 @@ func TestInspectorDeleteQueue(t *testing.T) {
 func TestInspectorDeleteQueueErrorQueueNotEmpty(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 	defer inspector.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
@@ -283,7 +201,7 @@ func TestInspectorDeleteQueueErrorQueueNotEmpty(t *testing.T) {
 func TestInspectorDeleteQueueErrorQueueNotFound(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 	defer inspector.Close()
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
@@ -349,7 +267,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 	timeCmpOpt := cmpopts.EquateApproxTime(time.Second)
 	ignoreMemUsg := cmpopts.IgnoreFields(QueueStats{}, "MemoryUsage")
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		pending   map[string][]*base.TaskMessage
@@ -453,7 +371,7 @@ func TestInspectorHistory(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	now := time.Now().UTC()
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		qname string // queue of interest
@@ -506,7 +424,7 @@ func TestInspectorHistory(t *testing.T) {
 
 func createPendingTask(msg *base.TaskMessage) *PendingTask {
 	return &PendingTask{
-		Task:      asynq.NewTask(msg.Type, msg.Payload),
+		Task:      NewTask(msg.Type, msg.Payload),
 		ID:        msg.ID.String(),
 		Queue:     msg.Queue,
 		MaxRetry:  msg.Retry,
@@ -523,7 +441,7 @@ func TestInspectorListPendingTasks(t *testing.T) {
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "critical")
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "low")
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		desc    string
@@ -576,7 +494,7 @@ func TestInspectorListPendingTasks(t *testing.T) {
 				tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{})
+		ignoreOpt := cmpopts.IgnoreUnexported(Task{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
 			t.Errorf("%s; ListPendingTasks(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
@@ -592,11 +510,11 @@ func TestInspectorListActiveTasks(t *testing.T) {
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	createActiveTask := func(msg *base.TaskMessage) *ActiveTask {
 		return &ActiveTask{
-			Task:      asynq.NewTask(msg.Type, msg.Payload),
+			Task:      NewTask(msg.Type, msg.Payload),
 			ID:        msg.ID.String(),
 			Queue:     msg.Queue,
 			MaxRetry:  msg.Retry,
@@ -634,7 +552,7 @@ func TestInspectorListActiveTasks(t *testing.T) {
 			t.Errorf("%s; ListActiveTasks(%q) returned error: %v", tc.qname, tc.desc, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{})
+		ignoreOpt := cmpopts.IgnoreUnexported(Task{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
 			t.Errorf("%s; ListActiveTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
@@ -645,7 +563,7 @@ func TestInspectorListActiveTasks(t *testing.T) {
 func createScheduledTask(z base.Z) *ScheduledTask {
 	msg := z.Message
 	return &ScheduledTask{
-		Task:          asynq.NewTask(msg.Type, msg.Payload),
+		Task:          NewTask(msg.Type, msg.Payload),
 		ID:            msg.ID.String(),
 		Queue:         msg.Queue,
 		MaxRetry:      msg.Retry,
@@ -669,7 +587,7 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		desc      string
@@ -710,7 +628,7 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 			t.Errorf("%s; ListScheduledTasks(%q) returned error: %v", tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{}, ScheduledTask{})
+		ignoreOpt := cmpopts.IgnoreUnexported(Task{}, ScheduledTask{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
 			t.Errorf("%s; ListScheduledTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
@@ -721,7 +639,7 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 func createRetryTask(z base.Z) *RetryTask {
 	msg := z.Message
 	return &RetryTask{
-		Task:          asynq.NewTask(msg.Type, msg.Payload),
+		Task:          NewTask(msg.Type, msg.Payload),
 		ID:            msg.ID.String(),
 		Queue:         msg.Queue,
 		NextProcessAt: time.Unix(z.Score, 0),
@@ -745,7 +663,7 @@ func TestInspectorListRetryTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		desc  string
@@ -787,7 +705,7 @@ func TestInspectorListRetryTasks(t *testing.T) {
 			t.Errorf("%s; ListRetryTasks(%q) returned error: %v", tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{}, RetryTask{})
+		ignoreOpt := cmpopts.IgnoreUnexported(Task{}, RetryTask{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
 			t.Errorf("%s; ListRetryTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
@@ -798,7 +716,7 @@ func TestInspectorListRetryTasks(t *testing.T) {
 func createArchivedTask(z base.Z) *ArchivedTask {
 	msg := z.Message
 	return &ArchivedTask{
-		Task:         asynq.NewTask(msg.Type, msg.Payload),
+		Task:         NewTask(msg.Type, msg.Payload),
 		ID:           msg.ID.String(),
 		Queue:        msg.Queue,
 		MaxRetry:     msg.Retry,
@@ -822,7 +740,7 @@ func TestInspectorListArchivedTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(-2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(-2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		desc     string
@@ -863,7 +781,7 @@ func TestInspectorListArchivedTasks(t *testing.T) {
 			t.Errorf("%s; ListArchivedTasks(%q) returned error: %v", tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{}, ArchivedTask{})
+		ignoreOpt := cmpopts.IgnoreUnexported(Task{}, ArchivedTask{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
 			t.Errorf("%s; ListArchivedTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
@@ -882,7 +800,7 @@ func TestInspectorListPagination(t *testing.T) {
 	defer r.Close()
 	h.SeedPendingQueue(t, r, msgs, base.DefaultQueueName)
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		page     int
@@ -924,7 +842,7 @@ func TestInspectorListPagination(t *testing.T) {
 			t.Errorf("ListPendingTask('default') returned error: %v", err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{})
+		ignoreOpt := cmpopts.IgnoreUnexported(Task{})
 		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
 			t.Errorf("ListPendingTask('default') = %v, want %v; (-want,+got)\n%s",
 				got, tc.want, diff)
@@ -940,7 +858,7 @@ func TestInspectorDeleteAllPendingTasks(t *testing.T) {
 	m3 := h.NewTaskMessage("task3", nil)
 	m4 := h.NewTaskMessageWithQueue("task3", nil, "custom")
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		pending     map[string][]*base.TaskMessage
@@ -1009,7 +927,7 @@ func TestInspectorDeleteAllScheduledTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -1075,7 +993,7 @@ func TestInspectorDeleteAllRetryTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry     map[string][]base.Z
@@ -1141,7 +1059,7 @@ func TestInspectorDeleteAllArchivedTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		archived     map[string][]base.Z
@@ -1204,7 +1122,7 @@ func TestInspectorArchiveAllPendingTasks(t *testing.T) {
 	now := time.Now()
 	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		pending      map[string][]*base.TaskMessage
@@ -1321,7 +1239,7 @@ func TestInspectorArchiveAllScheduledTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -1454,7 +1372,7 @@ func TestInspectorArchiveAllRetryTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry        map[string][]base.Z
@@ -1568,7 +1486,7 @@ func TestInspectorRunAllScheduledTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -1685,7 +1603,7 @@ func TestInspectorRunAllRetryTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry       map[string][]base.Z
@@ -1802,7 +1720,7 @@ func TestInspectorRunAllArchivedTasks(t *testing.T) {
 	z3 := base.Z{Message: m3, Score: now.Add(-2 * time.Minute).Unix()}
 	z4 := base.Z{Message: m4, Score: now.Add(-2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		archived     map[string][]base.Z
@@ -1909,7 +1827,7 @@ func TestInspectorDeleteTaskDeletesPendingTask(t *testing.T) {
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		pending     map[string][]*base.TaskMessage
@@ -1974,7 +1892,7 @@ func TestInspectorDeleteTaskDeletesScheduledTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -2024,7 +1942,7 @@ func TestInspectorDeleteTaskDeletesRetryTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry     map[string][]base.Z
@@ -2074,7 +1992,7 @@ func TestInspectorDeleteTaskDeletesArchivedTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(-15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(-2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		archived     map[string][]base.Z
@@ -2124,7 +2042,7 @@ func TestInspectorDeleteTaskError(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(-15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(-2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		archived     map[string][]base.Z
@@ -2189,7 +2107,7 @@ func TestInspectorRunTaskRunsScheduledTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -2259,7 +2177,7 @@ func TestInspectorRunTaskRunsRetryTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry       map[string][]base.Z
@@ -2328,7 +2246,7 @@ func TestInspectorRunTaskRunsArchivedTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(-15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(-2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		archived     map[string][]base.Z
@@ -2401,7 +2319,7 @@ func TestInspectorRunTaskError(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(-15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(-2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		archived     map[string][]base.Z
@@ -2496,7 +2414,7 @@ func TestInspectorArchiveTaskArchivesPendingTask(t *testing.T) {
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessageWithQueue("task2", nil, "custom")
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 	now := time.Now()
 
 	tests := []struct {
@@ -2591,7 +2509,7 @@ func TestInspectorArchiveTaskArchivesScheduledTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -2667,7 +2585,7 @@ func TestInspectorArchiveTaskArchivesRetryTask(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry        map[string][]base.Z
@@ -2741,7 +2659,7 @@ func TestInspectorArchiveTaskError(t *testing.T) {
 	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
 	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
 
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
 		retry        map[string][]base.Z
@@ -2833,7 +2751,7 @@ var sortSchedulerEntry = cmp.Transformer("SortSchedulerEntry", func(in []*Schedu
 func TestInspectorSchedulerEntries(t *testing.T) {
 	r := setup(t)
 	rdbClient := rdb.NewRDB(r)
-	inspector := New(getRedisConnOpt(t))
+	inspector := NewInspector(getRedisConnOpt(t))
 
 	now := time.Now().UTC()
 	schedulerID := "127.0.0.1:9876:abc123"
@@ -2864,15 +2782,15 @@ func TestInspectorSchedulerEntries(t *testing.T) {
 			want: []*SchedulerEntry{
 				{
 					Spec: "* * * * *",
-					Task: asynq.NewTask("foo", nil),
+					Task: NewTask("foo", nil),
 					Opts: nil,
 					Next: now.Add(5 * time.Hour),
 					Prev: now.Add(-2 * time.Hour),
 				},
 				{
 					Spec: "@every 20m",
-					Task: asynq.NewTask("bar", h.JSON(map[string]interface{}{"fiz": "baz"})),
-					Opts: []asynq.Option{asynq.Queue("bar"), asynq.MaxRetry(20)},
+					Task: NewTask("bar", h.JSON(map[string]interface{}{"fiz": "baz"})),
+					Opts: []Option{Queue("bar"), MaxRetry(20)},
 					Next: now.Add(1 * time.Minute),
 					Prev: now.Add(-19 * time.Minute),
 				},
@@ -2891,7 +2809,7 @@ func TestInspectorSchedulerEntries(t *testing.T) {
 			t.Errorf("SchedulerEntries() returned error: %v", err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(asynq.Task{})
+		ignoreOpt := cmpopts.IgnoreUnexported(Task{})
 		if diff := cmp.Diff(tc.want, got, sortSchedulerEntry, ignoreOpt); diff != "" {
 			t.Errorf("SchedulerEntries() = %v, want %v; (-want,+got)\n%s",
 				got, tc.want, diff)
@@ -2903,16 +2821,16 @@ func TestParseOption(t *testing.T) {
 	oneHourFromNow := time.Now().Add(1 * time.Hour)
 	tests := []struct {
 		s        string
-		wantType asynq.OptionType
+		wantType OptionType
 		wantVal  interface{}
 	}{
-		{`MaxRetry(10)`, asynq.MaxRetryOpt, 10},
-		{`Queue("email")`, asynq.QueueOpt, "email"},
-		{`Timeout(3m)`, asynq.TimeoutOpt, 3 * time.Minute},
-		{asynq.Deadline(oneHourFromNow).String(), asynq.DeadlineOpt, oneHourFromNow},
-		{`Unique(1h)`, asynq.UniqueOpt, 1 * time.Hour},
-		{asynq.ProcessAt(oneHourFromNow).String(), asynq.ProcessAtOpt, oneHourFromNow},
-		{`ProcessIn(10m)`, asynq.ProcessInOpt, 10 * time.Minute},
+		{`MaxRetry(10)`, MaxRetryOpt, 10},
+		{`Queue("email")`, QueueOpt, "email"},
+		{`Timeout(3m)`, TimeoutOpt, 3 * time.Minute},
+		{Deadline(oneHourFromNow).String(), DeadlineOpt, oneHourFromNow},
+		{`Unique(1h)`, UniqueOpt, 1 * time.Hour},
+		{ProcessAt(oneHourFromNow).String(), ProcessAtOpt, oneHourFromNow},
+		{`ProcessIn(10m)`, ProcessInOpt, 10 * time.Minute},
 	}
 
 	for _, tc := range tests {
@@ -2928,7 +2846,7 @@ func TestParseOption(t *testing.T) {
 				t.Fatalf("got type %v, want type %v ", got.Type(), tc.wantType)
 			}
 			switch tc.wantType {
-			case asynq.QueueOpt:
+			case QueueOpt:
 				gotVal, ok := got.Value().(string)
 				if !ok {
 					t.Fatal("returned Option with non-string value")
@@ -2936,7 +2854,7 @@ func TestParseOption(t *testing.T) {
 				if gotVal != tc.wantVal.(string) {
 					t.Fatalf("got value %v, want %v", gotVal, tc.wantVal)
 				}
-			case asynq.MaxRetryOpt:
+			case MaxRetryOpt:
 				gotVal, ok := got.Value().(int)
 				if !ok {
 					t.Fatal("returned Option with non-int value")
@@ -2944,7 +2862,7 @@ func TestParseOption(t *testing.T) {
 				if gotVal != tc.wantVal.(int) {
 					t.Fatalf("got value %v, want %v", gotVal, tc.wantVal)
 				}
-			case asynq.TimeoutOpt, asynq.UniqueOpt, asynq.ProcessInOpt:
+			case TimeoutOpt, UniqueOpt, ProcessInOpt:
 				gotVal, ok := got.Value().(time.Duration)
 				if !ok {
 					t.Fatal("returned Option with non duration value")
@@ -2952,7 +2870,7 @@ func TestParseOption(t *testing.T) {
 				if gotVal != tc.wantVal.(time.Duration) {
 					t.Fatalf("got value %v, want %v", gotVal, tc.wantVal)
 				}
-			case asynq.DeadlineOpt, asynq.ProcessAtOpt:
+			case DeadlineOpt, ProcessAtOpt:
 				gotVal, ok := got.Value().(time.Time)
 				if !ok {
 					t.Fatal("returned Option with non time value")
