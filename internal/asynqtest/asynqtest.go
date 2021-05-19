@@ -10,6 +10,7 @@ import (
 	"math"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
@@ -126,12 +127,14 @@ func JSON(kv map[string]interface{}) []byte {
 func TaskMessageAfterRetry(t base.TaskMessage, errMsg string) *base.TaskMessage {
 	t.Retried = t.Retried + 1
 	t.ErrorMsg = errMsg
+	t.LastFailedAt = time.Now().Unix() // use EquateApproxTime with cmp.Diff
 	return &t
 }
 
 // TaskMessageWithError returns an updated copy of t with the given error message.
 func TaskMessageWithError(t base.TaskMessage, errMsg string) *base.TaskMessage {
 	t.ErrorMsg = errMsg
+	t.LastFailedAt = time.Now().Unix() // use EquateApproxTime with cmp.Diff
 	return &t
 }
 

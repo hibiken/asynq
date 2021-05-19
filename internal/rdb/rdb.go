@@ -483,14 +483,15 @@ return redis.status_reply("OK")`)
 // and assigning error message to the task message.
 func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) error {
 	var op errors.Op = "rdb.Retry"
+	now := time.Now()
 	modified := *msg
 	modified.Retried++
 	modified.ErrorMsg = errMsg
+	modified.LastFailedAt = now.Unix()
 	encoded, err := base.EncodeMessage(&modified)
 	if err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	now := time.Now()
 	expireAt := now.Add(statsTTL)
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID.String()),
@@ -551,13 +552,14 @@ return redis.status_reply("OK")`)
 // It also trims the archive by timestamp and set size.
 func (r *RDB) Archive(msg *base.TaskMessage, errMsg string) error {
 	var op errors.Op = "rdb.Archive"
+	now := time.Now()
 	modified := *msg
 	modified.ErrorMsg = errMsg
+	modified.LastFailedAt = now.Unix()
 	encoded, err := base.EncodeMessage(&modified)
 	if err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	now := time.Now()
 	cutoff := now.AddDate(0, 0, -archivedExpirationInDays)
 	expireAt := now.Add(statsTTL)
 	keys := []string{
