@@ -137,14 +137,13 @@ func (i *Inspector) History(qname string, n int) ([]*DailyStats, error) {
 var (
 	// ErrQueueNotFound indicates that the specified queue does not exist.
 	ErrQueueNotFound = errors.New("queue not found")
+
 	// ErrQueueNotEmpty indicates that the specified queue is not empty.
 	ErrQueueNotEmpty = errors.New("queue is not empty")
+
 	// ErrTaskNotFound indicates that the specified task cannot be found in the queue.
 	ErrTaskNotFound = errors.New("task not found")
 )
-
-type taskNotFoundError struct {
-}
 
 // DeleteQueue removes the specified queue.
 //
