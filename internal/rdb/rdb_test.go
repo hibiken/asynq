@@ -1163,9 +1163,13 @@ func TestRetry(t *testing.T) {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DeadlinesKey(queue), diff)
 			}
 		}
+		cmpOpts := []cmp.Option{
+			h.SortZSetEntryOpt,
+			cmpopts.EquateApproxTime(5 * time.Second), // for LastFailedAt field
+		}
 		for queue, want := range tc.wantRetry {
 			gotRetry := h.GetRetryEntries(t, r.client, queue)
-			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt); diff != "" {
+			if diff := cmp.Diff(want, gotRetry, cmpOpts...); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryKey(queue), diff)
 			}
 		}
@@ -1368,7 +1372,7 @@ func TestArchive(t *testing.T) {
 		}
 		for queue, want := range tc.wantArchived {
 			gotArchived := h.GetArchivedEntries(t, r.client, queue)
-			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt, timeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q after calling (*RDB).Archive: (-want, +got):\n%s", base.ArchivedKey(queue), diff)
 			}
 		}
