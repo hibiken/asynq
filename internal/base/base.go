@@ -181,6 +181,12 @@ type TaskMessage struct {
 	// ErrorMsg holds the error message from the last failure.
 	ErrorMsg string
 
+	// Time of last failure in Unix time,
+	// the number of seconds elapsed since January 1, 1970 UTC.
+	//
+	// Use zero to indicate no last failure
+	LastFailedAt int64
+
 	// Timeout specifies timeout in seconds.
 	// If task processing doesn't complete within the timeout, the task will be retried
 	// if retry count is remaining. Otherwise it will be moved to the archive.
@@ -208,16 +214,17 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 		return nil, fmt.Errorf("cannot encode nil message")
 	}
 	return proto.Marshal(&pb.TaskMessage{
-		Type:      msg.Type,
-		Payload:   msg.Payload,
-		Id:        msg.ID.String(),
-		Queue:     msg.Queue,
-		Retry:     int32(msg.Retry),
-		Retried:   int32(msg.Retried),
-		ErrorMsg:  msg.ErrorMsg,
-		Timeout:   msg.Timeout,
-		Deadline:  msg.Deadline,
-		UniqueKey: msg.UniqueKey,
+		Type:         msg.Type,
+		Payload:      msg.Payload,
+		Id:           msg.ID.String(),
+		Queue:        msg.Queue,
+		Retry:        int32(msg.Retry),
+		Retried:      int32(msg.Retried),
+		ErrorMsg:     msg.ErrorMsg,
+		LastFailedAt: msg.LastFailedAt,
+		Timeout:      msg.Timeout,
+		Deadline:     msg.Deadline,
+		UniqueKey:    msg.UniqueKey,
 	})
 }
 
@@ -228,16 +235,17 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 		return nil, err
 	}
 	return &TaskMessage{
-		Type:      pbmsg.GetType(),
-		Payload:   pbmsg.GetPayload(),
-		ID:        uuid.MustParse(pbmsg.GetId()),
-		Queue:     pbmsg.GetQueue(),
-		Retry:     int(pbmsg.GetRetry()),
-		Retried:   int(pbmsg.GetRetried()),
-		ErrorMsg:  pbmsg.GetErrorMsg(),
-		Timeout:   pbmsg.GetTimeout(),
-		Deadline:  pbmsg.GetDeadline(),
-		UniqueKey: pbmsg.GetUniqueKey(),
+		Type:         pbmsg.GetType(),
+		Payload:      pbmsg.GetPayload(),
+		ID:           uuid.MustParse(pbmsg.GetId()),
+		Queue:        pbmsg.GetQueue(),
+		Retry:        int(pbmsg.GetRetry()),
+		Retried:      int(pbmsg.GetRetried()),
+		ErrorMsg:     pbmsg.GetErrorMsg(),
+		LastFailedAt: pbmsg.GetLastFailedAt(),
+		Timeout:      pbmsg.GetTimeout(),
+		Deadline:     pbmsg.GetDeadline(),
+		UniqueKey:    pbmsg.GetUniqueKey(),
 	}, nil
 }
 
