@@ -666,21 +666,29 @@ func (i *Inspector) ClusterKeySlot(qname string) (int64, error) {
 // ClusterNode describes a node in redis cluster.
 type ClusterNode struct {
 	// Node ID in the cluster.
-	ID string
+	id string
 
 	// Address of the node.
-	Addr string
+	addr string
 }
 
+// ID returns the node ID in the cluster.
+func (node *ClusterNode) ID() string { return node.id }
+
+// Addr returns the address of the node.
+func (node *ClusterNode) Addr() string { return node.addr }
+
 // ClusterNodes returns a list of nodes the given queue belongs to.
-func (i *Inspector) ClusterNodes(qname string) ([]ClusterNode, error) {
+//
+// Only relevant if task queues are stored in redis cluster.
+func (i *Inspector) ClusterNodes(qname string) ([]*ClusterNode, error) {
 	nodes, err := i.rdb.ClusterNodes(qname)
 	if err != nil {
 		return nil, err
 	}
-	var res []ClusterNode
+	var res []*ClusterNode
 	for _, node := range nodes {
-		res = append(res, ClusterNode{ID: node.ID, Addr: node.Addr})
+		res = append(res, &ClusterNode{id: node.ID, addr: node.Addr})
 	}
 	return res, nil
 }
