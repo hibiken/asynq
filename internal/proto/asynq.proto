@@ -33,6 +33,11 @@ message TaskMessage {
 	// Error message from the last failure.
   string error_msg = 7;
 
+  // Time of last failure in Unix time,
+  // the number of seconds elapsed since January 1, 1970 UTC.
+  // Use zero to indicate no last failure.
+  int64 last_failed_at = 11;
+
 	// Timeout specifies timeout in seconds.
 	// Use zero to indicate no timeout.
   int64 timeout = 8;
@@ -45,6 +50,7 @@ message TaskMessage {
 	// UniqueKey holds the redis key used for uniqueness lock for this task.
 	// Empty string indicates that no uniqueness lock was used.
   string unique_key = 10;
+
 };
 
 // ServerInfo holds information about a running server.
