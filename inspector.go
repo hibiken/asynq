@@ -352,25 +352,24 @@ func Page(n int) ListOption {
 // ListPendingTasks retrieves pending tasks from the specified queue.
 //
 // By default, it retrieves the first 30 tasks.
-func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*PendingTask, error) {
+func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*TaskInfo, error) {
 	if err := base.ValidateQueueName(qname); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	msgs, err := i.rdb.ListPending(qname, pgn)
 	if err != nil {
-		return nil, err
+		// TODO: Handle ErrQueueNotFound
+		return nil, fmt.Errorf("asynq: %v", err)
 	}
-	var tasks []*PendingTask
+	now := time.Now()
+	var tasks []*TaskInfo
 	for _, m := range msgs {
-		tasks = append(tasks, &PendingTask{
-			Task:      NewTask(m.Type, m.Payload),
-			ID:        m.ID.String(),
-			Queue:     m.Queue,
-			MaxRetry:  m.Retry,
-			Retried:   m.Retried,
-			LastError: m.ErrorMsg,
+		tasks = append(tasks, &TaskInfo{
+			msg:           m,
+			state:         base.TaskStatePending,
+			nextProcessAt: now,
 		})
 	}
 	return tasks, err
@@ -379,114 +378,100 @@ func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*Pendi
 // ListActiveTasks retrieves active tasks from the specified queue.
 //
 // By default, it retrieves the first 30 tasks.
-func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*ActiveTask, error) {
+func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*TaskInfo, error) {
 	if err := base.ValidateQueueName(qname); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	msgs, err := i.rdb.ListActive(qname, pgn)
 	if err != nil {
-		return nil, err
+		// TODO: Handle QueueNotFound
+		return nil, fmt.Errorf("asynq: %v", err)
 	}
-	var tasks []*ActiveTask
+	var tasks []*TaskInfo
 	for _, m := range msgs {
-		tasks = append(tasks, &ActiveTask{
-			Task:      NewTask(m.Type, m.Payload),
-			ID:        m.ID.String(),
-			Queue:     m.Queue,
-			MaxRetry:  m.Retry,
-			Retried:   m.Retried,
-			LastError: m.ErrorMsg,
+		tasks = append(tasks, &TaskInfo{
+			msg:   m,
+			state: base.TaskStateActive,
 		})
 	}
 	return tasks, err
 }
 
 // ListScheduledTasks retrieves scheduled tasks from the specified queue.
-// Tasks are sorted by NextProcessAt field in ascending order.
+// Tasks are sorted by NextProcessAt in ascending order.
 //
 // By default, it retrieves the first 30 tasks.
-func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*ScheduledTask, error) {
+func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*TaskInfo, error) {
 	if err := base.ValidateQueueName(qname); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	zs, err := i.rdb.ListScheduled(qname, pgn)
 	if err != nil {
-		return nil, err
+		// TODO: handle ErrQueueNotFound
+		return nil, fmt.Errorf("asynq: %v", err)
 	}
-	var tasks []*ScheduledTask
+	var tasks []*TaskInfo
 	for _, z := range zs {
-		processAt := time.Unix(z.Score, 0)
-		t := NewTask(z.Message.Type, z.Message.Payload)
-		tasks = append(tasks, &ScheduledTask{
-			Task:          t,
-			ID:            z.Message.ID.String(),
-			Queue:         z.Message.Queue,
-			MaxRetry:      z.Message.Retry,
-			Retried:       z.Message.Retried,
-			LastError:     z.Message.ErrorMsg,
-			NextProcessAt: processAt,
-			score:         z.Score,
+		tasks = append(tasks, &TaskInfo{
+			msg:           z.Message,
+			state:         base.TaskStateScheduled,
+			nextProcessAt: time.Unix(z.Score, 0),
 		})
 	}
 	return tasks, nil
 }
 
 // ListRetryTasks retrieves retry tasks from the specified queue.
-// Tasks are sorted by NextProcessAt field in ascending order.
+// Tasks are sorted by NextProcessAt in ascending order.
 //
 // By default, it retrieves the first 30 tasks.
-func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*RetryTask, error) {
+func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*TaskInfo, error) {
 	if err := base.ValidateQueueName(qname); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	zs, err := i.rdb.ListRetry(qname, pgn)
 	if err != nil {
-		return nil, err
+		// TODO: handle ErrQueueNotFound
+		return nil, fmt.Errorf("asynq: %v", err)
 	}
-	var tasks []*RetryTask
+	var tasks []*TaskInfo
 	for _, z := range zs {
-		processAt := time.Unix(z.Score, 0)
-		t := NewTask(z.Message.Type, z.Message.Payload)
-		tasks = append(tasks, &RetryTask{
-			Task:          t,
-			ID:            z.Message.ID.String(),
-			Queue:         z.Message.Queue,
-			NextProcessAt: processAt,
-			MaxRetry:      z.Message.Retry,
-			Retried:       z.Message.Retried,
-			// TODO: LastFailedAt: z.Message.LastFailedAt
-			LastError: z.Message.ErrorMsg,
-			score:     z.Score,
+		tasks = append(tasks, &TaskInfo{
+			msg:           z.Message,
+			state:         base.TaskStateRetry,
+			nextProcessAt: time.Unix(z.Score, 0),
 		})
 	}
 	return tasks, nil
 }
 
 // ListArchivedTasks retrieves archived tasks from the specified queue.
-// Tasks are sorted by LastFailedAt field in descending order.
+// Tasks are sorted by LastFailedAt in descending order.
 //
 // By default, it retrieves the first 30 tasks.
 func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*ArchivedTask, error) {
 	if err := base.ValidateQueueName(qname); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	zs, err := i.rdb.ListArchived(qname, pgn)
 	if err != nil {
-		return nil, err
+		// TODO: handle ErrQueueNotFound
+		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*ArchivedTask
 	for _, z := range zs {
 		failedAt := time.Unix(z.Score, 0)
 		t := NewTask(z.Message.Type, z.Message.Payload)
 		tasks = append(tasks, &ArchivedTask{
+			// TODO: How to handle last failed at
 			Task:         t,
 			ID:           z.Message.ID.String(),
 			Queue:        z.Message.Queue,
