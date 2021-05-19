@@ -455,7 +455,7 @@ func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*TaskInf
 // Tasks are sorted by LastFailedAt in descending order.
 //
 // By default, it retrieves the first 30 tasks.
-func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*ArchivedTask, error) {
+func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*TaskInfo, error) {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
@@ -466,20 +466,11 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Arch
 		// TODO: handle ErrQueueNotFound
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
-	var tasks []*ArchivedTask
+	var tasks []*TaskInfo
 	for _, z := range zs {
-		failedAt := time.Unix(z.Score, 0)
-		t := NewTask(z.Message.Type, z.Message.Payload)
-		tasks = append(tasks, &ArchivedTask{
-			// TODO: How to handle last failed at
-			Task:         t,
-			ID:           z.Message.ID.String(),
-			Queue:        z.Message.Queue,
-			MaxRetry:     z.Message.Retry,
-			Retried:      z.Message.Retried,
-			LastFailedAt: failedAt,
-			LastError:    z.Message.ErrorMsg,
-			score:        z.Score,
+		tasks = append(tasks, &TaskInfo{
+			msg:   z.Message,
+			state: base.TaskStateArchived,
 		})
 	}
 	return tasks, nil
