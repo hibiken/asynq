@@ -687,17 +687,11 @@ func TestInspectorListRetryTasks(t *testing.T) {
 	}
 }
 
-func createArchivedTask(z base.Z) *ArchivedTask {
-	msg := z.Message
-	return &ArchivedTask{
-		Task:         NewTask(msg.Type, msg.Payload),
-		ID:           msg.ID.String(),
-		Queue:        msg.Queue,
-		MaxRetry:     msg.Retry,
-		Retried:      msg.Retried,
-		LastFailedAt: time.Unix(z.Score, 0),
-		LastError:    msg.ErrorMsg,
-		score:        z.Score,
+func createArchivedTask(z base.Z) *TaskInfo {
+	return &TaskInfo{
+		msg:           z.Message,
+		state:         base.TaskStateArchived,
+		nextProcessAt: time.Time{},
 	}
 }
 
@@ -720,7 +714,7 @@ func TestInspectorListArchivedTasks(t *testing.T) {
 		desc     string
 		archived map[string][]base.Z
 		qname    string
-		want     []*ArchivedTask
+		want     []*TaskInfo
 	}{
 		{
 			desc: "with a few archived tasks",
@@ -730,7 +724,7 @@ func TestInspectorListArchivedTasks(t *testing.T) {
 			},
 			qname: "default",
 			// Should be sorted by LastFailedAt.
-			want: []*ArchivedTask{
+			want: []*TaskInfo{
 				createArchivedTask(z2),
 				createArchivedTask(z1),
 				createArchivedTask(z3),
@@ -742,7 +736,7 @@ func TestInspectorListArchivedTasks(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []*ArchivedTask(nil),
+			want:  []*TaskInfo(nil),
 		},
 	}
 
@@ -755,8 +749,7 @@ func TestInspectorListArchivedTasks(t *testing.T) {
 			t.Errorf("%s; ListArchivedTasks(%q) returned error: %v", tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(Task{}, ArchivedTask{})
-		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(TaskInfo{})); diff != "" {
 			t.Errorf("%s; ListArchivedTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
 		}
@@ -1983,7 +1976,7 @@ func TestInspectorDeleteTaskDeletesArchivedTask(t *testing.T) {
 				"custom":  {z3},
 			},
 			qname: "default",
-			id:    createArchivedTask(z2).ID,
+			id:    createArchivedTask(z2).ID(),
 			wantArchived: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2034,7 +2027,7 @@ func TestInspectorDeleteTaskError(t *testing.T) {
 				"custom":  {z3},
 			},
 			qname:   "nonexistent",
-			id:      createArchivedTask(z2).ID,
+			id:      createArchivedTask(z2).ID(),
 			wantErr: ErrQueueNotFound,
 			wantArchived: map[string][]base.Z{
 				"default": {z1, z2},
@@ -2245,7 +2238,7 @@ func TestInspectorRunTaskRunsArchivedTask(t *testing.T) {
 				"low":      {},
 			},
 			qname: "critical",
-			id:    createArchivedTask(z2).ID,
+			id:    createArchivedTask(z2).ID(),
 			wantArchived: map[string][]base.Z{
 				"default":  {z1},
 				"critical": {},
@@ -2319,7 +2312,7 @@ func TestInspectorRunTaskError(t *testing.T) {
 				"low":      {},
 			},
 			qname:   "nonexistent",
-			id:      createArchivedTask(z2).ID,
+			id:      createArchivedTask(z2).ID(),
 			wantErr: ErrQueueNotFound,
 			wantArchived: map[string][]base.Z{
 				"default":  {z1},
