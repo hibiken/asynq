@@ -820,6 +820,43 @@ func TestInspectorListPagination(t *testing.T) {
 	}
 }
 
+func TestInspectorListTasksQueueNotFoundError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	inspector := NewInspector(getRedisConnOpt(t))
+
+	tests := []struct {
+		qname   string
+		wantErr error
+	}{
+		{
+			qname:   "nonexistent",
+			wantErr: ErrQueueNotFound,
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+
+		if _, err := inspector.ListActiveTasks(tc.qname); !errors.Is(err, tc.wantErr) {
+			t.Errorf("ListActiveTasks(%q) returned error %v, want %v", tc.qname, err, tc.wantErr)
+		}
+		if _, err := inspector.ListPendingTasks(tc.qname); !errors.Is(err, tc.wantErr) {
+			t.Errorf("ListPendingTasks(%q) returned error %v, want %v", tc.qname, err, tc.wantErr)
+		}
+		if _, err := inspector.ListScheduledTasks(tc.qname); !errors.Is(err, tc.wantErr) {
+			t.Errorf("ListScheduledTasks(%q) returned error %v, want %v", tc.qname, err, tc.wantErr)
+		}
+		if _, err := inspector.ListRetryTasks(tc.qname); !errors.Is(err, tc.wantErr) {
+			t.Errorf("ListRetryTasks(%q) returned error %v, want %v", tc.qname, err, tc.wantErr)
+		}
+		if _, err := inspector.ListArchivedTasks(tc.qname); !errors.Is(err, tc.wantErr) {
+			t.Errorf("ListArchivedTasks(%q) returned error %v, want %v", tc.qname, err, tc.wantErr)
+		}
+	}
+}
+
 func TestInspectorDeleteAllPendingTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
