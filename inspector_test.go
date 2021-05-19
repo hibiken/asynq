@@ -422,14 +422,11 @@ func TestInspectorHistory(t *testing.T) {
 	}
 }
 
-func createPendingTask(msg *base.TaskMessage) *PendingTask {
-	return &PendingTask{
-		Task:      NewTask(msg.Type, msg.Payload),
-		ID:        msg.ID.String(),
-		Queue:     msg.Queue,
-		MaxRetry:  msg.Retry,
-		Retried:   msg.Retried,
-		LastError: msg.ErrorMsg,
+func createPendingTask(msg *base.TaskMessage) *TaskInfo {
+	return &TaskInfo{
+		msg:           msg,
+		state:         base.TaskStatePending,
+		nextProcessAt: time.Now(),
 	}
 }
 
@@ -447,7 +444,7 @@ func TestInspectorListPendingTasks(t *testing.T) {
 		desc    string
 		pending map[string][]*base.TaskMessage
 		qname   string
-		want    []*PendingTask
+		want    []*TaskInfo
 	}{
 		{
 			desc: "with default queue",
@@ -455,7 +452,7 @@ func TestInspectorListPendingTasks(t *testing.T) {
 				"default": {m1, m2},
 			},
 			qname: "default",
-			want: []*PendingTask{
+			want: []*TaskInfo{
 				createPendingTask(m1),
 				createPendingTask(m2),
 			},
@@ -468,7 +465,7 @@ func TestInspectorListPendingTasks(t *testing.T) {
 				"low":      {m4},
 			},
 			qname: "critical",
-			want: []*PendingTask{
+			want: []*TaskInfo{
 				createPendingTask(m3),
 			},
 		},
@@ -478,7 +475,7 @@ func TestInspectorListPendingTasks(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []*PendingTask(nil),
+			want:  []*TaskInfo(nil),
 		},
 	}
 
@@ -494,8 +491,11 @@ func TestInspectorListPendingTasks(t *testing.T) {
 				tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(Task{})
-		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
+		cmpOpts := []cmp.Option{
+			cmpopts.EquateApproxTime(2 * time.Second),
+			cmp.AllowUnexported(TaskInfo{}),
+		}
+		if diff := cmp.Diff(tc.want, got, cmpOpts...); diff != "" {
 			t.Errorf("%s; ListPendingTasks(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
 		}
@@ -512,22 +512,11 @@ func TestInspectorListActiveTasks(t *testing.T) {
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
-	createActiveTask := func(msg *base.TaskMessage) *ActiveTask {
-		return &ActiveTask{
-			Task:      NewTask(msg.Type, msg.Payload),
-			ID:        msg.ID.String(),
-			Queue:     msg.Queue,
-			MaxRetry:  msg.Retry,
-			Retried:   msg.Retried,
-			LastError: msg.ErrorMsg,
-		}
-	}
-
 	tests := []struct {
 		desc   string
 		active map[string][]*base.TaskMessage
 		qname  string
-		want   []*ActiveTask
+		want   []*TaskInfo
 	}{
 		{
 			desc: "with a few active tasks",
@@ -536,9 +525,9 @@ func TestInspectorListActiveTasks(t *testing.T) {
 				"custom":  {m3, m4},
 			},
 			qname: "default",
-			want: []*ActiveTask{
-				createActiveTask(m1),
-				createActiveTask(m2),
+			want: []*TaskInfo{
+				{msg: m1, state: base.TaskStateActive, nextProcessAt: time.Time{}},
+				{msg: m2, state: base.TaskStateActive, nextProcessAt: time.Time{}},
 			},
 		},
 	}
@@ -552,25 +541,18 @@ func TestInspectorListActiveTasks(t *testing.T) {
 			t.Errorf("%s; ListActiveTasks(%q) returned error: %v", tc.qname, tc.desc, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(Task{})
-		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(TaskInfo{})); diff != "" {
 			t.Errorf("%s; ListActiveTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
 		}
 	}
 }
 
-func createScheduledTask(z base.Z) *ScheduledTask {
-	msg := z.Message
-	return &ScheduledTask{
-		Task:          NewTask(msg.Type, msg.Payload),
-		ID:            msg.ID.String(),
-		Queue:         msg.Queue,
-		MaxRetry:      msg.Retry,
-		Retried:       msg.Retried,
-		LastError:     msg.ErrorMsg,
-		NextProcessAt: time.Unix(z.Score, 0),
-		score:         z.Score,
+func createScheduledTask(z base.Z) *TaskInfo {
+	return &TaskInfo{
+		msg:           z.Message,
+		state:         base.TaskStateScheduled,
+		nextProcessAt: time.Unix(z.Score, 0),
 	}
 }
 
@@ -593,7 +575,7 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 		desc      string
 		scheduled map[string][]base.Z
 		qname     string
-		want      []*ScheduledTask
+		want      []*TaskInfo
 	}{
 		{
 			desc: "with a few scheduled tasks",
@@ -603,7 +585,7 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 			},
 			qname: "default",
 			// Should be sorted by NextProcessAt.
-			want: []*ScheduledTask{
+			want: []*TaskInfo{
 				createScheduledTask(z3),
 				createScheduledTask(z1),
 				createScheduledTask(z2),
@@ -615,7 +597,7 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []*ScheduledTask(nil),
+			want:  []*TaskInfo(nil),
 		},
 	}
 
@@ -628,25 +610,18 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 			t.Errorf("%s; ListScheduledTasks(%q) returned error: %v", tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(Task{}, ScheduledTask{})
-		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(TaskInfo{})); diff != "" {
 			t.Errorf("%s; ListScheduledTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
 		}
 	}
 }
 
-func createRetryTask(z base.Z) *RetryTask {
-	msg := z.Message
-	return &RetryTask{
-		Task:          NewTask(msg.Type, msg.Payload),
-		ID:            msg.ID.String(),
-		Queue:         msg.Queue,
-		NextProcessAt: time.Unix(z.Score, 0),
-		MaxRetry:      msg.Retry,
-		Retried:       msg.Retried,
-		LastError:     msg.ErrorMsg,
-		score:         z.Score,
+func createRetryTask(z base.Z) *TaskInfo {
+	return &TaskInfo{
+		msg:           z.Message,
+		state:         base.TaskStateRetry,
+		nextProcessAt: time.Unix(z.Score, 0),
 	}
 }
 
@@ -669,7 +644,7 @@ func TestInspectorListRetryTasks(t *testing.T) {
 		desc  string
 		retry map[string][]base.Z
 		qname string
-		want  []*RetryTask
+		want  []*TaskInfo
 	}{
 		{
 			desc: "with a few retry tasks",
@@ -679,7 +654,7 @@ func TestInspectorListRetryTasks(t *testing.T) {
 			},
 			qname: "default",
 			// Should be sorted by NextProcessAt.
-			want: []*RetryTask{
+			want: []*TaskInfo{
 				createRetryTask(z3),
 				createRetryTask(z1),
 				createRetryTask(z2),
@@ -691,7 +666,7 @@ func TestInspectorListRetryTasks(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []*RetryTask(nil),
+			want:  []*TaskInfo(nil),
 		},
 		// TODO(hibiken): ErrQueueNotFound when queue doesn't exist
 	}
@@ -705,8 +680,7 @@ func TestInspectorListRetryTasks(t *testing.T) {
 			t.Errorf("%s; ListRetryTasks(%q) returned error: %v", tc.desc, tc.qname, err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(Task{}, RetryTask{})
-		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(TaskInfo{})); diff != "" {
 			t.Errorf("%s; ListRetryTask(%q) = %v, want %v; (-want,+got)\n%s",
 				tc.desc, tc.qname, got, tc.want, diff)
 		}
@@ -805,12 +779,12 @@ func TestInspectorListPagination(t *testing.T) {
 	tests := []struct {
 		page     int
 		pageSize int
-		want     []*PendingTask
+		want     []*TaskInfo
 	}{
 		{
 			page:     1,
 			pageSize: 5,
-			want: []*PendingTask{
+			want: []*TaskInfo{
 				createPendingTask(msgs[0]),
 				createPendingTask(msgs[1]),
 				createPendingTask(msgs[2]),
@@ -821,7 +795,7 @@ func TestInspectorListPagination(t *testing.T) {
 		{
 			page:     3,
 			pageSize: 10,
-			want: []*PendingTask{
+			want: []*TaskInfo{
 				createPendingTask(msgs[20]),
 				createPendingTask(msgs[21]),
 				createPendingTask(msgs[22]),
@@ -842,8 +816,11 @@ func TestInspectorListPagination(t *testing.T) {
 			t.Errorf("ListPendingTask('default') returned error: %v", err)
 			continue
 		}
-		ignoreOpt := cmpopts.IgnoreUnexported(Task{})
-		if diff := cmp.Diff(tc.want, got, ignoreOpt); diff != "" {
+		cmpOpts := []cmp.Option{
+			cmpopts.EquateApproxTime(2 * time.Second),
+			cmp.AllowUnexported(TaskInfo{}),
+		}
+		if diff := cmp.Diff(tc.want, got, cmpOpts...); diff != "" {
 			t.Errorf("ListPendingTask('default') = %v, want %v; (-want,+got)\n%s",
 				got, tc.want, diff)
 		}
@@ -1841,7 +1818,7 @@ func TestInspectorDeleteTaskDeletesPendingTask(t *testing.T) {
 				"custom":  {m3},
 			},
 			qname: "default",
-			id:    createPendingTask(m2).ID,
+			id:    createPendingTask(m2).ID(),
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1},
 				"custom":  {m3},
@@ -1853,7 +1830,7 @@ func TestInspectorDeleteTaskDeletesPendingTask(t *testing.T) {
 				"custom":  {m3},
 			},
 			qname: "custom",
-			id:    createPendingTask(m3).ID,
+			id:    createPendingTask(m3).ID(),
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 				"custom":  {},
@@ -1906,7 +1883,7 @@ func TestInspectorDeleteTaskDeletesScheduledTask(t *testing.T) {
 				"custom":  {z3},
 			},
 			qname: "default",
-			id:    createScheduledTask(z2).ID,
+			id:    createScheduledTask(z2).ID(),
 			wantScheduled: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -1956,7 +1933,7 @@ func TestInspectorDeleteTaskDeletesRetryTask(t *testing.T) {
 				"custom":  {z3},
 			},
 			qname: "default",
-			id:    createRetryTask(z2).ID,
+			id:    createRetryTask(z2).ID(),
 			wantRetry: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2127,7 +2104,7 @@ func TestInspectorRunTaskRunsScheduledTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "default",
-			id:    createScheduledTask(z2).ID,
+			id:    createScheduledTask(z2).ID(),
 			wantScheduled: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2197,7 +2174,7 @@ func TestInspectorRunTaskRunsRetryTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			id:    createRetryTask(z2).ID,
+			id:    createRetryTask(z2).ID(),
 			wantRetry: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2435,7 +2412,7 @@ func TestInspectorArchiveTaskArchivesPendingTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "default",
-			id:    createPendingTask(m1).ID,
+			id:    createPendingTask(m1).ID(),
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 				"custom":  {m2, m3},
@@ -2457,7 +2434,7 @@ func TestInspectorArchiveTaskArchivesPendingTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			id:    createPendingTask(m2).ID,
+			id:    createPendingTask(m2).ID(),
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1},
 				"custom":  {m3},
@@ -2530,7 +2507,7 @@ func TestInspectorArchiveTaskArchivesScheduledTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			id:    createScheduledTask(z2).ID,
+			id:    createScheduledTask(z2).ID(),
 			wantScheduled: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2605,7 +2582,7 @@ func TestInspectorArchiveTaskArchivesRetryTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			id:    createRetryTask(z2).ID,
+			id:    createRetryTask(z2).ID(),
 			wantRetry: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2680,7 +2657,7 @@ func TestInspectorArchiveTaskError(t *testing.T) {
 				"custom":  {},
 			},
 			qname:   "nonexistent",
-			id:      createRetryTask(z2).ID,
+			id:      createRetryTask(z2).ID(),
 			wantErr: ErrQueueNotFound,
 			wantRetry: map[string][]base.Z{
 				"default": {z1},
