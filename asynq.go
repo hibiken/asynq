@@ -81,6 +81,10 @@ func (info *TaskInfo) Retried() int { return info.msg.Retried }
 // If the task has no failures, returns an empty string.
 func (info *TaskInfo) LastErr() string { return info.msg.ErrorMsg }
 
+// LastFailedAt returns the time of the last failure if any.
+// If the task has no failures, returns zero time.
+func (info *TaskInfo) LastFailedAt() time.Time { return time.Unix(info.msg.LastFailedAt, 0) }
+
 // Timeout returns the duration the task can be processed by Handler before being retried,
 // zero if not specified
 func (info *TaskInfo) Timeout() time.Duration {
