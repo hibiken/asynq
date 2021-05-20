@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Inspector.ArchiveTaskByKey` is replaced with `Inspector.ArchiveTask`
 - `inspeq` package is removed. All types and functions from the package is moved to `asynq` package.
 - `WorkerInfo` field names have changed.
+- `Inspector.CancelActiveTask` is renamed to `Inspector.CancelProcessing`
 
 ## [0.17.2] - 2021-06-06
 
