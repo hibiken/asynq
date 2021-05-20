@@ -546,11 +546,11 @@ func (i *Inspector) ArchiveTask(qname, id string) error {
 	return nil
 }
 
-// CancelActiveTask sends a signal to cancel processing of the task with
-// the given id. CancelActiveTask is best-effort, which means that it does not
+// CancelProcessing sends a signal to cancel processing of the task
+// given a task id. CancelProcessing is best-effort, which means that it does not
 // guarantee that the task with the given id will be canceled. The return
 // value only indicates whether the cancelation signal has been sent.
-func (i *Inspector) CancelActiveTask(id string) error {
+func (i *Inspector) CancelProcessing(id string) error {
 	return i.rdb.PublishCancelation(id)
 }
 
