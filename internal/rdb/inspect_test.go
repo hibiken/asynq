@@ -309,6 +309,199 @@ func TestRedisInfo(t *testing.T) {
 	}
 }
 
+func TestGetTaskInfo(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	m1 := h.NewTaskMessageWithQueue("task1", nil, "default")
+	m2 := h.NewTaskMessageWithQueue("task2", nil, "default")
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
+	m5 := h.NewTaskMessageWithQueue("task5", nil, "custom")
+
+	now := time.Now()
+	fiveMinsFromNow := now.Add(5 * time.Minute)
+	oneHourFromNow := now.Add(1 * time.Hour)
+	twoHoursAgo := now.Add(-2 * time.Hour)
+
+	fixtures := struct {
+		active    map[string][]*base.TaskMessage
+		pending   map[string][]*base.TaskMessage
+		scheduled map[string][]base.Z
+		retry     map[string][]base.Z
+		archived  map[string][]base.Z
+	}{
+		active: map[string][]*base.TaskMessage{
+			"default": {m1},
+			"custom":  {},
+		},
+		pending: map[string][]*base.TaskMessage{
+			"default": {},
+			"custom":  {m5},
+		},
+		scheduled: map[string][]base.Z{
+			"default": {{Message: m2, Score: fiveMinsFromNow.Unix()}},
+			"custom":  {},
+		},
+		retry: map[string][]base.Z{
+			"default": {},
+			"custom":  {{Message: m3, Score: oneHourFromNow.Unix()}},
+		},
+		archived: map[string][]base.Z{
+			"default": {},
+			"custom":  {{Message: m4, Score: twoHoursAgo.Unix()}},
+		},
+	}
+
+	h.SeedAllActiveQueues(t, r.client, fixtures.active)
+	h.SeedAllPendingQueues(t, r.client, fixtures.pending)
+	h.SeedAllScheduledQueues(t, r.client, fixtures.scheduled)
+	h.SeedAllRetryQueues(t, r.client, fixtures.retry)
+	h.SeedAllArchivedQueues(t, r.client, fixtures.archived)
+
+	tests := []struct {
+		qname string
+		id    uuid.UUID
+		want  *base.TaskInfo
+	}{
+		{
+			qname: "default",
+			id:    m1.ID,
+			want: &base.TaskInfo{
+				Message:       m1,
+				State:         base.TaskStateActive,
+				NextProcessAt: time.Time{}, // zero value for N/A
+			},
+		},
+		{
+			qname: "default",
+			id:    m2.ID,
+			want: &base.TaskInfo{
+				Message:       m2,
+				State:         base.TaskStateScheduled,
+				NextProcessAt: fiveMinsFromNow,
+			},
+		},
+		{
+			qname: "custom",
+			id:    m3.ID,
+			want: &base.TaskInfo{
+				Message:       m3,
+				State:         base.TaskStateRetry,
+				NextProcessAt: oneHourFromNow,
+			},
+		},
+		{
+			qname: "custom",
+			id:    m4.ID,
+			want: &base.TaskInfo{
+				Message:       m4,
+				State:         base.TaskStateArchived,
+				NextProcessAt: time.Time{}, // zero value for N/A
+			},
+		},
+		{
+			qname: "custom",
+			id:    m5.ID,
+			want: &base.TaskInfo{
+				Message:       m5,
+				State:         base.TaskStatePending,
+				NextProcessAt: now,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		got, err := r.GetTaskInfo(tc.qname, tc.id)
+		if err != nil {
+			t.Errorf("GetTaskInfo(%q, %v) returned error: %v", tc.qname, tc.id, err)
+			continue
+		}
+		if diff := cmp.Diff(tc.want, got, cmpopts.EquateApproxTime(2*time.Second)); diff != "" {
+			t.Errorf("GetTaskInfo(%q, %v) = %v, want %v; (-want,+got)\n%s",
+				tc.qname, tc.id, got, tc.want, diff)
+		}
+	}
+}
+
+func TestGetTaskInfoError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	m1 := h.NewTaskMessageWithQueue("task1", nil, "default")
+	m2 := h.NewTaskMessageWithQueue("task2", nil, "default")
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
+	m5 := h.NewTaskMessageWithQueue("task5", nil, "custom")
+
+	now := time.Now()
+	fiveMinsFromNow := now.Add(5 * time.Minute)
+	oneHourFromNow := now.Add(1 * time.Hour)
+	twoHoursAgo := now.Add(-2 * time.Hour)
+
+	fixtures := struct {
+		active    map[string][]*base.TaskMessage
+		pending   map[string][]*base.TaskMessage
+		scheduled map[string][]base.Z
+		retry     map[string][]base.Z
+		archived  map[string][]base.Z
+	}{
+		active: map[string][]*base.TaskMessage{
+			"default": {m1},
+			"custom":  {},
+		},
+		pending: map[string][]*base.TaskMessage{
+			"default": {},
+			"custom":  {m5},
+		},
+		scheduled: map[string][]base.Z{
+			"default": {{Message: m2, Score: fiveMinsFromNow.Unix()}},
+			"custom":  {},
+		},
+		retry: map[string][]base.Z{
+			"default": {},
+			"custom":  {{Message: m3, Score: oneHourFromNow.Unix()}},
+		},
+		archived: map[string][]base.Z{
+			"default": {},
+			"custom":  {{Message: m4, Score: twoHoursAgo.Unix()}},
+		},
+	}
+
+	h.SeedAllActiveQueues(t, r.client, fixtures.active)
+	h.SeedAllPendingQueues(t, r.client, fixtures.pending)
+	h.SeedAllScheduledQueues(t, r.client, fixtures.scheduled)
+	h.SeedAllRetryQueues(t, r.client, fixtures.retry)
+	h.SeedAllArchivedQueues(t, r.client, fixtures.archived)
+
+	tests := []struct {
+		qname string
+		id    uuid.UUID
+		match func(err error) bool
+	}{
+		{
+			qname: "nonexistent",
+			id:    m1.ID,
+			match: errors.IsQueueNotFound,
+		},
+		{
+			qname: "default",
+			id:    uuid.New(),
+			match: errors.IsTaskNotFound,
+		},
+	}
+
+	for _, tc := range tests {
+		info, err := r.GetTaskInfo(tc.qname, tc.id)
+		if info != nil {
+			t.Errorf("GetTaskInfo(%q, %v) returned info: %v", tc.qname, tc.id, info)
+		}
+		if !tc.match(err) {
+			t.Errorf("GetTaskInfo(%q, %v) returned unexpected error: %v", tc.qname, tc.id, err)
+		}
+	}
+}
+
 func TestListPending(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
