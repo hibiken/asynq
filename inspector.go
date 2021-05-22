@@ -44,8 +44,8 @@ func (i *Inspector) Queues() ([]string, error) {
 	return i.rdb.AllQueues()
 }
 
-// QueueStats represents a state of queues at a certain time.
-type QueueStats struct {
+// QueueInfo represents a state of queues at a certain time.
+type QueueInfo struct {
 	// Name of the queue.
 	Queue string
 	// Total number of bytes that the queue and its tasks require to be stored in redis.
@@ -75,8 +75,8 @@ type QueueStats struct {
 	Timestamp time.Time
 }
 
-// CurrentStats returns a current stats of the given queue.
-func (i *Inspector) CurrentStats(qname string) (*QueueStats, error) {
+// GetQueueInfo returns current information of the given queue.
+func (i *Inspector) GetQueueInfo(qname string) (*QueueInfo, error) {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (i *Inspector) CurrentStats(qname string) (*QueueStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &QueueStats{
+	return &QueueInfo{
 		Queue:       stats.Queue,
 		MemoryUsage: stats.MemoryUsage,
 		Size:        stats.Size,
