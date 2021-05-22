@@ -254,7 +254,7 @@ func TestInspectorDeleteQueueErrorQueueNotFound(t *testing.T) {
 	}
 }
 
-func TestInspectorCurrentStats(t *testing.T) {
+func TestInspectorGetQueueInfo(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -265,7 +265,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 	m6 := h.NewTaskMessageWithQueue("task6", nil, "low")
 	now := time.Now()
 	timeCmpOpt := cmpopts.EquateApproxTime(time.Second)
-	ignoreMemUsg := cmpopts.IgnoreFields(QueueStats{}, "MemoryUsage")
+	ignoreMemUsg := cmpopts.IgnoreFields(QueueInfo{}, "MemoryUsage")
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
@@ -278,7 +278,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 		processed map[string]int
 		failed    map[string]int
 		qname     string
-		want      *QueueStats
+		want      *QueueInfo
 	}{
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -320,7 +320,7 @@ func TestInspectorCurrentStats(t *testing.T) {
 				"low":      5,
 			},
 			qname: "default",
-			want: &QueueStats{
+			want: &QueueInfo{
 				Queue:     "default",
 				Size:      4,
 				Pending:   1,
@@ -352,14 +352,14 @@ func TestInspectorCurrentStats(t *testing.T) {
 			r.Set(failedKey, n, 0)
 		}
 
-		got, err := inspector.CurrentStats(tc.qname)
+		got, err := inspector.GetQueueInfo(tc.qname)
 		if err != nil {
-			t.Errorf("r.CurrentStats(%q) = %v, %v, want %v, nil",
+			t.Errorf("r.GetQueueInfo(%q) = %v, %v, want %v, nil",
 				tc.qname, got, err, tc.want)
 			continue
 		}
 		if diff := cmp.Diff(tc.want, got, timeCmpOpt, ignoreMemUsg); diff != "" {
-			t.Errorf("r.CurrentStats(%q) = %v, %v, want %v, nil; (-want, +got)\n%s",
+			t.Errorf("r.GetQueueInfo(%q) = %v, %v, want %v, nil; (-want, +got)\n%s",
 				tc.qname, got, err, tc.want, diff)
 			continue
 		}
