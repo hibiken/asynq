@@ -14,6 +14,7 @@ import (
 	"github.com/go-redis/redis/v7"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq/internal/errors"
 	pb "github.com/hibiken/asynq/internal/proto"
 	"google.golang.org/protobuf/proto"
 )
@@ -61,6 +62,22 @@ func (s TaskState) String() string {
 		return "archived"
 	}
 	panic(fmt.Sprintf("internal error: unknown task state %d", s))
+}
+
+func TaskStateFromString(s string) (TaskState, error) {
+	switch s {
+	case "active":
+		return TaskStateActive, nil
+	case "pending":
+		return TaskStatePending, nil
+	case "scheduled":
+		return TaskStateScheduled, nil
+	case "retry":
+		return TaskStateRetry, nil
+	case "archived":
+		return TaskStateArchived, nil
+	}
+	return 0, errors.E(errors.FailedPrecondition, fmt.Sprintf("%q is not supported task state", s))
 }
 
 // ValidateQueueName validates a given qname to be used as a queue name.
@@ -247,6 +264,13 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 		Deadline:     pbmsg.GetDeadline(),
 		UniqueKey:    pbmsg.GetUniqueKey(),
 	}, nil
+}
+
+// TaskInfo describes a task message and its metadata.
+type TaskInfo struct {
+	Message       *TaskMessage
+	State         TaskState
+	NextProcessAt time.Time
 }
 
 // Z represents sorted set member.
