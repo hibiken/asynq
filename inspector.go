@@ -166,6 +166,31 @@ func (i *Inspector) DeleteQueue(qname string, force bool) error {
 	return err
 }
 
+// GetTaskInfo retrieves task information given a task id and queue name.
+//
+// Returns ErrQueueNotFound if a queue with the given name doesn't exist.
+// Returns ErrTaskNotFound if a task with the given id doesn't exist in the queue.
+func (i *Inspector) GetTaskInfo(qname, id string) (*TaskInfo, error) {
+	taskid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("asynq: %s is not a valid task id", id)
+	}
+	info, err := i.rdb.GetTaskInfo(qname, taskid)
+	switch {
+	case errors.IsQueueNotFound(err):
+		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case errors.IsTaskNotFound(err):
+		return nil, fmt.Errorf("asynq: %w", ErrTaskNotFound)
+	case err != nil:
+		return nil, fmt.Errorf("asynq: %v", err)
+	}
+	return &TaskInfo{
+		msg:           info.Message,
+		state:         info.State,
+		nextProcessAt: info.NextProcessAt,
+	}, nil
+}
+
 // ListOption specifies behavior of list operation.
 type ListOption interface{}
 
