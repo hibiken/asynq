@@ -11,7 +11,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/hibiken/asynq/inspeq"
+	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 )
 
@@ -108,7 +108,7 @@ func cronHistory(cmd *cobra.Command, args []string) {
 		fmt.Printf("Entry: %s\n\n", entryID)
 
 		events, err := inspector.ListSchedulerEnqueueEvents(
-			entryID, inspeq.PageSize(pageSize), inspeq.Page(pageNum))
+			entryID, asynq.PageSize(pageSize), asynq.Page(pageNum))
 		if err != nil {
 			fmt.Printf("error: %v\n", err)
 			continue
