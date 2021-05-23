@@ -10,8 +10,8 @@ import (
 	"os"
 
 	"github.com/fatih/color"
-	"github.com/hibiken/asynq/inspeq"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq"
+	"github.com/hibiken/asynq/internal/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -82,7 +82,7 @@ func queueList(cmd *cobra.Command, args []string) {
 	type queueInfo struct {
 		name    string
 		keyslot int64
-		nodes   []inspeq.ClusterNode
+		nodes   []*asynq.ClusterNode
 	}
 	inspector := createInspector()
 	queues, err := inspector.Queues()
@@ -132,16 +132,16 @@ func queueInspect(cmd *cobra.Command, args []string) {
 			fmt.Printf("\n%s\n", separator)
 		}
 		fmt.Println()
-		stats, err := inspector.CurrentStats(qname)
+		info, err := inspector.GetQueueInfo(qname)
 		if err != nil {
 			fmt.Printf("error: %v\n", err)
 			continue
 		}
-		printQueueStats(stats)
+		printQueueInfo(info)
 	}
 }
 
-func printQueueStats(s *inspeq.QueueStats) {
+func printQueueInfo(s *asynq.QueueInfo) {
 	bold := color.New(color.Bold)
 	bold.Println("Queue Info")
 	fmt.Printf("Name:   %s\n", s.Queue)
@@ -191,7 +191,7 @@ func queueHistory(cmd *cobra.Command, args []string) {
 	}
 }
 
-func printDailyStats(stats []*inspeq.DailyStats) {
+func printDailyStats(stats []*asynq.DailyStats) {
 	printTable(
 		[]string{"date (UTC)", "processed", "failed", "error rate"},
 		func(w io.Writer, tmpl string) {
@@ -244,7 +244,7 @@ func queueRemove(cmd *cobra.Command, args []string) {
 	for _, qname := range args {
 		err = r.RemoveQueue(qname, force)
 		if err != nil {
-			if _, ok := err.(*rdb.ErrQueueNotEmpty); ok {
+			if errors.IsQueueNotEmpty(err) {
 				fmt.Printf("error: %v\nIf you are sure you want to delete it, run 'asynq queue rm --force %s'\n", err, qname)
 				continue
 			}

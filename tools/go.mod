@@ -8,8 +8,9 @@ require (
 	github.com/cpuguy83/go-md2man v1.0.10 // indirect
 	github.com/fatih/color v1.9.0
 	github.com/go-redis/redis/v7 v7.4.0
-	github.com/google/uuid v1.1.1
-	github.com/hibiken/asynq v0.14.0
+	github.com/golang/protobuf v1.4.1 // indirect
+	github.com/google/uuid v1.2.0
+	github.com/hibiken/asynq v0.17.1
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cast v1.3.1
 	github.com/spf13/cobra v1.1.1
