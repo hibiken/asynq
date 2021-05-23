@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/hibiken/asynq/inspeq"
+	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 )
 
@@ -28,21 +28,21 @@ func init() {
 
 	taskCmd.AddCommand(taskArchiveCmd)
 	taskArchiveCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
-	taskArchiveCmd.Flags().StringP("key", "k", "", "key of the task")
+	taskArchiveCmd.Flags().StringP("id", "t", "", "id of the task")
 	taskArchiveCmd.MarkFlagRequired("queue")
-	taskArchiveCmd.MarkFlagRequired("key")
+	taskArchiveCmd.MarkFlagRequired("id")
 
 	taskCmd.AddCommand(taskDeleteCmd)
 	taskDeleteCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
-	taskDeleteCmd.Flags().StringP("key", "k", "", "key of the task")
+	taskDeleteCmd.Flags().StringP("id", "t", "", "id of the task")
 	taskDeleteCmd.MarkFlagRequired("queue")
-	taskDeleteCmd.MarkFlagRequired("key")
+	taskDeleteCmd.MarkFlagRequired("id")
 
 	taskCmd.AddCommand(taskRunCmd)
 	taskRunCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
-	taskRunCmd.Flags().StringP("key", "k", "", "key of the task")
+	taskRunCmd.Flags().StringP("id", "t", "", "id of the task")
 	taskRunCmd.MarkFlagRequired("queue")
-	taskRunCmd.MarkFlagRequired("key")
+	taskRunCmd.MarkFlagRequired("id")
 
 	taskCmd.AddCommand(taskArchiveAllCmd)
 	taskArchiveAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong")
@@ -101,22 +101,22 @@ var taskCancelCmd = &cobra.Command{
 }
 
 var taskArchiveCmd = &cobra.Command{
-	Use:   "archive --queue=QUEUE --key=KEY",
-	Short: "Archive a task with the given key",
+	Use:   "archive --queue=QUEUE --id=TASK_ID",
+	Short: "Archive a task with the given id",
 	Args:  cobra.NoArgs,
 	Run:   taskArchive,
 }
 
 var taskDeleteCmd = &cobra.Command{
-	Use:   "delete --queue=QUEUE --key=KEY",
-	Short: "Delete a task with the given key",
+	Use:   "delete --queue=QUEUE --id=TASK_ID",
+	Short: "Delete a task with the given id",
 	Args:  cobra.NoArgs,
 	Run:   taskDelete,
 }
 
 var taskRunCmd = &cobra.Command{
-	Use:   "run --queue=QUEUE --key=KEY",
-	Short: "Run a task with the given key",
+	Use:   "run --queue=QUEUE --id=TASK_ID",
+	Short: "Run a task with the given id",
 	Args:  cobra.NoArgs,
 	Run:   taskRun,
 }
@@ -129,14 +129,14 @@ var taskArchiveAllCmd = &cobra.Command{
 }
 
 var taskDeleteAllCmd = &cobra.Command{
-	Use:   "delete-all --queue=QUEUE --key=KEY",
+	Use:   "delete-all --queue=QUEUE --state=STATE",
 	Short: "Delete all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskDeleteAll,
 }
 
 var taskRunAllCmd = &cobra.Command{
-	Use:   "run-all --queue=QUEUE --key=KEY",
+	Use:   "run-all --queue=QUEUE --state=STATE",
 	Short: "Run all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskRunAll,
@@ -183,7 +183,7 @@ func taskList(cmd *cobra.Command, args []string) {
 
 func listActiveTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListActiveTasks(qname, inspeq.PageSize(pageSize), inspeq.Page(pageNum))
+	tasks, err := i.ListActiveTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -196,7 +196,7 @@ func listActiveTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, t.Payload)
+				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), t.Payload())
 			}
 		},
 	)
@@ -204,7 +204,7 @@ func listActiveTasks(qname string, pageNum, pageSize int) {
 
 func listPendingTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListPendingTasks(qname, inspeq.PageSize(pageSize), inspeq.Page(pageNum))
+	tasks, err := i.ListPendingTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -214,10 +214,10 @@ func listPendingTasks(qname string, pageNum, pageSize int) {
 		return
 	}
 	printTable(
-		[]string{"Key", "Type", "Payload"},
+		[]string{"ID", "Type", "Payload"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload)
+				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), t.Payload())
 			}
 		},
 	)
@@ -225,7 +225,7 @@ func listPendingTasks(qname string, pageNum, pageSize int) {
 
 func listScheduledTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListScheduledTasks(qname, inspeq.PageSize(pageSize), inspeq.Page(pageNum))
+	tasks, err := i.ListScheduledTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -235,12 +235,12 @@ func listScheduledTasks(qname string, pageNum, pageSize int) {
 		return
 	}
 	printTable(
-		[]string{"Key", "Type", "Payload", "Process In"},
+		[]string{"ID", "Type", "Payload", "Process In"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
 				processIn := fmt.Sprintf("%.0f seconds",
-					t.NextProcessAt.Sub(time.Now()).Seconds())
-				fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload, processIn)
+					t.NextProcessAt().Sub(time.Now()).Seconds())
+				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), t.Payload(), processIn)
 			}
 		},
 	)
@@ -248,7 +248,7 @@ func listScheduledTasks(qname string, pageNum, pageSize int) {
 
 func listRetryTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListRetryTasks(qname, inspeq.PageSize(pageSize), inspeq.Page(pageNum))
+	tasks, err := i.ListRetryTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -258,16 +258,16 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 		return
 	}
 	printTable(
-		[]string{"Key", "Type", "Payload", "Next Retry", "Last Error", "Retried", "Max Retry"},
+		[]string{"ID", "Type", "Payload", "Next Retry", "Last Error", "Retried", "Max Retry"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
 				var nextRetry string
-				if d := t.NextProcessAt.Sub(time.Now()); d > 0 {
+				if d := t.NextProcessAt().Sub(time.Now()); d > 0 {
 					nextRetry = fmt.Sprintf("in %v", d.Round(time.Second))
 				} else {
 					nextRetry = "right now"
 				}
-				fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload, nextRetry, t.LastError, t.Retried, t.MaxRetry)
+				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), t.Payload(), nextRetry, t.LastErr(), t.Retried(), t.MaxRetry())
 			}
 		},
 	)
@@ -275,7 +275,7 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 
 func listArchivedTasks(qname string, pageNum, pageSize int) {
 	i := createInspector()
-	tasks, err := i.ListArchivedTasks(qname, inspeq.PageSize(pageSize), inspeq.Page(pageNum))
+	tasks, err := i.ListArchivedTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -285,19 +285,18 @@ func listArchivedTasks(qname string, pageNum, pageSize int) {
 		return
 	}
 	printTable(
-		[]string{"Key", "Type", "Payload", "Last Failed", "Last Error"},
+		[]string{"ID", "Type", "Payload", "Last Failed", "Last Error"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.Key(), t.Type, t.Payload, t.LastFailedAt, t.LastError)
+				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), t.Payload(), t.LastFailedAt(), t.LastErr())
 			}
 		})
 }
 
 func taskCancel(cmd *cobra.Command, args []string) {
-	r := createRDB()
+	i := createInspector()
 	for _, id := range args {
-		err := r.PublishCancelation(id)
-		if err != nil {
+		if err := i.CancelProcessing(id); err != nil {
 			fmt.Printf("error: could not send cancelation signal: %v\n", err)
 			continue
 		}
@@ -311,14 +310,14 @@ func taskArchive(cmd *cobra.Command, args []string) {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
-	key, err := cmd.Flags().GetString("key")
+	id, err := cmd.Flags().GetString("id")
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
 
 	i := createInspector()
-	err = i.ArchiveTaskByKey(qname, key)
+	err = i.ArchiveTask(qname, id)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
@@ -332,14 +331,14 @@ func taskDelete(cmd *cobra.Command, args []string) {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
-	key, err := cmd.Flags().GetString("key")
+	id, err := cmd.Flags().GetString("id")
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
 
 	i := createInspector()
-	err = i.DeleteTaskByKey(qname, key)
+	err = i.DeleteTask(qname, id)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
@@ -353,14 +352,14 @@ func taskRun(cmd *cobra.Command, args []string) {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
-	key, err := cmd.Flags().GetString("key")
+	id, err := cmd.Flags().GetString("id")
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
 
 	i := createInspector()
-	err = i.RunTaskByKey(qname, key)
+	err = i.RunTask(qname, id)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
