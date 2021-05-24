@@ -35,19 +35,19 @@ func init() {
 
 	taskCmd.AddCommand(taskArchiveCmd)
 	taskArchiveCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
-	taskArchiveCmd.Flags().StringP("id", "t", "", "id of the task")
+	taskArchiveCmd.Flags().StringP("id", "i", "", "id of the task")
 	taskArchiveCmd.MarkFlagRequired("queue")
 	taskArchiveCmd.MarkFlagRequired("id")
 
 	taskCmd.AddCommand(taskDeleteCmd)
 	taskDeleteCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
-	taskDeleteCmd.Flags().StringP("id", "t", "", "id of the task")
+	taskDeleteCmd.Flags().StringP("id", "i", "", "id of the task")
 	taskDeleteCmd.MarkFlagRequired("queue")
 	taskDeleteCmd.MarkFlagRequired("id")
 
 	taskCmd.AddCommand(taskRunCmd)
 	taskRunCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
-	taskRunCmd.Flags().StringP("id", "t", "", "id of the task")
+	taskRunCmd.Flags().StringP("id", "i", "", "id of the task")
 	taskRunCmd.MarkFlagRequired("queue")
 	taskRunCmd.MarkFlagRequired("id")
 
@@ -136,21 +136,21 @@ var taskRunCmd = &cobra.Command{
 }
 
 var taskArchiveAllCmd = &cobra.Command{
-	Use:   "archive-all --queue=QUEUE --state=STATE",
+	Use:   "archiveall --queue=QUEUE --state=STATE",
 	Short: "Archive all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskArchiveAll,
 }
 
 var taskDeleteAllCmd = &cobra.Command{
-	Use:   "delete-all --queue=QUEUE --state=STATE",
+	Use:   "deleteall --queue=QUEUE --state=STATE",
 	Short: "Delete all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskDeleteAll,
 }
 
 var taskRunAllCmd = &cobra.Command{
-	Use:   "run-all --queue=QUEUE --state=STATE",
+	Use:   "runall --queue=QUEUE --state=STATE",
 	Short: "Run all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskRunAll,
@@ -252,12 +252,21 @@ func listScheduledTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload", "Process In"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				processIn := fmt.Sprintf("%.0f seconds",
-					t.NextProcessAt().Sub(time.Now()).Seconds())
-				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), t.Payload(), processIn)
+				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), t.Payload(), formatProcessAt(t.NextProcessAt()))
 			}
 		},
 	)
+}
+
+// formatProcessAt formats next process at time to human friendly string.
+// If processAt time is in the past, returns "right now".
+// If processAt time is in the future, returns "in xxx" where xxx is the duration from now.
+func formatProcessAt(processAt time.Time) string {
+	d := processAt.Sub(time.Now())
+	if d < 0 {
+		return "right now"
+	}
+	return fmt.Sprintf("in %v", d.Round(time.Second))
 }
 
 func listRetryTasks(qname string, pageNum, pageSize int) {
@@ -275,13 +284,7 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload", "Next Retry", "Last Error", "Retried", "Max Retry"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				var nextRetry string
-				if d := t.NextProcessAt().Sub(time.Now()); d > 0 {
-					nextRetry = fmt.Sprintf("in %v", d.Round(time.Second))
-				} else {
-					nextRetry = "right now"
-				}
-				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), t.Payload(), nextRetry, t.LastErr(), t.Retried(), t.MaxRetry())
+				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), t.Payload(), formatProcessAt(t.NextProcessAt()), t.LastErr(), t.Retried(), t.MaxRetry())
 			}
 		},
 	)

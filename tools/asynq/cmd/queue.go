@@ -140,31 +140,31 @@ func queueInspect(cmd *cobra.Command, args []string) {
 	}
 }
 
-func printQueueInfo(s *asynq.QueueInfo) {
+func printQueueInfo(info *asynq.QueueInfo) {
 	bold := color.New(color.Bold)
 	bold.Println("Queue Info")
-	fmt.Printf("Name:   %s\n", s.Queue)
-	fmt.Printf("Size:   %d\n", s.Size)
-	fmt.Printf("Paused: %t\n\n", s.Paused)
+	fmt.Printf("Name:   %s\n", info.Queue)
+	fmt.Printf("Size:   %d\n", info.Size)
+	fmt.Printf("Paused: %t\n\n", info.Paused)
 	bold.Println("Task Count by State")
 	printTable(
 		[]string{"active", "pending", "scheduled", "retry", "archived"},
 		func(w io.Writer, tmpl string) {
-			fmt.Fprintf(w, tmpl, s.Active, s.Pending, s.Scheduled, s.Retry, s.Archived)
+			fmt.Fprintf(w, tmpl, info.Active, info.Pending, info.Scheduled, info.Retry, info.Archived)
 		},
 	)
 	fmt.Println()
-	bold.Printf("Daily Stats %s UTC\n", s.Timestamp.UTC().Format("2006-01-02"))
+	bold.Printf("Daily Stats %s UTC\n", info.Timestamp.UTC().Format("2006-01-02"))
 	printTable(
 		[]string{"processed", "failed", "error rate"},
 		func(w io.Writer, tmpl string) {
 			var errRate string
-			if s.Processed == 0 {
+			if info.Processed == 0 {
 				errRate = "N/A"
 			} else {
-				errRate = fmt.Sprintf("%.2f%%", float64(s.Failed)/float64(s.Processed)*100)
+				errRate = fmt.Sprintf("%.2f%%", float64(info.Failed)/float64(info.Processed)*100)
 			}
-			fmt.Fprintf(w, tmpl, s.Processed, s.Failed, errRate)
+			fmt.Fprintf(w, tmpl, info.Processed, info.Failed, errRate)
 		},
 	)
 }
