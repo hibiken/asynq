@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 )
@@ -25,6 +26,12 @@ func init() {
 	taskListCmd.MarkFlagRequired("state")
 
 	taskCmd.AddCommand(taskCancelCmd)
+
+	taskCmd.AddCommand(taskInspectCmd)
+	taskInspectCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
+	taskInspectCmd.Flags().StringP("id", "i", "", "id of the task")
+	taskInspectCmd.MarkFlagRequired("queue")
+	taskInspectCmd.MarkFlagRequired("id")
 
 	taskCmd.AddCommand(taskArchiveCmd)
 	taskArchiveCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
@@ -91,6 +98,13 @@ To list pending tasks from "default" queue, run
 To list the tasks from the second page, run
   asynq task ls --queue=default --state=pending --page=1`,
 	Run: taskList,
+}
+
+var taskInspectCmd = &cobra.Command{
+	Use:   "inspect --queue=QUEUE --id=TASK_ID",
+	Short: "Display detailed information on the specified task",
+	Args:  cobra.NoArgs,
+	Run:   taskInspect,
 }
 
 var taskCancelCmd = &cobra.Command{
@@ -302,6 +316,55 @@ func taskCancel(cmd *cobra.Command, args []string) {
 		}
 		fmt.Printf("Sent cancelation signal for task %s\n", id)
 	}
+}
+
+func taskInspect(cmd *cobra.Command, args []string) {
+	qname, err := cmd.Flags().GetString("queue")
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+	id, err := cmd.Flags().GetString("id")
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+
+	i := createInspector()
+	info, err := i.GetTaskInfo(qname, id)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+	printTaskInfo(info)
+}
+
+func printTaskInfo(info *asynq.TaskInfo) {
+	bold := color.New(color.Bold)
+	bold.Println("Task Info")
+	fmt.Printf("Queue:   %s\n", info.Queue())
+	fmt.Printf("ID:      %s\n", info.ID())
+	fmt.Printf("Type:    %s\n", info.Type())
+	fmt.Printf("State:   %v\n", info.State())
+	fmt.Printf("Retried: %d/%d\n", info.Retried(), info.MaxRetry())
+	fmt.Println()
+	fmt.Printf("Next process time: %s\n", formatNextProcessAt(info.NextProcessAt()))
+	if len(info.LastErr()) != 0 {
+		fmt.Println()
+		bold.Println("Last Failure")
+		fmt.Printf("Failed at:     %s\n", info.LastFailedAt().Format(time.UnixDate))
+		fmt.Printf("Error message: %s\n", info.LastErr())
+	}
+}
+
+func formatNextProcessAt(processAt time.Time) string {
+	if processAt.IsZero() {
+		return "n/a"
+	}
+	if processAt.Before(time.Now()) {
+		return "now"
+	}
+	return fmt.Sprintf("%s (in %v)", processAt.Format(time.UnixDate), processAt.Sub(time.Now()).Round(time.Second))
 }
 
 func taskArchive(cmd *cobra.Command, args []string) {
