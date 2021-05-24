@@ -90,7 +90,7 @@ func queueList(cmd *cobra.Command, args []string) {
 		fmt.Printf("error: Could not fetch list of queues: %v\n", err)
 		os.Exit(1)
 	}
-	var qs []queueInfo
+	var qs []*queueInfo
 	for _, qname := range queues {
 		q := queueInfo{name: qname}
 		if useRedisCluster {
@@ -107,7 +107,7 @@ func queueList(cmd *cobra.Command, args []string) {
 			}
 			q.nodes = nodes
 		}
-		qs = append(qs, q)
+		qs = append(qs, &q)
 	}
 	if useRedisCluster {
 		printTable(
@@ -129,9 +129,8 @@ func queueInspect(cmd *cobra.Command, args []string) {
 	inspector := createInspector()
 	for i, qname := range args {
 		if i > 0 {
-			fmt.Printf("\n%s\n", separator)
+			fmt.Printf("\n%s\n\n", separator)
 		}
-		fmt.Println()
 		info, err := inspector.GetQueueInfo(qname)
 		if err != nil {
 			fmt.Printf("error: %v\n", err)
@@ -179,9 +178,9 @@ func queueHistory(cmd *cobra.Command, args []string) {
 	inspector := createInspector()
 	for i, qname := range args {
 		if i > 0 {
-			fmt.Printf("\n%s\n", separator)
+			fmt.Printf("\n%s\n\n", separator)
 		}
-		fmt.Printf("\nQueue: %s\n\n", qname)
+		fmt.Printf("Queue: %s\n\n", qname)
 		stats, err := inspector.History(qname, days)
 		if err != nil {
 			fmt.Printf("error: %v\n", err)
