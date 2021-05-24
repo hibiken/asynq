@@ -123,6 +123,22 @@ const (
 	TaskStateArchived
 )
 
+func (s TaskState) String() string {
+	switch s {
+	case TaskStateActive:
+		return "active"
+	case TaskStatePending:
+		return "pending"
+	case TaskStateScheduled:
+		return "scheduled"
+	case TaskStateRetry:
+		return "retry"
+	case TaskStateArchived:
+		return "archived"
+	}
+	panic("asynq: unknown task state")
+}
+
 // RedisConnOpt is a discriminated union of types that represent Redis connection configuration option.
 //
 // RedisConnOpt represents a sum of following types:
