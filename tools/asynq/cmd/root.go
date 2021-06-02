@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq"
@@ -194,4 +196,29 @@ func printTable(cols []string, printRows func(w io.Writer, tmpl string)) {
 	fmt.Fprintf(tw, format, seps...)
 	printRows(tw, format)
 	tw.Flush()
+}
+
+// formatPayload returns string representation of payload if data is printable.
+// If data is not printable, it returns a string describing payload is not printable.
+func formatPayload(payload []byte) string {
+	if !isPrintable(payload) {
+		return "non-printable bytes"
+	}
+	return string(payload)
+}
+
+func isPrintable(data []byte) bool {
+	if !utf8.Valid(data) {
+		return false
+	}
+	isAllSpace := true
+	for _, r := range string(data) {
+		if !unicode.IsPrint(r) {
+			return false
+		}
+		if !unicode.IsSpace(r) {
+			isAllSpace = false
+		}
+	}
+	return !isAllSpace
 }
