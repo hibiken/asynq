@@ -408,8 +408,8 @@ func TestProcessorRetry(t *testing.T) {
 		p.handler = tc.handler
 
 		p.start(&sync.WaitGroup{})
-		now := time.Now()   // time when processor is running
-		time.Sleep(tc.wait) // FIXME: This makes test flaky.
+		runTime := time.Now() // time when processor is running
+		time.Sleep(tc.wait)   // FIXME: This makes test flaky.
 		p.shutdown()
 
 		cmpOpt := h.EquateInt64Approx(int64(tc.wait.Seconds())) // allow up to a wait-second difference in zset score
@@ -418,8 +418,8 @@ func TestProcessorRetry(t *testing.T) {
 		for _, msg := range tc.wantRetry {
 			wantRetry = append(wantRetry,
 				base.Z{
-					Message: h.TaskMessageAfterRetry(*msg, tc.wantErrMsg),
-					Score:   now.Add(tc.delay).Unix(),
+					Message: h.TaskMessageAfterRetry(*msg, tc.wantErrMsg, runTime),
+					Score:   runTime.Add(tc.delay).Unix(),
 				})
 		}
 		if diff := cmp.Diff(wantRetry, gotRetry, h.SortZSetEntryOpt, cmpOpt); diff != "" {
@@ -431,8 +431,8 @@ func TestProcessorRetry(t *testing.T) {
 		for _, msg := range tc.wantArchived {
 			wantArchived = append(wantArchived,
 				base.Z{
-					Message: h.TaskMessageWithError(*msg, tc.wantErrMsg),
-					Score:   now.Unix(),
+					Message: h.TaskMessageWithError(*msg, tc.wantErrMsg, runTime),
+					Score:   runTime.Unix(),
 				})
 		}
 		if diff := cmp.Diff(wantArchived, gotArchived, h.SortZSetEntryOpt, cmpOpt); diff != "" {

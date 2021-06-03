@@ -1078,7 +1078,7 @@ func TestRetry(t *testing.T) {
 		errMsg        string
 		wantActive    map[string][]*base.TaskMessage
 		wantDeadlines map[string][]base.Z
-		wantRetry     map[string][]base.Z
+		getWantRetry  func(failedAt time.Time) map[string][]base.Z
 	}{
 		{
 			active: map[string][]*base.TaskMessage{
@@ -1099,11 +1099,13 @@ func TestRetry(t *testing.T) {
 			wantDeadlines: map[string][]base.Z{
 				"default": {{Message: t2, Score: t2Deadline}},
 			},
-			wantRetry: map[string][]base.Z{
-				"default": {
-					{Message: h.TaskMessageAfterRetry(*t1, errMsg), Score: now.Add(5 * time.Minute).Unix()},
-					{Message: t3, Score: now.Add(time.Minute).Unix()},
-				},
+			getWantRetry: func(failedAt time.Time) map[string][]base.Z {
+				return map[string][]base.Z{
+					"default": {
+						{Message: h.TaskMessageAfterRetry(*t1, errMsg, failedAt), Score: now.Add(5 * time.Minute).Unix()},
+						{Message: t3, Score: now.Add(time.Minute).Unix()},
+					},
+				}
 			},
 		},
 		{
@@ -1130,11 +1132,13 @@ func TestRetry(t *testing.T) {
 				"default": {{Message: t1, Score: t1Deadline}, {Message: t2, Score: t2Deadline}},
 				"custom":  {},
 			},
-			wantRetry: map[string][]base.Z{
-				"default": {},
-				"custom": {
-					{Message: h.TaskMessageAfterRetry(*t4, errMsg), Score: now.Add(5 * time.Minute).Unix()},
-				},
+			getWantRetry: func(failedAt time.Time) map[string][]base.Z {
+				return map[string][]base.Z{
+					"default": {},
+					"custom": {
+						{Message: h.TaskMessageAfterRetry(*t4, errMsg, failedAt), Score: now.Add(5 * time.Minute).Unix()},
+					},
+				}
 			},
 		},
 	}
@@ -1145,6 +1149,7 @@ func TestRetry(t *testing.T) {
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
+		callTime := time.Now() // time when method was called
 		err := r.Retry(tc.msg, tc.processAt, tc.errMsg)
 		if err != nil {
 			t.Errorf("(*RDB).Retry = %v, want nil", err)
@@ -1167,7 +1172,8 @@ func TestRetry(t *testing.T) {
 			h.SortZSetEntryOpt,
 			cmpopts.EquateApproxTime(5 * time.Second), // for LastFailedAt field
 		}
-		for queue, want := range tc.wantRetry {
+		wantRetry := tc.getWantRetry(callTime)
+		for queue, want := range wantRetry {
 			gotRetry := h.GetRetryEntries(t, r.client, queue)
 			if diff := cmp.Diff(want, gotRetry, cmpOpts...); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryKey(queue), diff)
@@ -1244,13 +1250,13 @@ func TestArchive(t *testing.T) {
 
 	// TODO(hibiken): add test cases for trimming
 	tests := []struct {
-		active        map[string][]*base.TaskMessage
-		deadlines     map[string][]base.Z
-		archived      map[string][]base.Z
-		target        *base.TaskMessage // task to archive
-		wantActive    map[string][]*base.TaskMessage
-		wantDeadlines map[string][]base.Z
-		wantArchived  map[string][]base.Z
+		active          map[string][]*base.TaskMessage
+		deadlines       map[string][]base.Z
+		archived        map[string][]base.Z
+		target          *base.TaskMessage // task to archive
+		wantActive      map[string][]*base.TaskMessage
+		wantDeadlines   map[string][]base.Z
+		getWantArchived func(failedAt time.Time) map[string][]base.Z
 	}{
 		{
 			active: map[string][]*base.TaskMessage{
@@ -1274,11 +1280,13 @@ func TestArchive(t *testing.T) {
 			wantDeadlines: map[string][]base.Z{
 				"default": {{Message: t2, Score: t2Deadline}},
 			},
-			wantArchived: map[string][]base.Z{
-				"default": {
-					{Message: h.TaskMessageWithError(*t1, errMsg), Score: now.Unix()},
-					{Message: t3, Score: now.Add(-time.Hour).Unix()},
-				},
+			getWantArchived: func(failedAt time.Time) map[string][]base.Z {
+				return map[string][]base.Z{
+					"default": {
+						{Message: h.TaskMessageWithError(*t1, errMsg, failedAt), Score: failedAt.Unix()},
+						{Message: t3, Score: now.Add(-time.Hour).Unix()},
+					},
+				}
 			},
 		},
 		{
@@ -1305,10 +1313,12 @@ func TestArchive(t *testing.T) {
 					{Message: t3, Score: t3Deadline},
 				},
 			},
-			wantArchived: map[string][]base.Z{
-				"default": {
-					{Message: h.TaskMessageWithError(*t1, errMsg), Score: now.Unix()},
-				},
+			getWantArchived: func(failedAt time.Time) map[string][]base.Z {
+				return map[string][]base.Z{
+					"default": {
+						{Message: h.TaskMessageWithError(*t1, errMsg, failedAt), Score: failedAt.Unix()},
+					},
+				}
 			},
 		},
 		{
@@ -1337,11 +1347,13 @@ func TestArchive(t *testing.T) {
 				"default": {{Message: t1, Score: t1Deadline}},
 				"custom":  {},
 			},
-			wantArchived: map[string][]base.Z{
-				"default": {},
-				"custom": {
-					{Message: h.TaskMessageWithError(*t4, errMsg), Score: now.Unix()},
-				},
+			getWantArchived: func(failedAt time.Time) map[string][]base.Z {
+				return map[string][]base.Z{
+					"default": {},
+					"custom": {
+						{Message: h.TaskMessageWithError(*t4, errMsg, failedAt), Score: failedAt.Unix()},
+					},
+				}
 			},
 		},
 	}
@@ -1352,6 +1364,7 @@ func TestArchive(t *testing.T) {
 		h.SeedAllDeadlines(t, r.client, tc.deadlines)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
+		callTime := time.Now() // record time `Archive` was called
 		err := r.Archive(tc.target, errMsg)
 		if err != nil {
 			t.Errorf("(*RDB).Archive(%v, %v) = %v, want nil", tc.target, errMsg, err)
@@ -1370,7 +1383,7 @@ func TestArchive(t *testing.T) {
 				t.Errorf("mismatch found in %q after calling (*RDB).Archive: (-want, +got):\n%s", base.DeadlinesKey(queue), diff)
 			}
 		}
-		for queue, want := range tc.wantArchived {
+		for queue, want := range tc.getWantArchived(callTime) {
 			gotArchived := h.GetArchivedEntries(t, r.client, queue)
 			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt, timeCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q after calling (*RDB).Archive: (-want, +got):\n%s", base.ArchivedKey(queue), diff)

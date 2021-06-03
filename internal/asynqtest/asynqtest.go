@@ -123,18 +123,18 @@ func JSON(kv map[string]interface{}) []byte {
 }
 
 // TaskMessageAfterRetry returns an updated copy of t after retry.
-// It increments retry count and sets the error message.
-func TaskMessageAfterRetry(t base.TaskMessage, errMsg string) *base.TaskMessage {
+// It increments retry count and sets the error message and last_failed_at time.
+func TaskMessageAfterRetry(t base.TaskMessage, errMsg string, failedAt time.Time) *base.TaskMessage {
 	t.Retried = t.Retried + 1
 	t.ErrorMsg = errMsg
-	t.LastFailedAt = time.Now().Unix() // use EquateApproxTime with cmp.Diff
+	t.LastFailedAt = failedAt.Unix()
 	return &t
 }
 
 // TaskMessageWithError returns an updated copy of t with the given error message.
-func TaskMessageWithError(t base.TaskMessage, errMsg string) *base.TaskMessage {
+func TaskMessageWithError(t base.TaskMessage, errMsg string, failedAt time.Time) *base.TaskMessage {
 	t.ErrorMsg = errMsg
-	t.LastFailedAt = time.Now().Unix() // use EquateApproxTime with cmp.Diff
+	t.LastFailedAt = failedAt.Unix()
 	return &t
 }
 
