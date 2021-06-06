@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.2] - 2021-06-06
+
+### Fixed
+
+- Free unique lock when task is deleted (https://github.com/hibiken/asynq/issues/275).
+
 ## [0.17.1] - 2021-04-04
 
 ### Fixed
