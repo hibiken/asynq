@@ -2445,7 +2445,68 @@ func TestDeleteScheduledTask(t *testing.T) {
 	}
 }
 
-func TestDeleteAllDeadTasks(t *testing.T) {
+func TestDeleteUniqueTask(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1 := &base.TaskMessage{
+		ID:        uuid.New(),
+		Type:      "reindex",
+		Payload:   nil,
+		Timeout:   1800,
+		Deadline:  0,
+		UniqueKey: "asynq:{default}:unique:reindex:nil",
+		Queue:     "default",
+	}
+	t1 := time.Now().Add(5 * time.Minute)
+
+	tests := []struct {
+		scheduled     map[string][]base.Z
+		qname         string
+		id            uuid.UUID
+		score         int64
+		uniqueKey     string
+		wantScheduled map[string][]*base.TaskMessage
+	}{
+		{
+			scheduled: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+				},
+			},
+			qname:     "default",
+			id:        m1.ID,
+			score:     t1.Unix(),
+			uniqueKey: m1.UniqueKey,
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		if err := r.client.SetNX(tc.uniqueKey, tc.id.String(), time.Minute).Err(); err != nil {
+			t.Fatalf("Could not set unique lock in redis: %v", err)
+		}
+
+		if err := r.DeleteScheduledTask(tc.qname, tc.id, tc.score); err != nil {
+			t.Errorf("r.DeleteScheduledTask(%q, %v, %v) returned error: %v", tc.qname, tc.id, tc.score, err)
+			continue
+		}
+
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := h.GetScheduledMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotScheduled, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledKey(qname), diff)
+			}
+		}
+		if r.client.Exists(tc.uniqueKey).Val() != 0 {
+			t.Errorf("Uniqueness lock %q still exists", tc.uniqueKey)
+		}
+	}
+}
+func TestDeleteAllArchivedTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := h.NewTaskMessage("task1", nil)
@@ -2502,6 +2563,89 @@ func TestDeleteAllDeadTasks(t *testing.T) {
 			gotDead := h.GetArchivedMessages(t, r.client, qname)
 			if diff := cmp.Diff(want, gotDead, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ArchivedKey(qname), diff)
+			}
+		}
+	}
+}
+
+func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1 := &base.TaskMessage{
+		ID:        uuid.New(),
+		Type:      "task1",
+		Payload:   nil,
+		Timeout:   1800,
+		Deadline:  0,
+		UniqueKey: "asynq:{default}:unique:task1:nil",
+		Queue:     "default",
+	}
+	m2 := &base.TaskMessage{
+		ID:        uuid.New(),
+		Type:      "task2",
+		Payload:   nil,
+		Timeout:   1800,
+		Deadline:  0,
+		UniqueKey: "asynq:{default}:unique:task2:nil",
+		Queue:     "default",
+	}
+	m3 := h.NewTaskMessage("task3", nil)
+
+	tests := []struct {
+		archived     map[string][]base.Z
+		qname        string
+		want         int64
+		wantArchived map[string][]*base.TaskMessage
+	}{
+		{
+			archived: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: time.Now().Unix()},
+					{Message: m2, Score: time.Now().Unix()},
+					{Message: m3, Score: time.Now().Unix()},
+				},
+			},
+			qname: "default",
+			want:  3,
+			wantArchived: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		var uniqueKeys []string // list of unique keys set in redis
+		for _, zs := range tc.archived {
+			for _, z := range zs {
+				if len(z.Message.UniqueKey) > 0 {
+					err := r.client.SetNX(z.Message.UniqueKey, z.Message.ID.String(), time.Minute).Err()
+					if err != nil {
+						t.Fatalf("Failed to set unique lock in redis: %v", err)
+					}
+					uniqueKeys = append(uniqueKeys, z.Message.UniqueKey)
+				}
+			}
+		}
+
+		got, err := r.DeleteAllArchivedTasks(tc.qname)
+		if err != nil {
+			t.Errorf("r.DeleteAllDeadTasks(%q) returned error: %v", tc.qname, err)
+		}
+		if got != tc.want {
+			t.Errorf("r.DeleteAllDeadTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
+		}
+		for qname, want := range tc.wantArchived {
+			gotArchived := h.GetArchivedMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotArchived, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ArchivedKey(qname), diff)
+			}
+		}
+
+		for _, uniqueKey := range uniqueKeys {
+			if r.client.Exists(uniqueKey).Val() != 0 {
+				t.Errorf("Uniqueness lock %q still exists", uniqueKey)
 			}
 		}
 	}
