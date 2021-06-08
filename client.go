@@ -176,7 +176,6 @@ func (d processInOption) String() string     { return fmt.Sprintf("ProcessIn(%v)
 func (d processInOption) Type() OptionType   { return ProcessInOpt }
 func (d processInOption) Value() interface{} { return time.Duration(d) }
 
-
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
@@ -199,7 +198,7 @@ func composeOptions(opts ...Option) (option, error) {
 	res := option{
 		retry:     defaultMaxRetry,
 		queue:     base.DefaultQueueName,
-		timeout:   0, // do not set to deafultTimeout here
+		timeout:   0, // do not set to defaultTimeout here
 		deadline:  time.Time{},
 		processAt: time.Now(),
 	}
@@ -301,7 +300,7 @@ func (c *Client) Close() error {
 //
 // The argument opts specifies the behavior of task processing.
 // If there are conflicting Option values the last one overrides others.
-// By deafult, max retry is set to 25 and timeout is set to 30 minutes.
+// By default, max retry is set to 25 and timeout is set to 30 minutes.
 // If no ProcessAt or ProcessIn options are passed, the task will be processed immediately.
 func (c *Client) Enqueue(task *Task, opts ...Option) (*Result, error) {
 	c.mu.Lock()

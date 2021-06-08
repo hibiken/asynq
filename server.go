@@ -136,7 +136,7 @@ type Config struct {
 	HealthCheckInterval time.Duration
 }
 
-// An ErrorHandler handles an error occured during task processing.
+// An ErrorHandler handles an error occurred during task processing.
 type ErrorHandler interface {
 	HandleError(ctx context.Context, task *Task, err error)
 }
