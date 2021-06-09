@@ -7,6 +7,8 @@ package base
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
@@ -170,9 +172,12 @@ func SchedulerHistoryKey(entryID string) string {
 }
 
 // UniqueKey returns a redis key with the given type, payload, and queue name.
-// FIXME: We probably need to generate a hash of payload to make this key unique
 func UniqueKey(qname, tasktype string, payload []byte) string {
-	return fmt.Sprintf("%sunique:%s:%s", QueueKeyPrefix(qname), tasktype, string(payload))
+	if payload == nil {
+		return fmt.Sprintf("%sunique:%s:", QueueKeyPrefix(qname), tasktype)
+	}
+	checksum := md5.Sum(payload)
+	return fmt.Sprintf("%sunique:%s:%s", QueueKeyPrefix(qname), tasktype, hex.EncodeToString(checksum[:]))
 }
 
 // TaskMessage is the internal representation of a task with additional metadata fields.
