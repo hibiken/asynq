@@ -114,7 +114,8 @@ redis.call("HSET", KEYS[2],
            "msg", ARGV[3],
            "state", "pending",
            "timeout", ARGV[4],
-           "deadline", ARGV[5])
+           "deadline", ARGV[5],
+           "unique_key", KEYS[1])
 redis.call("LPUSH", KEYS[3], ARGV[1])
 return 1
 `)
@@ -407,7 +408,8 @@ redis.call("HSET", KEYS[2],
            "msg", ARGV[4],
            "state", "scheduled",
            "timeout", ARGV[5],
-           "deadline", ARGV[6])
+           "deadline", ARGV[6],
+           "unique_key", KEYS[1])
 redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1])
 return 1
 `)

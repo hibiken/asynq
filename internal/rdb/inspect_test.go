@@ -5,6 +5,7 @@
 package rdb
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -3117,6 +3118,62 @@ func TestDeletePendingTask(t *testing.T) {
 	}
 }
 
+func TestDeleteTaskWithUniqueLock(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1 := &base.TaskMessage{
+		ID:        uuid.New(),
+		Type:      "email",
+		Payload:   h.JSON(map[string]interface{}{"user_id": json.Number("123")}),
+		Queue:     base.DefaultQueueName,
+		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]interface{}{"user_id": 123})),
+	}
+	t1 := time.Now().Add(3 * time.Hour)
+
+	tests := []struct {
+		scheduled     map[string][]base.Z
+		qname         string
+		id            uuid.UUID
+		uniqueKey     string
+		wantScheduled map[string][]*base.TaskMessage
+	}{
+		{
+			scheduled: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: t1.Unix()},
+				},
+			},
+			qname:     "default",
+			id:        m1.ID,
+			uniqueKey: m1.UniqueKey,
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+
+		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
+			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
+			continue
+		}
+
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := h.GetScheduledMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotScheduled, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledKey(qname), diff)
+			}
+		}
+
+		if r.client.Exists(tc.uniqueKey).Val() != 0 {
+			t.Errorf("Uniqueness lock %q still exists", tc.uniqueKey)
+		}
+	}
+}
+
 func TestDeleteTaskError(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -3305,6 +3362,7 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 		archived     map[string][]base.Z
 		qname        string
 		want         int64
+		uniqueKeys   []string // list of unique keys that should be cleared
 		wantArchived map[string][]*base.TaskMessage
 	}{
 		{
@@ -3315,8 +3373,9 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 					{Message: m3, Score: time.Now().Unix()},
 				},
 			},
-			qname: "default",
-			want:  3,
+			qname:      "default",
+			want:       3,
+			uniqueKeys: []string{m1.UniqueKey, m2.UniqueKey},
 			wantArchived: map[string][]*base.TaskMessage{
 				"default": {},
 			},
@@ -3326,18 +3385,6 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
-		var uniqueKeys []string // list of unique keys set in redis
-		for _, zs := range tc.archived {
-			for _, z := range zs {
-				if len(z.Message.UniqueKey) > 0 {
-					err := r.client.SetNX(z.Message.UniqueKey, z.Message.ID.String(), time.Minute).Err()
-					if err != nil {
-						t.Fatalf("Failed to set unique lock in redis: %v", err)
-					}
-					uniqueKeys = append(uniqueKeys, z.Message.UniqueKey)
-				}
-			}
-		}
 
 		got, err := r.DeleteAllArchivedTasks(tc.qname)
 		if err != nil {
@@ -3353,7 +3400,7 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 			}
 		}
 
-		for _, uniqueKey := range uniqueKeys {
+		for _, uniqueKey := range tc.uniqueKeys {
 			if r.client.Exists(uniqueKey).Val() != 0 {
 				t.Errorf("Uniqueness lock %q still exists", uniqueKey)
 			}

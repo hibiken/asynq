@@ -509,7 +509,7 @@ func (r *RDB) ListArchived(qname string, pgn Pagination) ([]base.Z, error) {
 	if !r.client.SIsMember(base.AllQueues, qname).Val() {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	res, err := r.listZSetEntries(base.ArchivedKey(qname), qname, pgn)
+	zs, err := r.listZSetEntries(base.ArchivedKey(qname), qname, pgn)
 	if err != nil {
 		return nil, errors.E(op, errors.CanonicalCode(err), err)
 	}
@@ -719,7 +719,7 @@ func (r *RDB) runAll(zset, qname string) (int64, error) {
 	}
 	res, err := runAllCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	n, ok := res.(int64)
 	if !ok {
@@ -994,6 +994,10 @@ else
 		return redis.error_reply("task is not found in zset: " .. tostring(state))
 	end
 end
+local unique_key = redis.call("HGET", KEYS[1], "unique_key")
+if unique_key ~= nil and unique_key ~= "" and redis.call("GET", unique_key) == ARGV[1] then
+	redis.call("DEL", unique_key)
+end
 return redis.call("DEL", KEYS[1])
 `)
 
@@ -1089,7 +1093,12 @@ func (r *RDB) DeleteAllScheduledTasks(qname string) (int64, error) {
 var deleteAllCmd = redis.NewScript(`
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
-	redis.call("DEL", ARGV[1] .. id)
+	local task_key = ARGV[1] .. id
+	local unique_key = redis.call("HGET", task_key, "unique_key")
+	if unique_key ~= nil and unique_key ~= "" and redis.call("GET", unique_key) == id then
+		redis.call("DEL", unique_key)
+	end
+	redis.call("DEL", task_key)
 end
 redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
