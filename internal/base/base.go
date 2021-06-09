@@ -170,6 +170,7 @@ func SchedulerHistoryKey(entryID string) string {
 }
 
 // UniqueKey returns a redis key with the given type, payload, and queue name.
+// FIXME: We probably need to generate a hash of payload to make this key unique
 func UniqueKey(qname, tasktype string, payload []byte) string {
 	return fmt.Sprintf("%sunique:%s:%s", QueueKeyPrefix(qname), tasktype, string(payload))
 }
