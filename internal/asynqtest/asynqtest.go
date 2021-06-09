@@ -283,13 +283,20 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string,
 		}
 		key := base.TaskKey(msg.Queue, msg.ID.String())
 		data := map[string]interface{}{
-			"msg":      encoded,
-			"state":    state.String(),
-			"timeout":  msg.Timeout,
-			"deadline": msg.Deadline,
+			"msg":        encoded,
+			"state":      state.String(),
+			"timeout":    msg.Timeout,
+			"deadline":   msg.Deadline,
+			"unique_key": msg.UniqueKey,
 		}
 		if err := c.HSet(key, data).Err(); err != nil {
 			tb.Fatal(err)
+		}
+		if len(msg.UniqueKey) > 0 {
+			err := c.SetNX(msg.UniqueKey, msg.ID.String(), 1*time.Minute).Err()
+			if err != nil {
+				tb.Fatalf("Failed to set unique lock in redis: %v", err)
+			}
 		}
 	}
 }
@@ -306,13 +313,20 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string,
 		}
 		key := base.TaskKey(msg.Queue, msg.ID.String())
 		data := map[string]interface{}{
-			"msg":      encoded,
-			"state":    state.String(),
-			"timeout":  msg.Timeout,
-			"deadline": msg.Deadline,
+			"msg":        encoded,
+			"state":      state.String(),
+			"timeout":    msg.Timeout,
+			"deadline":   msg.Deadline,
+			"unique_key": msg.UniqueKey,
 		}
 		if err := c.HSet(key, data).Err(); err != nil {
 			tb.Fatal(err)
+		}
+		if len(msg.UniqueKey) > 0 {
+			err := c.SetNX(msg.UniqueKey, msg.ID.String(), 1*time.Minute).Err()
+			if err != nil {
+				tb.Fatalf("Failed to set unique lock in redis: %v", err)
+			}
 		}
 	}
 }
