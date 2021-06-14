@@ -181,7 +181,7 @@ func main() {
     if err != nil {
         log.Fatalf("could not enqueue task: %v", err)
     }
-    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID(), info.Queue())
+    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID, info.Queue)
 
 
     // ------------------------------------------------------------
@@ -193,7 +193,7 @@ func main() {
     if err != nil {
         log.Fatalf("could not schedule task: %v", err)
     }
-    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID(), info.Queue())
+    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID, info.Queue)
 
 
     // ----------------------------------------------------------------------------
@@ -211,7 +211,7 @@ func main() {
     if err != nil {
         log.Fatalf("could not enqueue task: %v", err)
     }
-    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID(), info.Queue())
+    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID, info.Queue)
 
     // ---------------------------------------------------------------------------
     // Example 4: Pass options to tune task processing behavior at enqueue time.
@@ -222,7 +222,7 @@ func main() {
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
     }
-    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID(), info.Queue())
+    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID, info.Queue)
 }
 ```
 
