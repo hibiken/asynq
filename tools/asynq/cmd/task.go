@@ -210,7 +210,7 @@ func listActiveTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), formatPayload(t.Payload()))
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload))
 			}
 		},
 	)
@@ -231,7 +231,7 @@ func listPendingTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), formatPayload(t.Payload()))
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload))
 			}
 		},
 	)
@@ -252,7 +252,7 @@ func listScheduledTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload", "Process In"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), formatPayload(t.Payload()), formatProcessAt(t.NextProcessAt()))
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload), formatProcessAt(t.NextProcessAt))
 			}
 		},
 	)
@@ -284,8 +284,8 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload", "Next Retry", "Last Error", "Last Failed", "Retried", "Max Retry"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), formatPayload(t.Payload()), formatProcessAt(t.NextProcessAt()),
-					t.LastErr(), formatLastFailedAt(t.LastFailedAt()), t.Retried(), t.MaxRetry())
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload), formatProcessAt(t.NextProcessAt),
+					t.LastErr, formatLastFailedAt(t.LastFailedAt), t.Retried, t.MaxRetry)
 			}
 		},
 	)
@@ -306,7 +306,7 @@ func listArchivedTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload", "Last Failed", "Last Error"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID(), t.Type(), formatPayload(t.Payload()), formatLastFailedAt(t.LastFailedAt()), t.LastErr())
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload), formatLastFailedAt(t.LastFailedAt), t.LastErr)
 			}
 		})
 }
@@ -346,18 +346,18 @@ func taskInspect(cmd *cobra.Command, args []string) {
 func printTaskInfo(info *asynq.TaskInfo) {
 	bold := color.New(color.Bold)
 	bold.Println("Task Info")
-	fmt.Printf("Queue:   %s\n", info.Queue())
-	fmt.Printf("ID:      %s\n", info.ID())
-	fmt.Printf("Type:    %s\n", info.Type())
-	fmt.Printf("State:   %v\n", info.State())
-	fmt.Printf("Retried: %d/%d\n", info.Retried(), info.MaxRetry())
+	fmt.Printf("Queue:   %s\n", info.Queue)
+	fmt.Printf("ID:      %s\n", info.ID)
+	fmt.Printf("Type:    %s\n", info.Type)
+	fmt.Printf("State:   %v\n", info.State)
+	fmt.Printf("Retried: %d/%d\n", info.Retried, info.MaxRetry)
 	fmt.Println()
-	fmt.Printf("Next process time: %s\n", formatNextProcessAt(info.NextProcessAt()))
-	if len(info.LastErr()) != 0 {
+	fmt.Printf("Next process time: %s\n", formatNextProcessAt(info.NextProcessAt))
+	if len(info.LastErr) != 0 {
 		fmt.Println()
 		bold.Println("Last Failure")
-		fmt.Printf("Failed at:     %s\n", formatLastFailedAt(info.LastFailedAt()))
-		fmt.Printf("Error message: %s\n", info.LastErr())
+		fmt.Printf("Failed at:     %s\n", formatLastFailedAt(info.LastFailedAt))
+		fmt.Printf("Error message: %s\n", info.LastErr)
 	}
 }
 
