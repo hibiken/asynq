@@ -48,11 +48,14 @@ func (i *Inspector) Queues() ([]string, error) {
 type QueueInfo struct {
 	// Name of the queue.
 	Queue string
+
 	// Total number of bytes that the queue and its tasks require to be stored in redis.
 	MemoryUsage int64
+
 	// Size is the total number of tasks in the queue.
 	// The value is the sum of Pending, Active, Scheduled, Retry, and Archived.
 	Size int
+
 	// Number of pending tasks.
 	Pending int
 	// Number of active tasks.
@@ -63,15 +66,18 @@ type QueueInfo struct {
 	Retry int
 	// Number of archived tasks.
 	Archived int
+
 	// Total number of tasks being processed during the given date.
 	// The number includes both succeeded and failed tasks.
 	Processed int
 	// Total number of tasks failed to be processed during the given date.
 	Failed int
+
 	// Paused indicates whether the queue is paused.
 	// If true, tasks in the queue will not be processed.
 	Paused bool
-	// Time when this stats was taken.
+
+	// Time when this queue info snapshot was taken.
 	Timestamp time.Time
 }
 
@@ -184,11 +190,7 @@ func (i *Inspector) GetTaskInfo(qname, id string) (*TaskInfo, error) {
 	case err != nil:
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
-	return &TaskInfo{
-		msg:           info.Message,
-		state:         info.State,
-		nextProcessAt: info.NextProcessAt,
-	}, nil
+	return newTaskInfo(info.Message, info.State, info.NextProcessAt), nil
 }
 
 // ListOption specifies behavior of list operation.
@@ -271,11 +273,7 @@ func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*TaskI
 	now := time.Now()
 	var tasks []*TaskInfo
 	for _, m := range msgs {
-		tasks = append(tasks, &TaskInfo{
-			msg:           m,
-			state:         base.TaskStatePending,
-			nextProcessAt: now,
-		})
+		tasks = append(tasks, newTaskInfo(m, base.TaskStatePending, now))
 	}
 	return tasks, err
 }
@@ -298,10 +296,7 @@ func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*TaskIn
 	}
 	var tasks []*TaskInfo
 	for _, m := range msgs {
-		tasks = append(tasks, &TaskInfo{
-			msg:   m,
-			state: base.TaskStateActive,
-		})
+		tasks = append(tasks, newTaskInfo(m, base.TaskStateActive, time.Time{}))
 	}
 	return tasks, err
 }
@@ -325,11 +320,11 @@ func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*Tas
 	}
 	var tasks []*TaskInfo
 	for _, z := range zs {
-		tasks = append(tasks, &TaskInfo{
-			msg:           z.Message,
-			state:         base.TaskStateScheduled,
-			nextProcessAt: time.Unix(z.Score, 0),
-		})
+		tasks = append(tasks, newTaskInfo(
+			z.Message,
+			base.TaskStateScheduled,
+			time.Unix(z.Score, 0),
+		))
 	}
 	return tasks, nil
 }
@@ -353,11 +348,11 @@ func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*TaskInf
 	}
 	var tasks []*TaskInfo
 	for _, z := range zs {
-		tasks = append(tasks, &TaskInfo{
-			msg:           z.Message,
-			state:         base.TaskStateRetry,
-			nextProcessAt: time.Unix(z.Score, 0),
-		})
+		tasks = append(tasks, newTaskInfo(
+			z.Message,
+			base.TaskStateRetry,
+			time.Unix(z.Score, 0),
+		))
 	}
 	return tasks, nil
 }
@@ -381,10 +376,11 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Task
 	}
 	var tasks []*TaskInfo
 	for _, z := range zs {
-		tasks = append(tasks, &TaskInfo{
-			msg:   z.Message,
-			state: base.TaskStateArchived,
-		})
+		tasks = append(tasks, newTaskInfo(
+			z.Message,
+			base.TaskStateArchived,
+			time.Time{},
+		))
 	}
 	return tasks, nil
 }

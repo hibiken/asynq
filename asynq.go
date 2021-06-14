@@ -38,70 +38,86 @@ func NewTask(typename string, payload []byte) *Task {
 
 // A TaskInfo describes a task and its metadata.
 type TaskInfo struct {
-	msg           *base.TaskMessage
-	state         base.TaskState
-	nextProcessAt time.Time
+	// ID is the identifier of the task.
+	ID string
+
+	// Queue is the name of the queue in which the task belongs.
+	Queue string
+
+	// Type is the type name of the task.
+	Type string
+
+	// Payload is the payload data of the task.
+	Payload []byte
+
+	// State indicates the task state.
+	State TaskState
+
+	// MaxRetry is the maximum number of times the task can be retried.
+	MaxRetry int
+
+	// Retried is the number of times the task has retried so far.
+	Retried int
+
+	// LastErr is the error message from the last failure.
+	LastErr string
+
+	// LastFailedAt is the time time of the last failure if any.
+	// If the task has no failures, LastFailedAt is zero time (i.e. time.Time{}).
+	LastFailedAt time.Time
+
+	// Timeout is the duration the task can be processed by Handler before being retried,
+	// zero if not specified
+	Timeout time.Duration
+
+	// Deadline is the deadline for the task, zero value if not specified.
+	Deadline time.Time
+
+	// NextProcessAt is the time the task is scheduled to be processed,
+	// zero if not applicable.
+	NextProcessAt time.Time
 }
 
-// ID returns the id of the task.
-func (info *TaskInfo) ID() string { return info.msg.ID.String() }
+func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time.Time) *TaskInfo {
+	info := TaskInfo{
+		ID:            msg.ID.String(),
+		Queue:         msg.Queue,
+		Type:          msg.Type,
+		Payload:       msg.Payload, // Do we need to make a copy?
+		MaxRetry:      msg.Retry,
+		Retried:       msg.Retried,
+		LastErr:       msg.ErrorMsg,
+		Timeout:       time.Duration(msg.Timeout) * time.Second,
+		NextProcessAt: nextProcessAt,
+	}
+	if msg.LastFailedAt == 0 {
+		info.LastFailedAt = time.Time{}
+	} else {
+		info.LastFailedAt = time.Unix(msg.LastFailedAt, 0)
+	}
 
-// Queue returns the name of the queue in which the task belongs.
-func (info *TaskInfo) Queue() string { return info.msg.Queue }
+	if msg.Deadline == 0 {
+		info.Deadline = time.Time{}
+	} else {
+		info.Deadline = time.Unix(msg.Deadline, 0)
+	}
 
-// Type returns the type name of the task.
-func (info *TaskInfo) Type() string { return info.msg.Type }
-
-// Payload returns the payload data of the task.
-func (info *TaskInfo) Payload() []byte { return info.msg.Payload }
-
-func (info *TaskInfo) State() TaskState {
-	switch info.state {
+	switch state {
 	case base.TaskStateActive:
-		return TaskStateActive
+		info.State = TaskStateActive
 	case base.TaskStatePending:
-		return TaskStatePending
+		info.State = TaskStatePending
 	case base.TaskStateScheduled:
-		return TaskStateScheduled
+		info.State = TaskStateScheduled
 	case base.TaskStateRetry:
-		return TaskStateRetry
+		info.State = TaskStateRetry
 	case base.TaskStateArchived:
-		return TaskStateArchived
+		info.State = TaskStateArchived
+	default:
+		panic(fmt.Sprintf("internal error: unknown state: %d", state))
 	}
-	panic("internal error: unknown state in TaskInfo")
+	return &info
 }
-
-// MaxRetry returns the maximum number of times the task can be retried.
-func (info *TaskInfo) MaxRetry() int { return info.msg.Retry }
-
-// Retried returns the number of times the task has retried so far.
-func (info *TaskInfo) Retried() int { return info.msg.Retried }
-
-// LastErr returns the error message from the last failure.
-// If the task has no failures, returns an empty string.
-func (info *TaskInfo) LastErr() string { return info.msg.ErrorMsg }
-
-// LastFailedAt returns the time of the last failure if any.
-// If the task has no failures, returns zero time.
-func (info *TaskInfo) LastFailedAt() time.Time { return time.Unix(info.msg.LastFailedAt, 0) }
-
-// Timeout returns the duration the task can be processed by Handler before being retried,
-// zero if not specified
-func (info *TaskInfo) Timeout() time.Duration {
-	return time.Duration(info.msg.Timeout) * time.Second
-}
-
-// Deadline returns the deadline for the task, zero value if not specified.
-func (info *TaskInfo) Deadline() time.Time {
-	if info.msg.Deadline == 0 {
-		return time.Time{}
-	}
-	return time.Unix(info.msg.Deadline, 0)
-}
-
-// NextProcessAt returns the time the task is scheduled to be processed,
-// zero if not applicable.
-func (info *TaskInfo) NextProcessAt() time.Time { return info.nextProcessAt }
 
 // TaskState denotes the state of a task.
 type TaskState int
