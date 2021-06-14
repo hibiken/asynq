@@ -42,15 +42,17 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 			processAt: now,
 			opts:      []Option{},
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:    task.Type(),
-					Payload: task.Payload(),
-					Queue:   "default",
-					Retry:   defaultMaxRetry,
-					Timeout: int64(defaultTimeout.Seconds()),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -74,16 +76,17 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 			processAt: oneHourLater,
 			opts:      []Option{},
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     task.Type(),
-					Payload:  task.Payload(),
-					Retry:    defaultMaxRetry,
-					Queue:    "default",
-					Timeout:  int64(defaultTimeout.Seconds()),
-					Deadline: noDeadline.Unix(),
-				},
-				state:         base.TaskStateScheduled,
-				nextProcessAt: oneHourLater,
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStateScheduled,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: oneHourLater,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
@@ -116,8 +119,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 			continue
 		}
 		cmpOptions := []cmp.Option{
-			cmp.AllowUnexported(TaskInfo{}),
-			cmpopts.IgnoreFields(base.TaskMessage{}, "ID"),
+			cmpopts.IgnoreFields(TaskInfo{}, "ID"),
 			cmpopts.EquateApproxTime(500 * time.Millisecond),
 		}
 		if diff := cmp.Diff(tc.wantInfo, gotInfo, cmpOptions...); diff != "" {
@@ -162,16 +164,17 @@ func TestClientEnqueue(t *testing.T) {
 				MaxRetry(3),
 			},
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     task.Type(),
-					Payload:  task.Payload(),
-					Retry:    3,
-					Queue:    "default",
-					Timeout:  int64(defaultTimeout.Seconds()),
-					Deadline: noDeadline.Unix(),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStatePending,
+				MaxRetry:      3,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -193,16 +196,17 @@ func TestClientEnqueue(t *testing.T) {
 				MaxRetry(-2),
 			},
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     task.Type(),
-					Payload:  task.Payload(),
-					Retry:    0, // Retry count should be set to zero
-					Queue:    "default",
-					Timeout:  int64(defaultTimeout.Seconds()),
-					Deadline: noDeadline.Unix(),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStatePending,
+				MaxRetry:      0, // Retry count should be set to zero
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -225,16 +229,17 @@ func TestClientEnqueue(t *testing.T) {
 				MaxRetry(10),
 			},
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     task.Type(),
-					Payload:  task.Payload(),
-					Retry:    10, // Last option takes precedence
-					Queue:    "default",
-					Timeout:  int64(defaultTimeout.Seconds()),
-					Deadline: noDeadline.Unix(),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStatePending,
+				MaxRetry:      10, // Last option takes precedence
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -256,16 +261,17 @@ func TestClientEnqueue(t *testing.T) {
 				Queue("custom"),
 			},
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     task.Type(),
-					Payload:  task.Payload(),
-					Retry:    defaultMaxRetry,
-					Queue:    "custom",
-					Timeout:  int64(defaultTimeout.Seconds()),
-					Deadline: noDeadline.Unix(),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "custom",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"custom": {
@@ -287,16 +293,17 @@ func TestClientEnqueue(t *testing.T) {
 				Queue("HIGH"),
 			},
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     task.Type(),
-					Payload:  task.Payload(),
-					Retry:    defaultMaxRetry,
-					Queue:    "high",
-					Timeout:  int64(defaultTimeout.Seconds()),
-					Deadline: noDeadline.Unix(),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "high",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"high": {
@@ -318,16 +325,17 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout(20 * time.Second),
 			},
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     task.Type(),
-					Payload:  task.Payload(),
-					Retry:    defaultMaxRetry,
-					Queue:    "default",
-					Timeout:  20,
-					Deadline: noDeadline.Unix(),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       20 * time.Second,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -349,16 +357,17 @@ func TestClientEnqueue(t *testing.T) {
 				Deadline(time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC)),
 			},
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     task.Type(),
-					Payload:  task.Payload(),
-					Retry:    defaultMaxRetry,
-					Queue:    "default",
-					Timeout:  int64(noTimeout.Seconds()),
-					Deadline: time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC).Unix(),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       noTimeout,
+				Deadline:      time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC),
+				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -381,16 +390,17 @@ func TestClientEnqueue(t *testing.T) {
 				Deadline(time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC)),
 			},
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     task.Type(),
-					Payload:  task.Payload(),
-					Retry:    defaultMaxRetry,
-					Queue:    "default",
-					Timeout:  20,
-					Deadline: time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC).Unix(),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       20 * time.Second,
+				Deadline:      time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC),
+				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -416,8 +426,7 @@ func TestClientEnqueue(t *testing.T) {
 			continue
 		}
 		cmpOptions := []cmp.Option{
-			cmp.AllowUnexported(TaskInfo{}),
-			cmpopts.IgnoreFields(base.TaskMessage{}, "ID"),
+			cmpopts.IgnoreFields(TaskInfo{}, "ID"),
 			cmpopts.EquateApproxTime(500 * time.Millisecond),
 		}
 		if diff := cmp.Diff(tc.wantInfo, gotInfo, cmpOptions...); diff != "" {
@@ -457,16 +466,17 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 			delay: 1 * time.Hour,
 			opts:  []Option{},
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     task.Type(),
-					Payload:  task.Payload(),
-					Retry:    defaultMaxRetry,
-					Queue:    "default",
-					Timeout:  int64(defaultTimeout.Seconds()),
-					Deadline: noDeadline.Unix(),
-				},
-				state:         base.TaskStateScheduled,
-				nextProcessAt: time.Now().Add(1 * time.Hour),
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStateScheduled,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: time.Now().Add(1 * time.Hour),
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
@@ -493,16 +503,17 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 			delay: 0,
 			opts:  []Option{},
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     task.Type(),
-					Payload:  task.Payload(),
-					Retry:    defaultMaxRetry,
-					Queue:    "default",
-					Timeout:  int64(defaultTimeout.Seconds()),
-					Deadline: noDeadline.Unix(),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -532,8 +543,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 			continue
 		}
 		cmpOptions := []cmp.Option{
-			cmp.AllowUnexported(TaskInfo{}),
-			cmpopts.IgnoreFields(base.TaskMessage{}, "ID"),
+			cmpopts.IgnoreFields(TaskInfo{}, "ID"),
 			cmpopts.EquateApproxTime(500 * time.Millisecond),
 		}
 		if diff := cmp.Diff(tc.wantInfo, gotInfo, cmpOptions...); diff != "" {
@@ -607,16 +617,17 @@ func TestClientDefaultOptions(t *testing.T) {
 			opts:        []Option{},
 			task:        NewTask("feed:import", nil),
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     "feed:import",
-					Payload:  nil,
-					Retry:    defaultMaxRetry,
-					Queue:    "feed",
-					Timeout:  int64(defaultTimeout.Seconds()),
-					Deadline: noDeadline.Unix(),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "feed",
+				Type:          "feed:import",
+				Payload:       nil,
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
 			},
 			queue: "feed",
 			want: &base.TaskMessage{
@@ -634,16 +645,17 @@ func TestClientDefaultOptions(t *testing.T) {
 			opts:        []Option{},
 			task:        NewTask("feed:import", nil),
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     "feed:import",
-					Payload:  nil,
-					Retry:    5,
-					Queue:    "feed",
-					Timeout:  int64(defaultTimeout.Seconds()),
-					Deadline: noDeadline.Unix(),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "feed",
+				Type:          "feed:import",
+				Payload:       nil,
+				State:         TaskStatePending,
+				MaxRetry:      5,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
 			},
 			queue: "feed",
 			want: &base.TaskMessage{
@@ -661,16 +673,16 @@ func TestClientDefaultOptions(t *testing.T) {
 			opts:        []Option{Queue("critical")},
 			task:        NewTask("feed:import", nil),
 			wantInfo: &TaskInfo{
-				msg: &base.TaskMessage{
-					Type:     "feed:import",
-					Payload:  nil,
-					Retry:    5,
-					Queue:    "critical",
-					Timeout:  int64(defaultTimeout.Seconds()),
-					Deadline: noDeadline.Unix(),
-				},
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
+				Queue:         "critical",
+				Type:          "feed:import",
+				Payload:       nil,
+				State:         TaskStatePending,
+				MaxRetry:      5,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
 			},
 			queue: "critical",
 			want: &base.TaskMessage{
@@ -694,8 +706,7 @@ func TestClientDefaultOptions(t *testing.T) {
 			t.Fatal(err)
 		}
 		cmpOptions := []cmp.Option{
-			cmp.AllowUnexported(TaskInfo{}),
-			cmpopts.IgnoreFields(base.TaskMessage{}, "ID"),
+			cmpopts.IgnoreFields(TaskInfo{}, "ID"),
 			cmpopts.EquateApproxTime(500 * time.Millisecond),
 		}
 		if diff := cmp.Diff(tc.wantInfo, gotInfo, cmpOptions...); diff != "" {

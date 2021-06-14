@@ -320,7 +320,7 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 	case err != nil:
 		return nil, err
 	}
-	return &TaskInfo{msg, state, opt.processAt}, nil
+	return newTaskInfo(msg, state, opt.processAt), nil
 }
 
 func (c *Client) enqueue(msg *base.TaskMessage, uniqueTTL time.Duration) error {

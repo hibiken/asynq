@@ -423,11 +423,7 @@ func TestInspectorHistory(t *testing.T) {
 }
 
 func createPendingTask(msg *base.TaskMessage) *TaskInfo {
-	return &TaskInfo{
-		msg:           msg,
-		state:         base.TaskStatePending,
-		nextProcessAt: time.Now(),
-	}
+	return newTaskInfo(msg, base.TaskStatePending, time.Now())
 }
 
 func TestInspectorGetTaskInfo(t *testing.T) {
@@ -488,47 +484,47 @@ func TestInspectorGetTaskInfo(t *testing.T) {
 		{
 			qname: "default",
 			id:    m1.ID.String(),
-			want: &TaskInfo{
-				msg:           m1,
-				state:         base.TaskStateActive,
-				nextProcessAt: time.Time{}, // zero value for n/a
-			},
+			want: newTaskInfo(
+				m1,
+				base.TaskStateActive,
+				time.Time{}, // zero value for n/a
+			),
 		},
 		{
 			qname: "default",
 			id:    m2.ID.String(),
-			want: &TaskInfo{
-				msg:           m2,
-				state:         base.TaskStateScheduled,
-				nextProcessAt: fiveMinsFromNow,
-			},
+			want: newTaskInfo(
+				m2,
+				base.TaskStateScheduled,
+				fiveMinsFromNow,
+			),
 		},
 		{
 			qname: "custom",
 			id:    m3.ID.String(),
-			want: &TaskInfo{
-				msg:           m3,
-				state:         base.TaskStateRetry,
-				nextProcessAt: oneHourFromNow,
-			},
+			want: newTaskInfo(
+				m3,
+				base.TaskStateRetry,
+				oneHourFromNow,
+			),
 		},
 		{
 			qname: "custom",
 			id:    m4.ID.String(),
-			want: &TaskInfo{
-				msg:           m4,
-				state:         base.TaskStateArchived,
-				nextProcessAt: time.Time{}, // zero value for n/a
-			},
+			want: newTaskInfo(
+				m4,
+				base.TaskStateArchived,
+				time.Time{}, // zero value for n/a
+			),
 		},
 		{
 			qname: "custom",
 			id:    m5.ID.String(),
-			want: &TaskInfo{
-				msg:           m5,
-				state:         base.TaskStatePending,
-				nextProcessAt: now,
-			},
+			want: newTaskInfo(
+				m5,
+				base.TaskStatePending,
+				now,
+			),
 		},
 	}
 
@@ -725,8 +721,8 @@ func TestInspectorListActiveTasks(t *testing.T) {
 			},
 			qname: "default",
 			want: []*TaskInfo{
-				{msg: m1, state: base.TaskStateActive, nextProcessAt: time.Time{}},
-				{msg: m2, state: base.TaskStateActive, nextProcessAt: time.Time{}},
+				newTaskInfo(m1, base.TaskStateActive, time.Time{}),
+				newTaskInfo(m2, base.TaskStateActive, time.Time{}),
 			},
 		},
 	}
@@ -748,11 +744,11 @@ func TestInspectorListActiveTasks(t *testing.T) {
 }
 
 func createScheduledTask(z base.Z) *TaskInfo {
-	return &TaskInfo{
-		msg:           z.Message,
-		state:         base.TaskStateScheduled,
-		nextProcessAt: time.Unix(z.Score, 0),
-	}
+	return newTaskInfo(
+		z.Message,
+		base.TaskStateScheduled,
+		time.Unix(z.Score, 0),
+	)
 }
 
 func TestInspectorListScheduledTasks(t *testing.T) {
@@ -817,11 +813,11 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 }
 
 func createRetryTask(z base.Z) *TaskInfo {
-	return &TaskInfo{
-		msg:           z.Message,
-		state:         base.TaskStateRetry,
-		nextProcessAt: time.Unix(z.Score, 0),
-	}
+	return newTaskInfo(
+		z.Message,
+		base.TaskStateRetry,
+		time.Unix(z.Score, 0),
+	)
 }
 
 func TestInspectorListRetryTasks(t *testing.T) {
@@ -887,11 +883,11 @@ func TestInspectorListRetryTasks(t *testing.T) {
 }
 
 func createArchivedTask(z base.Z) *TaskInfo {
-	return &TaskInfo{
-		msg:           z.Message,
-		state:         base.TaskStateArchived,
-		nextProcessAt: time.Time{},
-	}
+	return newTaskInfo(
+		z.Message,
+		base.TaskStateArchived,
+		time.Time{}, // zero value for n/a
+	)
 }
 
 func TestInspectorListArchivedTasks(t *testing.T) {
@@ -2047,7 +2043,7 @@ func TestInspectorDeleteTaskDeletesPendingTask(t *testing.T) {
 				"custom":  {m3},
 			},
 			qname: "default",
-			id:    createPendingTask(m2).ID(),
+			id:    createPendingTask(m2).ID,
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1},
 				"custom":  {m3},
@@ -2059,7 +2055,7 @@ func TestInspectorDeleteTaskDeletesPendingTask(t *testing.T) {
 				"custom":  {m3},
 			},
 			qname: "custom",
-			id:    createPendingTask(m3).ID(),
+			id:    createPendingTask(m3).ID,
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1, m2},
 				"custom":  {},
@@ -2112,7 +2108,7 @@ func TestInspectorDeleteTaskDeletesScheduledTask(t *testing.T) {
 				"custom":  {z3},
 			},
 			qname: "default",
-			id:    createScheduledTask(z2).ID(),
+			id:    createScheduledTask(z2).ID,
 			wantScheduled: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2162,7 +2158,7 @@ func TestInspectorDeleteTaskDeletesRetryTask(t *testing.T) {
 				"custom":  {z3},
 			},
 			qname: "default",
-			id:    createRetryTask(z2).ID(),
+			id:    createRetryTask(z2).ID,
 			wantRetry: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2212,7 +2208,7 @@ func TestInspectorDeleteTaskDeletesArchivedTask(t *testing.T) {
 				"custom":  {z3},
 			},
 			qname: "default",
-			id:    createArchivedTask(z2).ID(),
+			id:    createArchivedTask(z2).ID,
 			wantArchived: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2263,7 +2259,7 @@ func TestInspectorDeleteTaskError(t *testing.T) {
 				"custom":  {z3},
 			},
 			qname:   "nonexistent",
-			id:      createArchivedTask(z2).ID(),
+			id:      createArchivedTask(z2).ID,
 			wantErr: ErrQueueNotFound,
 			wantArchived: map[string][]base.Z{
 				"default": {z1, z2},
@@ -2333,7 +2329,7 @@ func TestInspectorRunTaskRunsScheduledTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "default",
-			id:    createScheduledTask(z2).ID(),
+			id:    createScheduledTask(z2).ID,
 			wantScheduled: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2403,7 +2399,7 @@ func TestInspectorRunTaskRunsRetryTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			id:    createRetryTask(z2).ID(),
+			id:    createRetryTask(z2).ID,
 			wantRetry: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2474,7 +2470,7 @@ func TestInspectorRunTaskRunsArchivedTask(t *testing.T) {
 				"low":      {},
 			},
 			qname: "critical",
-			id:    createArchivedTask(z2).ID(),
+			id:    createArchivedTask(z2).ID,
 			wantArchived: map[string][]base.Z{
 				"default":  {z1},
 				"critical": {},
@@ -2548,7 +2544,7 @@ func TestInspectorRunTaskError(t *testing.T) {
 				"low":      {},
 			},
 			qname:   "nonexistent",
-			id:      createArchivedTask(z2).ID(),
+			id:      createArchivedTask(z2).ID,
 			wantErr: ErrQueueNotFound,
 			wantArchived: map[string][]base.Z{
 				"default":  {z1},
@@ -2641,7 +2637,7 @@ func TestInspectorArchiveTaskArchivesPendingTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "default",
-			id:    createPendingTask(m1).ID(),
+			id:    createPendingTask(m1).ID,
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 				"custom":  {m2, m3},
@@ -2663,7 +2659,7 @@ func TestInspectorArchiveTaskArchivesPendingTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			id:    createPendingTask(m2).ID(),
+			id:    createPendingTask(m2).ID,
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {m1},
 				"custom":  {m3},
@@ -2736,7 +2732,7 @@ func TestInspectorArchiveTaskArchivesScheduledTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			id:    createScheduledTask(z2).ID(),
+			id:    createScheduledTask(z2).ID,
 			wantScheduled: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2811,7 +2807,7 @@ func TestInspectorArchiveTaskArchivesRetryTask(t *testing.T) {
 				"custom":  {},
 			},
 			qname: "custom",
-			id:    createRetryTask(z2).ID(),
+			id:    createRetryTask(z2).ID,
 			wantRetry: map[string][]base.Z{
 				"default": {z1},
 				"custom":  {z3},
@@ -2886,7 +2882,7 @@ func TestInspectorArchiveTaskError(t *testing.T) {
 				"custom":  {},
 			},
 			qname:   "nonexistent",
-			id:      createRetryTask(z2).ID(),
+			id:      createRetryTask(z2).ID,
 			wantErr: ErrQueueNotFound,
 			wantRetry: map[string][]base.Z{
 				"default": {z1},
