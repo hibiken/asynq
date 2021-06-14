@@ -127,7 +127,7 @@ func (j *enqueueJob) Run() {
 	}
 	j.logger.Debugf("scheduler enqueued a task: %+v", info)
 	event := &base.SchedulerEnqueueEvent{
-		TaskID:     info.ID(),
+		TaskID:     info.ID,
 		EnqueuedAt: time.Now().In(j.location),
 	}
 	err = j.rdb.RecordSchedulerEnqueueEvent(j.id.String(), event)
