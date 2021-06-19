@@ -290,6 +290,11 @@ return 1
 
 // ZAddTask adds task to zset.
 func ZAddTask(c redis.UniversalClient, key string, msg *base.TaskMessage, score float64, state string) error {
+	// Special case; LastFailedAt field is new so assign a value inferred from zscore.
+	if state == "archived" {
+		msg.LastFailedAt = int64(score)
+	}
+
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
 		return err
