@@ -33,16 +33,6 @@ func init() {
 	rootCmd.AddCommand(migrateCmd)
 }
 
-// Migration Steps:
-//
-// Step 1: Backup your Redis DB with RDB snapshot file
-//
-// Step 2: Run the following command to update the DB with new schema:
-// asynq migrate
-//
-// Step 3 (Optional):
-// If Step 2 fails, restore from the backup and report an issue.
-
 func backupKey(key string) string {
 	return fmt.Sprintf("%s:backup", key)
 }
