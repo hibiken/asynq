@@ -92,21 +92,19 @@ type ImageResizePayload struct {
 //----------------------------------------------
 
 func NewEmailDeliveryTask(userID int, tmplID string) (*asynq.Task, error) {
-    payload := EmailDeliveryPayload{UserID: userID, TemplateID: templID}
-    bytes, err := json.Marshal(payload)
+    payload, err := json.Marshal(EmailDeliveryPayload{UserID: userID, TemplateID: templID})
     if err != nil {
         return nil, err
     }
-    return asynq.NewTask(TypeEmailDelivery, bytes), nil
+    return asynq.NewTask(TypeEmailDelivery, payload), nil
 }
 
 func NewImageResizeTask(src string) (*asynq.Task, error) {
-    payload := ImageResizePayload{SourceURL: src}
-    bytes, err := json.Marshal(payload)
+    payload, err := json.Marshal(ImageResizePayload{SourceURL: src})
     if err != nil {
         return nil, err
     }
-    return asynq.NewTask(TypeImageResize, bytes), nil
+    return asynq.NewTask(TypeImageResize, payload), nil
 }
 
 //---------------------------------------------------------------
@@ -164,20 +162,19 @@ import (
 const redisAddr = "127.0.0.1:6379"
 
 func main() {
-    r := asynq.RedisClientOpt{Addr: redisAddr}
-    c := asynq.NewClient(r)
-    defer c.Close()
+    client := asynq.NewClient(asynq.RedisClientOpt{Addr: redisAddr})
+    defer client.Close()
 
     // ------------------------------------------------------
     // Example 1: Enqueue task to be processed immediately.
     //            Use (*Client).Enqueue method.
     // ------------------------------------------------------
 
-    t, err := tasks.NewEmailDeliveryTask(42, "some:template:id")
+    task, err := tasks.NewEmailDeliveryTask(42, "some:template:id")
     if err != nil {
         log.Fatalf("could not create task: %v", err)
     }
-    info, err := c.Enqueue(t)
+    info, err := client.Enqueue(task)
     if err != nil {
         log.Fatalf("could not enqueue task: %v", err)
     }
@@ -189,7 +186,7 @@ func main() {
     //            Use ProcessIn or ProcessAt option.
     // ------------------------------------------------------------
 
-    info, err = c.Enqueue(t, asynq.ProcessIn(24*time.Hour))
+    info, err = client.Enqueue(task, asynq.ProcessIn(24*time.Hour))
     if err != nil {
         log.Fatalf("could not schedule task: %v", err)
     }
@@ -201,13 +198,13 @@ func main() {
     //            Options include MaxRetry, Queue, Timeout, Deadline, Unique etc.
     // ----------------------------------------------------------------------------
 
-    c.SetDefaultOptions(tasks.TypeImageResize, asynq.MaxRetry(10), asynq.Timeout(3*time.Minute))
+    client.SetDefaultOptions(tasks.TypeImageResize, asynq.MaxRetry(10), asynq.Timeout(3*time.Minute))
 
-    t, err = tasks.NewImageResizeTask("https://example.com/myassets/image.jpg")
+    task, err = tasks.NewImageResizeTask("https://example.com/myassets/image.jpg")
     if err != nil {
         log.Fatalf("could not create task: %v", err)
     }
-    info, err = c.Enqueue(t)
+    info, err = client.Enqueue(task)
     if err != nil {
         log.Fatalf("could not enqueue task: %v", err)
     }
@@ -218,7 +215,7 @@ func main() {
     //            Options passed at enqueue time override default ones.
     // ---------------------------------------------------------------------------
 
-    info, err = c.Enqueue(t, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
+    info, err = client.Enqueue(task, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
     }
@@ -243,19 +240,20 @@ import (
 const redisAddr = "127.0.0.1:6379"
 
 func main() {
-    r := asynq.RedisClientOpt{Addr: redisAddr}
-
-    srv := asynq.NewServer(r, asynq.Config{
-        // Specify how many concurrent workers to use
-        Concurrency: 10,
-        // Optionally specify multiple queues with different priority.
-        Queues: map[string]int{
-            "critical": 6,
-            "default":  3,
-            "low":      1,
+    srv := asynq.NewServer(
+        asynq.RedisClientOpt{Addr: redisAddr}
+        asynq.Config{
+            // Specify how many concurrent workers to use
+            Concurrency: 10,
+            // Optionally specify multiple queues with different priority.
+            Queues: map[string]int{
+                "critical": 6,
+                "default":  3,
+                "low":      1,
+            },
+            // See the godoc for other configuration options
         },
-        // See the godoc for other configuration options
-    })
+    )
 
     // mux maps a type to a handler
     mux := asynq.NewServeMux()
