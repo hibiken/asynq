@@ -138,23 +138,24 @@ func createRDB() *rdb.RDB {
 
 // createRDB creates a Inspector instance using flag values and returns it.
 func createInspector() *asynq.Inspector {
-	var connOpt asynq.RedisConnOpt
+	return asynq.NewInspector(getRedisConnOpt())
+}
+
+func getRedisConnOpt() asynq.RedisConnOpt {
 	if useRedisCluster {
 		addrs := strings.Split(viper.GetString("cluster_addrs"), ",")
-		connOpt = asynq.RedisClusterClientOpt{
+		return asynq.RedisClusterClientOpt{
 			Addrs:     addrs,
 			Password:  viper.GetString("password"),
 			TLSConfig: getTLSConfig(),
 		}
-	} else {
-		connOpt = asynq.RedisClientOpt{
-			Addr:      viper.GetString("uri"),
-			DB:        viper.GetInt("db"),
-			Password:  viper.GetString("password"),
-			TLSConfig: getTLSConfig(),
-		}
 	}
-	return asynq.NewInspector(connOpt)
+	return asynq.RedisClientOpt{
+		Addr:      viper.GetString("uri"),
+		DB:        viper.GetInt("db"),
+		Password:  viper.GetString("password"),
+		TLSConfig: getTLSConfig(),
+	}
 }
 
 func getTLSConfig() *tls.Config {

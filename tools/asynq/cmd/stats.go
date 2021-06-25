@@ -22,7 +22,7 @@ import (
 var statsCmd = &cobra.Command{
 	Use:   "stats",
 	Short: "Shows current state of the tasks and queues",
-	Long: `Stats (aysnqmon stats) will show the overview of tasks and queues at that instant.
+	Long: `Stats (aysnq stats) will show the overview of tasks and queues at that instant.
 
 Specifically, the command shows the following:
 * Number of tasks in each state

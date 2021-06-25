@@ -32,6 +32,11 @@ func (r *RDB) Close() error {
 	return r.client.Close()
 }
 
+// Client returns the reference to underlying redis client.
+func (r *RDB) Client() redis.UniversalClient {
+	return r.client
+}
+
 // Ping checks the connection with redis server.
 func (r *RDB) Ping() error {
 	return r.client.Ping().Err()

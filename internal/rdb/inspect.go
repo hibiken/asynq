@@ -994,7 +994,7 @@ else
 	end
 end
 local unique_key = redis.call("HGET", KEYS[1], "unique_key")
-if unique_key ~= nil and unique_key ~= "" and redis.call("GET", unique_key) == ARGV[1] then
+if unique_key and unique_key ~= "" and redis.call("GET", unique_key) == ARGV[1] then
 	redis.call("DEL", unique_key)
 end
 return redis.call("DEL", KEYS[1])
@@ -1094,7 +1094,7 @@ local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	local task_key = ARGV[1] .. id
 	local unique_key = redis.call("HGET", task_key, "unique_key")
-	if unique_key ~= nil and unique_key ~= "" and redis.call("GET", unique_key) == id then
+	if unique_key and unique_key ~= "" and redis.call("GET", unique_key) == id then
 		redis.call("DEL", unique_key)
 	end
 	redis.call("DEL", task_key)
