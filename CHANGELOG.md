@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.2] - 2021-06-29
+
 ### Changed
 
 - NewTask function now takes array of bytes as payload.
