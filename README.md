@@ -26,7 +26,6 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 
 - Guaranteed [at least one execution](https://www.cloudcomputingpatterns.org/at_least_once_delivery/) of a task
 - Scheduling of tasks
-- Durability since tasks are written to Redis
 - [Retries](https://github.com/hibiken/asynq/wiki/Task-Retry) of failed tasks
 - Automatic recovery of tasks in the event of a worker crash
 - [Weighted priority queues](https://github.com/hibiken/asynq/wiki/Priority-Queues#weighted-priority-queues)
@@ -58,7 +57,7 @@ Initialize your project by creating a folder and then running `go mod init githu
 go get -u github.com/hibiken/asynq
 ```
 
-Make sure you're running a Redis server locally or from a [Docker](https://hub.docker.com/_/redis) container. Version `3.0` or higher is required.
+Make sure you're running a Redis server locally or from a [Docker](https://hub.docker.com/_/redis) container. Version `4.0` or higher is required.
 
 Next, write a package that encapsulates task creation and task handling.
 
@@ -120,7 +119,7 @@ func HandleEmailDeliveryTask(ctx context.Context, t *asynq.Task) error {
     if err := json.Unmarshal(t.Payload(), &p); err != nil {
         return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
     }
-    log.Printf("Sending Email to User: user_id = %d, template_id = %s\n", p.UserID, p.TemplateID)
+    log.Printf("Sending Email to User: user_id=%d, template_id=%s", p.UserID, p.TemplateID)
     // Email delivery code ...
     return nil
 }
@@ -135,7 +134,7 @@ func (p *ImageProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
     if err := json.Unmarshal(t.Payload(), &p); err != nil {
         return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
     }
-    log.Printf("Resizing image: src = %s\n", p.SourceURL)
+    log.Printf("Resizing image: src=%s", p.SourceURL)
     // Image resizing code ...
     return nil
 }
@@ -145,13 +144,12 @@ func NewImageProcessor() *ImageProcessor {
 }
 ```
 
-In your application code, import the above package and use [`Client`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Client) to put tasks on the queue.
+In your application code, import the above package and use [`Client`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Client) to put tasks on queues.
 
 ```go
 package main
 
 import (
-    "fmt"
     "log"
     "time"
 
@@ -178,7 +176,7 @@ func main() {
     if err != nil {
         log.Fatalf("could not enqueue task: %v", err)
     }
-    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID, info.Queue)
+    log.Printf("enqueued task: id=%s queue=%s", info.ID, info.Queue)
 
 
     // ------------------------------------------------------------
@@ -190,7 +188,7 @@ func main() {
     if err != nil {
         log.Fatalf("could not schedule task: %v", err)
     }
-    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID, info.Queue)
+    log.Printf("enqueued task: id=%s queue=%s", info.ID, info.Queue)
 
 
     // ----------------------------------------------------------------------------
@@ -208,7 +206,7 @@ func main() {
     if err != nil {
         log.Fatalf("could not enqueue task: %v", err)
     }
-    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID, info.Queue)
+    log.Printf("enqueued task: id=%s queue=%s", info.ID, info.Queue)
 
     // ---------------------------------------------------------------------------
     // Example 4: Pass options to tune task processing behavior at enqueue time.
@@ -219,7 +217,7 @@ func main() {
     if err != nil {
         log.Fatal("could not enqueue task: %v", err)
     }
-    fmt.Printf("enqueued task: id=%s queue=%s\n", info.ID, info.Queue)
+    log.Printf("enqueued task: id=%s queue=%s", info.ID, info.Queue)
 }
 ```
 
