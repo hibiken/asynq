@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Changed to execute task recovering logic when server starts up; Previously it needed to wait for a minute for task recovering logic to exeucte.
+
+### Fixed
+
+- Fixed task recovering logic to execute every minute
+
 ## [0.18.2] - 2021-06-29
 
 ### Changed
