@@ -57,6 +57,7 @@ func (r *recoverer) start(wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		r.recover()
 		timer := time.NewTimer(r.interval)
 		for {
 			select {
