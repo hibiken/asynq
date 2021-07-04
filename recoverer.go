@@ -65,25 +65,29 @@ func (r *recoverer) start(wg *sync.WaitGroup) {
 				timer.Stop()
 				return
 			case <-timer.C:
-				// Get all tasks which have expired 30 seconds ago or earlier.
-				deadline := time.Now().Add(-30 * time.Second)
-				msgs, err := r.broker.ListDeadlineExceeded(deadline, r.queues...)
-				if err != nil {
-					r.logger.Warn("recoverer: could not list deadline exceeded tasks")
-					continue
-				}
-				const errMsg = "deadline exceeded" // TODO: better error message
-				for _, msg := range msgs {
-					if msg.Retried >= msg.Retry {
-						r.archive(msg, errMsg)
-					} else {
-						r.retry(msg, errMsg)
-					}
-				}
-
+				r.recover()
+				timer.Reset(r.interval)
 			}
 		}
 	}()
+}
+
+func (r *recoverer) recover() {
+	// Get all tasks which have expired 30 seconds ago or earlier.
+	deadline := time.Now().Add(-30 * time.Second)
+	msgs, err := r.broker.ListDeadlineExceeded(deadline, r.queues...)
+	if err != nil {
+		r.logger.Warn("recoverer: could not list deadline exceeded tasks")
+		return
+	}
+	const errMsg = "deadline exceeded"
+	for _, msg := range msgs {
+		if msg.Retried >= msg.Retry {
+			r.archive(msg, errMsg)
+		} else {
+			r.retry(msg, errMsg)
+		}
+	}
 }
 
 func (r *recoverer) retry(msg *base.TaskMessage, errMsg string) {
