@@ -295,6 +295,9 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	}
 	queues := make(map[string]int)
 	for qname, p := range cfg.Queues {
+		if err := base.ValidateQueueName(qname); err != nil {
+			continue // ignore invalid queue names
+		}
 		if p > 0 {
 			queues[qname] = p
 		}
