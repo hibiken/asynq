@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.2] - 2020-07-15
+
 ### Changed
 
 - Changed `Queue` function to not to convert the provided queue name to lowercase. Queue names are now case-sensitive.
