@@ -287,13 +287,13 @@ func TestClientEnqueue(t *testing.T) {
 			},
 		},
 		{
-			desc: "Queue option should be case-insensitive",
+			desc: "Queue option should be case sensitive",
 			task: task,
 			opts: []Option{
-				Queue("HIGH"),
+				Queue("MyQueue"),
 			},
 			wantInfo: &TaskInfo{
-				Queue:         "high",
+				Queue:         "MyQueue",
 				Type:          task.Type(),
 				Payload:       task.Payload(),
 				State:         TaskStatePending,
@@ -306,12 +306,12 @@ func TestClientEnqueue(t *testing.T) {
 				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
-				"high": {
+				"MyQueue": {
 					{
 						Type:     task.Type(),
 						Payload:  task.Payload(),
 						Retry:    defaultMaxRetry,
-						Queue:    "high",
+						Queue:    "MyQueue",
 						Timeout:  int64(defaultTimeout.Seconds()),
 						Deadline: noDeadline.Unix(),
 					},

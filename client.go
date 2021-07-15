@@ -6,7 +6,6 @@ package asynq
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -93,10 +92,8 @@ func (n retryOption) Type() OptionType   { return MaxRetryOpt }
 func (n retryOption) Value() interface{} { return int(n) }
 
 // Queue returns an option to specify the queue to enqueue the task into.
-//
-// Queue name is case-insensitive and the lowercased version is used.
 func Queue(qname string) Option {
-	return queueOption(strings.ToLower(qname))
+	return queueOption(qname)
 }
 
 func (qname queueOption) String() string     { return fmt.Sprintf("Queue(%q)", string(qname)) }
@@ -207,11 +204,11 @@ func composeOptions(opts ...Option) (option, error) {
 		case retryOption:
 			res.retry = int(opt)
 		case queueOption:
-			trimmed := strings.TrimSpace(string(opt))
-			if err := base.ValidateQueueName(trimmed); err != nil {
+			qname := string(opt)
+			if err := base.ValidateQueueName(qname); err != nil {
 				return option{}, err
 			}
-			res.queue = trimmed
+			res.queue = qname
 		case timeoutOption:
 			res.timeout = time.Duration(opt)
 		case deadlineOption:

@@ -10,6 +10,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -85,7 +86,7 @@ func TaskStateFromString(s string) (TaskState, error) {
 // ValidateQueueName validates a given qname to be used as a queue name.
 // Returns nil if valid, otherwise returns non-nil error.
 func ValidateQueueName(qname string) error {
-	if len(qname) == 0 {
+	if len(strings.TrimSpace(qname)) == 0 {
 		return fmt.Errorf("queue name must contain one or more characters")
 	}
 	return nil
