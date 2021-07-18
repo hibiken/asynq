@@ -91,7 +91,7 @@ type ImageResizePayload struct {
 //----------------------------------------------
 
 func NewEmailDeliveryTask(userID int, tmplID string) (*asynq.Task, error) {
-    payload, err := json.Marshal(EmailDeliveryPayload{UserID: userID, TemplateID: templID})
+    payload, err := json.Marshal(EmailDeliveryPayload{UserID: userID, TemplateID: tmplID})
     if err != nil {
         return nil, err
     }
@@ -129,7 +129,7 @@ type ImageProcessor struct {
     // ... fields for struct
 }
 
-func (p *ImageProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
+func (processor *ImageProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
     var p ImageResizePayload
     if err := json.Unmarshal(t.Payload(), &p); err != nil {
         return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
@@ -140,7 +140,7 @@ func (p *ImageProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
 }
 
 func NewImageProcessor() *ImageProcessor {
-    // ... return an instance
+	return &ImageProcessor{}
 }
 ```
 
