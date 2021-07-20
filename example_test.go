@@ -5,6 +5,7 @@
 package asynq_test
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -85,10 +86,10 @@ func ExampleScheduler() {
 		&asynq.SchedulerOpts{Location: time.Local},
 	)
 
-	if _, err := scheduler.Register("* * * * *", asynq.NewTask("task1", nil)); err != nil {
+	if _, err := scheduler.Register(context.Background(), "* * * * *", asynq.NewTask("task1", nil)); err != nil {
 		log.Fatal(err)
 	}
-	if _, err := scheduler.Register("@every 30s", asynq.NewTask("task2", nil)); err != nil {
+	if _, err := scheduler.Register(context.Background(),"@every 30s", asynq.NewTask("task2", nil)); err != nil {
 		log.Fatal(err)
 	}
 

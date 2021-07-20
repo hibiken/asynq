@@ -59,7 +59,7 @@ func TestSchedulerRegister(t *testing.T) {
 
 	for _, tc := range tests {
 		scheduler := NewScheduler(getRedisConnOpt(t), nil)
-		if _, err := scheduler.Register(tc.cronspec, tc.task, tc.opts...); err != nil {
+		if _, err := scheduler.Register(ctx, tc.cronspec, tc.task, tc.opts...); err != nil {
 			t.Fatal(err)
 		}
 
@@ -95,7 +95,7 @@ func TestSchedulerWhenRedisDown(t *testing.T) {
 
 	task := NewTask("test", nil)
 
-	if _, err := scheduler.Register("@every 3s", task); err != nil {
+	if _, err := scheduler.Register(ctx, "@every 3s", task); err != nil {
 		t.Fatal(err)
 	}
 
@@ -134,7 +134,7 @@ func TestSchedulerUnregister(t *testing.T) {
 
 	for _, tc := range tests {
 		scheduler := NewScheduler(getRedisConnOpt(t), nil)
-		entryID, err := scheduler.Register(tc.cronspec, tc.task, tc.opts...)
+		entryID, err := scheduler.Register(ctx, tc.cronspec, tc.task, tc.opts...)
 		if err != nil {
 			t.Fatal(err)
 		}

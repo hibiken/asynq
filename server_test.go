@@ -19,7 +19,7 @@ import (
 
 func TestServer(t *testing.T) {
 	// https://github.com/go-redis/redis/issues/1029
-	ignoreOpt := goleak.IgnoreTopFunction("github.com/go-redis/redis/v7/internal/pool.(*ConnPool).reaper")
+	ignoreOpt := goleak.IgnoreTopFunction("github.com/go-redis/redis/v8/internal/pool.(*ConnPool).reaper")
 	defer goleak.VerifyNoLeaks(t, ignoreOpt)
 
 	redisConnOpt := getRedisConnOpt(t)
@@ -40,12 +40,12 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = c.Enqueue(NewTask("send_email", asynqtest.JSON(map[string]interface{}{"recipient_id": 123})))
+	_, err = c.Enqueue(ctx, NewTask("send_email", asynqtest.JSON(map[string]interface{}{"recipient_id": 123})))
 	if err != nil {
 		t.Errorf("could not enqueue a task: %v", err)
 	}
 
-	_, err = c.Enqueue(NewTask("send_email", asynqtest.JSON(map[string]interface{}{"recipient_id": 456})), ProcessIn(1*time.Hour))
+	_, err = c.Enqueue(ctx, NewTask("send_email", asynqtest.JSON(map[string]interface{}{"recipient_id": 456})), ProcessIn(1*time.Hour))
 	if err != nil {
 		t.Errorf("could not enqueue a task: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestServer(t *testing.T) {
 
 func TestServerRun(t *testing.T) {
 	// https://github.com/go-redis/redis/issues/1029
-	ignoreOpt := goleak.IgnoreTopFunction("github.com/go-redis/redis/v7/internal/pool.(*ConnPool).reaper")
+	ignoreOpt := goleak.IgnoreTopFunction("github.com/go-redis/redis/v8/internal/pool.(*ConnPool).reaper")
 	defer goleak.VerifyNoLeaks(t, ignoreOpt)
 
 	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
@@ -183,15 +183,15 @@ func TestServerWithFlakyBroker(t *testing.T) {
 	}
 
 	for i := 0; i < 10; i++ {
-		_, err := c.Enqueue(NewTask("enqueued", nil), MaxRetry(i))
+		_, err := c.Enqueue(ctx, NewTask("enqueued", nil), MaxRetry(i))
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = c.Enqueue(NewTask("bad_task", nil))
+		_, err = c.Enqueue(ctx, NewTask("bad_task", nil))
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = c.Enqueue(NewTask("scheduled", nil), ProcessIn(time.Duration(i)*time.Second))
+		_, err = c.Enqueue(ctx, NewTask("scheduled", nil), ProcessIn(time.Duration(i)*time.Second))
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -160,7 +160,7 @@ func (p *processor) exec() {
 		return
 	case p.sema <- struct{}{}: // acquire token
 		qnames := p.queues()
-		msg, deadline, err := p.broker.Dequeue(qnames...)
+		msg, deadline, err := p.broker.Dequeue(context.Background(), qnames...)
 		switch {
 		case errors.Is(err, errors.ErrNoProcessableTask):
 			p.logger.Debug("All queues are empty")
@@ -211,7 +211,7 @@ func (p *processor) exec() {
 			case <-p.abort:
 				// time is up, push the message back to queue and quit this worker goroutine.
 				p.logger.Warnf("Quitting worker. task id=%s", msg.ID)
-				p.requeue(msg)
+				p.requeue(ctx, msg)
 				return
 			case <-ctx.Done():
 				p.retryOrKill(ctx, msg, ctx.Err())
@@ -231,8 +231,8 @@ func (p *processor) exec() {
 	}
 }
 
-func (p *processor) requeue(msg *base.TaskMessage) {
-	err := p.broker.Requeue(msg)
+func (p *processor) requeue(ctx context.Context, msg *base.TaskMessage) {
+	err := p.broker.Requeue(ctx, msg)
 	if err != nil {
 		p.logger.Errorf("Could not push task id=%s back to queue: %v", msg.ID, err)
 	} else {
@@ -241,7 +241,7 @@ func (p *processor) requeue(msg *base.TaskMessage) {
 }
 
 func (p *processor) markAsDone(ctx context.Context, msg *base.TaskMessage) {
-	err := p.broker.Done(msg)
+	err := p.broker.Done(ctx, msg)
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not remove task id=%s type=%q from %q err: %+v", msg.ID, msg.Type, base.ActiveKey(msg.Queue), err)
 		deadline, ok := ctx.Deadline()
@@ -251,7 +251,7 @@ func (p *processor) markAsDone(ctx context.Context, msg *base.TaskMessage) {
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.Done(msg)
+				return p.broker.Done(ctx, msg)
 			},
 			errMsg:   errMsg,
 			deadline: deadline,
@@ -278,7 +278,7 @@ func (p *processor) retryOrKill(ctx context.Context, msg *base.TaskMessage, err 
 func (p *processor) retry(ctx context.Context, msg *base.TaskMessage, e error) {
 	d := p.retryDelayFunc(msg.Retried, e, NewTask(msg.Type, msg.Payload))
 	retryAt := time.Now().Add(d)
-	err := p.broker.Retry(msg, retryAt, e.Error())
+	err := p.broker.Retry(ctx, msg, retryAt, e.Error())
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.ActiveKey(msg.Queue), base.RetryKey(msg.Queue))
 		deadline, ok := ctx.Deadline()
@@ -288,7 +288,7 @@ func (p *processor) retry(ctx context.Context, msg *base.TaskMessage, e error) {
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.Retry(msg, retryAt, e.Error())
+				return p.broker.Retry(ctx, msg, retryAt, e.Error())
 			},
 			errMsg:   errMsg,
 			deadline: deadline,
@@ -297,7 +297,7 @@ func (p *processor) retry(ctx context.Context, msg *base.TaskMessage, e error) {
 }
 
 func (p *processor) archive(ctx context.Context, msg *base.TaskMessage, e error) {
-	err := p.broker.Archive(msg, e.Error())
+	err := p.broker.Archive(ctx, msg, e.Error())
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.ActiveKey(msg.Queue), base.ArchivedKey(msg.Queue))
 		deadline, ok := ctx.Deadline()
@@ -307,7 +307,7 @@ func (p *processor) archive(ctx context.Context, msg *base.TaskMessage, e error)
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.Archive(msg, e.Error())
+				return p.broker.Archive(ctx, msg, e.Error())
 			},
 			errMsg:   errMsg,
 			deadline: deadline,
