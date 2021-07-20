@@ -71,7 +71,7 @@ func TestHeartbeater(t *testing.T) {
 		// allow for heartbeater to write to redis
 		time.Sleep(tc.interval)
 
-		ss, err := rdbClient.ListServers()
+		ss, err := rdbClient.ListServers(ctx)
 		if err != nil {
 			t.Errorf("could not read server info from redis: %v", err)
 			hb.shutdown()
@@ -97,7 +97,7 @@ func TestHeartbeater(t *testing.T) {
 		time.Sleep(tc.interval * 2)
 
 		want.Status = "closed"
-		ss, err = rdbClient.ListServers()
+		ss, err = rdbClient.ListServers(ctx)
 		if err != nil {
 			t.Errorf("could not read process status from redis: %v", err)
 			hb.shutdown()

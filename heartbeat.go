@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"os"
 	"sync"
 	"time"
@@ -115,7 +116,7 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-h.done:
-				h.broker.ClearServerState(h.host, h.pid, h.serverID)
+				h.broker.ClearServerState(context.Background(), h.host, h.pid, h.serverID)
 				h.logger.Debug("Heartbeater done")
 				timer.Stop()
 				return
@@ -164,7 +165,7 @@ func (h *heartbeater) beat() {
 
 	// Note: Set TTL to be long enough so that it won't expire before we write again
 	// and short enough to expire quickly once the process is shut down or killed.
-	if err := h.broker.WriteServerState(&info, ws, h.interval*2); err != nil {
+	if err := h.broker.WriteServerState(context.Background(), &info, ws, h.interval*2); err != nil {
 		h.logger.Errorf("could not write server state data: %v", err)
 	}
 }

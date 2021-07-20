@@ -5,12 +5,13 @@
 package asynq
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v7"
+	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
@@ -117,7 +118,7 @@ type enqueueJob struct {
 }
 
 func (j *enqueueJob) Run() {
-	info, err := j.client.Enqueue(j.task, j.opts...)
+	info, err := j.client.Enqueue(context.Background(), j.task, j.opts...)
 	if err != nil {
 		j.logger.Errorf("scheduler could not enqueue a task %+v: %v", j.task, err)
 		if j.errHandler != nil {
@@ -130,7 +131,7 @@ func (j *enqueueJob) Run() {
 		TaskID:     info.ID,
 		EnqueuedAt: time.Now().In(j.location),
 	}
-	err = j.rdb.RecordSchedulerEnqueueEvent(j.id.String(), event)
+	err = j.rdb.RecordSchedulerEnqueueEvent(context.Background(), j.id.String(), event)
 	if err != nil {
 		j.logger.Errorf("scheduler could not record enqueue event of enqueued task %+v: %v", j.task, err)
 	}
@@ -138,7 +139,7 @@ func (j *enqueueJob) Run() {
 
 // Register registers a task to be enqueued on the given schedule specified by the cronspec.
 // It returns an ID of the newly registered entry.
-func (s *Scheduler) Register(cronspec string, task *Task, opts ...Option) (entryID string, err error) {
+func (s *Scheduler) Register(ctx context.Context, cronspec string, task *Task, opts ...Option) (entryID string, err error) {
 	job := &enqueueJob{
 		id:         uuid.New(),
 		cronspec:   cronspec,
@@ -206,7 +207,7 @@ func (s *Scheduler) Shutdown() {
 	<-ctx.Done()
 	s.wg.Wait()
 
-	s.clearHistory()
+	s.clearHistory(ctx)
 	s.client.Close()
 	s.rdb.Close()
 	s.state.Set(base.StateClosed)
@@ -220,7 +221,7 @@ func (s *Scheduler) runHeartbeater() {
 		select {
 		case <-s.done:
 			s.logger.Debugf("Scheduler heatbeater shutting down")
-			s.rdb.ClearSchedulerEntries(s.id)
+			s.rdb.ClearSchedulerEntries(context.Background(), s.id)
 			return
 		case <-ticker.C:
 			s.beat()
@@ -245,7 +246,7 @@ func (s *Scheduler) beat() {
 		entries = append(entries, e)
 	}
 	s.logger.Debugf("Writing entries %v", entries)
-	if err := s.rdb.WriteSchedulerEntries(s.id, entries, 5*time.Second); err != nil {
+	if err := s.rdb.WriteSchedulerEntries(context.Background(), s.id, entries, 5*time.Second); err != nil {
 		s.logger.Warnf("Scheduler could not write heartbeat data: %v", err)
 	}
 }
@@ -258,10 +259,10 @@ func stringifyOptions(opts []Option) []string {
 	return res
 }
 
-func (s *Scheduler) clearHistory() {
+func (s *Scheduler) clearHistory(ctx context.Context) {
 	for _, entry := range s.cron.Entries() {
 		job := entry.Job.(*enqueueJob)
-		if err := s.rdb.ClearSchedulerHistory(job.id.String()); err != nil {
+		if err := s.rdb.ClearSchedulerHistory(ctx, job.id.String()); err != nil {
 			s.logger.Warnf("Could not clear scheduler history for entry %q: %v", job.id.String(), err)
 		}
 	}

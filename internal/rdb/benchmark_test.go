@@ -23,7 +23,7 @@ func BenchmarkEnqueue(b *testing.B) {
 		asynqtest.FlushDB(b, r.client)
 		b.StartTimer()
 
-		if err := r.Enqueue(msg); err != nil {
+		if err := r.Enqueue(ctx, msg); err != nil {
 			b.Fatalf("Enqueue failed: %v", err)
 		}
 	}
@@ -45,7 +45,7 @@ func BenchmarkEnqueueUnique(b *testing.B) {
 		asynqtest.FlushDB(b, r.client)
 		b.StartTimer()
 
-		if err := r.EnqueueUnique(msg, uniqueTTL); err != nil {
+		if err := r.EnqueueUnique(ctx, msg, uniqueTTL); err != nil {
 			b.Fatalf("EnqueueUnique failed: %v", err)
 		}
 	}
@@ -62,7 +62,7 @@ func BenchmarkSchedule(b *testing.B) {
 		asynqtest.FlushDB(b, r.client)
 		b.StartTimer()
 
-		if err := r.Schedule(msg, processAt); err != nil {
+		if err := r.Schedule(ctx, msg, processAt); err != nil {
 			b.Fatalf("Schedule failed: %v", err)
 		}
 	}
@@ -85,7 +85,7 @@ func BenchmarkScheduleUnique(b *testing.B) {
 		asynqtest.FlushDB(b, r.client)
 		b.StartTimer()
 
-		if err := r.ScheduleUnique(msg, processAt, uniqueTTL); err != nil {
+		if err := r.ScheduleUnique(ctx, msg, processAt, uniqueTTL); err != nil {
 			b.Fatalf("EnqueueUnique failed: %v", err)
 		}
 	}
@@ -101,13 +101,13 @@ func BenchmarkDequeueSingleQueue(b *testing.B) {
 		for i := 0; i < 10; i++ {
 			m := asynqtest.NewTaskMessageWithQueue(
 				fmt.Sprintf("task%d", i), nil, base.DefaultQueueName)
-			if err := r.Enqueue(m); err != nil {
+			if err := r.Enqueue(ctx, m); err != nil {
 				b.Fatalf("Enqueue failed: %v", err)
 			}
 		}
 		b.StartTimer()
 
-		if _, _, err := r.Dequeue(base.DefaultQueueName); err != nil {
+		if _, _, err := r.Dequeue(ctx, base.DefaultQueueName); err != nil {
 			b.Fatalf("Dequeue failed: %v", err)
 		}
 	}
@@ -125,14 +125,14 @@ func BenchmarkDequeueMultipleQueues(b *testing.B) {
 			for _, qname := range qnames {
 				m := asynqtest.NewTaskMessageWithQueue(
 					fmt.Sprintf("%s_task%d", qname, i), nil, qname)
-				if err := r.Enqueue(m); err != nil {
+				if err := r.Enqueue(ctx, m); err != nil {
 					b.Fatalf("Enqueue failed: %v", err)
 				}
 			}
 		}
 		b.StartTimer()
 
-		if _, _, err := r.Dequeue(qnames...); err != nil {
+		if _, _, err := r.Dequeue(ctx, qnames...); err != nil {
 			b.Fatalf("Dequeue failed: %v", err)
 		}
 	}
@@ -158,7 +158,7 @@ func BenchmarkDone(b *testing.B) {
 		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
-		if err := r.Done(msgs[0]); err != nil {
+		if err := r.Done(ctx, msgs[0]); err != nil {
 			b.Fatalf("Done failed: %v", err)
 		}
 	}
@@ -184,7 +184,7 @@ func BenchmarkRetry(b *testing.B) {
 		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
-		if err := r.Retry(msgs[0], time.Now().Add(1*time.Minute), "error"); err != nil {
+		if err := r.Retry(ctx, msgs[0], time.Now().Add(1*time.Minute), "error"); err != nil {
 			b.Fatalf("Retry failed: %v", err)
 		}
 	}
@@ -210,7 +210,7 @@ func BenchmarkArchive(b *testing.B) {
 		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
-		if err := r.Archive(msgs[0], "error"); err != nil {
+		if err := r.Archive(ctx, msgs[0], "error"); err != nil {
 			b.Fatalf("Archive failed: %v", err)
 		}
 	}
@@ -236,7 +236,7 @@ func BenchmarkRequeue(b *testing.B) {
 		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
-		if err := r.Requeue(msgs[0]); err != nil {
+		if err := r.Requeue(ctx, msgs[0]); err != nil {
 			b.Fatalf("Requeue failed: %v", err)
 		}
 	}
@@ -259,7 +259,7 @@ func BenchmarkCheckAndEnqueue(b *testing.B) {
 		asynqtest.SeedScheduledQueue(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
-		if err := r.ForwardIfReady(base.DefaultQueueName); err != nil {
+		if err := r.ForwardIfReady(ctx, base.DefaultQueueName); err != nil {
 			b.Fatalf("ForwardIfReady failed: %v", err)
 		}
 	}

@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -76,7 +77,7 @@ func (r *recoverer) start(wg *sync.WaitGroup) {
 func (r *recoverer) recover() {
 	// Get all tasks which have expired 30 seconds ago or earlier.
 	deadline := time.Now().Add(-30 * time.Second)
-	msgs, err := r.broker.ListDeadlineExceeded(deadline, r.queues...)
+	msgs, err := r.broker.ListDeadlineExceeded(context.Background(), deadline, r.queues...)
 	if err != nil {
 		r.logger.Warn("recoverer: could not list deadline exceeded tasks")
 		return
@@ -94,13 +95,13 @@ func (r *recoverer) recover() {
 func (r *recoverer) retry(msg *base.TaskMessage, errMsg string) {
 	delay := r.retryDelayFunc(msg.Retried, fmt.Errorf(errMsg), NewTask(msg.Type, msg.Payload))
 	retryAt := time.Now().Add(delay)
-	if err := r.broker.Retry(msg, retryAt, errMsg); err != nil {
+	if err := r.broker.Retry(context.Background(), msg, retryAt, errMsg); err != nil {
 		r.logger.Warnf("recoverer: could not retry deadline exceeded task: %v", err)
 	}
 }
 
 func (r *recoverer) archive(msg *base.TaskMessage, errMsg string) {
-	if err := r.broker.Archive(msg, errMsg); err != nil {
+	if err := r.broker.Archive(context.Background(), msg, errMsg); err != nil {
 		r.logger.Warnf("recoverer: could not move task to archive: %v", err)
 	}
 }

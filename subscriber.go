@@ -5,10 +5,11 @@
 package asynq
 
 import (
+	"context"
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v7"
+	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
 )
@@ -59,7 +60,7 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 		)
 		// Try until successfully connect to Redis.
 		for {
-			pubsub, err = s.broker.CancelationPubSub()
+			pubsub, err = s.broker.CancelationPubSub(context.Background())
 			if err != nil {
 				s.logger.Errorf("cannot subscribe to cancelation channel: %v", err)
 				select {
