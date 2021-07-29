@@ -28,8 +28,8 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 - Scheduling of tasks
 - [Retries](https://github.com/hibiken/asynq/wiki/Task-Retry) of failed tasks
 - Automatic recovery of tasks in the event of a worker crash
-- [Weighted priority queues](https://github.com/hibiken/asynq/wiki/Priority-Queues#weighted-priority-queues)
-- [Strict priority queues](https://github.com/hibiken/asynq/wiki/Priority-Queues#strict-priority-queues)
+- [Weighted priority queues](https://github.com/hibiken/asynq/wiki/Queue-Priority#weighted-priority)
+- [Strict priority queues](https://github.com/hibiken/asynq/wiki/Queue-Priority#strict-priority)
 - Low latency to add a task since writes are fast in Redis
 - De-duplication of tasks using [unique option](https://github.com/hibiken/asynq/wiki/Unique-Tasks)
 - Allow [timeout and deadline per task](https://github.com/hibiken/asynq/wiki/Task-Timeout-and-Cancelation)
