@@ -585,6 +585,11 @@ func TestClientEnqueueError(t *testing.T) {
 				Queue(""),
 			},
 		},
+		{
+			desc: "With empty task typename",
+			task: NewTask("", h.JSON(map[string]interface{}{})),
+			opts: []Option{},
+		},
 	}
 
 	for _, tc := range tests {
