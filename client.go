@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -178,8 +179,8 @@ func (d processInOption) Value() interface{} { return time.Duration(d) }
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
 var ErrDuplicateTask = errors.New("task already exists")
 
-// ErrEmptyTypeTask indicates that task's typename is not specified.
-var ErrEmptyTypeTask = errors.New("task typename not specified")
+// ErrEmptyTypename indicates that task's typename is empty.
+var ErrEmptyTypename = errors.New("task typename cannot be empty")
 
 type option struct {
 	retry     int
@@ -269,8 +270,8 @@ func (c *Client) Close() error {
 //
 // If no ProcessAt or ProcessIn options are provided, the task will be pending immediately.
 func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
-	if task.Type() == "" {
-		return nil, fmt.Errorf("%w", ErrEmptyTypeTask)
+	if strings.TrimSpace(task.Type()) == "" {
+		return nil, fmt.Errorf("%w", ErrEmptyTypename)
 	}
 	c.mu.Lock()
 	if defaults, ok := c.opts[task.Type()]; ok {
