@@ -179,9 +179,6 @@ func (d processInOption) Value() interface{} { return time.Duration(d) }
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
 var ErrDuplicateTask = errors.New("task already exists")
 
-// ErrEmptyTypename indicates that task's typename is empty.
-var ErrEmptyTypename = errors.New("task typename cannot be empty")
-
 type option struct {
 	retry     int
 	queue     string
@@ -271,7 +268,7 @@ func (c *Client) Close() error {
 // If no ProcessAt or ProcessIn options are provided, the task will be pending immediately.
 func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 	if strings.TrimSpace(task.Type()) == "" {
-		return nil, fmt.Errorf("%w", ErrEmptyTypename)
+		return nil, fmt.Errorf("task typename cannot be empty")
 	}
 	c.mu.Lock()
 	if defaults, ok := c.opts[task.Type()]; ok {
