@@ -37,7 +37,7 @@ func TestInspectorQueues(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 		for _, qname := range tc.queues {
-			if err := r.SAdd(base.AllQueues, qname).Err(); err != nil {
+			if err := r.SAdd(ctx, base.AllQueues, qname).Err(); err != nil {
 				t.Fatalf("could not initialize all queue set: %v", err)
 			}
 		}
@@ -136,7 +136,7 @@ func TestInspectorDeleteQueue(t *testing.T) {
 				tc.qname, tc.force, err)
 			continue
 		}
-		if r.SIsMember(base.AllQueues, tc.qname).Val() {
+		if r.SIsMember(ctx, base.AllQueues, tc.qname).Val() {
 			t.Errorf("%q is a member of %q", tc.qname, base.AllQueues)
 		}
 	}
@@ -345,11 +345,11 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r, tc.archived)
 		for qname, n := range tc.processed {
 			processedKey := base.ProcessedKey(qname, now)
-			r.Set(processedKey, n, 0)
+			r.Set(ctx, processedKey, n, 0)
 		}
 		for qname, n := range tc.failed {
 			failedKey := base.FailedKey(qname, now)
-			r.Set(failedKey, n, 0)
+			r.Set(ctx, failedKey, n, 0)
 		}
 
 		got, err := inspector.GetQueueInfo(tc.qname)
@@ -385,14 +385,14 @@ func TestInspectorHistory(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 
-		r.SAdd(base.AllQueues, tc.qname)
+		r.SAdd(ctx, base.AllQueues, tc.qname)
 		// populate last n days data
 		for i := 0; i < tc.n; i++ {
 			ts := now.Add(-time.Duration(i) * 24 * time.Hour)
 			processedKey := base.ProcessedKey(tc.qname, ts)
 			failedKey := base.FailedKey(tc.qname, ts)
-			r.Set(processedKey, (i+1)*1000, 0)
-			r.Set(failedKey, (i+1)*10, 0)
+			r.Set(ctx, processedKey, (i+1)*1000, 0)
+			r.Set(ctx, failedKey, (i+1)*10, 0)
 		}
 
 		got, err := inspector.History(tc.qname, tc.n)
