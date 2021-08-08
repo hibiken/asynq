@@ -5,7 +5,6 @@
 package asynq
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -15,8 +14,6 @@ import (
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 )
-
-var ctx = context.Background()
 
 func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 	r := setup(t)
@@ -116,7 +113,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 		h.FlushDB(t, r) // clean up db before each test case.
 
 		opts := append(tc.opts, ProcessAt(tc.processAt))
-		gotInfo, err := client.Enqueue(ctx, tc.task, opts...)
+		gotInfo, err := client.Enqueue(tc.task, opts...)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -423,7 +420,7 @@ func TestClientEnqueue(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r) // clean up db before each test case.
 
-		gotInfo, err := client.Enqueue(ctx, tc.task, tc.opts...)
+		gotInfo, err := client.Enqueue(tc.task, tc.opts...)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -540,7 +537,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 		h.FlushDB(t, r) // clean up db before each test case.
 
 		opts := append(tc.opts, ProcessIn(tc.delay))
-		gotInfo, err := client.Enqueue(ctx, tc.task, opts...)
+		gotInfo, err := client.Enqueue(tc.task, opts...)
 		if err != nil {
 			t.Error(err)
 			continue
@@ -593,7 +590,7 @@ func TestClientEnqueueError(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 
-		_, err := client.Enqueue(ctx, tc.task, tc.opts...)
+		_, err := client.Enqueue(tc.task, tc.opts...)
 		if err == nil {
 			t.Errorf("%s; client.Enqueue(task, opts...) did not return non-nil error", tc.desc)
 		}
@@ -704,7 +701,7 @@ func TestClientDefaultOptions(t *testing.T) {
 		c := NewClient(getRedisConnOpt(t))
 		defer c.Close()
 		c.SetDefaultOptions(tc.task.Type(), tc.defaultOpts...)
-		gotInfo, err := c.Enqueue(ctx, tc.task, tc.opts...)
+		gotInfo, err := c.Enqueue(tc.task, tc.opts...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -749,19 +746,19 @@ func TestClientEnqueueUnique(t *testing.T) {
 		h.FlushDB(t, r) // clean up db before each test case.
 
 		// Enqueue the task first. It should succeed.
-		_, err := c.Enqueue(ctx, tc.task, Unique(tc.ttl))
+		_, err := c.Enqueue(tc.task, Unique(tc.ttl))
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(ctx, base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
+		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
 		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, tc.ttl)
 			continue
 		}
 
 		// Enqueue the task again. It should fail.
-		_, err = c.Enqueue(ctx, tc.task, Unique(tc.ttl))
+		_, err = c.Enqueue(tc.task, Unique(tc.ttl))
 		if err == nil {
 			t.Errorf("Enqueueing %+v did not return an error", tc.task)
 			continue
@@ -794,12 +791,12 @@ func TestClientEnqueueUniqueWithProcessInOption(t *testing.T) {
 		h.FlushDB(t, r) // clean up db before each test case.
 
 		// Enqueue the task first. It should succeed.
-		_, err := c.Enqueue(ctx, tc.task, ProcessIn(tc.d), Unique(tc.ttl))
+		_, err := c.Enqueue(tc.task, ProcessIn(tc.d), Unique(tc.ttl))
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(ctx, base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
+		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
 		wantTTL := time.Duration(tc.ttl.Seconds()+tc.d.Seconds()) * time.Second
 		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)
@@ -807,7 +804,7 @@ func TestClientEnqueueUniqueWithProcessInOption(t *testing.T) {
 		}
 
 		// Enqueue the task again. It should fail.
-		_, err = c.Enqueue(ctx, tc.task, ProcessIn(tc.d), Unique(tc.ttl))
+		_, err = c.Enqueue(tc.task, ProcessIn(tc.d), Unique(tc.ttl))
 		if err == nil {
 			t.Errorf("Enqueueing %+v did not return an error", tc.task)
 			continue
@@ -840,12 +837,12 @@ func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 		h.FlushDB(t, r) // clean up db before each test case.
 
 		// Enqueue the task first. It should succeed.
-		_, err := c.Enqueue(ctx, tc.task, ProcessAt(tc.at), Unique(tc.ttl))
+		_, err := c.Enqueue(tc.task, ProcessAt(tc.at), Unique(tc.ttl))
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(ctx, base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
+		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
 		wantTTL := tc.at.Add(tc.ttl).Sub(time.Now())
 		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)
@@ -853,7 +850,7 @@ func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 		}
 
 		// Enqueue the task again. It should fail.
-		_, err = c.Enqueue(ctx, tc.task, ProcessAt(tc.at), Unique(tc.ttl))
+		_, err = c.Enqueue(tc.task, ProcessAt(tc.at), Unique(tc.ttl))
 		if err == nil {
 			t.Errorf("Enqueueing %+v did not return an error", tc.task)
 			continue

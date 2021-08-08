@@ -41,7 +41,7 @@ func TestSyncer(t *testing.T) {
 		m := msg
 		syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return rdbClient.Done(ctx, m)
+				return rdbClient.Done(m)
 			},
 			deadline: time.Now().Add(5 * time.Minute),
 		}

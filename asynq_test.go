@@ -5,13 +5,12 @@
 package asynq
 
 import (
-	"crypto/tls"
 	"flag"
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/go-redis/redis/v7"
 	"github.com/google/go-cmp/cmp"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/log"
@@ -23,13 +22,11 @@ import (
 
 // variables used for package testing.
 var (
-	redisAddr     string
-	redisDB       int
-	redisPassword string
+	redisAddr string
+	redisDB   int
 
 	useRedisCluster   bool
 	redisClusterAddrs string // comma-separated list of host:port
-	redisTLSServer    string
 
 	testLogLevel = FatalLevel
 )
@@ -39,10 +36,9 @@ var testLogger *log.Logger
 func init() {
 	flag.StringVar(&redisAddr, "redis_addr", "localhost:6379", "redis address to use in testing")
 	flag.IntVar(&redisDB, "redis_db", 14, "redis db number to use in testing")
-	flag.StringVar(&redisPassword, "redis_password", "", "redis password to use in testing")
 	flag.BoolVar(&useRedisCluster, "redis_cluster", false, "use redis cluster as a broker in testing")
 	flag.StringVar(&redisClusterAddrs, "redis_cluster_addrs", "localhost:7000,localhost:7001,localhost:7002", "comma separated list of redis server addresses")
-	flag.StringVar(&redisTLSServer, "redis_tls_server", "", "redis host for TLS verification")
+	flag.Var(&testLogLevel, "loglevel", "log level to use in testing")
 
 	testLogger = log.NewLogger(nil)
 	testLogger.SetLevel(toInternalLogLevel(testLogLevel))
@@ -57,15 +53,11 @@ func setup(tb testing.TB) (r redis.UniversalClient) {
 		}
 		r = redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs: addrs,
-			Password: redisPassword,
-			TLSConfig: getTLSConfig(),
 		})
 	} else {
 		r = redis.NewClient(&redis.Options{
 			Addr: redisAddr,
 			DB:   redisDB,
-			Password: redisPassword,
-			TLSConfig: getTLSConfig(),
 		})
 	}
 	// Start each test with a clean slate.
@@ -82,23 +74,12 @@ func getRedisConnOpt(tb testing.TB) RedisConnOpt {
 		}
 		return RedisClusterClientOpt{
 			Addrs: addrs,
-			Password: redisPassword,
-			TLSConfig: getTLSConfig(),
 		}
 	}
 	return RedisClientOpt{
 		Addr: redisAddr,
 		DB:   redisDB,
-		Password: redisPassword,
-		TLSConfig: getTLSConfig(),
 	}
-}
-
-func getTLSConfig() *tls.Config {
-	if redisTLSServer != "" {
-		return &tls.Config{ServerName: redisTLSServer}
-	}
-	return nil
 }
 
 var sortTaskOpt = cmp.Transformer("SortMsg", func(in []*Task) []*Task {

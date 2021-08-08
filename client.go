@@ -5,12 +5,11 @@
 package asynq
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/go-redis/redis/v7"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
@@ -266,7 +265,7 @@ func (c *Client) Close() error {
 // By deafult, max retry is set to 25 and timeout is set to 30 minutes.
 //
 // If no ProcessAt or ProcessIn options are provided, the task will be pending immediately.
-func (c *Client) Enqueue(ctx context.Context, task *Task, opts ...Option) (*TaskInfo, error) {
+func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 	c.mu.Lock()
 	if defaults, ok := c.opts[task.Type()]; ok {
 		opts = append(defaults, opts...)
@@ -306,10 +305,10 @@ func (c *Client) Enqueue(ctx context.Context, task *Task, opts ...Option) (*Task
 	var state base.TaskState
 	if opt.processAt.Before(now) || opt.processAt.Equal(now) {
 		opt.processAt = now
-		err = c.enqueue(ctx, msg, opt.uniqueTTL)
+		err = c.enqueue(msg, opt.uniqueTTL)
 		state = base.TaskStatePending
 	} else {
-		err = c.schedule(ctx, msg, opt.processAt, opt.uniqueTTL)
+		err = c.schedule(msg, opt.processAt, opt.uniqueTTL)
 		state = base.TaskStateScheduled
 	}
 	switch {
@@ -321,17 +320,17 @@ func (c *Client) Enqueue(ctx context.Context, task *Task, opts ...Option) (*Task
 	return newTaskInfo(msg, state, opt.processAt), nil
 }
 
-func (c *Client) enqueue(ctx context.Context, msg *base.TaskMessage, uniqueTTL time.Duration) error {
+func (c *Client) enqueue(msg *base.TaskMessage, uniqueTTL time.Duration) error {
 	if uniqueTTL > 0 {
-		return c.rdb.EnqueueUnique(ctx, msg, uniqueTTL)
+		return c.rdb.EnqueueUnique(msg, uniqueTTL)
 	}
-	return c.rdb.Enqueue(ctx, msg)
+	return c.rdb.Enqueue(msg)
 }
 
-func (c *Client) schedule(ctx context.Context, msg *base.TaskMessage, t time.Time, uniqueTTL time.Duration) error {
+func (c *Client) schedule(msg *base.TaskMessage, t time.Time, uniqueTTL time.Duration) error {
 	if uniqueTTL > 0 {
 		ttl := t.Add(uniqueTTL).Sub(time.Now())
-		return c.rdb.ScheduleUnique(ctx, msg, t, ttl)
+		return c.rdb.ScheduleUnique(msg, t, ttl)
 	}
-	return c.rdb.Schedule(ctx, msg, t)
+	return c.rdb.Schedule(msg, t)
 }

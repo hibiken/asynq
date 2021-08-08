@@ -5,7 +5,6 @@
 package asynq
 
 import (
-	"context"
 	"sync"
 	"time"
 
@@ -72,7 +71,7 @@ func (hc *healthchecker) start(wg *sync.WaitGroup) {
 				timer.Stop()
 				return
 			case <-timer.C:
-				err := hc.broker.Ping(context.Background())
+				err := hc.broker.Ping()
 				hc.healthcheckFunc(err)
 				timer.Reset(hc.interval)
 			}

@@ -34,11 +34,11 @@ func TestAllQueues(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		for _, qname := range tc.queues {
-			if err := r.client.SAdd(ctx, base.AllQueues, qname).Err(); err != nil {
+			if err := r.client.SAdd(base.AllQueues, qname).Err(); err != nil {
 				t.Fatalf("could not initialize all queue set: %v", err)
 			}
 		}
-		got, err := r.AllQueues(ctx)
+		got, err := r.AllQueues()
 		if err != nil {
 			t.Errorf("AllQueues() returned an error: %v", err)
 			continue
@@ -187,7 +187,7 @@ func TestCurrentStats(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		for _, qname := range tc.paused {
-			if err := r.Pause(ctx, qname); err != nil {
+			if err := r.Pause(qname); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -198,14 +198,14 @@ func TestCurrentStats(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 		for qname, n := range tc.processed {
 			processedKey := base.ProcessedKey(qname, now)
-			r.client.Set(ctx, processedKey, n, 0)
+			r.client.Set(processedKey, n, 0)
 		}
 		for qname, n := range tc.failed {
 			failedKey := base.FailedKey(qname, now)
-			r.client.Set(ctx, failedKey, n, 0)
+			r.client.Set(failedKey, n, 0)
 		}
 
-		got, err := r.CurrentStats(ctx, tc.qname)
+		got, err := r.CurrentStats(tc.qname)
 		if err != nil {
 			t.Errorf("r.CurrentStats(%q) = %v, %v, want %v, nil", tc.qname, got, err, tc.want)
 			continue
@@ -224,7 +224,7 @@ func TestCurrentStatsWithNonExistentQueue(t *testing.T) {
 	defer r.Close()
 
 	qname := "non-existent"
-	got, err := r.CurrentStats(ctx, qname)
+	got, err := r.CurrentStats(qname)
 	if !errors.IsQueueNotFound(err) {
 		t.Fatalf("r.CurrentStats(%q) = %v, %v, want nil, %v", qname, got, err, &errors.QueueNotFoundError{Queue: qname})
 	}
@@ -247,17 +247,17 @@ func TestHistoricalStats(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
-		r.client.SAdd(ctx, base.AllQueues, tc.qname)
+		r.client.SAdd(base.AllQueues, tc.qname)
 		// populate last n days data
 		for i := 0; i < tc.n; i++ {
 			ts := now.Add(-time.Duration(i) * 24 * time.Hour)
 			processedKey := base.ProcessedKey(tc.qname, ts)
 			failedKey := base.FailedKey(tc.qname, ts)
-			r.client.Set(ctx, processedKey, (i+1)*1000, 0)
-			r.client.Set(ctx, failedKey, (i+1)*10, 0)
+			r.client.Set(processedKey, (i+1)*1000, 0)
+			r.client.Set(failedKey, (i+1)*10, 0)
 		}
 
-		got, err := r.HistoricalStats(ctx, tc.qname, tc.n)
+		got, err := r.HistoricalStats(tc.qname, tc.n)
 		if err != nil {
 			t.Errorf("RDB.HistoricalStats(%q, %d) returned error: %v", tc.qname, tc.n, err)
 			continue
@@ -289,7 +289,7 @@ func TestRedisInfo(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 
-	info, err := r.RedisInfo(ctx)
+	info, err := r.RedisInfo()
 	if err != nil {
 		t.Fatalf("RDB.RedisInfo() returned error: %v", err)
 	}
@@ -413,7 +413,7 @@ func TestGetTaskInfo(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.GetTaskInfo(ctx, tc.qname, tc.id)
+		got, err := r.GetTaskInfo(tc.qname, tc.id)
 		if err != nil {
 			t.Errorf("GetTaskInfo(%q, %v) returned error: %v", tc.qname, tc.id, err)
 			continue
@@ -493,7 +493,7 @@ func TestGetTaskInfoError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		info, err := r.GetTaskInfo(ctx, tc.qname, tc.id)
+		info, err := r.GetTaskInfo(tc.qname, tc.id)
 		if info != nil {
 			t.Errorf("GetTaskInfo(%q, %v) returned info: %v", tc.qname, tc.id, info)
 		}
@@ -555,7 +555,7 @@ func TestListPending(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 
-		got, err := r.ListPending(ctx, tc.qname, Pagination{Size: 20, Page: 0})
+		got, err := r.ListPending(tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListPending(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
@@ -605,7 +605,7 @@ func TestListPendingPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListPending(ctx, tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		got, err := r.ListPending(tc.qname, Pagination{Size: tc.size, Page: tc.page})
 		op := fmt.Sprintf("r.ListPending(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
@@ -671,7 +671,7 @@ func TestListActive(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
 
-		got, err := r.ListActive(ctx, tc.qname, Pagination{Size: 20, Page: 0})
+		got, err := r.ListActive(tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListActive(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.inProgress)
@@ -711,7 +711,7 @@ func TestListActivePagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListActive(ctx, tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		got, err := r.ListActive(tc.qname, Pagination{Size: tc.size, Page: tc.page})
 		op := fmt.Sprintf("r.ListActive(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
@@ -806,7 +806,7 @@ func TestListScheduled(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got, err := r.ListScheduled(ctx, tc.qname, Pagination{Size: 20, Page: 0})
+		got, err := r.ListScheduled(tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListScheduled(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
@@ -825,7 +825,7 @@ func TestListScheduledPagination(t *testing.T) {
 	// create 100 tasks with an increasing number of wait time.
 	for i := 0; i < 100; i++ {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
-		if err := r.Schedule(ctx, msg, time.Now().Add(time.Duration(i)*time.Second)); err != nil {
+		if err := r.Schedule(msg, time.Now().Add(time.Duration(i)*time.Second)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -847,7 +847,7 @@ func TestListScheduledPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListScheduled(ctx, tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		got, err := r.ListScheduled(tc.qname, Pagination{Size: tc.size, Page: tc.page})
 		op := fmt.Sprintf("r.ListScheduled(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
@@ -960,7 +960,7 @@ func TestListRetry(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		got, err := r.ListRetry(ctx, tc.qname, Pagination{Size: 20, Page: 0})
+		got, err := r.ListRetry(tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListRetry(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
@@ -1004,7 +1004,7 @@ func TestListRetryPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListRetry(ctx, tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		got, err := r.ListRetry(tc.qname, Pagination{Size: tc.size, Page: tc.page})
 		op := fmt.Sprintf("r.ListRetry(%q, Pagination{Size: %d, Page: %d})",
 			tc.qname, tc.size, tc.page)
 		if err != nil {
@@ -1113,7 +1113,7 @@ func TestListArchived(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.ListArchived(ctx, tc.qname, Pagination{Size: 20, Page: 0})
+		got, err := r.ListArchived(tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListDead(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
@@ -1154,7 +1154,7 @@ func TestListArchivedPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListArchived(ctx, tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		got, err := r.ListArchived(tc.qname, Pagination{Size: tc.size, Page: tc.page})
 		op := fmt.Sprintf("r.ListDead(Pagination{Size: %d, Page: %d})",
 			tc.size, tc.page)
 		if err != nil {
@@ -1204,19 +1204,19 @@ func TestListTasksError(t *testing.T) {
 
 	for _, tc := range tests {
 		pgn := Pagination{Page: 0, Size: 20}
-		if _, got := r.ListActive(ctx, tc.qname, pgn); !tc.match(got) {
+		if _, got := r.ListActive(tc.qname, pgn); !tc.match(got) {
 			t.Errorf("%s: ListActive returned %v", tc.desc, got)
 		}
-		if _, got := r.ListPending(ctx, tc.qname, pgn); !tc.match(got) {
+		if _, got := r.ListPending(tc.qname, pgn); !tc.match(got) {
 			t.Errorf("%s: ListPending returned %v", tc.desc, got)
 		}
-		if _, got := r.ListScheduled(ctx, tc.qname, pgn); !tc.match(got) {
+		if _, got := r.ListScheduled(tc.qname, pgn); !tc.match(got) {
 			t.Errorf("%s: ListScheduled returned %v", tc.desc, got)
 		}
-		if _, got := r.ListRetry(ctx, tc.qname, pgn); !tc.match(got) {
+		if _, got := r.ListRetry(tc.qname, pgn); !tc.match(got) {
 			t.Errorf("%s: ListRetry returned %v", tc.desc, got)
 		}
-		if _, got := r.ListArchived(ctx, tc.qname, pgn); !tc.match(got) {
+		if _, got := r.ListArchived(tc.qname, pgn); !tc.match(got) {
 			t.Errorf("%s: ListArchived returned %v", tc.desc, got)
 		}
 	}
@@ -1286,7 +1286,7 @@ func TestRunArchivedTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		if got := r.RunTask(ctx, tc.qname, tc.id); got != nil {
+		if got := r.RunTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.RunTask(%q, %s) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -1366,7 +1366,7 @@ func TestRunRetryTask(t *testing.T) {
 		h.FlushDB(t, r.client)                      // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry) // initialize retry queue
 
-		if got := r.RunTask(ctx, tc.qname, tc.id); got != nil {
+		if got := r.RunTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.RunTask(%q, %s) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -1446,7 +1446,7 @@ func TestRunScheduledTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		if got := r.RunTask(ctx, tc.qname, tc.id); got != nil {
+		if got := r.RunTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.RunTask(%q, %s) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -1593,7 +1593,7 @@ func TestRunTaskError(t *testing.T) {
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got := r.RunTask(ctx, tc.qname, tc.id)
+		got := r.RunTask(tc.qname, tc.id)
 		if !tc.match(got) {
 			t.Errorf("%s: unexpected return value %v", tc.desc, got)
 			continue
@@ -1702,7 +1702,7 @@ func TestRunAllScheduledTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got, err := r.RunAllScheduledTasks(ctx, tc.qname)
+		got, err := r.RunAllScheduledTasks(tc.qname)
 		if err != nil {
 			t.Errorf("%s; r.RunAllScheduledTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
@@ -1808,7 +1808,7 @@ func TestRunAllRetryTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		got, err := r.RunAllRetryTasks(ctx, tc.qname)
+		got, err := r.RunAllRetryTasks(tc.qname)
 		if err != nil {
 			t.Errorf("%s; r.RunAllRetryTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
@@ -1914,7 +1914,7 @@ func TestRunAllArchivedTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.RunAllArchivedTasks(ctx, tc.qname)
+		got, err := r.RunAllArchivedTasks(tc.qname)
 		if err != nil {
 			t.Errorf("%s; r.RunAllDeadTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
@@ -1958,13 +1958,13 @@ func TestRunAllTasksError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		if _, got := r.RunAllScheduledTasks(ctx, tc.qname); !tc.match(got) {
+		if _, got := r.RunAllScheduledTasks(tc.qname); !tc.match(got) {
 			t.Errorf("%s: RunAllScheduledTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.RunAllRetryTasks(ctx, tc.qname); !tc.match(got) {
+		if _, got := r.RunAllRetryTasks(tc.qname); !tc.match(got) {
 			t.Errorf("%s: RunAllRetryTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.RunAllArchivedTasks(ctx, tc.qname); !tc.match(got) {
+		if _, got := r.RunAllArchivedTasks(tc.qname); !tc.match(got) {
 			t.Errorf("%s: RunAllArchivedTasks returned %v", tc.desc, got)
 		}
 	}
@@ -2047,7 +2047,7 @@ func TestArchiveRetryTask(t *testing.T) {
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		if got := r.ArchiveTask(ctx, tc.qname, tc.id); got != nil {
+		if got := r.ArchiveTask(tc.qname, tc.id); got != nil {
 			t.Errorf("(*RDB).ArchiveTask(%q, %v) returned error: %v",
 				tc.qname, tc.id, got)
 			continue
@@ -2148,7 +2148,7 @@ func TestArchiveScheduledTask(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		if got := r.ArchiveTask(ctx, tc.qname, tc.id); got != nil {
+		if got := r.ArchiveTask(tc.qname, tc.id); got != nil {
 			t.Errorf("(*RDB).ArchiveTask(%q, %v) returned error: %v",
 				tc.qname, tc.id, got)
 			continue
@@ -2231,7 +2231,7 @@ func TestArchivePendingTask(t *testing.T) {
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		if got := r.ArchiveTask(ctx, tc.qname, tc.id); got != nil {
+		if got := r.ArchiveTask(tc.qname, tc.id); got != nil {
 			t.Errorf("(*RDB).ArchiveTask(%q, %v) returned error: %v",
 				tc.qname, tc.id, got)
 			continue
@@ -2379,7 +2379,7 @@ func TestArchiveTaskError(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.ArchiveTask(ctx, tc.qname, tc.id)
+		got := r.ArchiveTask(tc.qname, tc.id)
 		if !tc.match(got) {
 			t.Errorf("%s: returned error didn't match: got=%v", tc.desc, got)
 			continue
@@ -2518,7 +2518,7 @@ func TestArchiveAllPendingTasks(t *testing.T) {
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.ArchiveAllPendingTasks(ctx, tc.qname)
+		got, err := r.ArchiveAllPendingTasks(tc.qname)
 		if got != tc.want || err != nil {
 			t.Errorf("(*RDB).KillAllRetryTasks(%q) = %v, %v; want %v, nil",
 				tc.qname, got, err, tc.want)
@@ -2664,7 +2664,7 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.ArchiveAllRetryTasks(ctx, tc.qname)
+		got, err := r.ArchiveAllRetryTasks(tc.qname)
 		if got != tc.want || err != nil {
 			t.Errorf("(*RDB).KillAllRetryTasks(%q) = %v, %v; want %v, nil",
 				tc.qname, got, err, tc.want)
@@ -2811,7 +2811,7 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.ArchiveAllScheduledTasks(ctx, tc.qname)
+		got, err := r.ArchiveAllScheduledTasks(tc.qname)
 		if got != tc.want || err != nil {
 			t.Errorf("(*RDB).KillAllScheduledTasks(%q) = %v, %v; want %v, nil",
 				tc.qname, got, err, tc.want)
@@ -2853,13 +2853,13 @@ func TestArchiveAllTasksError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		if _, got := r.ArchiveAllPendingTasks(ctx, tc.qname); !tc.match(got) {
+		if _, got := r.ArchiveAllPendingTasks(tc.qname); !tc.match(got) {
 			t.Errorf("%s: ArchiveAllPendingTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.ArchiveAllScheduledTasks(ctx, tc.qname); !tc.match(got) {
+		if _, got := r.ArchiveAllScheduledTasks(tc.qname); !tc.match(got) {
 			t.Errorf("%s: ArchiveAllScheduledTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.ArchiveAllRetryTasks(ctx, tc.qname); !tc.match(got) {
+		if _, got := r.ArchiveAllRetryTasks(tc.qname); !tc.match(got) {
 			t.Errorf("%s: ArchiveAllRetryTasks returned %v", tc.desc, got)
 		}
 	}
@@ -2917,7 +2917,7 @@ func TestDeleteArchivedTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		if got := r.DeleteTask(ctx, tc.qname, tc.id); got != nil {
+		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -2983,7 +2983,7 @@ func TestDeleteRetryTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		if got := r.DeleteTask(ctx, tc.qname, tc.id); got != nil {
+		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -3049,7 +3049,7 @@ func TestDeleteScheduledTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		if got := r.DeleteTask(ctx, tc.qname, tc.id); got != nil {
+		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -3104,7 +3104,7 @@ func TestDeletePendingTask(t *testing.T) {
 		h.FlushDB(t, r.client)
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 
-		if got := r.DeleteTask(ctx, tc.qname, tc.id); got != nil {
+		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -3156,7 +3156,7 @@ func TestDeleteTaskWithUniqueLock(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		if got := r.DeleteTask(ctx, tc.qname, tc.id); got != nil {
+		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -3168,7 +3168,7 @@ func TestDeleteTaskWithUniqueLock(t *testing.T) {
 			}
 		}
 
-		if r.client.Exists(ctx, tc.uniqueKey).Val() != 0 {
+		if r.client.Exists(tc.uniqueKey).Val() != 0 {
 			t.Errorf("Uniqueness lock %q still exists", tc.uniqueKey)
 		}
 	}
@@ -3251,7 +3251,7 @@ func TestDeleteTaskError(t *testing.T) {
 		h.SeedAllActiveQueues(t, r.client, tc.active)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got := r.DeleteTask(ctx, tc.qname, tc.id)
+		got := r.DeleteTask(tc.qname, tc.id)
 		if !tc.match(got) {
 			t.Errorf("%s: r.DeleteTask(qname, id) returned %v", tc.desc, got)
 			continue
@@ -3319,7 +3319,7 @@ func TestDeleteAllArchivedTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.DeleteAllArchivedTasks(ctx, tc.qname)
+		got, err := r.DeleteAllArchivedTasks(tc.qname)
 		if err != nil {
 			t.Errorf("r.DeleteAllDeadTasks(%q) returned error: %v", tc.qname, err)
 		}
@@ -3386,7 +3386,7 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.DeleteAllArchivedTasks(ctx, tc.qname)
+		got, err := r.DeleteAllArchivedTasks(tc.qname)
 		if err != nil {
 			t.Errorf("r.DeleteAllDeadTasks(%q) returned error: %v", tc.qname, err)
 		}
@@ -3401,7 +3401,7 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 		}
 
 		for _, uniqueKey := range tc.uniqueKeys {
-			if r.client.Exists(ctx, uniqueKey).Val() != 0 {
+			if r.client.Exists(uniqueKey).Val() != 0 {
 				t.Errorf("Uniqueness lock %q still exists", uniqueKey)
 			}
 		}
@@ -3454,7 +3454,7 @@ func TestDeleteAllRetryTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		got, err := r.DeleteAllRetryTasks(ctx, tc.qname)
+		got, err := r.DeleteAllRetryTasks(tc.qname)
 		if err != nil {
 			t.Errorf("r.DeleteAllRetryTasks(%q) returned error: %v", tc.qname, err)
 		}
@@ -3516,7 +3516,7 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got, err := r.DeleteAllScheduledTasks(ctx, tc.qname)
+		got, err := r.DeleteAllScheduledTasks(tc.qname)
 		if err != nil {
 			t.Errorf("r.DeleteAllScheduledTasks(%q) returned error: %v", tc.qname, err)
 		}
@@ -3573,7 +3573,7 @@ func TestDeleteAllPendingTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 
-		got, err := r.DeleteAllPendingTasks(ctx, tc.qname)
+		got, err := r.DeleteAllPendingTasks(tc.qname)
 		if err != nil {
 			t.Errorf("r.DeleteAllPendingTasks(%q) returned error: %v", tc.qname, err)
 		}
@@ -3606,16 +3606,16 @@ func TestDeleteAllTasksError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		if _, got := r.DeleteAllPendingTasks(ctx, tc.qname); !tc.match(got) {
+		if _, got := r.DeleteAllPendingTasks(tc.qname); !tc.match(got) {
 			t.Errorf("%s: DeleteAllPendingTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.DeleteAllScheduledTasks(ctx, tc.qname); !tc.match(got) {
+		if _, got := r.DeleteAllScheduledTasks(tc.qname); !tc.match(got) {
 			t.Errorf("%s: DeleteAllScheduledTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.DeleteAllRetryTasks(ctx, tc.qname); !tc.match(got) {
+		if _, got := r.DeleteAllRetryTasks(tc.qname); !tc.match(got) {
 			t.Errorf("%s: DeleteAllRetryTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.DeleteAllArchivedTasks(ctx, tc.qname); !tc.match(got) {
+		if _, got := r.DeleteAllArchivedTasks(tc.qname); !tc.match(got) {
 			t.Errorf("%s: DeleteAllArchivedTasks returned %v", tc.desc, got)
 		}
 	}
@@ -3696,13 +3696,13 @@ func TestRemoveQueue(t *testing.T) {
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		err := r.RemoveQueue(ctx, tc.qname, tc.force)
+		err := r.RemoveQueue(tc.qname, tc.force)
 		if err != nil {
 			t.Errorf("(*RDB).RemoveQueue(%q, %t) = %v, want nil",
 				tc.qname, tc.force, err)
 			continue
 		}
-		if r.client.SIsMember(ctx, base.AllQueues, tc.qname).Val() {
+		if r.client.SIsMember(base.AllQueues, tc.qname).Val() {
 			t.Errorf("%q is a member of %q", tc.qname, base.AllQueues)
 		}
 
@@ -3715,12 +3715,12 @@ func TestRemoveQueue(t *testing.T) {
 			base.ArchivedKey(tc.qname),
 		}
 		for _, key := range keys {
-			if r.client.Exists(ctx, key).Val() != 0 {
+			if r.client.Exists(key).Val() != 0 {
 				t.Errorf("key %q still exists", key)
 			}
 		}
 
-		if n := len(r.client.Keys(ctx, base.TaskKeyPrefix(tc.qname) + "*").Val()); n != 0 {
+		if n := len(r.client.Keys(base.TaskKeyPrefix(tc.qname) + "*").Val()); n != 0 {
 			t.Errorf("%d keys still exists for tasks", n)
 		}
 	}
@@ -3834,7 +3834,7 @@ func TestRemoveQueueError(t *testing.T) {
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.RemoveQueue(ctx, tc.qname, tc.force)
+		got := r.RemoveQueue(tc.qname, tc.force)
 		if !tc.match(got) {
 			t.Errorf("%s; returned error didn't match expected value; got=%v", tc.desc, got)
 			continue
@@ -3920,12 +3920,12 @@ func TestListServers(t *testing.T) {
 		h.FlushDB(t, r.client)
 
 		for _, info := range tc.data {
-			if err := r.WriteServerState(ctx, info, []*base.WorkerInfo{}, 5*time.Second); err != nil {
+			if err := r.WriteServerState(info, []*base.WorkerInfo{}, 5*time.Second); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		got, err := r.ListServers(ctx)
+		got, err := r.ListServers()
 		if err != nil {
 			t.Errorf("r.ListServers returned an error: %v", err)
 		}
@@ -3995,13 +3995,13 @@ func TestListWorkers(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
-		err := r.WriteServerState(ctx, &base.ServerInfo{}, tc.data, time.Minute)
+		err := r.WriteServerState(&base.ServerInfo{}, tc.data, time.Minute)
 		if err != nil {
 			t.Errorf("could not write server state to redis: %v", err)
 			continue
 		}
 
-		got, err := r.ListWorkers(ctx)
+		got, err := r.ListWorkers()
 		if err != nil {
 			t.Errorf("(*RDB).ListWorkers() returned an error: %v", err)
 			continue
@@ -4037,20 +4037,20 @@ func TestWriteListClearSchedulerEntries(t *testing.T) {
 		},
 	}
 
-	if err := r.WriteSchedulerEntries(ctx, schedulerID, data, 30*time.Second); err != nil {
+	if err := r.WriteSchedulerEntries(schedulerID, data, 30*time.Second); err != nil {
 		t.Fatalf("WriteSchedulerEnties failed: %v", err)
 	}
-	entries, err := r.ListSchedulerEntries(ctx)
+	entries, err := r.ListSchedulerEntries()
 	if err != nil {
 		t.Fatalf("ListSchedulerEntries failed: %v", err)
 	}
 	if diff := cmp.Diff(data, entries, h.SortSchedulerEntryOpt); diff != "" {
 		t.Errorf("ListSchedulerEntries() = %v, want %v; (-want,+got)\n%s", entries, data, diff)
 	}
-	if err := r.ClearSchedulerEntries(ctx, schedulerID); err != nil {
+	if err := r.ClearSchedulerEntries(schedulerID); err != nil {
 		t.Fatalf("ClearSchedulerEntries failed: %v", err)
 	}
-	entries, err = r.ListSchedulerEntries(ctx)
+	entries, err = r.ListSchedulerEntries()
 	if err != nil {
 		t.Fatalf("ListSchedulerEntries() after clear failed: %v", err)
 	}
@@ -4100,12 +4100,12 @@ loop:
 		h.FlushDB(t, r.client)
 
 		for _, e := range tc.events {
-			if err := r.RecordSchedulerEnqueueEvent(ctx, tc.entryID, e); err != nil {
+			if err := r.RecordSchedulerEnqueueEvent(tc.entryID, e); err != nil {
 				t.Errorf("RecordSchedulerEnqueueEvent(%q, %v) failed: %v", tc.entryID, e, err)
 				continue loop
 			}
 		}
-		got, err := r.ListSchedulerEnqueueEvents(ctx, tc.entryID, Pagination{Size: 20, Page: 0})
+		got, err := r.ListSchedulerEnqueueEvents(tc.entryID, Pagination{Size: 20, Page: 0})
 		if err != nil {
 			t.Errorf("ListSchedulerEnqueueEvents(%q) failed: %v", tc.entryID, err)
 			continue
@@ -4131,13 +4131,13 @@ func TestRecordSchedulerEnqueueEventTrimsDataSet(t *testing.T) {
 			TaskID:     fmt.Sprintf("task%d", i),
 			EnqueuedAt: now.Add(-time.Duration(i) * time.Second),
 		}
-		if err := r.RecordSchedulerEnqueueEvent(ctx, entryID, &event); err != nil {
+		if err := r.RecordSchedulerEnqueueEvent(entryID, &event); err != nil {
 			t.Fatalf("RecordSchedulerEnqueueEvent failed: %v", err)
 		}
 	}
 
 	// Make sure the set is full.
-	if n := r.client.ZCard(ctx, key).Val(); n != maxEvents {
+	if n := r.client.ZCard(key).Val(); n != maxEvents {
 		t.Fatalf("unexpected number of events; got %d, want %d", n, maxEvents)
 	}
 
@@ -4146,13 +4146,13 @@ func TestRecordSchedulerEnqueueEventTrimsDataSet(t *testing.T) {
 		TaskID:     "latest",
 		EnqueuedAt: now,
 	}
-	if err := r.RecordSchedulerEnqueueEvent(ctx, entryID, &event); err != nil {
+	if err := r.RecordSchedulerEnqueueEvent(entryID, &event); err != nil {
 		t.Fatalf("RecordSchedulerEnqueueEvent failed: %v", err)
 	}
-	if n := r.client.ZCard(ctx, key).Val(); n != maxEvents {
+	if n := r.client.ZCard(key).Val(); n != maxEvents {
 		t.Fatalf("unexpected number of events; got %d, want %d", n, maxEvents)
 	}
-	events, err := r.ListSchedulerEnqueueEvents(ctx, entryID, Pagination{Size: maxEvents})
+	events, err := r.ListSchedulerEnqueueEvents(entryID, Pagination{Size: maxEvents})
 	if err != nil {
 		t.Fatalf("ListSchedulerEnqueueEvents failed: %v", err)
 	}
@@ -4177,12 +4177,12 @@ func TestPause(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
-		err := r.Pause(ctx, tc.qname)
+		err := r.Pause(tc.qname)
 		if err != nil {
 			t.Errorf("Pause(%q) returned error: %v", tc.qname, err)
 		}
 		key := base.PausedKey(tc.qname)
-		if r.client.Exists(ctx, key).Val() == 0 {
+		if r.client.Exists(key).Val() == 0 {
 			t.Errorf("key %q does not exist", key)
 		}
 	}
@@ -4202,12 +4202,12 @@ func TestPauseError(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		for _, qname := range tc.paused {
-			if err := r.Pause(ctx, qname); err != nil {
+			if err := r.Pause(qname); err != nil {
 				t.Fatalf("could not pause %q: %v", qname, err)
 			}
 		}
 
-		err := r.Pause(ctx, tc.qname)
+		err := r.Pause(tc.qname)
 		if err == nil {
 			t.Errorf("%s; Pause(%q) returned nil: want error", tc.desc, tc.qname)
 		}
@@ -4227,17 +4227,17 @@ func TestUnpause(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		for _, qname := range tc.paused {
-			if err := r.Pause(ctx, qname); err != nil {
+			if err := r.Pause(qname); err != nil {
 				t.Fatalf("could not pause %q: %v", qname, err)
 			}
 		}
 
-		err := r.Unpause(ctx, tc.qname)
+		err := r.Unpause(tc.qname)
 		if err != nil {
 			t.Errorf("Unpause(%q) returned error: %v", tc.qname, err)
 		}
 		key := base.PausedKey(tc.qname)
-		if r.client.Exists(ctx, key).Val() == 1 {
+		if r.client.Exists(key).Val() == 1 {
 			t.Errorf("key %q exists", key)
 		}
 	}
@@ -4257,12 +4257,12 @@ func TestUnpauseError(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		for _, qname := range tc.paused {
-			if err := r.Pause(ctx, qname); err != nil {
+			if err := r.Pause(qname); err != nil {
 				t.Fatalf("could not pause %q: %v", qname, err)
 			}
 		}
 
-		err := r.Unpause(ctx, tc.qname)
+		err := r.Unpause(tc.qname)
 		if err == nil {
 			t.Errorf("%s; Unpause(%q) returned nil: want error", tc.desc, tc.qname)
 		}

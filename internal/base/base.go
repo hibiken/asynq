@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/go-redis/redis/v7"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/errors"
@@ -637,21 +637,21 @@ func (c *Cancelations) Get(id string) (fn context.CancelFunc, ok bool) {
 //
 // See rdb.RDB as a reference implementation.
 type Broker interface {
-	Ping(context.Context) error
-	Enqueue(ctx context.Context, msg *TaskMessage) error
-	EnqueueUnique(ctx context.Context, msg *TaskMessage, ttl time.Duration) error
-	Dequeue(ctx context.Context, qnames ...string) (*TaskMessage, time.Time, error)
-	Done(ctx context.Context, msg *TaskMessage) error
-	Requeue(ctx context.Context, msg *TaskMessage) error
-	Schedule(ctx context.Context, msg *TaskMessage, processAt time.Time) error
-	ScheduleUnique(ctx context.Context, msg *TaskMessage, processAt time.Time, ttl time.Duration) error
-	Retry(ctx context.Context, msg *TaskMessage, processAt time.Time, errMsg string) error
-	Archive(ctx context.Context, msg *TaskMessage, errMsg string) error
-	ForwardIfReady(ctx context.Context, qnames ...string) error
-	ListDeadlineExceeded(ctx context.Context, deadline time.Time, qnames ...string) ([]*TaskMessage, error)
-	WriteServerState(ctx context.Context, info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error
-	ClearServerState(ctx context.Context, host string, pid int, serverID string) error
-	CancelationPubSub(ctx context.Context) (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers
-	PublishCancelation(ctx context.Context, id string) error
+	Ping() error
+	Enqueue(msg *TaskMessage) error
+	EnqueueUnique(msg *TaskMessage, ttl time.Duration) error
+	Dequeue(qnames ...string) (*TaskMessage, time.Time, error)
+	Done(msg *TaskMessage) error
+	Requeue(msg *TaskMessage) error
+	Schedule(msg *TaskMessage, processAt time.Time) error
+	ScheduleUnique(msg *TaskMessage, processAt time.Time, ttl time.Duration) error
+	Retry(msg *TaskMessage, processAt time.Time, errMsg string) error
+	Archive(msg *TaskMessage, errMsg string) error
+	ForwardIfReady(qnames ...string) error
+	ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*TaskMessage, error)
+	WriteServerState(info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error
+	ClearServerState(host string, pid int, serverID string) error
+	CancelationPubSub() (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers
+	PublishCancelation(id string) error
 	Close() error
 }

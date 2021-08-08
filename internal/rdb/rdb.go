@@ -6,11 +6,10 @@
 package rdb
 
 import (
-	"context"
 	"fmt"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/go-redis/redis/v7"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/spf13/cast"
@@ -39,12 +38,12 @@ func (r *RDB) Client() redis.UniversalClient {
 }
 
 // Ping checks the connection with redis server.
-func (r *RDB) Ping(ctx context.Context) error {
-	return r.client.Ping(ctx).Err()
+func (r *RDB) Ping() error {
+	return r.client.Ping().Err()
 }
 
-func (r *RDB) runScript(ctx context.Context, op errors.Op, script *redis.Script, keys []string, args ...interface{}) error {
-	if err := script.Run(ctx, r.client, keys, args...).Err(); err != nil {
+func (r *RDB) runScript(op errors.Op, script *redis.Script, keys []string, args ...interface{}) error {
+	if err := script.Run(r.client, keys, args...).Err(); err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
 	}
 	return nil
@@ -74,13 +73,13 @@ return 1
 `)
 
 // Enqueue adds the given task to the pending list of the queue.
-func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
+func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 	var op errors.Op = "rdb.Enqueue"
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
 	keys := []string{
@@ -93,7 +92,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 		msg.Timeout,
 		msg.Deadline,
 	}
-	return r.runScript(ctx, op, enqueueCmd, keys, argv...)
+	return r.runScript(op, enqueueCmd, keys, argv...)
 }
 
 // enqueueUniqueCmd enqueues the task message if the task is unique.
@@ -128,13 +127,13 @@ return 1
 
 // EnqueueUnique inserts the given task if the task's uniqueness lock can be acquired.
 // It returns ErrDuplicateTask if the lock cannot be acquired.
-func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time.Duration) error {
+func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
 	var op errors.Op = "rdb.EnqueueUnique"
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
 		return errors.E(op, errors.Internal, "cannot encode task message: %v", err)
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
 	keys := []string{
@@ -149,7 +148,7 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 		msg.Timeout,
 		msg.Deadline,
 	}
-	res, err := enqueueUniqueCmd.Run(ctx, r.client, keys, argv...).Result()
+	res, err := enqueueUniqueCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
 	}
@@ -211,7 +210,7 @@ return nil`)
 // off a queue if one exists and returns the message and deadline.
 // Dequeue skips a queue if the queue is paused.
 // If all queues are empty, ErrNoProcessableTask error is returned.
-func (r *RDB) Dequeue(ctx context.Context, qnames ...string) (msg *base.TaskMessage, deadline time.Time, err error) {
+func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, deadline time.Time, err error) {
 	var op errors.Op = "rdb.Dequeue"
 	for _, qname := range qnames {
 		keys := []string{
@@ -224,7 +223,7 @@ func (r *RDB) Dequeue(ctx context.Context, qnames ...string) (msg *base.TaskMess
 			time.Now().Unix(),
 			base.TaskKeyPrefix(qname),
 		}
-		res, err := dequeueCmd.Run(ctx, r.client, keys, argv...).Result()
+		res, err := dequeueCmd.Run(r.client, keys, argv...).Result()
 		if err == redis.Nil {
 			continue
 		} else if err != nil {
@@ -305,7 +304,7 @@ return redis.status_reply("OK")
 
 // Done removes the task from active queue to mark the task as done.
 // It removes a uniqueness lock acquired by the task, if any.
-func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
+func (r *RDB) Done(msg *base.TaskMessage) error {
 	var op errors.Op = "rdb.Done"
 	now := time.Now()
 	expireAt := now.Add(statsTTL)
@@ -321,9 +320,9 @@ func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
 	}
 	if len(msg.UniqueKey) > 0 {
 		keys = append(keys, msg.UniqueKey)
-		return r.runScript(ctx, op, doneUniqueCmd, keys, argv...)
+		return r.runScript(op, doneUniqueCmd, keys, argv...)
 	}
-	return r.runScript(ctx, op, doneCmd, keys, argv...)
+	return r.runScript(op, doneCmd, keys, argv...)
 }
 
 // KEYS[1] -> asynq:{<qname>}:active
@@ -344,7 +343,7 @@ redis.call("HSET", KEYS[4], "state", "pending")
 return redis.status_reply("OK")`)
 
 // Requeue moves the task from active queue to the specified queue.
-func (r *RDB) Requeue(ctx context.Context, msg *base.TaskMessage) error {
+func (r *RDB) Requeue(msg *base.TaskMessage) error {
 	var op errors.Op = "rdb.Requeue"
 	keys := []string{
 		base.ActiveKey(msg.Queue),
@@ -352,7 +351,7 @@ func (r *RDB) Requeue(ctx context.Context, msg *base.TaskMessage) error {
 		base.PendingKey(msg.Queue),
 		base.TaskKey(msg.Queue, msg.ID.String()),
 	}
-	return r.runScript(ctx, op, requeueCmd, keys, msg.ID.String())
+	return r.runScript(op, requeueCmd, keys, msg.ID.String())
 }
 
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
@@ -373,13 +372,13 @@ return 1
 `)
 
 // Schedule adds the task to the scheduled set to be processed in the future.
-func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt time.Time) error {
+func (r *RDB) Schedule(msg *base.TaskMessage, processAt time.Time) error {
 	var op errors.Op = "rdb.Schedule"
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
 	keys := []string{
@@ -393,7 +392,7 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 		msg.Timeout,
 		msg.Deadline,
 	}
-	return r.runScript(ctx, op, scheduleCmd, keys, argv...)
+	return r.runScript(op, scheduleCmd, keys, argv...)
 }
 
 // KEYS[1] -> unique key
@@ -422,13 +421,13 @@ return 1
 
 // ScheduleUnique adds the task to the backlog queue to be processed in the future if the uniqueness lock can be acquired.
 // It returns ErrDuplicateTask if the lock cannot be acquired.
-func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, processAt time.Time, ttl time.Duration) error {
+func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl time.Duration) error {
 	var op errors.Op = "rdb.ScheduleUnique"
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode task message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+	if err := r.client.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
 	keys := []string{
@@ -444,7 +443,7 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 		msg.Timeout,
 		msg.Deadline,
 	}
-	res, err := scheduleUniqueCmd.Run(ctx, r.client, keys, argv...).Result()
+	res, err := scheduleUniqueCmd.Run(r.client, keys, argv...).Result()
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
 	}
@@ -489,7 +488,7 @@ return redis.status_reply("OK")`)
 
 // Retry moves the task from active to retry queue, incrementing retry count
 // and assigning error message to the task message.
-func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.Time, errMsg string) error {
+func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) error {
 	var op errors.Op = "rdb.Retry"
 	now := time.Now()
 	modified := *msg
@@ -515,7 +514,7 @@ func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.T
 		processAt.Unix(),
 		expireAt.Unix(),
 	}
-	return r.runScript(ctx, op, retryCmd, keys, argv...)
+	return r.runScript(op, retryCmd, keys, argv...)
 }
 
 const (
@@ -558,7 +557,7 @@ return redis.status_reply("OK")`)
 
 // Archive sends the given task to archive, attaching the error message to the task.
 // It also trims the archive by timestamp and set size.
-func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string) error {
+func (r *RDB) Archive(msg *base.TaskMessage, errMsg string) error {
 	var op errors.Op = "rdb.Archive"
 	now := time.Now()
 	modified := *msg
@@ -586,15 +585,15 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 		maxArchiveSize,
 		expireAt.Unix(),
 	}
-	return r.runScript(ctx, op, archiveCmd, keys, argv...)
+	return r.runScript(op, archiveCmd, keys, argv...)
 }
 
 // ForwardIfReady checks scheduled and retry sets of the given queues
 // and move any tasks that are ready to be processed to the pending set.
-func (r *RDB) ForwardIfReady(ctx context.Context, qnames ...string) error {
+func (r *RDB) ForwardIfReady(qnames ...string) error {
 	var op errors.Op = "rdb.ForwardIfReady"
 	for _, qname := range qnames {
-		if err := r.forwardAll(ctx, qname); err != nil {
+		if err := r.forwardAll(qname); err != nil {
 			return errors.E(op, errors.CanonicalCode(err), err)
 		}
 	}
@@ -617,9 +616,9 @@ return table.getn(ids)`)
 
 // forward moves tasks with a score less than the current unix time
 // from the src zset to the dst list. It returns the number of tasks moved.
-func (r *RDB) forward(ctx context.Context, src, dst, taskKeyPrefix string) (int, error) {
+func (r *RDB) forward(src, dst, taskKeyPrefix string) (int, error) {
 	now := float64(time.Now().Unix())
-	res, err := forwardCmd.Run(ctx, r.client, []string{src, dst}, now, taskKeyPrefix).Result()
+	res, err := forwardCmd.Run(r.client, []string{src, dst}, now, taskKeyPrefix).Result()
 	if err != nil {
 		return 0, errors.E(errors.Internal, fmt.Sprintf("redis eval error: %v", err))
 	}
@@ -632,14 +631,14 @@ func (r *RDB) forward(ctx context.Context, src, dst, taskKeyPrefix string) (int,
 
 // forwardAll checks for tasks in scheduled/retry state that are ready to be run, and updates
 // their state to "pending".
-func (r *RDB) forwardAll(ctx context.Context, qname string) (err error) {
+func (r *RDB) forwardAll(qname string) (err error) {
 	sources := []string{base.ScheduledKey(qname), base.RetryKey(qname)}
 	dst := base.PendingKey(qname)
 	taskKeyPrefix := base.TaskKeyPrefix(qname)
 	for _, src := range sources {
 		n := 1
 		for n != 0 {
-			n, err = r.forward(ctx, src, dst, taskKeyPrefix)
+			n, err = r.forward(src, dst, taskKeyPrefix)
 			if err != nil {
 				return err
 			}
@@ -662,11 +661,11 @@ return res
 `)
 
 // ListDeadlineExceeded returns a list of task messages that have exceeded the deadline from the given queues.
-func (r *RDB) ListDeadlineExceeded(ctx context.Context, deadline time.Time, qnames ...string) ([]*base.TaskMessage, error) {
+func (r *RDB) ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*base.TaskMessage, error) {
 	var op errors.Op = "rdb.ListDeadlineExceeded"
 	var msgs []*base.TaskMessage
 	for _, qname := range qnames {
-		res, err := listDeadlineExceededCmd.Run(ctx, r.client,
+		res, err := listDeadlineExceededCmd.Run(r.client,
 			[]string{base.DeadlinesKey(qname)},
 			deadline.Unix(), base.TaskKeyPrefix(qname)).Result()
 		if err != nil {
@@ -704,7 +703,7 @@ redis.call("EXPIRE", KEYS[2], ARGV[1])
 return redis.status_reply("OK")`)
 
 // WriteServerState writes server state data to redis with expiration set to the value ttl.
-func (r *RDB) WriteServerState(ctx context.Context, info *base.ServerInfo, workers []*base.WorkerInfo, ttl time.Duration) error {
+func (r *RDB) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo, ttl time.Duration) error {
 	var op errors.Op = "rdb.WriteServerState"
 	bytes, err := base.EncodeServerInfo(info)
 	if err != nil {
@@ -721,13 +720,13 @@ func (r *RDB) WriteServerState(ctx context.Context, info *base.ServerInfo, worke
 	}
 	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
 	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
-	if err := r.client.ZAdd(ctx, base.AllServers, &redis.Z{Score: float64(exp.Unix()), Member: skey}).Err(); err != nil {
+	if err := r.client.ZAdd(base.AllServers, &redis.Z{Score: float64(exp.Unix()), Member: skey}).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
-	if err := r.client.ZAdd(ctx, base.AllWorkers, &redis.Z{Score: float64(exp.Unix()), Member: wkey}).Err(); err != nil {
+	if err := r.client.ZAdd(base.AllWorkers, &redis.Z{Score: float64(exp.Unix()), Member: wkey}).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zadd", Err: err})
 	}
-	return r.runScript(ctx, op, writeServerStateCmd, []string{skey, wkey}, args...)
+	return r.runScript(op, writeServerStateCmd, []string{skey, wkey}, args...)
 }
 
 // KEYS[1] -> asynq:servers:{<host:pid:sid>}
@@ -738,17 +737,17 @@ redis.call("DEL", KEYS[2])
 return redis.status_reply("OK")`)
 
 // ClearServerState deletes server state data from redis.
-func (r *RDB) ClearServerState(ctx context.Context, host string, pid int, serverID string) error {
+func (r *RDB) ClearServerState(host string, pid int, serverID string) error {
 	var op errors.Op = "rdb.ClearServerState"
 	skey := base.ServerInfoKey(host, pid, serverID)
 	wkey := base.WorkersKey(host, pid, serverID)
-	if err := r.client.ZRem(ctx, base.AllServers, skey).Err(); err != nil {
+	if err := r.client.ZRem(base.AllServers, skey).Err(); err != nil {
 		return errors.E(op, errors.Internal, &errors.RedisCommandError{Command: "zrem", Err: err})
 	}
-	if err := r.client.ZRem(ctx, base.AllWorkers, wkey).Err(); err != nil {
+	if err := r.client.ZRem(base.AllWorkers, wkey).Err(); err != nil {
 		return errors.E(op, errors.Internal, &errors.RedisCommandError{Command: "zrem", Err: err})
 	}
-	return r.runScript(ctx, op, clearServerStateCmd, []string{skey, wkey})
+	return r.runScript(op, clearServerStateCmd, []string{skey, wkey})
 }
 
 // KEYS[1]  -> asynq:schedulers:{<schedulerID>}
@@ -763,7 +762,7 @@ redis.call("EXPIRE", KEYS[1], ARGV[1])
 return redis.status_reply("OK")`)
 
 // WriteSchedulerEntries writes scheduler entries data to redis with expiration set to the value ttl.
-func (r *RDB) WriteSchedulerEntries(ctx context.Context, schedulerID string, entries []*base.SchedulerEntry, ttl time.Duration) error {
+func (r *RDB) WriteSchedulerEntries(schedulerID string, entries []*base.SchedulerEntry, ttl time.Duration) error {
 	var op errors.Op = "rdb.WriteSchedulerEntries"
 	args := []interface{}{ttl.Seconds()}
 	for _, e := range entries {
@@ -775,31 +774,31 @@ func (r *RDB) WriteSchedulerEntries(ctx context.Context, schedulerID string, ent
 	}
 	exp := time.Now().Add(ttl).UTC()
 	key := base.SchedulerEntriesKey(schedulerID)
-	err := r.client.ZAdd(ctx, base.AllSchedulers, &redis.Z{Score: float64(exp.Unix()), Member: key}).Err()
+	err := r.client.ZAdd(base.AllSchedulers, &redis.Z{Score: float64(exp.Unix()), Member: key}).Err()
 	if err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zadd", Err: err})
 	}
-	return r.runScript(ctx, op, writeSchedulerEntriesCmd, []string{key}, args...)
+	return r.runScript(op, writeSchedulerEntriesCmd, []string{key}, args...)
 }
 
 // ClearSchedulerEntries deletes scheduler entries data from redis.
-func (r *RDB) ClearSchedulerEntries(ctx context.Context, scheduelrID string) error {
+func (r *RDB) ClearSchedulerEntries(scheduelrID string) error {
 	var op errors.Op = "rdb.ClearSchedulerEntries"
 	key := base.SchedulerEntriesKey(scheduelrID)
-	if err := r.client.ZRem(ctx, base.AllSchedulers, key).Err(); err != nil {
+	if err := r.client.ZRem(base.AllSchedulers, key).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zrem", Err: err})
 	}
-	if err := r.client.Del(ctx, key).Err(); err != nil {
+	if err := r.client.Del(key).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "del", Err: err})
 	}
 	return nil
 }
 
 // CancelationPubSub returns a pubsub for cancelation messages.
-func (r *RDB) CancelationPubSub(ctx context.Context) (*redis.PubSub, error) {
+func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
 	var op errors.Op = "rdb.CancelationPubSub"
-	pubsub := r.client.Subscribe(ctx, base.CancelChannel)
-	_, err := pubsub.Receive(ctx)
+	pubsub := r.client.Subscribe(base.CancelChannel)
+	_, err := pubsub.Receive()
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis pubsub receive error: %v", err))
 	}
@@ -808,9 +807,9 @@ func (r *RDB) CancelationPubSub(ctx context.Context) (*redis.PubSub, error) {
 
 // PublishCancelation publish cancelation message to all subscribers.
 // The message is the ID for the task to be canceled.
-func (r *RDB) PublishCancelation(ctx context.Context, id string) error {
+func (r *RDB) PublishCancelation(id string) error {
 	var op errors.Op = "rdb.PublishCancelation"
-	if err := r.client.Publish(ctx, base.CancelChannel, id).Err(); err != nil {
+	if err := r.client.Publish(base.CancelChannel, id).Err(); err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("redis pubsub publish error: %v", err))
 	}
 	return nil
@@ -829,7 +828,7 @@ return redis.status_reply("OK")`)
 const maxEvents = 1000
 
 // RecordSchedulerEnqueueEvent records the time when the given task was enqueued.
-func (r *RDB) RecordSchedulerEnqueueEvent(ctx context.Context, entryID string, event *base.SchedulerEnqueueEvent) error {
+func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerEnqueueEvent) error {
 	var op errors.Op = "rdb.RecordSchedulerEnqueueEvent"
 	data, err := base.EncodeSchedulerEnqueueEvent(event)
 	if err != nil {
@@ -843,14 +842,14 @@ func (r *RDB) RecordSchedulerEnqueueEvent(ctx context.Context, entryID string, e
 		data,
 		maxEvents,
 	}
-	return r.runScript(ctx, op, recordSchedulerEnqueueEventCmd, keys, argv...)
+	return r.runScript(op, recordSchedulerEnqueueEventCmd, keys, argv...)
 }
 
 // ClearSchedulerHistory deletes the enqueue event history for the given scheduler entry.
-func (r *RDB) ClearSchedulerHistory(ctx context.Context, entryID string) error {
+func (r *RDB) ClearSchedulerHistory(entryID string) error {
 	var op errors.Op = "rdb.ClearSchedulerHistory"
 	key := base.SchedulerHistoryKey(entryID)
-	if err := r.client.Del(ctx, key).Err(); err != nil {
+	if err := r.client.Del(key).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "del", Err: err})
 	}
 	return nil
