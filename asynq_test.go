@@ -43,7 +43,6 @@ func init() {
 	flag.BoolVar(&useRedisCluster, "redis_cluster", false, "use redis cluster as a broker in testing")
 	flag.StringVar(&redisClusterAddrs, "redis_cluster_addrs", "localhost:7000,localhost:7001,localhost:7002", "comma separated list of redis server addresses")
 	flag.StringVar(&redisTLSServer, "redis_tls_server", "", "redis host for TLS verification")
-	flag.Var(&testLogLevel, "loglevel", "log level to use in testing")
 
 	testLogger = log.NewLogger(nil)
 	testLogger.SetLevel(toInternalLogLevel(testLogLevel))
