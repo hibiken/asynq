@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Changed `Queue` function to not to convert the provided queue name to lowercase. Queue names are now case-sensitive.
+- `QueueInfo.MemoryUsage` is now an approximate usage value.
+
+### Fixed
+
+- Fixed latency issue around memory usage (see https://github.com/hibiken/asynq/issues/309).
 
 ## [0.18.1] - 2020-07-04
 
