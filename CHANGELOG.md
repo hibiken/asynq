@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.4] - 2020-08-17
+
 ### Fixed
 
 - Scheduler methods are now thread-safe. It's now safe to call `Register` and `Unregister` concurrently.
