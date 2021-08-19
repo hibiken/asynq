@@ -5,6 +5,7 @@
 package rdb
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -18,7 +19,7 @@ import (
 
 // AllQueues returns a list of all queue names.
 func (r *RDB) AllQueues() ([]string, error) {
-	return r.client.SMembers(ctx, base.AllQueues).Result()
+	return r.client.SMembers(context.Background(), base.AllQueues).Result()
 }
 
 // Stats represents a state of queues at a certain time.
@@ -102,7 +103,7 @@ return res`)
 // CurrentStats returns a current state of the queues.
 func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 	var op errors.Op = "rdb.CurrentStats"
-	exists, err := r.client.SIsMember(ctx, base.AllQueues, qname).Result()
+	exists, err := r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, err)
 	}
@@ -110,7 +111,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	now := time.Now()
-	res, err := currentStatsCmd.Run(ctx, r.client, []string{
+	res, err := currentStatsCmd.Run(context.Background(), r.client, []string{
 		base.PendingKey(qname),
 		base.ActiveKey(qname),
 		base.ScheduledKey(qname),
@@ -181,7 +182,7 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 		err    error
 	)
 	for {
-		data, cursor, err = r.client.Scan(ctx, cursor, fmt.Sprintf("asynq:{%s}*", qname), 100).Result()
+		data, cursor, err = r.client.Scan(context.Background(), cursor, fmt.Sprintf("asynq:{%s}*", qname), 100).Result()
 		if err != nil {
 			return 0, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "scan", Err: err})
 		}
@@ -192,7 +193,7 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 	}
 	var usg int64
 	for _, k := range keys {
-		n, err := r.client.MemoryUsage(ctx, k).Result()
+		n, err := r.client.MemoryUsage(context.Background(), k).Result()
 		if err != nil {
 			return 0, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "memory usage", Err: err})
 		}
@@ -218,7 +219,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 	if n < 1 {
 		return nil, errors.E(op, errors.FailedPrecondition, "the number of days must be positive")
 	}
-	exists, err := r.client.SIsMember(ctx, base.AllQueues, qname).Result()
+	exists, err := r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
 	}
@@ -235,7 +236,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 		keys = append(keys, base.ProcessedKey(qname, ts))
 		keys = append(keys, base.FailedKey(qname, ts))
 	}
-	res, err := historicalStatsCmd.Run(ctx, r.client, keys).Result()
+	res, err := historicalStatsCmd.Run(context.Background(), r.client, keys).Result()
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
 	}
@@ -257,7 +258,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 
 // RedisInfo returns a map of redis info.
 func (r *RDB) RedisInfo() (map[string]string, error) {
-	res, err := r.client.Info(ctx).Result()
+	res, err := r.client.Info(context.Background()).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +267,7 @@ func (r *RDB) RedisInfo() (map[string]string, error) {
 
 // RedisClusterInfo returns a map of redis cluster info.
 func (r *RDB) RedisClusterInfo() (map[string]string, error) {
-	res, err := r.client.ClusterInfo(ctx).Result()
+	res, err := r.client.ClusterInfo(context.Background()).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +296,7 @@ func reverse(x []string) {
 // checkQueueExists verifies whether the queue exists.
 // It returns QueueNotFoundError if queue doesn't exist.
 func (r *RDB) checkQueueExists(qname string) error {
-	exists, err := r.client.SIsMember(ctx, base.AllQueues, qname).Result()
+	exists, err := r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
 	if err != nil {
 		return errors.E(errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
 	}
@@ -344,7 +345,7 @@ func (r *RDB) GetTaskInfo(qname string, id uuid.UUID) (*base.TaskInfo, error) {
 		time.Now().Unix(),
 		base.QueueKeyPrefix(qname),
 	}
-	res, err := getTaskInfoCmd.Run(ctx, r.client, keys, argv...).Result()
+	res, err := getTaskInfoCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
 		if err.Error() == "NOT FOUND" {
 			return nil, errors.E(op, errors.NotFound, &errors.TaskNotFoundError{Queue: qname, ID: id.String()})
@@ -410,7 +411,7 @@ func (p Pagination) stop() int64 {
 // ListPending returns pending tasks that are ready to be processed.
 func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
 	var op errors.Op = "rdb.ListPending"
-	if !r.client.SIsMember(ctx, base.AllQueues, qname).Val() {
+	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	res, err := r.listMessages(base.PendingKey(qname), qname, pgn)
@@ -423,7 +424,7 @@ func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskMessage, er
 // ListActive returns all tasks that are currently being processed for the given queue.
 func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
 	var op errors.Op = "rdb.ListActive"
-	if !r.client.SIsMember(ctx, base.AllQueues, qname).Val() {
+	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	res, err := r.listMessages(base.ActiveKey(qname), qname, pgn)
@@ -453,7 +454,7 @@ func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskMessa
 	// correct range and reverse the list to get the tasks with pagination.
 	stop := -pgn.start() - 1
 	start := -pgn.stop() - 1
-	res, err := listMessagesCmd.Run(ctx, r.client,
+	res, err := listMessagesCmd.Run(context.Background(), r.client,
 		[]string{key}, start, stop, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
 		return nil, errors.E(errors.Unknown, err)
@@ -479,7 +480,7 @@ func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskMessa
 // to be processed in the future.
 func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]base.Z, error) {
 	var op errors.Op = "rdb.ListScheduled"
-	if !r.client.SIsMember(ctx, base.AllQueues, qname).Val() {
+	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	res, err := r.listZSetEntries(base.ScheduledKey(qname), qname, pgn)
@@ -493,7 +494,7 @@ func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]base.Z, error) {
 // and willl be retried in the future.
 func (r *RDB) ListRetry(qname string, pgn Pagination) ([]base.Z, error) {
 	var op errors.Op = "rdb.ListRetry"
-	if !r.client.SIsMember(ctx, base.AllQueues, qname).Val() {
+	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	res, err := r.listZSetEntries(base.RetryKey(qname), qname, pgn)
@@ -506,7 +507,7 @@ func (r *RDB) ListRetry(qname string, pgn Pagination) ([]base.Z, error) {
 // ListArchived returns all tasks from the given queue that have exhausted its retry limit.
 func (r *RDB) ListArchived(qname string, pgn Pagination) ([]base.Z, error) {
 	var op errors.Op = "rdb.ListArchived"
-	if !r.client.SIsMember(ctx, base.AllQueues, qname).Val() {
+	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	zs, err := r.listZSetEntries(base.ArchivedKey(qname), qname, pgn)
@@ -537,7 +538,7 @@ return res
 // listZSetEntries returns a list of message and score pairs in Redis sorted-set
 // with the given key.
 func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, error) {
-	res, err := listZSetEntriesCmd.Run(ctx, r.client, []string{key},
+	res, err := listZSetEntriesCmd.Run(context.Background(), r.client, []string{key},
 		pgn.start(), pgn.stop(), base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
 		return nil, errors.E(errors.Unknown, err)
@@ -664,7 +665,7 @@ func (r *RDB) RunTask(qname string, id uuid.UUID) error {
 		id.String(),
 		base.QueueKeyPrefix(qname),
 	}
-	res, err := runTaskCmd.Run(ctx, r.client, keys, argv...).Result()
+	res, err := runTaskCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
 		return errors.E(op, errors.Unknown, err)
 	}
@@ -717,7 +718,7 @@ func (r *RDB) runAll(zset, qname string) (int64, error) {
 	argv := []interface{}{
 		base.TaskKeyPrefix(qname),
 	}
-	res, err := runAllCmd.Run(ctx, r.client, keys, argv...).Result()
+	res, err := runAllCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -805,7 +806,7 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 		maxArchiveSize,
 		base.TaskKeyPrefix(qname),
 	}
-	res, err := archiveAllPendingCmd.Run(ctx, r.client, keys, argv...).Result()
+	res, err := archiveAllPendingCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
 		return 0, errors.E(op, errors.Internal, err)
 	}
@@ -886,7 +887,7 @@ func (r *RDB) ArchiveTask(qname string, id uuid.UUID) error {
 		maxArchiveSize,
 		base.QueueKeyPrefix(qname),
 	}
-	res, err := archiveTaskCmd.Run(ctx, r.client, keys, argv...).Result()
+	res, err := archiveTaskCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
 		return errors.E(op, errors.Unknown, err)
 	}
@@ -951,7 +952,7 @@ func (r *RDB) archiveAll(src, dst, qname string) (int64, error) {
 		base.TaskKeyPrefix(qname),
 		qname,
 	}
-	res, err := archiveAllCmd.Run(ctx, r.client, keys, argv...).Result()
+	res, err := archiveAllCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -1018,7 +1019,7 @@ func (r *RDB) DeleteTask(qname string, id uuid.UUID) error {
 		id.String(),
 		base.QueueKeyPrefix(qname),
 	}
-	res, err := deleteTaskCmd.Run(ctx, r.client, keys, argv...).Result()
+	res, err := deleteTaskCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
 		return errors.E(op, errors.Unknown, err)
 	}
@@ -1110,7 +1111,7 @@ func (r *RDB) deleteAll(key, qname string) (int64, error) {
 		base.TaskKeyPrefix(qname),
 		qname,
 	}
-	res, err := deleteAllCmd.Run(ctx, r.client, []string{key}, argv...).Result()
+	res, err := deleteAllCmd.Run(context.Background(), r.client, []string{key}, argv...).Result()
 	if err != nil {
 		return 0, err
 	}
@@ -1151,7 +1152,7 @@ func (r *RDB) DeleteAllPendingTasks(qname string) (int64, error) {
 	argv := []interface{}{
 		base.TaskKeyPrefix(qname),
 	}
-	res, err := deleteAllPendingCmd.Run(ctx, r.client, keys, argv...).Result()
+	res, err := deleteAllPendingCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
 		return 0, errors.E(op, errors.Unknown, err)
 	}
@@ -1282,7 +1283,7 @@ return 1`)
 // the queue is empty.
 func (r *RDB) RemoveQueue(qname string, force bool) error {
 	var op errors.Op = "rdb.RemoveQueue"
-	exists, err := r.client.SIsMember(ctx, base.AllQueues, qname).Result()
+	exists, err := r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
 	if err != nil {
 		return err
 	}
@@ -1303,7 +1304,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 		base.ArchivedKey(qname),
 		base.DeadlinesKey(qname),
 	}
-	res, err := script.Run(ctx, r.client, keys, base.TaskKeyPrefix(qname)).Result()
+	res, err := script.Run(context.Background(), r.client, keys, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
 		return errors.E(op, errors.Unknown, err)
 	}
@@ -1313,7 +1314,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 	}
 	switch n {
 	case 1:
-		if err := r.client.SRem(ctx, base.AllQueues, qname).Err(); err != nil {
+		if err := r.client.SRem(context.Background(), base.AllQueues, qname).Err(); err != nil {
 			return errors.E(op, errors.Unknown, err)
 		}
 		return nil
@@ -1336,7 +1337,7 @@ return keys`)
 // ListServers returns the list of server info.
 func (r *RDB) ListServers() ([]*base.ServerInfo, error) {
 	now := time.Now()
-	res, err := listServerKeysCmd.Run(ctx, r.client, []string{base.AllServers}, now.Unix()).Result()
+	res, err := listServerKeysCmd.Run(context.Background(), r.client, []string{base.AllServers}, now.Unix()).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -1346,7 +1347,7 @@ func (r *RDB) ListServers() ([]*base.ServerInfo, error) {
 	}
 	var servers []*base.ServerInfo
 	for _, key := range keys {
-		data, err := r.client.Get(ctx, key).Result()
+		data, err := r.client.Get(context.Background(), key).Result()
 		if err != nil {
 			continue // skip bad data
 		}
@@ -1370,7 +1371,7 @@ return keys`)
 func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
 	var op errors.Op = "rdb.ListWorkers"
 	now := time.Now()
-	res, err := listWorkersCmd.Run(ctx, r.client, []string{base.AllWorkers}, now.Unix()).Result()
+	res, err := listWorkersCmd.Run(context.Background(), r.client, []string{base.AllWorkers}, now.Unix()).Result()
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, err)
 	}
@@ -1380,7 +1381,7 @@ func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
 	}
 	var workers []*base.WorkerInfo
 	for _, key := range keys {
-		data, err := r.client.HVals(ctx, key).Result()
+		data, err := r.client.HVals(context.Background(), key).Result()
 		if err != nil {
 			continue // skip bad data
 		}
@@ -1405,7 +1406,7 @@ return keys`)
 // ListSchedulerEntries returns the list of scheduler entries.
 func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
 	now := time.Now()
-	res, err := listSchedulerKeysCmd.Run(ctx, r.client, []string{base.AllSchedulers}, now.Unix()).Result()
+	res, err := listSchedulerKeysCmd.Run(context.Background(), r.client, []string{base.AllSchedulers}, now.Unix()).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -1415,7 +1416,7 @@ func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
 	}
 	var entries []*base.SchedulerEntry
 	for _, key := range keys {
-		data, err := r.client.LRange(ctx, key, 0, -1).Result()
+		data, err := r.client.LRange(context.Background(), key, 0, -1).Result()
 		if err != nil {
 			continue // skip bad data
 		}
@@ -1433,7 +1434,7 @@ func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
 // ListSchedulerEnqueueEvents returns the list of scheduler enqueue events.
 func (r *RDB) ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*base.SchedulerEnqueueEvent, error) {
 	key := base.SchedulerHistoryKey(entryID)
-	zs, err := r.client.ZRevRangeWithScores(ctx, key, pgn.start(), pgn.stop()).Result()
+	zs, err := r.client.ZRevRangeWithScores(context.Background(), key, pgn.start(), pgn.stop()).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -1455,7 +1456,7 @@ func (r *RDB) ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*bas
 // Pause pauses processing of tasks from the given queue.
 func (r *RDB) Pause(qname string) error {
 	key := base.PausedKey(qname)
-	ok, err := r.client.SetNX(ctx, key, time.Now().Unix(), 0).Result()
+	ok, err := r.client.SetNX(context.Background(), key, time.Now().Unix(), 0).Result()
 	if err != nil {
 		return err
 	}
@@ -1468,7 +1469,7 @@ func (r *RDB) Pause(qname string) error {
 // Unpause resumes processing of tasks from the given queue.
 func (r *RDB) Unpause(qname string) error {
 	key := base.PausedKey(qname)
-	deleted, err := r.client.Del(ctx, key).Result()
+	deleted, err := r.client.Del(context.Background(), key).Result()
 	if err != nil {
 		return err
 	}
@@ -1481,7 +1482,7 @@ func (r *RDB) Unpause(qname string) error {
 // ClusterKeySlot returns an integer identifying the hash slot the given queue hashes to.
 func (r *RDB) ClusterKeySlot(qname string) (int64, error) {
 	key := base.PendingKey(qname)
-	return r.client.ClusterKeySlot(ctx, key).Result()
+	return r.client.ClusterKeySlot(context.Background(), key).Result()
 }
 
 // ClusterNodes returns a list of nodes the given queue belongs to.
@@ -1490,7 +1491,7 @@ func (r *RDB) ClusterNodes(qname string) ([]redis.ClusterNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	clusterSlots, err := r.client.ClusterSlots(ctx).Result()
+	clusterSlots, err := r.client.ClusterSlots(context.Background()).Result()
 	if err != nil {
 		return nil, err
 	}

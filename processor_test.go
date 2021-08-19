@@ -119,7 +119,7 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 			}
 		}
 		time.Sleep(2 * time.Second) // wait for two second to allow all pending tasks to be processed.
-		if l := r.LLen(ctx, base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
+		if l := r.LLen(context.Background(), base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
 			t.Errorf("%q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), l)
 		}
 		p.shutdown()
@@ -211,7 +211,7 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 		time.Sleep(2 * time.Second)
 		// Make sure no messages are stuck in active list.
 		for _, qname := range tc.queues {
-			if l := r.LLen(ctx, base.ActiveKey(qname)).Val(); l != 0 {
+			if l := r.LLen(context.Background(), base.ActiveKey(qname)).Val(); l != 0 {
 				t.Errorf("%q has %d tasks, want 0", base.ActiveKey(qname), l)
 			}
 		}
@@ -290,7 +290,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 
 		p.start(&sync.WaitGroup{})
 		time.Sleep(2 * time.Second) // wait for two second to allow all pending tasks to be processed.
-		if l := r.LLen(ctx, base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
+		if l := r.LLen(context.Background(), base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
 			t.Errorf("%q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), l)
 		}
 		p.shutdown()
@@ -439,7 +439,7 @@ func TestProcessorRetry(t *testing.T) {
 			t.Errorf("%s: mismatch found in %q after running processor; (-want, +got)\n%s", tc.desc, base.ArchivedKey(base.DefaultQueueName), diff)
 		}
 
-		if l := r.LLen(ctx, base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
+		if l := r.LLen(context.Background(), base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
 			t.Errorf("%s: %q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), tc.desc, l)
 		}
 
@@ -593,7 +593,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		time.Sleep(tc.wait)
 		// Make sure no tasks are stuck in active list.
 		for _, qname := range tc.queues {
-			if l := r.LLen(ctx, base.ActiveKey(qname)).Val(); l != 0 {
+			if l := r.LLen(context.Background(), base.ActiveKey(qname)).Val(); l != 0 {
 				t.Errorf("%q has %d tasks, want 0", base.ActiveKey(qname), l)
 			}
 		}
