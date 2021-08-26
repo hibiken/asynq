@@ -170,8 +170,8 @@ func FlushDB(tb testing.TB, r redis.UniversalClient) {
 			tb.Fatal(err)
 		}
 	case *redis.ClusterClient:
-		err := r.ForEachMaster(context.Background(), func(ctx2 context.Context, c *redis.Client) error {
-			if err := c.FlushAll(ctx2).Err(); err != nil {
+		err := r.ForEachMaster(context.Background(), func(ctx context.Context, c *redis.Client) error {
+			if err := c.FlushAll(ctx).Err(); err != nil {
 				return err
 			}
 			return nil
