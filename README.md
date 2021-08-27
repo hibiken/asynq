@@ -215,7 +215,7 @@ func main() {
 
     info, err = client.Enqueue(task, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
     if err != nil {
-        log.Fatal("could not enqueue task: %v", err)
+        log.Fatalf("could not enqueue task: %v", err)
     }
     log.Printf("enqueued task: id=%s queue=%s", info.ID, info.Queue)
 }
