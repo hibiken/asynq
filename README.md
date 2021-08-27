@@ -215,7 +215,7 @@ func main() {
 
     info, err = client.Enqueue(task, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
     if err != nil {
-        log.Fatal("could not enqueue task: %v", err)
+        log.Fatalf("could not enqueue task: %v", err)
     }
     log.Printf("enqueued task: id=%s queue=%s", info.ID, info.Queue)
 }
@@ -239,7 +239,7 @@ const redisAddr = "127.0.0.1:6379"
 
 func main() {
     srv := asynq.NewServer(
-        asynq.RedisClientOpt{Addr: redisAddr}
+        asynq.RedisClientOpt{Addr: redisAddr},
         asynq.Config{
             // Specify how many concurrent workers to use
             Concurrency: 10,
