@@ -234,6 +234,7 @@ func TestRecoverer(t *testing.T) {
 			queues:         []string{"default", "critical"},
 			interval:       1 * time.Second,
 			retryDelayFunc: func(n int, err error, task *Task) time.Duration { return 30 * time.Second },
+			isFailureFunc:  defaultIsFailureFunc,
 		})
 
 		var wg sync.WaitGroup
@@ -259,7 +260,7 @@ func TestRecoverer(t *testing.T) {
 			gotRetry := h.GetRetryMessages(t, r, qname)
 			var wantRetry []*base.TaskMessage // Note: construct message here since `LastFailedAt` is relative to each test run
 			for _, msg := range msgs {
-				wantRetry = append(wantRetry, h.TaskMessageAfterRetry(*msg, "deadline exceeded", runTime))
+				wantRetry = append(wantRetry, h.TaskMessageAfterRetry(*msg, "context deadline exceeded", runTime))
 			}
 			if diff := cmp.Diff(wantRetry, gotRetry, h.SortMsgOpt, cmpOpt); diff != "" {
 				t.Errorf("%s; mismatch found in %q: (-want, +got)\n%s", tc.desc, base.RetryKey(qname), diff)
@@ -269,7 +270,7 @@ func TestRecoverer(t *testing.T) {
 			gotArchived := h.GetArchivedMessages(t, r, qname)
 			var wantArchived []*base.TaskMessage
 			for _, msg := range msgs {
-				wantArchived = append(wantArchived, h.TaskMessageWithError(*msg, "deadline exceeded", runTime))
+				wantArchived = append(wantArchived, h.TaskMessageWithError(*msg, "context deadline exceeded", runTime))
 			}
 			if diff := cmp.Diff(wantArchived, gotArchived, h.SortMsgOpt, cmpOpt); diff != "" {
 				t.Errorf("%s; mismatch found in %q: (-want, +got)\n%s", tc.desc, base.ArchivedKey(qname), diff)

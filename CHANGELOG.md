@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `IsFailure` config option is added to determine whether error returned from Handler counts as a failure.
+
 ## [0.18.4] - 2020-08-17
 
 ### Fixed
