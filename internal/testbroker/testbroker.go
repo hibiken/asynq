@@ -108,13 +108,13 @@ func (tb *TestBroker) ScheduleUnique(msg *base.TaskMessage, processAt time.Time,
 	return tb.real.ScheduleUnique(msg, processAt, ttl)
 }
 
-func (tb *TestBroker) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) error {
+func (tb *TestBroker) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string, isFailure bool) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return errRedisDown
 	}
-	return tb.real.Retry(msg, processAt, errMsg)
+	return tb.real.Retry(msg, processAt, errMsg, isFailure)
 }
 
 func (tb *TestBroker) Archive(msg *base.TaskMessage, errMsg string) error {

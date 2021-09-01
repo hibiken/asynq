@@ -64,6 +64,14 @@ type Config struct {
 	// By default, it uses exponential backoff algorithm to calculate the delay.
 	RetryDelayFunc RetryDelayFunc
 
+	// Predicate function to determine whether the error returned from Handler is a failure.
+	// If the function returns false, Server will not increment the retried counter for the task,
+	// and Server won't record the queue stats (processed and failed stats) to avoid skewing the error
+	// rate of the queue.
+	//
+	// By default, if the given error is non-nil the function returns true.
+	IsFailure func(error) bool
+
 	// List of queues to process with given priority value. Keys are the names of the
 	// queues and values are associated priority value.
 	//
@@ -268,6 +276,8 @@ func DefaultRetryDelayFunc(n int, e error, t *Task) time.Duration {
 	return time.Duration(s) * time.Second
 }
 
+func defaultIsFailureFunc(err error) bool { return err != nil }
+
 var defaultQueueConfig = map[string]int{
 	base.DefaultQueueName: 1,
 }
@@ -292,6 +302,10 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	delayFunc := cfg.RetryDelayFunc
 	if delayFunc == nil {
 		delayFunc = DefaultRetryDelayFunc
+	}
+	isFailureFunc := cfg.IsFailure
+	if isFailureFunc == nil {
+		isFailureFunc = defaultIsFailureFunc
 	}
 	queues := make(map[string]int)
 	for qname, p := range cfg.Queues {
@@ -362,6 +376,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		logger:          logger,
 		broker:          rdb,
 		retryDelayFunc:  delayFunc,
+		isFailureFunc:   isFailureFunc,
 		syncCh:          syncCh,
 		cancelations:    cancels,
 		concurrency:     n,
@@ -376,6 +391,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		logger:         logger,
 		broker:         rdb,
 		retryDelayFunc: delayFunc,
+		isFailureFunc:  isFailureFunc,
 		queues:         qnames,
 		interval:       1 * time.Minute,
 	})

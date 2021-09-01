@@ -467,6 +467,7 @@ func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl tim
 // ARGV[2] -> updated base.TaskMessage value
 // ARGV[3] -> retry_at UNIX timestamp
 // ARGV[4] -> stats expiration timestamp
+// ARGV[5] -> is_failure (bool)
 var retryCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[2], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
@@ -476,23 +477,28 @@ if redis.call("ZREM", KEYS[3], ARGV[1]) == 0 then
 end
 redis.call("ZADD", KEYS[4], ARGV[3], ARGV[1])
 redis.call("HSET", KEYS[1], "msg", ARGV[2], "state", "retry")
-local n = redis.call("INCR", KEYS[5])
-if tonumber(n) == 1 then
-	redis.call("EXPIREAT", KEYS[5], ARGV[4])
-end
-local m = redis.call("INCR", KEYS[6])
-if tonumber(m) == 1 then
-	redis.call("EXPIREAT", KEYS[6], ARGV[4])
+if tonumber(ARGV[5]) == 1 then
+	local n = redis.call("INCR", KEYS[5])
+	if tonumber(n) == 1 then
+		redis.call("EXPIREAT", KEYS[5], ARGV[4])
+	end
+	local m = redis.call("INCR", KEYS[6])
+	if tonumber(m) == 1 then
+		redis.call("EXPIREAT", KEYS[6], ARGV[4])
+	end
 end
 return redis.status_reply("OK")`)
 
-// Retry moves the task from active to retry queue, incrementing retry count
-// and assigning error message to the task message.
-func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) error {
+// Retry moves the task from active to retry queue.
+// It also annotates the message with the given error message and
+// if isFailure is true increments the retried counter.
+func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string, isFailure bool) error {
 	var op errors.Op = "rdb.Retry"
 	now := time.Now()
 	modified := *msg
-	modified.Retried++
+	if isFailure {
+		modified.Retried++
+	}
 	modified.ErrorMsg = errMsg
 	modified.LastFailedAt = now.Unix()
 	encoded, err := base.EncodeMessage(&modified)
@@ -513,6 +519,7 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string) e
 		encoded,
 		processAt.Unix(),
 		expireAt.Unix(),
+		isFailure,
 	}
 	return r.runScript(op, retryCmd, keys, argv...)
 }

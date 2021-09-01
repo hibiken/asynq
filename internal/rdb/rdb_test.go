@@ -1158,7 +1158,7 @@ func TestRetry(t *testing.T) {
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
 		callTime := time.Now() // time when method was called
-		err := r.Retry(tc.msg, tc.processAt, tc.errMsg)
+		err := r.Retry(tc.msg, tc.processAt, tc.errMsg, true /*isFailure*/)
 		if err != nil {
 			t.Errorf("(*RDB).Retry = %v, want nil", err)
 			continue
@@ -1206,6 +1206,173 @@ func TestRetry(t *testing.T) {
 		gotTTL = r.client.TTL(failedKey).Val()
 		if gotTTL > statsTTL {
 			t.Errorf("TTL %q = %v, want less than or equal to %v", failedKey, gotTTL, statsTTL)
+		}
+	}
+}
+
+func TestRetryWithNonFailureError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	t1 := &base.TaskMessage{
+		ID:      uuid.New(),
+		Type:    "send_email",
+		Payload: h.JSON(map[string]interface{}{"subject": "Hola!"}),
+		Retried: 10,
+		Timeout: 1800,
+		Queue:   "default",
+	}
+	t2 := &base.TaskMessage{
+		ID:      uuid.New(),
+		Type:    "gen_thumbnail",
+		Payload: h.JSON(map[string]interface{}{"path": "some/path/to/image.jpg"}),
+		Timeout: 3000,
+		Queue:   "default",
+	}
+	t3 := &base.TaskMessage{
+		ID:      uuid.New(),
+		Type:    "reindex",
+		Payload: nil,
+		Timeout: 60,
+		Queue:   "default",
+	}
+	t4 := &base.TaskMessage{
+		ID:      uuid.New(),
+		Type:    "send_notification",
+		Payload: nil,
+		Timeout: 1800,
+		Queue:   "custom",
+	}
+	t1Deadline := now.Unix() + t1.Timeout
+	t2Deadline := now.Unix() + t2.Timeout
+	t4Deadline := now.Unix() + t4.Timeout
+	errMsg := "SMTP server is not responding"
+
+	tests := []struct {
+		active        map[string][]*base.TaskMessage
+		deadlines     map[string][]base.Z
+		retry         map[string][]base.Z
+		msg           *base.TaskMessage
+		processAt     time.Time
+		errMsg        string
+		wantActive    map[string][]*base.TaskMessage
+		wantDeadlines map[string][]base.Z
+		getWantRetry  func(failedAt time.Time) map[string][]base.Z
+	}{
+		{
+			active: map[string][]*base.TaskMessage{
+				"default": {t1, t2},
+			},
+			deadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}, {Message: t2, Score: t2Deadline}},
+			},
+			retry: map[string][]base.Z{
+				"default": {{Message: t3, Score: now.Add(time.Minute).Unix()}},
+			},
+			msg:       t1,
+			processAt: now.Add(5 * time.Minute),
+			errMsg:    errMsg,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {t2},
+			},
+			wantDeadlines: map[string][]base.Z{
+				"default": {{Message: t2, Score: t2Deadline}},
+			},
+			getWantRetry: func(failedAt time.Time) map[string][]base.Z {
+				return map[string][]base.Z{
+					"default": {
+						// Task message should include the error message but without incrementing the retry count.
+						{Message: h.TaskMessageWithError(*t1, errMsg, failedAt), Score: now.Add(5 * time.Minute).Unix()},
+						{Message: t3, Score: now.Add(time.Minute).Unix()},
+					},
+				}
+			},
+		},
+		{
+			active: map[string][]*base.TaskMessage{
+				"default": {t1, t2},
+				"custom":  {t4},
+			},
+			deadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}, {Message: t2, Score: t2Deadline}},
+				"custom":  {{Message: t4, Score: t4Deadline}},
+			},
+			retry: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			msg:       t4,
+			processAt: now.Add(5 * time.Minute),
+			errMsg:    errMsg,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {t1, t2},
+				"custom":  {},
+			},
+			wantDeadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}, {Message: t2, Score: t2Deadline}},
+				"custom":  {},
+			},
+			getWantRetry: func(failedAt time.Time) map[string][]base.Z {
+				return map[string][]base.Z{
+					"default": {},
+					"custom": {
+						// Task message should include the error message but without incrementing the retry count.
+						{Message: h.TaskMessageWithError(*t4, errMsg, failedAt), Score: now.Add(5 * time.Minute).Unix()},
+					},
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedAllActiveQueues(t, r.client, tc.active)
+		h.SeedAllDeadlines(t, r.client, tc.deadlines)
+		h.SeedAllRetryQueues(t, r.client, tc.retry)
+
+		callTime := time.Now() // time when method was called
+		err := r.Retry(tc.msg, tc.processAt, tc.errMsg, false /*isFailure*/)
+		if err != nil {
+			t.Errorf("(*RDB).Retry = %v, want nil", err)
+			continue
+		}
+
+		for queue, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ActiveKey(queue), diff)
+			}
+		}
+		for queue, want := range tc.wantDeadlines {
+			gotDeadlines := h.GetDeadlinesEntries(t, r.client, queue)
+			if diff := cmp.Diff(want, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.DeadlinesKey(queue), diff)
+			}
+		}
+		cmpOpts := []cmp.Option{
+			h.SortZSetEntryOpt,
+			cmpopts.EquateApproxTime(5 * time.Second), // for LastFailedAt field
+		}
+		wantRetry := tc.getWantRetry(callTime)
+		for queue, want := range wantRetry {
+			gotRetry := h.GetRetryEntries(t, r.client, queue)
+			if diff := cmp.Diff(want, gotRetry, cmpOpts...); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryKey(queue), diff)
+			}
+		}
+
+		// If isFailure is set to false, no stats should be recorded to avoid skewing the error rate.
+		processedKey := base.ProcessedKey(tc.msg.Queue, time.Now())
+		gotProcessed := r.client.Get(processedKey).Val()
+		if gotProcessed != "" {
+			t.Errorf("GET %q = %q, want empty", processedKey, gotProcessed)
+		}
+
+		// If isFailure is set to false, no stats should be recorded to avoid skewing the error rate.
+		failedKey := base.FailedKey(tc.msg.Queue, time.Now())
+		gotFailed := r.client.Get(failedKey).Val()
+		if gotFailed != "" {
+			t.Errorf("GET %q = %q, want empty", failedKey, gotFailed)
 		}
 	}
 }

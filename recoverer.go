@@ -5,7 +5,7 @@
 package asynq
 
 import (
-	"fmt"
+	"context"
 	"sync"
 	"time"
 
@@ -17,6 +17,7 @@ type recoverer struct {
 	logger         *log.Logger
 	broker         base.Broker
 	retryDelayFunc RetryDelayFunc
+	isFailureFunc  func(error) bool
 
 	// channel to communicate back to the long running "recoverer" goroutine.
 	done chan struct{}
@@ -34,6 +35,7 @@ type recovererParams struct {
 	queues         []string
 	interval       time.Duration
 	retryDelayFunc RetryDelayFunc
+	isFailureFunc  func(error) bool
 }
 
 func newRecoverer(params recovererParams) *recoverer {
@@ -44,6 +46,7 @@ func newRecoverer(params recovererParams) *recoverer {
 		queues:         params.queues,
 		interval:       params.interval,
 		retryDelayFunc: params.retryDelayFunc,
+		isFailureFunc:  params.isFailureFunc,
 	}
 }
 
@@ -81,26 +84,25 @@ func (r *recoverer) recover() {
 		r.logger.Warn("recoverer: could not list deadline exceeded tasks")
 		return
 	}
-	const errMsg = "deadline exceeded"
 	for _, msg := range msgs {
 		if msg.Retried >= msg.Retry {
-			r.archive(msg, errMsg)
+			r.archive(msg, context.DeadlineExceeded)
 		} else {
-			r.retry(msg, errMsg)
+			r.retry(msg, context.DeadlineExceeded)
 		}
 	}
 }
 
-func (r *recoverer) retry(msg *base.TaskMessage, errMsg string) {
-	delay := r.retryDelayFunc(msg.Retried, fmt.Errorf(errMsg), NewTask(msg.Type, msg.Payload))
+func (r *recoverer) retry(msg *base.TaskMessage, err error) {
+	delay := r.retryDelayFunc(msg.Retried, err, NewTask(msg.Type, msg.Payload))
 	retryAt := time.Now().Add(delay)
-	if err := r.broker.Retry(msg, retryAt, errMsg); err != nil {
+	if err := r.broker.Retry(msg, retryAt, err.Error(), r.isFailureFunc(err)); err != nil {
 		r.logger.Warnf("recoverer: could not retry deadline exceeded task: %v", err)
 	}
 }
 
-func (r *recoverer) archive(msg *base.TaskMessage, errMsg string) {
-	if err := r.broker.Archive(msg, errMsg); err != nil {
+func (r *recoverer) archive(msg *base.TaskMessage, err error) {
+	if err := r.broker.Archive(msg, err.Error()); err != nil {
 		r.logger.Warnf("recoverer: could not move task to archive: %v", err)
 	}
 }
