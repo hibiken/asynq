@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -761,7 +762,7 @@ func TestClientEnqueueUnique(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
+		gotTTL := r.TTL(context.Background(), base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
 		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, tc.ttl)
 			continue
@@ -806,7 +807,7 @@ func TestClientEnqueueUniqueWithProcessInOption(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
+		gotTTL := r.TTL(context.Background(), base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
 		wantTTL := time.Duration(tc.ttl.Seconds()+tc.d.Seconds()) * time.Second
 		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)
@@ -852,7 +853,7 @@ func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
+		gotTTL := r.TTL(context.Background(), base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
 		wantTTL := tc.at.Add(tc.ttl).Sub(time.Now())
 		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)

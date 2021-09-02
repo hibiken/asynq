@@ -6,13 +6,14 @@
 package asynqtest
 
 import (
+	"context"
 	"encoding/json"
 	"math"
 	"sort"
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v7"
+	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
@@ -165,12 +166,12 @@ func FlushDB(tb testing.TB, r redis.UniversalClient) {
 	tb.Helper()
 	switch r := r.(type) {
 	case *redis.Client:
-		if err := r.FlushDB().Err(); err != nil {
+		if err := r.FlushDB(context.Background()).Err(); err != nil {
 			tb.Fatal(err)
 		}
 	case *redis.ClusterClient:
-		err := r.ForEachMaster(func(c *redis.Client) error {
-			if err := c.FlushAll().Err(); err != nil {
+		err := r.ForEachMaster(context.Background(), func(ctx context.Context, c *redis.Client) error {
+			if err := c.FlushAll(ctx).Err(); err != nil {
 				return err
 			}
 			return nil
@@ -184,42 +185,42 @@ func FlushDB(tb testing.TB, r redis.UniversalClient) {
 // SeedPendingQueue initializes the specified queue with the given messages.
 func SeedPendingQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname string) {
 	tb.Helper()
-	r.SAdd(base.AllQueues, qname)
+	r.SAdd(context.Background(), base.AllQueues, qname)
 	seedRedisList(tb, r, base.PendingKey(qname), msgs, base.TaskStatePending)
 }
 
 // SeedActiveQueue initializes the active queue with the given messages.
 func SeedActiveQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname string) {
 	tb.Helper()
-	r.SAdd(base.AllQueues, qname)
+	r.SAdd(context.Background(), base.AllQueues, qname)
 	seedRedisList(tb, r, base.ActiveKey(qname), msgs, base.TaskStateActive)
 }
 
 // SeedScheduledQueue initializes the scheduled queue with the given messages.
 func SeedScheduledQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
 	tb.Helper()
-	r.SAdd(base.AllQueues, qname)
+	r.SAdd(context.Background(), base.AllQueues, qname)
 	seedRedisZSet(tb, r, base.ScheduledKey(qname), entries, base.TaskStateScheduled)
 }
 
 // SeedRetryQueue initializes the retry queue with the given messages.
 func SeedRetryQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
 	tb.Helper()
-	r.SAdd(base.AllQueues, qname)
+	r.SAdd(context.Background(), base.AllQueues, qname)
 	seedRedisZSet(tb, r, base.RetryKey(qname), entries, base.TaskStateRetry)
 }
 
 // SeedArchivedQueue initializes the archived queue with the given messages.
 func SeedArchivedQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
 	tb.Helper()
-	r.SAdd(base.AllQueues, qname)
+	r.SAdd(context.Background(), base.AllQueues, qname)
 	seedRedisZSet(tb, r, base.ArchivedKey(qname), entries, base.TaskStateArchived)
 }
 
 // SeedDeadlines initializes the deadlines set with the given entries.
 func SeedDeadlines(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
 	tb.Helper()
-	r.SAdd(base.AllQueues, qname)
+	r.SAdd(context.Background(), base.AllQueues, qname)
 	seedRedisZSet(tb, r, base.DeadlinesKey(qname), entries, base.TaskStateActive)
 }
 
@@ -278,7 +279,7 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string,
 	tb.Helper()
 	for _, msg := range msgs {
 		encoded := MustMarshal(tb, msg)
-		if err := c.LPush(key, msg.ID.String()).Err(); err != nil {
+		if err := c.LPush(context.Background(), key, msg.ID.String()).Err(); err != nil {
 			tb.Fatal(err)
 		}
 		key := base.TaskKey(msg.Queue, msg.ID.String())
@@ -289,11 +290,11 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string,
 			"deadline":   msg.Deadline,
 			"unique_key": msg.UniqueKey,
 		}
-		if err := c.HSet(key, data).Err(); err != nil {
+		if err := c.HSet(context.Background(), key, data).Err(); err != nil {
 			tb.Fatal(err)
 		}
 		if len(msg.UniqueKey) > 0 {
-			err := c.SetNX(msg.UniqueKey, msg.ID.String(), 1*time.Minute).Err()
+			err := c.SetNX(context.Background(), msg.UniqueKey, msg.ID.String(), 1*time.Minute).Err()
 			if err != nil {
 				tb.Fatalf("Failed to set unique lock in redis: %v", err)
 			}
@@ -308,7 +309,7 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string,
 		msg := item.Message
 		encoded := MustMarshal(tb, msg)
 		z := &redis.Z{Member: msg.ID.String(), Score: float64(item.Score)}
-		if err := c.ZAdd(key, z).Err(); err != nil {
+		if err := c.ZAdd(context.Background(), key, z).Err(); err != nil {
 			tb.Fatal(err)
 		}
 		key := base.TaskKey(msg.Queue, msg.ID.String())
@@ -319,11 +320,11 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string,
 			"deadline":   msg.Deadline,
 			"unique_key": msg.UniqueKey,
 		}
-		if err := c.HSet(key, data).Err(); err != nil {
+		if err := c.HSet(context.Background(), key, data).Err(); err != nil {
 			tb.Fatal(err)
 		}
 		if len(msg.UniqueKey) > 0 {
-			err := c.SetNX(msg.UniqueKey, msg.ID.String(), 1*time.Minute).Err()
+			err := c.SetNX(context.Background(), msg.UniqueKey, msg.ID.String(), 1*time.Minute).Err()
 			if err != nil {
 				tb.Fatalf("Failed to set unique lock in redis: %v", err)
 			}
@@ -398,13 +399,13 @@ func GetDeadlinesEntries(tb testing.TB, r redis.UniversalClient, qname string) [
 func getMessagesFromList(tb testing.TB, r redis.UniversalClient, qname string,
 	keyFn func(qname string) string, state base.TaskState) []*base.TaskMessage {
 	tb.Helper()
-	ids := r.LRange(keyFn(qname), 0, -1).Val()
+	ids := r.LRange(context.Background(), keyFn(qname), 0, -1).Val()
 	var msgs []*base.TaskMessage
 	for _, id := range ids {
 		taskKey := base.TaskKey(qname, id)
-		data := r.HGet(taskKey, "msg").Val()
+		data := r.HGet(context.Background(), taskKey, "msg").Val()
 		msgs = append(msgs, MustUnmarshal(tb, data))
-		if gotState := r.HGet(taskKey, "state").Val(); gotState != state.String() {
+		if gotState := r.HGet(context.Background(), taskKey, "state").Val(); gotState != state.String() {
 			tb.Errorf("task (id=%q) is in %q state, want %v", id, gotState, state)
 		}
 	}
@@ -415,13 +416,13 @@ func getMessagesFromList(tb testing.TB, r redis.UniversalClient, qname string,
 func getMessagesFromZSet(tb testing.TB, r redis.UniversalClient, qname string,
 	keyFn func(qname string) string, state base.TaskState) []*base.TaskMessage {
 	tb.Helper()
-	ids := r.ZRange(keyFn(qname), 0, -1).Val()
+	ids := r.ZRange(context.Background(), keyFn(qname), 0, -1).Val()
 	var msgs []*base.TaskMessage
 	for _, id := range ids {
 		taskKey := base.TaskKey(qname, id)
-		msg := r.HGet(taskKey, "msg").Val()
+		msg := r.HGet(context.Background(), taskKey, "msg").Val()
 		msgs = append(msgs, MustUnmarshal(tb, msg))
-		if gotState := r.HGet(taskKey, "state").Val(); gotState != state.String() {
+		if gotState := r.HGet(context.Background(), taskKey, "state").Val(); gotState != state.String() {
 			tb.Errorf("task (id=%q) is in %q state, want %v", id, gotState, state)
 		}
 	}
@@ -432,14 +433,14 @@ func getMessagesFromZSet(tb testing.TB, r redis.UniversalClient, qname string,
 func getMessagesFromZSetWithScores(tb testing.TB, r redis.UniversalClient,
 	qname string, keyFn func(qname string) string, state base.TaskState) []base.Z {
 	tb.Helper()
-	zs := r.ZRangeWithScores(keyFn(qname), 0, -1).Val()
+	zs := r.ZRangeWithScores(context.Background(), keyFn(qname), 0, -1).Val()
 	var res []base.Z
 	for _, z := range zs {
 		taskID := z.Member.(string)
 		taskKey := base.TaskKey(qname, taskID)
-		msg := r.HGet(taskKey, "msg").Val()
+		msg := r.HGet(context.Background(), taskKey, "msg").Val()
 		res = append(res, base.Z{Message: MustUnmarshal(tb, msg), Score: int64(z.Score)})
-		if gotState := r.HGet(taskKey, "state").Val(); gotState != state.String() {
+		if gotState := r.HGet(context.Background(), taskKey, "state").Val(); gotState != state.String() {
 			tb.Errorf("task (id=%q) is in %q state, want %v", taskID, gotState, state)
 		}
 	}

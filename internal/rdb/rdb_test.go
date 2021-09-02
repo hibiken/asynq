@@ -5,6 +5,7 @@
 package rdb
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"strconv"
@@ -13,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v7"
+	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
@@ -85,7 +86,7 @@ func TestEnqueue(t *testing.T) {
 
 		// Check Pending list has task ID.
 		pendingKey := base.PendingKey(tc.msg.Queue)
-		pendingIDs := r.client.LRange(pendingKey, 0, -1).Val()
+		pendingIDs := r.client.LRange(context.Background(), pendingKey, 0, -1).Val()
 		if n := len(pendingIDs); n != 1 {
 			t.Errorf("Redis LIST %q contains %d IDs, want 1", pendingKey, n)
 			continue
@@ -97,26 +98,26 @@ func TestEnqueue(t *testing.T) {
 
 		// Check the value under the task key.
 		taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID.String())
-		encoded := r.client.HGet(taskKey, "msg").Val() // "msg" field
+		encoded := r.client.HGet(context.Background(), taskKey, "msg").Val() // "msg" field
 		decoded := h.MustUnmarshal(t, encoded)
 		if diff := cmp.Diff(tc.msg, decoded); diff != "" {
 			t.Errorf("persisted message was %v, want %v; (-want, +got)\n%s", decoded, tc.msg, diff)
 		}
-		state := r.client.HGet(taskKey, "state").Val() // "state" field
+		state := r.client.HGet(context.Background(), taskKey, "state").Val() // "state" field
 		if state != "pending" {
 			t.Errorf("state field under task-key is set to %q, want %q", state, "pending")
 		}
-		timeout := r.client.HGet(taskKey, "timeout").Val() // "timeout" field
+		timeout := r.client.HGet(context.Background(), taskKey, "timeout").Val() // "timeout" field
 		if want := strconv.Itoa(int(tc.msg.Timeout)); timeout != want {
 			t.Errorf("timeout field under task-key is set to %v, want %v", timeout, want)
 		}
-		deadline := r.client.HGet(taskKey, "deadline").Val() // "deadline" field
+		deadline := r.client.HGet(context.Background(), taskKey, "deadline").Val() // "deadline" field
 		if want := strconv.Itoa(int(tc.msg.Deadline)); deadline != want {
 			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(base.AllQueues, tc.msg.Queue).Val() {
+		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
 			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
 		}
 	}
@@ -158,13 +159,13 @@ func TestEnqueueUnique(t *testing.T) {
 		if diff := cmp.Diff(tc.msg, gotPending[0]); diff != "" {
 			t.Errorf("persisted data differed from the original input (-want, +got)\n%s", diff)
 		}
-		if !r.client.SIsMember(base.AllQueues, tc.msg.Queue).Val() {
+		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
 			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
 		}
 
 		// Check Pending list has task ID.
 		pendingKey := base.PendingKey(tc.msg.Queue)
-		pendingIDs := r.client.LRange(pendingKey, 0, -1).Val()
+		pendingIDs := r.client.LRange(context.Background(), pendingKey, 0, -1).Val()
 		if len(pendingIDs) != 1 {
 			t.Errorf("Redis LIST %q contains %d IDs, want 1", pendingKey, len(pendingIDs))
 			continue
@@ -176,30 +177,30 @@ func TestEnqueueUnique(t *testing.T) {
 
 		// Check the value under the task key.
 		taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID.String())
-		encoded := r.client.HGet(taskKey, "msg").Val() // "msg" field
+		encoded := r.client.HGet(context.Background(), taskKey, "msg").Val() // "msg" field
 		decoded := h.MustUnmarshal(t, encoded)
 		if diff := cmp.Diff(tc.msg, decoded); diff != "" {
 			t.Errorf("persisted message was %v, want %v; (-want, +got)\n%s", decoded, tc.msg, diff)
 		}
-		state := r.client.HGet(taskKey, "state").Val() // "state" field
+		state := r.client.HGet(context.Background(), taskKey, "state").Val() // "state" field
 		if state != "pending" {
 			t.Errorf("state field under task-key is set to %q, want %q", state, "pending")
 		}
-		timeout := r.client.HGet(taskKey, "timeout").Val() // "timeout" field
+		timeout := r.client.HGet(context.Background(), taskKey, "timeout").Val() // "timeout" field
 		if want := strconv.Itoa(int(tc.msg.Timeout)); timeout != want {
 			t.Errorf("timeout field under task-key is set to %v, want %v", timeout, want)
 		}
-		deadline := r.client.HGet(taskKey, "deadline").Val() // "deadline" field
+		deadline := r.client.HGet(context.Background(), taskKey, "deadline").Val() // "deadline" field
 		if want := strconv.Itoa(int(tc.msg.Deadline)); deadline != want {
 			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
 		}
-		uniqueKey := r.client.HGet(taskKey, "unique_key").Val() // "unique_key" field
+		uniqueKey := r.client.HGet(context.Background(), taskKey, "unique_key").Val() // "unique_key" field
 		if uniqueKey != tc.msg.UniqueKey {
 			t.Errorf("uniqueue_key field under task key is set to %q, want %q", uniqueKey, tc.msg.UniqueKey)
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(base.AllQueues, tc.msg.Queue).Val() {
+		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
 			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
 		}
 
@@ -209,7 +210,7 @@ func TestEnqueueUnique(t *testing.T) {
 			t.Errorf("Second message: (*RDB).EnqueueUnique(msg, ttl) = %v, want %v", got, errors.ErrDuplicateTask)
 			continue
 		}
-		gotTTL := r.client.TTL(tc.msg.UniqueKey).Val()
+		gotTTL := r.client.TTL(context.Background(), tc.msg.UniqueKey).Val()
 		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 2)) {
 			t.Errorf("TTL %q = %v, want %v", tc.msg.UniqueKey, gotTTL, tc.ttl)
 			continue
@@ -681,7 +682,7 @@ func TestDone(t *testing.T) {
 			for _, msg := range msgs {
 				// Set uniqueness lock if unique key is present.
 				if len(msg.UniqueKey) > 0 {
-					err := r.client.SetNX(msg.UniqueKey, msg.ID.String(), time.Minute).Err()
+					err := r.client.SetNX(context.Background(), msg.UniqueKey, msg.ID.String(), time.Minute).Err()
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -711,17 +712,17 @@ func TestDone(t *testing.T) {
 		}
 
 		processedKey := base.ProcessedKey(tc.target.Queue, time.Now())
-		gotProcessed := r.client.Get(processedKey).Val()
+		gotProcessed := r.client.Get(context.Background(), processedKey).Val()
 		if gotProcessed != "1" {
 			t.Errorf("%s; GET %q = %q, want 1", tc.desc, processedKey, gotProcessed)
 		}
 
-		gotTTL := r.client.TTL(processedKey).Val()
+		gotTTL := r.client.TTL(context.Background(), processedKey).Val()
 		if gotTTL > statsTTL {
 			t.Errorf("%s; TTL %q = %v, want less than or equal to %v", tc.desc, processedKey, gotTTL, statsTTL)
 		}
 
-		if len(tc.target.UniqueKey) > 0 && r.client.Exists(tc.target.UniqueKey).Val() != 0 {
+		if len(tc.target.UniqueKey) > 0 && r.client.Exists(context.Background(), tc.target.UniqueKey).Val() != 0 {
 			t.Errorf("%s; Uniqueness lock %q still exists", tc.desc, tc.target.UniqueKey)
 		}
 	}
@@ -899,7 +900,7 @@ func TestSchedule(t *testing.T) {
 
 		// Check Scheduled zset has task ID.
 		scheduledKey := base.ScheduledKey(tc.msg.Queue)
-		zs := r.client.ZRangeWithScores(scheduledKey, 0, -1).Val()
+		zs := r.client.ZRangeWithScores(context.Background(), scheduledKey, 0, -1).Val()
 		if n := len(zs); n != 1 {
 			t.Errorf("Redis ZSET %q contains %d elements, want 1",
 				scheduledKey, n)
@@ -918,28 +919,28 @@ func TestSchedule(t *testing.T) {
 
 		// Check the values under the task key.
 		taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID.String())
-		encoded := r.client.HGet(taskKey, "msg").Val() // "msg" field
+		encoded := r.client.HGet(context.Background(), taskKey, "msg").Val() // "msg" field
 		decoded := h.MustUnmarshal(t, encoded)
 		if diff := cmp.Diff(tc.msg, decoded); diff != "" {
 			t.Errorf("persisted message was %v, want %v; (-want, +got)\n%s",
 				decoded, tc.msg, diff)
 		}
-		state := r.client.HGet(taskKey, "state").Val() // "state" field
+		state := r.client.HGet(context.Background(), taskKey, "state").Val() // "state" field
 		if want := "scheduled"; state != want {
 			t.Errorf("state field under task-key is set to %q, want %q",
 				state, want)
 		}
-		timeout := r.client.HGet(taskKey, "timeout").Val() // "timeout" field
+		timeout := r.client.HGet(context.Background(), taskKey, "timeout").Val() // "timeout" field
 		if want := strconv.Itoa(int(tc.msg.Timeout)); timeout != want {
 			t.Errorf("timeout field under task-key is set to %v, want %v", timeout, want)
 		}
-		deadline := r.client.HGet(taskKey, "deadline").Val() // "deadline" field
+		deadline := r.client.HGet(context.Background(), taskKey, "deadline").Val() // "deadline" field
 		if want := strconv.Itoa(int(tc.msg.Deadline)); deadline != want {
 			t.Errorf("deadline field under task-ke is set to %v, want %v", deadline, want)
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(base.AllQueues, tc.msg.Queue).Val() {
+		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
 			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
 		}
 	}
@@ -976,7 +977,7 @@ func TestScheduleUnique(t *testing.T) {
 
 		// Check Scheduled zset has task ID.
 		scheduledKey := base.ScheduledKey(tc.msg.Queue)
-		zs := r.client.ZRangeWithScores(scheduledKey, 0, -1).Val()
+		zs := r.client.ZRangeWithScores(context.Background(), scheduledKey, 0, -1).Val()
 		if n := len(zs); n != 1 {
 			t.Errorf("Redis ZSET %q contains %d elements, want 1",
 				scheduledKey, n)
@@ -995,32 +996,32 @@ func TestScheduleUnique(t *testing.T) {
 
 		// Check the values under the task key.
 		taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID.String())
-		encoded := r.client.HGet(taskKey, "msg").Val() // "msg" field
+		encoded := r.client.HGet(context.Background(), taskKey, "msg").Val() // "msg" field
 		decoded := h.MustUnmarshal(t, encoded)
 		if diff := cmp.Diff(tc.msg, decoded); diff != "" {
 			t.Errorf("persisted message was %v, want %v; (-want, +got)\n%s",
 				decoded, tc.msg, diff)
 		}
-		state := r.client.HGet(taskKey, "state").Val() // "state" field
+		state := r.client.HGet(context.Background(), taskKey, "state").Val() // "state" field
 		if want := "scheduled"; state != want {
 			t.Errorf("state field under task-key is set to %q, want %q",
 				state, want)
 		}
-		timeout := r.client.HGet(taskKey, "timeout").Val() // "timeout" field
+		timeout := r.client.HGet(context.Background(), taskKey, "timeout").Val() // "timeout" field
 		if want := strconv.Itoa(int(tc.msg.Timeout)); timeout != want {
 			t.Errorf("timeout field under task-key is set to %v, want %v", timeout, want)
 		}
-		deadline := r.client.HGet(taskKey, "deadline").Val() // "deadline" field
+		deadline := r.client.HGet(context.Background(), taskKey, "deadline").Val() // "deadline" field
 		if want := strconv.Itoa(int(tc.msg.Deadline)); deadline != want {
 			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
 		}
-		uniqueKey := r.client.HGet(taskKey, "unique_key").Val() // "unique_key" field
+		uniqueKey := r.client.HGet(context.Background(), taskKey, "unique_key").Val() // "unique_key" field
 		if uniqueKey != tc.msg.UniqueKey {
 			t.Errorf("uniqueue_key field under task key is set to %q, want %q", uniqueKey, tc.msg.UniqueKey)
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(base.AllQueues, tc.msg.Queue).Val() {
+		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
 			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
 		}
 
@@ -1031,7 +1032,7 @@ func TestScheduleUnique(t *testing.T) {
 			continue
 		}
 
-		gotTTL := r.client.TTL(tc.msg.UniqueKey).Val()
+		gotTTL := r.client.TTL(context.Background(), tc.msg.UniqueKey).Val()
 		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL %q = %v, want %v", tc.msg.UniqueKey, gotTTL, tc.ttl)
 			continue
@@ -1189,21 +1190,21 @@ func TestRetry(t *testing.T) {
 		}
 
 		processedKey := base.ProcessedKey(tc.msg.Queue, time.Now())
-		gotProcessed := r.client.Get(processedKey).Val()
+		gotProcessed := r.client.Get(context.Background(), processedKey).Val()
 		if gotProcessed != "1" {
 			t.Errorf("GET %q = %q, want 1", processedKey, gotProcessed)
 		}
-		gotTTL := r.client.TTL(processedKey).Val()
+		gotTTL := r.client.TTL(context.Background(), processedKey).Val()
 		if gotTTL > statsTTL {
 			t.Errorf("TTL %q = %v, want less than or equal to %v", processedKey, gotTTL, statsTTL)
 		}
 
 		failedKey := base.FailedKey(tc.msg.Queue, time.Now())
-		gotFailed := r.client.Get(failedKey).Val()
+		gotFailed := r.client.Get(context.Background(), failedKey).Val()
 		if gotFailed != "1" {
 			t.Errorf("GET %q = %q, want 1", failedKey, gotFailed)
 		}
-		gotTTL = r.client.TTL(failedKey).Val()
+		gotTTL = r.client.TTL(context.Background(), failedKey).Val()
 		if gotTTL > statsTTL {
 			t.Errorf("TTL %q = %v, want less than or equal to %v", failedKey, gotTTL, statsTTL)
 		}
@@ -1363,14 +1364,14 @@ func TestRetryWithNonFailureError(t *testing.T) {
 
 		// If isFailure is set to false, no stats should be recorded to avoid skewing the error rate.
 		processedKey := base.ProcessedKey(tc.msg.Queue, time.Now())
-		gotProcessed := r.client.Get(processedKey).Val()
+		gotProcessed := r.client.Get(context.Background(), processedKey).Val()
 		if gotProcessed != "" {
 			t.Errorf("GET %q = %q, want empty", processedKey, gotProcessed)
 		}
 
 		// If isFailure is set to false, no stats should be recorded to avoid skewing the error rate.
 		failedKey := base.FailedKey(tc.msg.Queue, time.Now())
-		gotFailed := r.client.Get(failedKey).Val()
+		gotFailed := r.client.Get(context.Background(), failedKey).Val()
 		if gotFailed != "" {
 			t.Errorf("GET %q = %q, want empty", failedKey, gotFailed)
 		}
@@ -1566,21 +1567,21 @@ func TestArchive(t *testing.T) {
 		}
 
 		processedKey := base.ProcessedKey(tc.target.Queue, time.Now())
-		gotProcessed := r.client.Get(processedKey).Val()
+		gotProcessed := r.client.Get(context.Background(), processedKey).Val()
 		if gotProcessed != "1" {
 			t.Errorf("GET %q = %q, want 1", processedKey, gotProcessed)
 		}
-		gotTTL := r.client.TTL(processedKey).Val()
+		gotTTL := r.client.TTL(context.Background(), processedKey).Val()
 		if gotTTL > statsTTL {
 			t.Errorf("TTL %q = %v, want less than or equal to %v", processedKey, gotTTL, statsTTL)
 		}
 
 		failedKey := base.FailedKey(tc.target.Queue, time.Now())
-		gotFailed := r.client.Get(failedKey).Val()
+		gotFailed := r.client.Get(context.Background(), failedKey).Val()
 		if gotFailed != "1" {
 			t.Errorf("GET %q = %q, want 1", failedKey, gotFailed)
 		}
-		gotTTL = r.client.TTL(processedKey).Val()
+		gotTTL = r.client.TTL(context.Background(), processedKey).Val()
 		if gotTTL > statsTTL {
 			t.Errorf("TTL %q = %v, want less than or equal to %v", failedKey, gotTTL, statsTTL)
 		}
@@ -1850,7 +1851,7 @@ func TestWriteServerState(t *testing.T) {
 
 	// Check ServerInfo was written correctly.
 	skey := base.ServerInfoKey(host, pid, serverID)
-	data := r.client.Get(skey).Val()
+	data := r.client.Get(context.Background(), skey).Val()
 	got, err := base.DecodeServerInfo([]byte(data))
 	if err != nil {
 		t.Fatalf("could not decode server info: %v", err)
@@ -1860,12 +1861,12 @@ func TestWriteServerState(t *testing.T) {
 			got, info, diff)
 	}
 	// Check ServerInfo TTL was set correctly.
-	gotTTL := r.client.TTL(skey).Val()
+	gotTTL := r.client.TTL(context.Background(), skey).Val()
 	if !cmp.Equal(ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 		t.Errorf("TTL of %q was %v, want %v", skey, gotTTL, ttl)
 	}
 	// Check ServerInfo key was added to the set all server keys correctly.
-	gotServerKeys := r.client.ZRange(base.AllServers, 0, -1).Val()
+	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers, 0, -1).Val()
 	wantServerKeys := []string{skey}
 	if diff := cmp.Diff(wantServerKeys, gotServerKeys); diff != "" {
 		t.Errorf("%q contained %v, want %v", base.AllServers, gotServerKeys, wantServerKeys)
@@ -1873,12 +1874,12 @@ func TestWriteServerState(t *testing.T) {
 
 	// Check WorkersInfo was written correctly.
 	wkey := base.WorkersKey(host, pid, serverID)
-	workerExist := r.client.Exists(wkey).Val()
+	workerExist := r.client.Exists(context.Background(), wkey).Val()
 	if workerExist != 0 {
 		t.Errorf("%q key exists", wkey)
 	}
 	// Check WorkersInfo key was added to the set correctly.
-	gotWorkerKeys := r.client.ZRange(base.AllWorkers, 0, -1).Val()
+	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers, 0, -1).Val()
 	wantWorkerKeys := []string{wkey}
 	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
 		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)
@@ -1940,7 +1941,7 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 
 	// Check ServerInfo was written correctly.
 	skey := base.ServerInfoKey(host, pid, serverID)
-	data := r.client.Get(skey).Val()
+	data := r.client.Get(context.Background(), skey).Val()
 	got, err := base.DecodeServerInfo([]byte(data))
 	if err != nil {
 		t.Fatalf("could not decode server info: %v", err)
@@ -1950,12 +1951,12 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 			got, serverInfo, diff)
 	}
 	// Check ServerInfo TTL was set correctly.
-	gotTTL := r.client.TTL(skey).Val()
+	gotTTL := r.client.TTL(context.Background(), skey).Val()
 	if !cmp.Equal(ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 		t.Errorf("TTL of %q was %v, want %v", skey, gotTTL, ttl)
 	}
 	// Check ServerInfo key was added to the set correctly.
-	gotServerKeys := r.client.ZRange(base.AllServers, 0, -1).Val()
+	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers, 0, -1).Val()
 	wantServerKeys := []string{skey}
 	if diff := cmp.Diff(wantServerKeys, gotServerKeys); diff != "" {
 		t.Errorf("%q contained %v, want %v", base.AllServers, gotServerKeys, wantServerKeys)
@@ -1963,7 +1964,7 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 
 	// Check WorkersInfo was written correctly.
 	wkey := base.WorkersKey(host, pid, serverID)
-	wdata := r.client.HGetAll(wkey).Val()
+	wdata := r.client.HGetAll(context.Background(), wkey).Val()
 	if len(wdata) != 2 {
 		t.Fatalf("HGETALL %q returned a hash of size %d, want 2", wkey, len(wdata))
 	}
@@ -1981,12 +1982,12 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 	}
 
 	// Check WorkersInfo TTL was set correctly.
-	gotTTL = r.client.TTL(wkey).Val()
+	gotTTL = r.client.TTL(context.Background(), wkey).Val()
 	if !cmp.Equal(ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 		t.Errorf("TTL of %q was %v, want %v", wkey, gotTTL, ttl)
 	}
 	// Check WorkersInfo key was added to the set correctly.
-	gotWorkerKeys := r.client.ZRange(base.AllWorkers, 0, -1).Val()
+	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers, 0, -1).Val()
 	wantWorkerKeys := []string{wkey}
 	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
 		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)
@@ -2076,18 +2077,18 @@ func TestClearServerState(t *testing.T) {
 	otherSKey := base.ServerInfoKey(otherHost, otherPID, otherServerID)
 	otherWKey := base.WorkersKey(otherHost, otherPID, otherServerID)
 	// Check all keys are cleared.
-	if r.client.Exists(skey).Val() != 0 {
+	if r.client.Exists(context.Background(), skey).Val() != 0 {
 		t.Errorf("Redis key %q exists", skey)
 	}
-	if r.client.Exists(wkey).Val() != 0 {
+	if r.client.Exists(context.Background(), wkey).Val() != 0 {
 		t.Errorf("Redis key %q exists", wkey)
 	}
-	gotServerKeys := r.client.ZRange(base.AllServers, 0, -1).Val()
+	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers, 0, -1).Val()
 	wantServerKeys := []string{otherSKey}
 	if diff := cmp.Diff(wantServerKeys, gotServerKeys); diff != "" {
 		t.Errorf("%q contained %v, want %v", base.AllServers, gotServerKeys, wantServerKeys)
 	}
-	gotWorkerKeys := r.client.ZRange(base.AllWorkers, 0, -1).Val()
+	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers, 0, -1).Val()
 	wantWorkerKeys := []string{otherWKey}
 	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
 		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)

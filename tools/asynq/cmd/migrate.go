@@ -5,13 +5,14 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v7"
+	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
@@ -38,10 +39,10 @@ func backupKey(key string) string {
 }
 
 func renameKeyAsBackup(c redis.UniversalClient, key string) error {
-	if c.Exists(key).Val() == 0 {
+	if c.Exists(context.Background(), key).Val() == 0 {
 		return nil // key doesn't exist; no-op
 	}
-	return c.Rename(key, backupKey(key)).Err()
+	return c.Rename(context.Background(), key, backupKey(key)).Err()
 }
 
 func failIfError(err error, msg string) {
@@ -87,11 +88,11 @@ func migrate(cmd *cobra.Command, args []string) {
 	fmt.Print("Renaming pending keys...")
 	for _, qname := range queues {
 		oldKey := fmt.Sprintf("asynq:{%s}", qname)
-		if r.Client().Exists(oldKey).Val() == 0 {
+		if r.Client().Exists(context.Background(), oldKey).Val() == 0 {
 			continue
 		}
 		newKey := base.PendingKey(qname)
-		err := r.Client().Rename(oldKey, newKey).Err()
+		err := r.Client().Rename(context.Background(), oldKey, newKey).Err()
 		failIfError(err, "Failed to rename key")
 	}
 	fmt.Print("Done\n")
@@ -140,7 +141,7 @@ func migrate(cmd *cobra.Command, args []string) {
 			backupKey(base.ArchivedKey(qname)),
 		}
 		for _, key := range keys {
-			err := r.Client().Del(key).Err()
+			err := r.Client().Del(context.Background(), key).Err()
 			failIfError(err, "Failed to delete backup key")
 		}
 	}
@@ -228,7 +229,7 @@ func DecodeMessage(s string) (*OldTaskMessage, error) {
 }
 
 func updatePendingMessages(r *rdb.RDB, qname string) {
-	data, err := r.Client().LRange(backupKey(base.PendingKey(qname)), 0, -1).Result()
+	data, err := r.Client().LRange(context.Background(), backupKey(base.PendingKey(qname)), 0, -1).Result()
 	failIfError(err, "Failed to read backup pending key")
 
 	for _, s := range data {
@@ -236,11 +237,11 @@ func updatePendingMessages(r *rdb.RDB, qname string) {
 		failIfError(err, "Failed to unmarshal message")
 
 		if msg.UniqueKey != "" {
-			ttl, err := r.Client().TTL(msg.UniqueKey).Result()
+			ttl, err := r.Client().TTL(context.Background(), msg.UniqueKey).Result()
 			failIfError(err, "Failed to get ttl")
 
 			if ttl > 0 {
-				err = r.Client().Del(msg.UniqueKey).Err()
+				err = r.Client().Del(context.Background(), msg.UniqueKey).Err()
 				logIfError(err, "Failed to delete unique key")
 			}
 
@@ -289,7 +290,7 @@ func ZAddTask(c redis.UniversalClient, key string, msg *base.TaskMessage, score 
 	if err != nil {
 		return err
 	}
-	if err := c.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
+	if err := c.SAdd(context.Background(), base.AllQueues, msg.Queue).Err(); err != nil {
 		return err
 	}
 	keys := []string{
@@ -304,7 +305,7 @@ func ZAddTask(c redis.UniversalClient, key string, msg *base.TaskMessage, score 
 		msg.Deadline,
 		state,
 	}
-	return taskZAddCmd.Run(c, keys, argv...).Err()
+	return taskZAddCmd.Run(context.Background(), c, keys, argv...).Err()
 }
 
 // KEYS[1] -> unique key
@@ -340,7 +341,7 @@ func ZAddTaskUnique(c redis.UniversalClient, key string, msg *base.TaskMessage, 
 	if err != nil {
 		return err
 	}
-	if err := c.SAdd(base.AllQueues, msg.Queue).Err(); err != nil {
+	if err := c.SAdd(context.Background(), base.AllQueues, msg.Queue).Err(); err != nil {
 		return err
 	}
 	keys := []string{
@@ -357,7 +358,7 @@ func ZAddTaskUnique(c redis.UniversalClient, key string, msg *base.TaskMessage, 
 		msg.Deadline,
 		state,
 	}
-	res, err := taskZAddUniqueCmd.Run(c, keys, argv...).Result()
+	res, err := taskZAddUniqueCmd.Run(context.Background(), c, keys, argv...).Result()
 	if err != nil {
 		return err
 	}
@@ -372,7 +373,7 @@ func ZAddTaskUnique(c redis.UniversalClient, key string, msg *base.TaskMessage, 
 }
 
 func updateZSetMessages(c redis.UniversalClient, key, state string) {
-	zs, err := c.ZRangeWithScores(backupKey(key), 0, -1).Result()
+	zs, err := c.ZRangeWithScores(context.Background(), backupKey(key), 0, -1).Result()
 	failIfError(err, "Failed to read")
 
 	for _, z := range zs {
@@ -380,11 +381,11 @@ func updateZSetMessages(c redis.UniversalClient, key, state string) {
 		failIfError(err, "Failed to unmarshal message")
 
 		if msg.UniqueKey != "" {
-			ttl, err := c.TTL(msg.UniqueKey).Result()
+			ttl, err := c.TTL(context.Background(), msg.UniqueKey).Result()
 			failIfError(err, "Failed to get ttl")
 
 			if ttl > 0 {
-				err = c.Del(msg.UniqueKey).Err()
+				err = c.Del(context.Background(), msg.UniqueKey).Err()
 				logIfError(err, "Failed to delete unique key")
 			}
 

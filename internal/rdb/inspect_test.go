@@ -5,6 +5,7 @@
 package rdb
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -34,7 +35,7 @@ func TestAllQueues(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		for _, qname := range tc.queues {
-			if err := r.client.SAdd(base.AllQueues, qname).Err(); err != nil {
+			if err := r.client.SAdd(context.Background(), base.AllQueues, qname).Err(); err != nil {
 				t.Fatalf("could not initialize all queue set: %v", err)
 			}
 		}
@@ -198,11 +199,11 @@ func TestCurrentStats(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 		for qname, n := range tc.processed {
 			processedKey := base.ProcessedKey(qname, now)
-			r.client.Set(processedKey, n, 0)
+			r.client.Set(context.Background(), processedKey, n, 0)
 		}
 		for qname, n := range tc.failed {
 			failedKey := base.FailedKey(qname, now)
-			r.client.Set(failedKey, n, 0)
+			r.client.Set(context.Background(), failedKey, n, 0)
 		}
 
 		got, err := r.CurrentStats(tc.qname)
@@ -247,14 +248,14 @@ func TestHistoricalStats(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
-		r.client.SAdd(base.AllQueues, tc.qname)
+		r.client.SAdd(context.Background(), base.AllQueues, tc.qname)
 		// populate last n days data
 		for i := 0; i < tc.n; i++ {
 			ts := now.Add(-time.Duration(i) * 24 * time.Hour)
 			processedKey := base.ProcessedKey(tc.qname, ts)
 			failedKey := base.FailedKey(tc.qname, ts)
-			r.client.Set(processedKey, (i+1)*1000, 0)
-			r.client.Set(failedKey, (i+1)*10, 0)
+			r.client.Set(context.Background(), processedKey, (i+1)*1000, 0)
+			r.client.Set(context.Background(), failedKey, (i+1)*10, 0)
 		}
 
 		got, err := r.HistoricalStats(tc.qname, tc.n)
@@ -3168,7 +3169,7 @@ func TestDeleteTaskWithUniqueLock(t *testing.T) {
 			}
 		}
 
-		if r.client.Exists(tc.uniqueKey).Val() != 0 {
+		if r.client.Exists(context.Background(), tc.uniqueKey).Val() != 0 {
 			t.Errorf("Uniqueness lock %q still exists", tc.uniqueKey)
 		}
 	}
@@ -3401,7 +3402,7 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 		}
 
 		for _, uniqueKey := range tc.uniqueKeys {
-			if r.client.Exists(uniqueKey).Val() != 0 {
+			if r.client.Exists(context.Background(), uniqueKey).Val() != 0 {
 				t.Errorf("Uniqueness lock %q still exists", uniqueKey)
 			}
 		}
@@ -3702,7 +3703,7 @@ func TestRemoveQueue(t *testing.T) {
 				tc.qname, tc.force, err)
 			continue
 		}
-		if r.client.SIsMember(base.AllQueues, tc.qname).Val() {
+		if r.client.SIsMember(context.Background(), base.AllQueues, tc.qname).Val() {
 			t.Errorf("%q is a member of %q", tc.qname, base.AllQueues)
 		}
 
@@ -3715,12 +3716,12 @@ func TestRemoveQueue(t *testing.T) {
 			base.ArchivedKey(tc.qname),
 		}
 		for _, key := range keys {
-			if r.client.Exists(key).Val() != 0 {
+			if r.client.Exists(context.Background(), key).Val() != 0 {
 				t.Errorf("key %q still exists", key)
 			}
 		}
 
-		if n := len(r.client.Keys(base.TaskKeyPrefix(tc.qname) + "*").Val()); n != 0 {
+		if n := len(r.client.Keys(context.Background(), base.TaskKeyPrefix(tc.qname) + "*").Val()); n != 0 {
 			t.Errorf("%d keys still exists for tasks", n)
 		}
 	}
@@ -4137,7 +4138,7 @@ func TestRecordSchedulerEnqueueEventTrimsDataSet(t *testing.T) {
 	}
 
 	// Make sure the set is full.
-	if n := r.client.ZCard(key).Val(); n != maxEvents {
+	if n := r.client.ZCard(context.Background(), key).Val(); n != maxEvents {
 		t.Fatalf("unexpected number of events; got %d, want %d", n, maxEvents)
 	}
 
@@ -4149,7 +4150,7 @@ func TestRecordSchedulerEnqueueEventTrimsDataSet(t *testing.T) {
 	if err := r.RecordSchedulerEnqueueEvent(entryID, &event); err != nil {
 		t.Fatalf("RecordSchedulerEnqueueEvent failed: %v", err)
 	}
-	if n := r.client.ZCard(key).Val(); n != maxEvents {
+	if n := r.client.ZCard(context.Background(), key).Val(); n != maxEvents {
 		t.Fatalf("unexpected number of events; got %d, want %d", n, maxEvents)
 	}
 	events, err := r.ListSchedulerEnqueueEvents(entryID, Pagination{Size: maxEvents})
@@ -4182,7 +4183,7 @@ func TestPause(t *testing.T) {
 			t.Errorf("Pause(%q) returned error: %v", tc.qname, err)
 		}
 		key := base.PausedKey(tc.qname)
-		if r.client.Exists(key).Val() == 0 {
+		if r.client.Exists(context.Background(), key).Val() == 0 {
 			t.Errorf("key %q does not exist", key)
 		}
 	}
@@ -4237,7 +4238,7 @@ func TestUnpause(t *testing.T) {
 			t.Errorf("Unpause(%q) returned error: %v", tc.qname, err)
 		}
 		key := base.PausedKey(tc.qname)
-		if r.client.Exists(key).Val() == 1 {
+		if r.client.Exists(context.Background(), key).Val() == 1 {
 			t.Errorf("key %q exists", key)
 		}
 	}
