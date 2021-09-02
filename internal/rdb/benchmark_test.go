@@ -184,7 +184,7 @@ func BenchmarkRetry(b *testing.B) {
 		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
-		if err := r.Retry(msgs[0], time.Now().Add(1*time.Minute), "error"); err != nil {
+		if err := r.Retry(msgs[0], time.Now().Add(1*time.Minute), "error", true /*isFailure*/); err != nil {
 			b.Fatalf("Retry failed: %v", err)
 		}
 	}

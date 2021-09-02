@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -266,6 +267,9 @@ func (c *Client) Close() error {
 //
 // If no ProcessAt or ProcessIn options are provided, the task will be pending immediately.
 func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
+	if strings.TrimSpace(task.Type()) == "" {
+		return nil, fmt.Errorf("task typename cannot be empty")
+	}
 	c.mu.Lock()
 	if defaults, ok := c.opts[task.Type()]; ok {
 		opts = append(defaults, opts...)

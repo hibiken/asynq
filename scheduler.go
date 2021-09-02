@@ -19,6 +19,8 @@ import (
 )
 
 // A Scheduler kicks off tasks at regular intervals based on the user defined schedule.
+//
+// Schedulers are safe for concurrent use by multiple goroutines.
 type Scheduler struct {
 	id         string
 	state      *base.ServerState
@@ -30,6 +32,9 @@ type Scheduler struct {
 	done       chan struct{}
 	wg         sync.WaitGroup
 	errHandler func(task *Task, opts []Option, err error)
+
+	// guards idmap
+	mu sync.Mutex
 	// idmap maps Scheduler's entry ID to cron.EntryID
 	// to avoid using cron.EntryID as the public API of
 	// the Scheduler.
@@ -154,17 +159,22 @@ func (s *Scheduler) Register(cronspec string, task *Task, opts ...Option) (entry
 	if err != nil {
 		return "", err
 	}
+	s.mu.Lock()
 	s.idmap[job.id.String()] = cronID
+	s.mu.Unlock()
 	return job.id.String(), nil
 }
 
 // Unregister removes a registered entry by entry ID.
 // Unregister returns a non-nil error if no entries were found for the given entryID.
 func (s *Scheduler) Unregister(entryID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	cronID, ok := s.idmap[entryID]
 	if !ok {
 		return fmt.Errorf("asynq: no scheduler entry found")
 	}
+	delete(s.idmap, entryID)
 	s.cron.Remove(cronID)
 	return nil
 }

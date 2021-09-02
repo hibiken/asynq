@@ -28,8 +28,8 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 - Scheduling of tasks
 - [Retries](https://github.com/hibiken/asynq/wiki/Task-Retry) of failed tasks
 - Automatic recovery of tasks in the event of a worker crash
-- [Weighted priority queues](https://github.com/hibiken/asynq/wiki/Priority-Queues#weighted-priority-queues)
-- [Strict priority queues](https://github.com/hibiken/asynq/wiki/Priority-Queues#strict-priority-queues)
+- [Weighted priority queues](https://github.com/hibiken/asynq/wiki/Queue-Priority#weighted-priority)
+- [Strict priority queues](https://github.com/hibiken/asynq/wiki/Queue-Priority#strict-priority)
 - Low latency to add a task since writes are fast in Redis
 - De-duplication of tasks using [unique option](https://github.com/hibiken/asynq/wiki/Unique-Tasks)
 - Allow [timeout and deadline per task](https://github.com/hibiken/asynq/wiki/Task-Timeout-and-Cancelation)
@@ -91,7 +91,7 @@ type ImageResizePayload struct {
 //----------------------------------------------
 
 func NewEmailDeliveryTask(userID int, tmplID string) (*asynq.Task, error) {
-    payload, err := json.Marshal(EmailDeliveryPayload{UserID: userID, TemplateID: templID})
+    payload, err := json.Marshal(EmailDeliveryPayload{UserID: userID, TemplateID: tmplID})
     if err != nil {
         return nil, err
     }
@@ -129,7 +129,7 @@ type ImageProcessor struct {
     // ... fields for struct
 }
 
-func (p *ImageProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
+func (processor *ImageProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
     var p ImageResizePayload
     if err := json.Unmarshal(t.Payload(), &p); err != nil {
         return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
@@ -140,7 +140,7 @@ func (p *ImageProcessor) ProcessTask(ctx context.Context, t *asynq.Task) error {
 }
 
 func NewImageProcessor() *ImageProcessor {
-    // ... return an instance
+	return &ImageProcessor{}
 }
 ```
 
@@ -215,7 +215,7 @@ func main() {
 
     info, err = client.Enqueue(task, asynq.Queue("critical"), asynq.Timeout(30*time.Second))
     if err != nil {
-        log.Fatal("could not enqueue task: %v", err)
+        log.Fatalf("could not enqueue task: %v", err)
     }
     log.Printf("enqueued task: id=%s queue=%s", info.ID, info.Queue)
 }
@@ -239,7 +239,7 @@ const redisAddr = "127.0.0.1:6379"
 
 func main() {
     srv := asynq.NewServer(
-        asynq.RedisClientOpt{Addr: redisAddr}
+        asynq.RedisClientOpt{Addr: redisAddr},
         asynq.Config{
             // Specify how many concurrent workers to use
             Concurrency: 10,

@@ -7,11 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.5] - 2020-09-01
+
+### Added
+
+- `IsFailure` config option is added to determine whether error returned from Handler counts as a failure.
+
+## [0.18.4] - 2020-08-17
+
+### Fixed
+
+- Scheduler methods are now thread-safe. It's now safe to call `Register` and `Unregister` concurrently.
+
+## [0.18.3] - 2020-08-09
+
+### Changed
+
+- `Client.Enqueue` no longer enqueues tasks with empty typename; Error message is returned.
+
 ## [0.18.2] - 2020-07-15
 
 ### Changed
 
 - Changed `Queue` function to not to convert the provided queue name to lowercase. Queue names are now case-sensitive.
+- `QueueInfo.MemoryUsage` is now an approximate usage value.
+
+### Fixed
+
+- Fixed latency issue around memory usage (see https://github.com/hibiken/asynq/issues/309).
 
 ## [0.18.1] - 2020-07-04
 

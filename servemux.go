@@ -98,7 +98,7 @@ func (mux *ServeMux) Handle(pattern string, handler Handler) {
 	mux.mu.Lock()
 	defer mux.mu.Unlock()
 
-	if pattern == "" {
+	if strings.TrimSpace(pattern) == "" {
 		panic("asynq: invalid pattern")
 	}
 	if handler == nil {

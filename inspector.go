@@ -50,6 +50,7 @@ type QueueInfo struct {
 	Queue string
 
 	// Total number of bytes that the queue and its tasks require to be stored in redis.
+	// It is an approximate memory usage value in bytes since the value is computed by sampling.
 	MemoryUsage int64
 
 	// Size is the total number of tasks in the queue.

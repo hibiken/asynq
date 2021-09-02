@@ -23,7 +23,7 @@ import (
 )
 
 // Version of asynq library and CLI.
-const Version = "0.18.2"
+const Version = "0.18.5"
 
 // DefaultQueueName is the queue name used if none are specified by user.
 const DefaultQueueName = "default"
@@ -645,7 +645,7 @@ type Broker interface {
 	Requeue(msg *TaskMessage) error
 	Schedule(msg *TaskMessage, processAt time.Time) error
 	ScheduleUnique(msg *TaskMessage, processAt time.Time, ttl time.Duration) error
-	Retry(msg *TaskMessage, processAt time.Time, errMsg string) error
+	Retry(msg *TaskMessage, processAt time.Time, errMsg string, isFailure bool) error
 	Archive(msg *TaskMessage, errMsg string) error
 	ForwardIfReady(qnames ...string) error
 	ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*TaskMessage, error)
