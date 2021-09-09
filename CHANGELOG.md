@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `NewTask` takes `Option` as variadic argument
+
+### Removed
+
+- `Client.SetDefaultOptions` is removed. Use `NewTask` instead to pass default options for tasks.
+
 ## [0.18.5] - 2020-09-01
 
 ### Added

@@ -607,16 +607,17 @@ func TestClientEnqueueError(t *testing.T) {
 	}
 }
 
-func TestClientDefaultOptions(t *testing.T) {
+func TestClientWithDefaultOptions(t *testing.T) {
 	r := setup(t)
 
 	now := time.Now()
 
 	tests := []struct {
 		desc        string
-		defaultOpts []Option // options set at the client level.
+		defaultOpts []Option // options set at task initialization time
 		opts        []Option // options used at enqueue time.
-		task        *Task
+		tasktype    string
+		payload     []byte
 		wantInfo    *TaskInfo
 		queue       string // queue that the message should go into.
 		want        *base.TaskMessage
@@ -625,7 +626,8 @@ func TestClientDefaultOptions(t *testing.T) {
 			desc:        "With queue routing option",
 			defaultOpts: []Option{Queue("feed")},
 			opts:        []Option{},
-			task:        NewTask("feed:import", nil),
+			tasktype:    "feed:import",
+			payload:     nil,
 			wantInfo: &TaskInfo{
 				Queue:         "feed",
 				Type:          "feed:import",
@@ -653,7 +655,8 @@ func TestClientDefaultOptions(t *testing.T) {
 			desc:        "With multiple options",
 			defaultOpts: []Option{Queue("feed"), MaxRetry(5)},
 			opts:        []Option{},
-			task:        NewTask("feed:import", nil),
+			tasktype:    "feed:import",
+			payload:     nil,
 			wantInfo: &TaskInfo{
 				Queue:         "feed",
 				Type:          "feed:import",
@@ -681,7 +684,8 @@ func TestClientDefaultOptions(t *testing.T) {
 			desc:        "With overriding options at enqueue time",
 			defaultOpts: []Option{Queue("feed"), MaxRetry(5)},
 			opts:        []Option{Queue("critical")},
-			task:        NewTask("feed:import", nil),
+			tasktype:    "feed:import",
+			payload:     nil,
 			wantInfo: &TaskInfo{
 				Queue:         "critical",
 				Type:          "feed:import",
@@ -710,8 +714,8 @@ func TestClientDefaultOptions(t *testing.T) {
 		h.FlushDB(t, r)
 		c := NewClient(getRedisConnOpt(t))
 		defer c.Close()
-		c.SetDefaultOptions(tc.task.Type(), tc.defaultOpts...)
-		gotInfo, err := c.Enqueue(tc.task, tc.opts...)
+		task := NewTask(tc.tasktype, tc.payload, tc.defaultOpts...)
+		gotInfo, err := c.Enqueue(task, tc.opts...)
 		if err != nil {
 			t.Fatal(err)
 		}
