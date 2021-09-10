@@ -32,7 +32,7 @@ func EquateInt64Approx(margin int64) cmp.Option {
 var SortMsgOpt = cmp.Transformer("SortTaskMessages", func(in []*base.TaskMessage) []*base.TaskMessage {
 	out := append([]*base.TaskMessage(nil), in...) // Copy input to avoid mutating it
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].ID.String() < out[j].ID.String()
+		return out[i].ID < out[j].ID
 	})
 	return out
 })
@@ -41,7 +41,7 @@ var SortMsgOpt = cmp.Transformer("SortTaskMessages", func(in []*base.TaskMessage
 var SortZSetEntryOpt = cmp.Transformer("SortZSetEntries", func(in []base.Z) []base.Z {
 	out := append([]base.Z(nil), in...) // Copy input to avoid mutating it
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].Message.ID.String() < out[j].Message.ID.String()
+		return out[i].Message.ID < out[j].Message.ID
 	})
 	return out
 })
@@ -104,7 +104,7 @@ func NewTaskMessage(taskType string, payload []byte) *base.TaskMessage {
 // task type, payload and queue name.
 func NewTaskMessageWithQueue(taskType string, payload []byte, qname string) *base.TaskMessage {
 	return &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     taskType,
 		Queue:    qname,
 		Retry:    25,
@@ -279,10 +279,10 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string,
 	tb.Helper()
 	for _, msg := range msgs {
 		encoded := MustMarshal(tb, msg)
-		if err := c.LPush(context.Background(), key, msg.ID.String()).Err(); err != nil {
+		if err := c.LPush(context.Background(), key, msg.ID).Err(); err != nil {
 			tb.Fatal(err)
 		}
-		key := base.TaskKey(msg.Queue, msg.ID.String())
+		key := base.TaskKey(msg.Queue, msg.ID)
 		data := map[string]interface{}{
 			"msg":        encoded,
 			"state":      state.String(),
@@ -294,7 +294,7 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string,
 			tb.Fatal(err)
 		}
 		if len(msg.UniqueKey) > 0 {
-			err := c.SetNX(context.Background(), msg.UniqueKey, msg.ID.String(), 1*time.Minute).Err()
+			err := c.SetNX(context.Background(), msg.UniqueKey, msg.ID, 1*time.Minute).Err()
 			if err != nil {
 				tb.Fatalf("Failed to set unique lock in redis: %v", err)
 			}
@@ -308,11 +308,11 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string,
 	for _, item := range items {
 		msg := item.Message
 		encoded := MustMarshal(tb, msg)
-		z := &redis.Z{Member: msg.ID.String(), Score: float64(item.Score)}
+		z := &redis.Z{Member: msg.ID, Score: float64(item.Score)}
 		if err := c.ZAdd(context.Background(), key, z).Err(); err != nil {
 			tb.Fatal(err)
 		}
-		key := base.TaskKey(msg.Queue, msg.ID.String())
+		key := base.TaskKey(msg.Queue, msg.ID)
 		data := map[string]interface{}{
 			"msg":        encoded,
 			"state":      state.String(),
@@ -324,7 +324,7 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string,
 			tb.Fatal(err)
 		}
 		if len(msg.UniqueKey) > 0 {
-			err := c.SetNX(context.Background(), msg.UniqueKey, msg.ID.String(), 1*time.Minute).Err()
+			err := c.SetNX(context.Background(), msg.UniqueKey, msg.ID, 1*time.Minute).Err()
 			if err != nil {
 				tb.Fatalf("Failed to set unique lock in redis: %v", err)
 			}

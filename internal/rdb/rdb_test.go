@@ -91,13 +91,13 @@ func TestEnqueue(t *testing.T) {
 			t.Errorf("Redis LIST %q contains %d IDs, want 1", pendingKey, n)
 			continue
 		}
-		if pendingIDs[0] != tc.msg.ID.String() {
-			t.Errorf("Redis LIST %q: got %v, want %v", pendingKey, pendingIDs, []string{tc.msg.ID.String()})
+		if pendingIDs[0] != tc.msg.ID {
+			t.Errorf("Redis LIST %q: got %v, want %v", pendingKey, pendingIDs, []string{tc.msg.ID})
 			continue
 		}
 
 		// Check the value under the task key.
-		taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID.String())
+		taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID)
 		encoded := r.client.HGet(context.Background(), taskKey, "msg").Val() // "msg" field
 		decoded := h.MustUnmarshal(t, encoded)
 		if diff := cmp.Diff(tc.msg, decoded); diff != "" {
@@ -127,7 +127,7 @@ func TestEnqueueUnique(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := base.TaskMessage{
-		ID:        uuid.New(),
+		ID:        uuid.NewString(),
 		Type:      "email",
 		Payload:   h.JSON(map[string]interface{}{"user_id": json.Number("123")}),
 		Queue:     base.DefaultQueueName,
@@ -170,13 +170,13 @@ func TestEnqueueUnique(t *testing.T) {
 			t.Errorf("Redis LIST %q contains %d IDs, want 1", pendingKey, len(pendingIDs))
 			continue
 		}
-		if pendingIDs[0] != tc.msg.ID.String() {
-			t.Errorf("Redis LIST %q: got %v, want %v", pendingKey, pendingIDs, []string{tc.msg.ID.String()})
+		if pendingIDs[0] != tc.msg.ID {
+			t.Errorf("Redis LIST %q: got %v, want %v", pendingKey, pendingIDs, []string{tc.msg.ID})
 			continue
 		}
 
 		// Check the value under the task key.
-		taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID.String())
+		taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID)
 		encoded := r.client.HGet(context.Background(), taskKey, "msg").Val() // "msg" field
 		decoded := h.MustUnmarshal(t, encoded)
 		if diff := cmp.Diff(tc.msg, decoded); diff != "" {
@@ -223,7 +223,7 @@ func TestDequeue(t *testing.T) {
 	defer r.Close()
 	now := time.Now()
 	t1 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "send_email",
 		Payload:  h.JSON(map[string]interface{}{"subject": "hello!"}),
 		Queue:    "default",
@@ -232,7 +232,7 @@ func TestDequeue(t *testing.T) {
 	}
 	t1Deadline := now.Unix() + t1.Timeout
 	t2 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "export_csv",
 		Payload:  nil,
 		Queue:    "critical",
@@ -241,7 +241,7 @@ func TestDequeue(t *testing.T) {
 	}
 	t2Deadline := t2.Deadline
 	t3 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "reindex",
 		Payload:  nil,
 		Queue:    "low",
@@ -466,7 +466,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	t1 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "send_email",
 		Payload:  h.JSON(map[string]interface{}{"subject": "hello!"}),
 		Queue:    "default",
@@ -474,7 +474,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 		Deadline: 0,
 	}
 	t2 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "export_csv",
 		Payload:  nil,
 		Queue:    "critical",
@@ -580,7 +580,7 @@ func TestDone(t *testing.T) {
 	defer r.Close()
 	now := time.Now()
 	t1 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "send_email",
 		Payload:  nil,
 		Timeout:  1800,
@@ -588,7 +588,7 @@ func TestDone(t *testing.T) {
 		Queue:    "default",
 	}
 	t2 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "export_csv",
 		Payload:  nil,
 		Timeout:  0,
@@ -596,7 +596,7 @@ func TestDone(t *testing.T) {
 		Queue:    "custom",
 	}
 	t3 := &base.TaskMessage{
-		ID:        uuid.New(),
+		ID:        uuid.NewString(),
 		Type:      "reindex",
 		Payload:   nil,
 		Timeout:   1800,
@@ -682,7 +682,7 @@ func TestDone(t *testing.T) {
 			for _, msg := range msgs {
 				// Set uniqueness lock if unique key is present.
 				if len(msg.UniqueKey) > 0 {
-					err := r.client.SetNX(context.Background(), msg.UniqueKey, msg.ID.String(), time.Minute).Err()
+					err := r.client.SetNX(context.Background(), msg.UniqueKey, msg.ID, time.Minute).Err()
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -733,21 +733,21 @@ func TestRequeue(t *testing.T) {
 	defer r.Close()
 	now := time.Now()
 	t1 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "send_email",
 		Payload: nil,
 		Queue:   "default",
 		Timeout: 1800,
 	}
 	t2 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "export_csv",
 		Payload: nil,
 		Queue:   "default",
 		Timeout: 3000,
 	}
 	t3 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "send_email",
 		Payload: nil,
 		Queue:   "critical",
@@ -906,9 +906,9 @@ func TestSchedule(t *testing.T) {
 				scheduledKey, n)
 			continue
 		}
-		if got := zs[0].Member.(string); got != tc.msg.ID.String() {
+		if got := zs[0].Member.(string); got != tc.msg.ID {
 			t.Errorf("Redis ZSET %q member: got %v, want %v",
-				scheduledKey, got, tc.msg.ID.String())
+				scheduledKey, got, tc.msg.ID)
 			continue
 		}
 		if got := int64(zs[0].Score); got != tc.processAt.Unix() {
@@ -918,7 +918,7 @@ func TestSchedule(t *testing.T) {
 		}
 
 		// Check the values under the task key.
-		taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID.String())
+		taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID)
 		encoded := r.client.HGet(context.Background(), taskKey, "msg").Val() // "msg" field
 		decoded := h.MustUnmarshal(t, encoded)
 		if diff := cmp.Diff(tc.msg, decoded); diff != "" {
@@ -950,7 +950,7 @@ func TestScheduleUnique(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := base.TaskMessage{
-		ID:        uuid.New(),
+		ID:        uuid.NewString(),
 		Type:      "email",
 		Payload:   h.JSON(map[string]interface{}{"user_id": 123}),
 		Queue:     base.DefaultQueueName,
@@ -983,9 +983,9 @@ func TestScheduleUnique(t *testing.T) {
 				scheduledKey, n)
 			continue
 		}
-		if got := zs[0].Member.(string); got != tc.msg.ID.String() {
+		if got := zs[0].Member.(string); got != tc.msg.ID {
 			t.Errorf("Redis ZSET %q member: got %v, want %v",
-				scheduledKey, got, tc.msg.ID.String())
+				scheduledKey, got, tc.msg.ID)
 			continue
 		}
 		if got := int64(zs[0].Score); got != tc.processAt.Unix() {
@@ -995,7 +995,7 @@ func TestScheduleUnique(t *testing.T) {
 		}
 
 		// Check the values under the task key.
-		taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID.String())
+		taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID)
 		encoded := r.client.HGet(context.Background(), taskKey, "msg").Val() // "msg" field
 		decoded := h.MustUnmarshal(t, encoded)
 		if diff := cmp.Diff(tc.msg, decoded); diff != "" {
@@ -1045,7 +1045,7 @@ func TestRetry(t *testing.T) {
 	defer r.Close()
 	now := time.Now()
 	t1 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "send_email",
 		Payload: h.JSON(map[string]interface{}{"subject": "Hola!"}),
 		Retried: 10,
@@ -1053,21 +1053,21 @@ func TestRetry(t *testing.T) {
 		Queue:   "default",
 	}
 	t2 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "gen_thumbnail",
 		Payload: h.JSON(map[string]interface{}{"path": "some/path/to/image.jpg"}),
 		Timeout: 3000,
 		Queue:   "default",
 	}
 	t3 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "reindex",
 		Payload: nil,
 		Timeout: 60,
 		Queue:   "default",
 	}
 	t4 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "send_notification",
 		Payload: nil,
 		Timeout: 1800,
@@ -1216,7 +1216,7 @@ func TestRetryWithNonFailureError(t *testing.T) {
 	defer r.Close()
 	now := time.Now()
 	t1 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "send_email",
 		Payload: h.JSON(map[string]interface{}{"subject": "Hola!"}),
 		Retried: 10,
@@ -1224,21 +1224,21 @@ func TestRetryWithNonFailureError(t *testing.T) {
 		Queue:   "default",
 	}
 	t2 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "gen_thumbnail",
 		Payload: h.JSON(map[string]interface{}{"path": "some/path/to/image.jpg"}),
 		Timeout: 3000,
 		Queue:   "default",
 	}
 	t3 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "reindex",
 		Payload: nil,
 		Timeout: 60,
 		Queue:   "default",
 	}
 	t4 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "send_notification",
 		Payload: nil,
 		Timeout: 1800,
@@ -1383,7 +1383,7 @@ func TestArchive(t *testing.T) {
 	defer r.Close()
 	now := time.Now()
 	t1 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "send_email",
 		Payload: nil,
 		Queue:   "default",
@@ -1393,7 +1393,7 @@ func TestArchive(t *testing.T) {
 	}
 	t1Deadline := now.Unix() + t1.Timeout
 	t2 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "reindex",
 		Payload: nil,
 		Queue:   "default",
@@ -1403,7 +1403,7 @@ func TestArchive(t *testing.T) {
 	}
 	t2Deadline := now.Unix() + t2.Timeout
 	t3 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "generate_csv",
 		Payload: nil,
 		Queue:   "default",
@@ -1413,7 +1413,7 @@ func TestArchive(t *testing.T) {
 	}
 	t3Deadline := now.Unix() + t3.Timeout
 	t4 := &base.TaskMessage{
-		ID:      uuid.New(),
+		ID:      uuid.NewString(),
 		Type:    "send_email",
 		Payload: nil,
 		Queue:   "custom",
@@ -1905,7 +1905,7 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		{
 			Host:    host,
 			PID:     pid,
-			ID:      msg1.ID.String(),
+			ID:      msg1.ID,
 			Type:    msg1.Type,
 			Queue:   msg1.Queue,
 			Payload: msg1.Payload,
@@ -1914,7 +1914,7 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		{
 			Host:    host,
 			PID:     pid,
-			ID:      msg2.ID.String(),
+			ID:      msg2.ID,
 			Type:    msg2.Type,
 			Queue:   msg2.Queue,
 			Payload: msg2.Payload,
@@ -2017,7 +2017,7 @@ func TestClearServerState(t *testing.T) {
 		{
 			Host:    host,
 			PID:     pid,
-			ID:      msg1.ID.String(),
+			ID:      msg1.ID,
 			Type:    msg1.Type,
 			Queue:   msg1.Queue,
 			Payload: msg1.Payload,
@@ -2040,7 +2040,7 @@ func TestClearServerState(t *testing.T) {
 		{
 			Host:    otherHost,
 			PID:     otherPID,
-			ID:      msg2.ID.String(),
+			ID:      msg2.ID,
 			Type:    msg2.Type,
 			Queue:   msg2.Queue,
 			Payload: msg2.Payload,

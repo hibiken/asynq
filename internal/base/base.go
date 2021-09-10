@@ -16,7 +16,6 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/golang/protobuf/ptypes"
-	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/errors"
 	pb "github.com/hibiken/asynq/internal/proto"
 	"google.golang.org/protobuf/proto"
@@ -191,7 +190,7 @@ type TaskMessage struct {
 	Payload []byte
 
 	// ID is a unique identifier for each task.
-	ID uuid.UUID
+	ID string
 
 	// Queue is a name this message should be enqueued to.
 	Queue string
@@ -240,7 +239,7 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 	return proto.Marshal(&pb.TaskMessage{
 		Type:         msg.Type,
 		Payload:      msg.Payload,
-		Id:           msg.ID.String(),
+		Id:           msg.ID,
 		Queue:        msg.Queue,
 		Retry:        int32(msg.Retry),
 		Retried:      int32(msg.Retried),
@@ -261,7 +260,7 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 	return &TaskMessage{
 		Type:         pbmsg.GetType(),
 		Payload:      pbmsg.GetPayload(),
-		ID:           uuid.MustParse(pbmsg.GetId()),
+		ID:           pbmsg.GetId(),
 		Queue:        pbmsg.GetQueue(),
 		Retry:        int(pbmsg.GetRetry()),
 		Retried:      int(pbmsg.GetRetried()),

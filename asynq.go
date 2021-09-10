@@ -85,7 +85,7 @@ type TaskInfo struct {
 
 func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time.Time) *TaskInfo {
 	info := TaskInfo{
-		ID:            msg.ID.String(),
+		ID:            msg.ID,
 		Queue:         msg.Queue,
 		Type:          msg.Type,
 		Payload:       msg.Payload, // Do we need to make a copy?

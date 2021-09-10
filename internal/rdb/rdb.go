@@ -84,12 +84,12 @@ func (r *RDB) Enqueue(msg *base.TaskMessage) error {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
 	keys := []string{
-		base.TaskKey(msg.Queue, msg.ID.String()),
+		base.TaskKey(msg.Queue, msg.ID),
 		base.PendingKey(msg.Queue),
 	}
 	argv := []interface{}{
 		encoded,
-		msg.ID.String(),
+		msg.ID,
 		msg.Timeout,
 		msg.Deadline,
 	}
@@ -139,11 +139,11 @@ func (r *RDB) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
 	}
 	keys := []string{
 		msg.UniqueKey,
-		base.TaskKey(msg.Queue, msg.ID.String()),
+		base.TaskKey(msg.Queue, msg.ID),
 		base.PendingKey(msg.Queue),
 	}
 	argv := []interface{}{
-		msg.ID.String(),
+		msg.ID,
 		int(ttl.Seconds()),
 		encoded,
 		msg.Timeout,
@@ -312,11 +312,11 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 	keys := []string{
 		base.ActiveKey(msg.Queue),
 		base.DeadlinesKey(msg.Queue),
-		base.TaskKey(msg.Queue, msg.ID.String()),
+		base.TaskKey(msg.Queue, msg.ID),
 		base.ProcessedKey(msg.Queue, now),
 	}
 	argv := []interface{}{
-		msg.ID.String(),
+		msg.ID,
 		expireAt.Unix(),
 	}
 	if len(msg.UniqueKey) > 0 {
@@ -350,9 +350,9 @@ func (r *RDB) Requeue(msg *base.TaskMessage) error {
 		base.ActiveKey(msg.Queue),
 		base.DeadlinesKey(msg.Queue),
 		base.PendingKey(msg.Queue),
-		base.TaskKey(msg.Queue, msg.ID.String()),
+		base.TaskKey(msg.Queue, msg.ID),
 	}
-	return r.runScript(op, requeueCmd, keys, msg.ID.String())
+	return r.runScript(op, requeueCmd, keys, msg.ID)
 }
 
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
@@ -383,13 +383,13 @@ func (r *RDB) Schedule(msg *base.TaskMessage, processAt time.Time) error {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
 	keys := []string{
-		base.TaskKey(msg.Queue, msg.ID.String()),
+		base.TaskKey(msg.Queue, msg.ID),
 		base.ScheduledKey(msg.Queue),
 	}
 	argv := []interface{}{
 		encoded,
 		processAt.Unix(),
-		msg.ID.String(),
+		msg.ID,
 		msg.Timeout,
 		msg.Deadline,
 	}
@@ -433,11 +433,11 @@ func (r *RDB) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl tim
 	}
 	keys := []string{
 		msg.UniqueKey,
-		base.TaskKey(msg.Queue, msg.ID.String()),
+		base.TaskKey(msg.Queue, msg.ID),
 		base.ScheduledKey(msg.Queue),
 	}
 	argv := []interface{}{
-		msg.ID.String(),
+		msg.ID,
 		int(ttl.Seconds()),
 		processAt.Unix(),
 		encoded,
@@ -508,7 +508,7 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string, i
 	}
 	expireAt := now.Add(statsTTL)
 	keys := []string{
-		base.TaskKey(msg.Queue, msg.ID.String()),
+		base.TaskKey(msg.Queue, msg.ID),
 		base.ActiveKey(msg.Queue),
 		base.DeadlinesKey(msg.Queue),
 		base.RetryKey(msg.Queue),
@@ -516,7 +516,7 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string, i
 		base.FailedKey(msg.Queue, now),
 	}
 	argv := []interface{}{
-		msg.ID.String(),
+		msg.ID,
 		encoded,
 		processAt.Unix(),
 		expireAt.Unix(),
@@ -578,7 +578,7 @@ func (r *RDB) Archive(msg *base.TaskMessage, errMsg string) error {
 	cutoff := now.AddDate(0, 0, -archivedExpirationInDays)
 	expireAt := now.Add(statsTTL)
 	keys := []string{
-		base.TaskKey(msg.Queue, msg.ID.String()),
+		base.TaskKey(msg.Queue, msg.ID),
 		base.ActiveKey(msg.Queue),
 		base.DeadlinesKey(msg.Queue),
 		base.ArchivedKey(msg.Queue),
@@ -586,7 +586,7 @@ func (r *RDB) Archive(msg *base.TaskMessage, errMsg string) error {
 		base.FailedKey(msg.Queue, now),
 	}
 	argv := []interface{}{
-		msg.ID.String(),
+		msg.ID,
 		encoded,
 		now.Unix(),
 		cutoff.Unix(),

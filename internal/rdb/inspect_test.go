@@ -363,7 +363,7 @@ func TestGetTaskInfo(t *testing.T) {
 
 	tests := []struct {
 		qname string
-		id    uuid.UUID
+		id    string
 		want  *base.TaskInfo
 	}{
 		{
@@ -478,7 +478,7 @@ func TestGetTaskInfoError(t *testing.T) {
 
 	tests := []struct {
 		qname string
-		id    uuid.UUID
+		id    string
 		match func(err error) bool
 	}{
 		{
@@ -488,7 +488,7 @@ func TestGetTaskInfoError(t *testing.T) {
 		},
 		{
 			qname: "default",
-			id:    uuid.New(),
+			id:    uuid.NewString(),
 			match: errors.IsTaskNotFound,
 		},
 	}
@@ -882,7 +882,7 @@ func TestListRetry(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "task1",
 		Queue:    "default",
 		Payload:  nil,
@@ -891,7 +891,7 @@ func TestListRetry(t *testing.T) {
 		Retried:  10,
 	}
 	m2 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "task2",
 		Queue:    "default",
 		Payload:  nil,
@@ -900,7 +900,7 @@ func TestListRetry(t *testing.T) {
 		Retried:  2,
 	}
 	m3 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "task3",
 		Queue:    "custom",
 		Payload:  nil,
@@ -1041,21 +1041,21 @@ func TestListArchived(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "task1",
 		Queue:    "default",
 		Payload:  nil,
 		ErrorMsg: "some error occurred",
 	}
 	m2 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "task2",
 		Queue:    "default",
 		Payload:  nil,
 		ErrorMsg: "some error occurred",
 	}
 	m3 := &base.TaskMessage{
-		ID:       uuid.New(),
+		ID:       uuid.NewString(),
 		Type:     "task3",
 		Queue:    "custom",
 		Payload:  nil,
@@ -1240,7 +1240,7 @@ func TestRunArchivedTask(t *testing.T) {
 	tests := []struct {
 		archived     map[string][]base.Z
 		qname        string
-		id           uuid.UUID
+		id           string
 		wantArchived map[string][]*base.TaskMessage
 		wantPending  map[string][]*base.TaskMessage
 	}{
@@ -1320,7 +1320,7 @@ func TestRunRetryTask(t *testing.T) {
 	tests := []struct {
 		retry       map[string][]base.Z
 		qname       string
-		id          uuid.UUID
+		id          string
 		wantRetry   map[string][]*base.TaskMessage
 		wantPending map[string][]*base.TaskMessage
 	}{
@@ -1400,7 +1400,7 @@ func TestRunScheduledTask(t *testing.T) {
 	tests := []struct {
 		scheduled     map[string][]base.Z
 		qname         string
-		id            uuid.UUID
+		id            string
 		wantScheduled map[string][]*base.TaskMessage
 		wantPending   map[string][]*base.TaskMessage
 	}{
@@ -1480,7 +1480,7 @@ func TestRunTaskError(t *testing.T) {
 		pending       map[string][]*base.TaskMessage
 		scheduled     map[string][]base.Z
 		qname         string
-		id            uuid.UUID
+		id            string
 		match         func(err error) bool
 		wantActive    map[string][]*base.TaskMessage
 		wantPending   map[string][]*base.TaskMessage
@@ -1526,7 +1526,7 @@ func TestRunTaskError(t *testing.T) {
 				},
 			},
 			qname: "default",
-			id:    uuid.New(),
+			id:    uuid.NewString(),
 			match: errors.IsTaskNotFound,
 			wantActive: map[string][]*base.TaskMessage{
 				"default": {},
@@ -1987,7 +1987,7 @@ func TestArchiveRetryTask(t *testing.T) {
 		retry        map[string][]base.Z
 		archived     map[string][]base.Z
 		qname        string
-		id           uuid.UUID
+		id           string
 		wantRetry    map[string][]base.Z
 		wantArchived map[string][]base.Z
 	}{
@@ -2088,7 +2088,7 @@ func TestArchiveScheduledTask(t *testing.T) {
 		scheduled     map[string][]base.Z
 		archived      map[string][]base.Z
 		qname         string
-		id            uuid.UUID
+		id            string
 		wantScheduled map[string][]base.Z
 		wantArchived  map[string][]base.Z
 	}{
@@ -2185,7 +2185,7 @@ func TestArchivePendingTask(t *testing.T) {
 		pending      map[string][]*base.TaskMessage
 		archived     map[string][]base.Z
 		qname        string
-		id           uuid.UUID
+		id           string
 		wantPending  map[string][]*base.TaskMessage
 		wantArchived map[string][]base.Z
 	}{
@@ -2270,7 +2270,7 @@ func TestArchiveTaskError(t *testing.T) {
 		scheduled     map[string][]base.Z
 		archived      map[string][]base.Z
 		qname         string
-		id            uuid.UUID
+		id            string
 		match         func(err error) bool
 		wantActive    map[string][]*base.TaskMessage
 		wantScheduled map[string][]base.Z
@@ -2312,7 +2312,7 @@ func TestArchiveTaskError(t *testing.T) {
 				"default": {{Message: m2, Score: t2.Unix()}},
 			},
 			qname: "default",
-			id:    uuid.New(),
+			id:    uuid.NewString(),
 			match: errors.IsTaskNotFound,
 			wantActive: map[string][]*base.TaskMessage{
 				"default": {},
@@ -2879,7 +2879,7 @@ func TestDeleteArchivedTask(t *testing.T) {
 	tests := []struct {
 		archived     map[string][]base.Z
 		qname        string
-		id           uuid.UUID
+		id           string
 		wantArchived map[string][]*base.TaskMessage
 	}{
 		{
@@ -2945,7 +2945,7 @@ func TestDeleteRetryTask(t *testing.T) {
 	tests := []struct {
 		retry     map[string][]base.Z
 		qname     string
-		id        uuid.UUID
+		id        string
 		wantRetry map[string][]*base.TaskMessage
 	}{
 		{
@@ -3011,7 +3011,7 @@ func TestDeleteScheduledTask(t *testing.T) {
 	tests := []struct {
 		scheduled     map[string][]base.Z
 		qname         string
-		id            uuid.UUID
+		id            string
 		wantScheduled map[string][]*base.TaskMessage
 	}{
 		{
@@ -3074,7 +3074,7 @@ func TestDeletePendingTask(t *testing.T) {
 	tests := []struct {
 		pending     map[string][]*base.TaskMessage
 		qname       string
-		id          uuid.UUID
+		id          string
 		wantPending map[string][]*base.TaskMessage
 	}{
 		{
@@ -3123,7 +3123,7 @@ func TestDeleteTaskWithUniqueLock(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := &base.TaskMessage{
-		ID:        uuid.New(),
+		ID:        uuid.NewString(),
 		Type:      "email",
 		Payload:   h.JSON(map[string]interface{}{"user_id": json.Number("123")}),
 		Queue:     base.DefaultQueueName,
@@ -3134,7 +3134,7 @@ func TestDeleteTaskWithUniqueLock(t *testing.T) {
 	tests := []struct {
 		scheduled     map[string][]base.Z
 		qname         string
-		id            uuid.UUID
+		id            string
 		uniqueKey     string
 		wantScheduled map[string][]*base.TaskMessage
 	}{
@@ -3186,7 +3186,7 @@ func TestDeleteTaskError(t *testing.T) {
 		active        map[string][]*base.TaskMessage
 		scheduled     map[string][]base.Z
 		qname         string
-		id            uuid.UUID
+		id            string
 		match         func(err error) bool
 		wantActive    map[string][]*base.TaskMessage
 		wantScheduled map[string][]*base.TaskMessage
@@ -3200,7 +3200,7 @@ func TestDeleteTaskError(t *testing.T) {
 				"default": {{Message: m1, Score: t1.Unix()}},
 			},
 			qname: "default",
-			id:    uuid.New(),
+			id:    uuid.NewString(),
 			match: errors.IsTaskNotFound,
 			wantActive: map[string][]*base.TaskMessage{
 				"default": {},
@@ -3218,7 +3218,7 @@ func TestDeleteTaskError(t *testing.T) {
 				"default": {{Message: m1, Score: t1.Unix()}},
 			},
 			qname: "nonexistent",
-			id:    uuid.New(),
+			id:    uuid.NewString(),
 			match: errors.IsQueueNotFound,
 			wantActive: map[string][]*base.TaskMessage{
 				"default": {},
@@ -3340,7 +3340,7 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	m1 := &base.TaskMessage{
-		ID:        uuid.New(),
+		ID:        uuid.NewString(),
 		Type:      "task1",
 		Payload:   nil,
 		Timeout:   1800,
@@ -3349,7 +3349,7 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 		Queue:     "default",
 	}
 	m2 := &base.TaskMessage{
-		ID:        uuid.New(),
+		ID:        uuid.NewString(),
 		Type:      "task2",
 		Payload:   nil,
 		Timeout:   1800,
@@ -3721,7 +3721,7 @@ func TestRemoveQueue(t *testing.T) {
 			}
 		}
 
-		if n := len(r.client.Keys(context.Background(), base.TaskKeyPrefix(tc.qname) + "*").Val()); n != 0 {
+		if n := len(r.client.Keys(context.Background(), base.TaskKeyPrefix(tc.qname)+"*").Val()); n != 0 {
 			t.Errorf("%d keys still exists for tasks", n)
 		}
 	}
@@ -3960,7 +3960,7 @@ func TestListWorkers(t *testing.T) {
 					Host:     host,
 					PID:      pid,
 					ServerID: serverID,
-					ID:       m1.ID.String(),
+					ID:       m1.ID,
 					Type:     m1.Type,
 					Queue:    m1.Queue,
 					Payload:  m1.Payload,
@@ -3971,7 +3971,7 @@ func TestListWorkers(t *testing.T) {
 					Host:     host,
 					PID:      pid,
 					ServerID: serverID,
-					ID:       m2.ID.String(),
+					ID:       m2.ID,
 					Type:     m2.Type,
 					Queue:    m2.Queue,
 					Payload:  m2.Payload,
@@ -3982,7 +3982,7 @@ func TestListWorkers(t *testing.T) {
 					Host:     host,
 					PID:      pid,
 					ServerID: serverID,
-					ID:       m3.ID.String(),
+					ID:       m3.ID,
 					Type:     m3.Type,
 					Queue:    m3.Queue,
 					Payload:  m3.Payload,
