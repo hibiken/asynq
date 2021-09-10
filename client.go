@@ -7,7 +7,6 @@ package asynq
 import (
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -24,9 +23,7 @@ import (
 //
 // Clients are safe for concurrent use by multiple goroutines.
 type Client struct {
-	mu   sync.Mutex
-	opts map[string][]Option
-	rdb  *rdb.RDB
+	rdb *rdb.RDB
 }
 
 // NewClient returns a new Client instance given a redis connection option.
@@ -35,11 +32,7 @@ func NewClient(r RedisConnOpt) *Client {
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
-	rdb := rdb.NewRDB(c)
-	return &Client{
-		opts: make(map[string][]Option),
-		rdb:  rdb,
-	}
+	return &Client{rdb: rdb.NewRDB(c)}
 }
 
 type OptionType int
@@ -241,17 +234,6 @@ var (
 	noDeadline time.Time     = time.Unix(0, 0)
 )
 
-// SetDefaultOptions sets options to be used for a given task type.
-// The argument opts specifies the behavior of task processing.
-// If there are conflicting Option values the last one overrides others.
-//
-// Default options can be overridden by options passed at enqueue time.
-func (c *Client) SetDefaultOptions(taskType string, opts ...Option) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.opts[taskType] = opts
-}
-
 // Close closes the connection with redis.
 func (c *Client) Close() error {
 	return c.rdb.Close()
@@ -263,6 +245,7 @@ func (c *Client) Close() error {
 //
 // The argument opts specifies the behavior of task processing.
 // If there are conflicting Option values the last one overrides others.
+// Any options provided to NewTask can be overridden by options passed to Enqueue.
 // By deafult, max retry is set to 25 and timeout is set to 30 minutes.
 //
 // If no ProcessAt or ProcessIn options are provided, the task will be pending immediately.
@@ -270,11 +253,8 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 	if strings.TrimSpace(task.Type()) == "" {
 		return nil, fmt.Errorf("task typename cannot be empty")
 	}
-	c.mu.Lock()
-	if defaults, ok := c.opts[task.Type()]; ok {
-		opts = append(defaults, opts...)
-	}
-	c.mu.Unlock()
+	// merge task options with the options provided at enqueue time.
+	opts = append(task.opts, opts...)
 	opt, err := composeOptions(opts...)
 	if err != nil {
 		return nil, err

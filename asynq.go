@@ -23,16 +23,21 @@ type Task struct {
 
 	// payload holds data needed to perform the task.
 	payload []byte
+
+	// opts holds options for the task.
+	opts []Option
 }
 
 func (t *Task) Type() string    { return t.typename }
 func (t *Task) Payload() []byte { return t.payload }
 
 // NewTask returns a new Task given a type name and payload data.
-func NewTask(typename string, payload []byte) *Task {
+// Options can be passed to configure task processing behavior.
+func NewTask(typename string, payload []byte, opts ...Option) *Task {
 	return &Task{
 		typename: typename,
 		payload:  payload,
+		opts:     opts,
 	}
 }
 
