@@ -190,10 +190,10 @@ func (p *processor) exec() {
 			}()
 
 			ctx, cancel := createContext(msg, deadline)
-			p.cancelations.Add(msg.ID.String(), cancel)
+			p.cancelations.Add(msg.ID, cancel)
 			defer func() {
 				cancel()
-				p.cancelations.Delete(msg.ID.String())
+				p.cancelations.Delete(msg.ID)
 			}()
 
 			// check context before starting a worker goroutine.

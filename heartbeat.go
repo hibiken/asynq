@@ -125,10 +125,10 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 				timer.Reset(h.interval)
 
 			case w := <-h.starting:
-				h.workers[w.msg.ID.String()] = w
+				h.workers[w.msg.ID] = w
 
 			case msg := <-h.finished:
-				delete(h.workers, msg.ID.String())
+				delete(h.workers, msg.ID)
 			}
 		}
 	}()

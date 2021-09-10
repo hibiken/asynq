@@ -484,7 +484,7 @@ func TestInspectorGetTaskInfo(t *testing.T) {
 	}{
 		{
 			qname: "default",
-			id:    m1.ID.String(),
+			id:    m1.ID,
 			want: newTaskInfo(
 				m1,
 				base.TaskStateActive,
@@ -493,7 +493,7 @@ func TestInspectorGetTaskInfo(t *testing.T) {
 		},
 		{
 			qname: "default",
-			id:    m2.ID.String(),
+			id:    m2.ID,
 			want: newTaskInfo(
 				m2,
 				base.TaskStateScheduled,
@@ -502,7 +502,7 @@ func TestInspectorGetTaskInfo(t *testing.T) {
 		},
 		{
 			qname: "custom",
-			id:    m3.ID.String(),
+			id:    m3.ID,
 			want: newTaskInfo(
 				m3,
 				base.TaskStateRetry,
@@ -511,7 +511,7 @@ func TestInspectorGetTaskInfo(t *testing.T) {
 		},
 		{
 			qname: "custom",
-			id:    m4.ID.String(),
+			id:    m4.ID,
 			want: newTaskInfo(
 				m4,
 				base.TaskStateArchived,
@@ -520,7 +520,7 @@ func TestInspectorGetTaskInfo(t *testing.T) {
 		},
 		{
 			qname: "custom",
-			id:    m5.ID.String(),
+			id:    m5.ID,
 			want: newTaskInfo(
 				m5,
 				base.TaskStatePending,
@@ -603,7 +603,7 @@ func TestInspectorGetTaskInfoError(t *testing.T) {
 	}{
 		{
 			qname:   "nonexistent",
-			id:      m1.ID.String(),
+			id:      m1.ID,
 			wantErr: ErrQueueNotFound,
 		},
 		{

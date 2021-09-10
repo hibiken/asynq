@@ -30,7 +30,7 @@ const metadataCtxKey ctxKey = 0
 // createContext returns a context and cancel function for a given task message.
 func createContext(msg *base.TaskMessage, deadline time.Time) (context.Context, context.CancelFunc) {
 	metadata := taskMetadata{
-		id:         msg.ID.String(),
+		id:         msg.ID,
 		maxRetry:   msg.Retry,
 		retryCount: msg.Retried,
 		qname:      msg.Queue,

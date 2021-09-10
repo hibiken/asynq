@@ -24,7 +24,7 @@ func TestCreateContextWithFutureDeadline(t *testing.T) {
 	for _, tc := range tests {
 		msg := &base.TaskMessage{
 			Type:    "something",
-			ID:      uuid.New(),
+			ID:      uuid.NewString(),
 			Payload: nil,
 		}
 
@@ -64,7 +64,7 @@ func TestCreateContextWithPastDeadline(t *testing.T) {
 	for _, tc := range tests {
 		msg := &base.TaskMessage{
 			Type:    "something",
-			ID:      uuid.New(),
+			ID:      uuid.NewString(),
 			Payload: nil,
 		}
 
@@ -92,9 +92,9 @@ func TestGetTaskMetadataFromContext(t *testing.T) {
 		desc string
 		msg  *base.TaskMessage
 	}{
-		{"with zero retried message", &base.TaskMessage{Type: "something", ID: uuid.New(), Retry: 25, Retried: 0, Timeout: 1800, Queue: "default"}},
-		{"with non-zero retried message", &base.TaskMessage{Type: "something", ID: uuid.New(), Retry: 10, Retried: 5, Timeout: 1800, Queue: "default"}},
-		{"with custom queue name", &base.TaskMessage{Type: "something", ID: uuid.New(), Retry: 25, Retried: 0, Timeout: 1800, Queue: "custom"}},
+		{"with zero retried message", &base.TaskMessage{Type: "something", ID: uuid.NewString(), Retry: 25, Retried: 0, Timeout: 1800, Queue: "default"}},
+		{"with non-zero retried message", &base.TaskMessage{Type: "something", ID: uuid.NewString(), Retry: 10, Retried: 5, Timeout: 1800, Queue: "default"}},
+		{"with custom queue name", &base.TaskMessage{Type: "something", ID: uuid.NewString(), Retry: 25, Retried: 0, Timeout: 1800, Queue: "custom"}},
 	}
 
 	for _, tc := range tests {
@@ -105,8 +105,8 @@ func TestGetTaskMetadataFromContext(t *testing.T) {
 		if !ok {
 			t.Errorf("%s: GetTaskID(ctx) returned ok == false", tc.desc)
 		}
-		if ok && id != tc.msg.ID.String() {
-			t.Errorf("%s: GetTaskID(ctx) returned id == %q, want %q", tc.desc, id, tc.msg.ID.String())
+		if ok && id != tc.msg.ID {
+			t.Errorf("%s: GetTaskID(ctx) returned id == %q, want %q", tc.desc, id, tc.msg.ID)
 		}
 
 		retried, ok := GetRetryCount(ctx)

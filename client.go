@@ -276,7 +276,7 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 		uniqueKey = base.UniqueKey(opt.queue, task.Type(), task.Payload())
 	}
 	msg := &base.TaskMessage{
-		ID:        uuid.New(),
+		ID:        uuid.NewString(),
 		Type:      task.Type(),
 		Payload:   task.Payload(),
 		Queue:     opt.queue,
