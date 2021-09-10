@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/spf13/cast"
@@ -386,21 +385,21 @@ var getTaskInfoCmd = redis.NewScript(`
 `)
 
 // GetTaskInfo returns a TaskInfo describing the task from the given queue.
-func (r *RDB) GetTaskInfo(qname string, id uuid.UUID) (*base.TaskInfo, error) {
+func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 	var op errors.Op = "rdb.GetTaskInfo"
 	if err := r.checkQueueExists(qname); err != nil {
 		return nil, errors.E(op, errors.CanonicalCode(err), err)
 	}
-	keys := []string{base.TaskKey(qname, id.String())}
+	keys := []string{base.TaskKey(qname, id)}
 	argv := []interface{}{
-		id.String(),
+		id,
 		time.Now().Unix(),
 		base.QueueKeyPrefix(qname),
 	}
 	res, err := getTaskInfoCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
 		if err.Error() == "NOT FOUND" {
-			return nil, errors.E(op, errors.NotFound, &errors.TaskNotFoundError{Queue: qname, ID: id.String()})
+			return nil, errors.E(op, errors.NotFound, &errors.TaskNotFoundError{Queue: qname, ID: id})
 		}
 		return nil, errors.E(op, errors.Unknown, err)
 	}
@@ -704,17 +703,17 @@ return 1
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
 // If a task with the given id doesn't exist in the queue, it returns TaskNotFoundError
 // If a task is in active or pending state it returns non-nil error with Code FailedPrecondition.
-func (r *RDB) RunTask(qname string, id uuid.UUID) error {
+func (r *RDB) RunTask(qname, id string) error {
 	var op errors.Op = "rdb.RunTask"
 	if err := r.checkQueueExists(qname); err != nil {
 		return errors.E(op, errors.CanonicalCode(err), err)
 	}
 	keys := []string{
-		base.TaskKey(qname, id.String()),
+		base.TaskKey(qname, id),
 		base.PendingKey(qname),
 	}
 	argv := []interface{}{
-		id.String(),
+		id,
 		base.QueueKeyPrefix(qname),
 	}
 	res, err := runTaskCmd.Run(context.Background(), r.client, keys, argv...).Result()
@@ -729,7 +728,7 @@ func (r *RDB) RunTask(qname string, id uuid.UUID) error {
 	case 1:
 		return nil
 	case 0:
-		return errors.E(op, errors.NotFound, &errors.TaskNotFoundError{Queue: qname, ID: id.String()})
+		return errors.E(op, errors.NotFound, &errors.TaskNotFoundError{Queue: qname, ID: id})
 	case -1:
 		return errors.E(op, errors.FailedPrecondition, "task is already running")
 	case -2:
@@ -922,18 +921,18 @@ return 1
 // If a task with the given id doesn't exist in the queue, it returns TaskNotFoundError
 // If a task is already archived, it returns TaskAlreadyArchivedError.
 // If a task is in active state it returns non-nil error with FailedPrecondition code.
-func (r *RDB) ArchiveTask(qname string, id uuid.UUID) error {
+func (r *RDB) ArchiveTask(qname, id string) error {
 	var op errors.Op = "rdb.ArchiveTask"
 	if err := r.checkQueueExists(qname); err != nil {
 		return errors.E(op, errors.CanonicalCode(err), err)
 	}
 	keys := []string{
-		base.TaskKey(qname, id.String()),
+		base.TaskKey(qname, id),
 		base.ArchivedKey(qname),
 	}
 	now := time.Now()
 	argv := []interface{}{
-		id.String(),
+		id,
 		now.Unix(),
 		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
 		maxArchiveSize,
@@ -951,9 +950,9 @@ func (r *RDB) ArchiveTask(qname string, id uuid.UUID) error {
 	case 1:
 		return nil
 	case 0:
-		return errors.E(op, errors.NotFound, &errors.TaskNotFoundError{Queue: qname, ID: id.String()})
+		return errors.E(op, errors.NotFound, &errors.TaskNotFoundError{Queue: qname, ID: id})
 	case -1:
-		return errors.E(op, errors.FailedPrecondition, &errors.TaskAlreadyArchivedError{Queue: qname, ID: id.String()})
+		return errors.E(op, errors.FailedPrecondition, &errors.TaskAlreadyArchivedError{Queue: qname, ID: id})
 	case -2:
 		return errors.E(op, errors.FailedPrecondition, "cannot archive task in active state. use CancelTask instead.")
 	case -3:
@@ -1059,16 +1058,16 @@ return redis.call("DEL", KEYS[1])
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
 // If a task with the given id doesn't exist in the queue, it returns TaskNotFoundError
 // If a task is in active state it returns non-nil error with Code FailedPrecondition.
-func (r *RDB) DeleteTask(qname string, id uuid.UUID) error {
+func (r *RDB) DeleteTask(qname, id string) error {
 	var op errors.Op = "rdb.DeleteTask"
 	if err := r.checkQueueExists(qname); err != nil {
 		return errors.E(op, errors.CanonicalCode(err), err)
 	}
 	keys := []string{
-		base.TaskKey(qname, id.String()),
+		base.TaskKey(qname, id),
 	}
 	argv := []interface{}{
-		id.String(),
+		id,
 		base.QueueKeyPrefix(qname),
 	}
 	res, err := deleteTaskCmd.Run(context.Background(), r.client, keys, argv...).Result()
@@ -1083,7 +1082,7 @@ func (r *RDB) DeleteTask(qname string, id uuid.UUID) error {
 	case 1:
 		return nil
 	case 0:
-		return errors.E(op, errors.NotFound, &errors.TaskNotFoundError{Queue: qname, ID: id.String()})
+		return errors.E(op, errors.NotFound, &errors.TaskNotFoundError{Queue: qname, ID: id})
 	case -1:
 		return errors.E(op, errors.FailedPrecondition, "cannot delete task in active state. use CancelTask instead.")
 	default:

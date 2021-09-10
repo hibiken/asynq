@@ -344,7 +344,7 @@ func TestUniqueKey(t *testing.T) {
 }
 
 func TestMessageEncoding(t *testing.T) {
-	id := uuid.New()
+	id := uuid.NewString()
 	tests := []struct {
 		in  *TaskMessage
 		out *TaskMessage
