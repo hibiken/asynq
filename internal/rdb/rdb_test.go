@@ -123,6 +123,42 @@ func TestEnqueue(t *testing.T) {
 	}
 }
 
+func TestEnqueueTaskIdConflictError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	m1 := base.TaskMessage{
+		ID:      "custom_id",
+		Type:    "foo",
+		Payload: nil,
+	}
+	m2 := base.TaskMessage{
+		ID:      "custom_id",
+		Type:    "bar",
+		Payload: nil,
+	}
+
+	tests := []struct {
+		firstMsg  *base.TaskMessage
+		secondMsg *base.TaskMessage
+	}{
+		{firstMsg: &m1, secondMsg: &m2},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case.
+
+		if err := r.Enqueue(tc.firstMsg); err != nil {
+			t.Errorf("First message: Enqueue failed: %v", err)
+			continue
+		}
+		if err := r.Enqueue(tc.secondMsg); !errors.Is(err, errors.ErrTaskIdConflict) {
+			t.Errorf("Second message: Enqueue returned %v, want %v", err, errors.ErrTaskIdConflict)
+			continue
+		}
+	}
+}
+
 func TestEnqueueUnique(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -213,6 +249,45 @@ func TestEnqueueUnique(t *testing.T) {
 		gotTTL := r.client.TTL(context.Background(), tc.msg.UniqueKey).Val()
 		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 2)) {
 			t.Errorf("TTL %q = %v, want %v", tc.msg.UniqueKey, gotTTL, tc.ttl)
+			continue
+		}
+	}
+}
+
+func TestEnqueueUniqueTaskIdConflictError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	m1 := base.TaskMessage{
+		ID:        "custom_id",
+		Type:      "foo",
+		Payload:   nil,
+		UniqueKey: "unique_key_one",
+	}
+	m2 := base.TaskMessage{
+		ID:        "custom_id",
+		Type:      "bar",
+		Payload:   nil,
+		UniqueKey: "unique_key_two",
+	}
+	const ttl = 30 * time.Second
+
+	tests := []struct {
+		firstMsg  *base.TaskMessage
+		secondMsg *base.TaskMessage
+	}{
+		{firstMsg: &m1, secondMsg: &m2},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case.
+
+		if err := r.EnqueueUnique(tc.firstMsg, ttl); err != nil {
+			t.Errorf("First message: EnqueueUnique failed: %v", err)
+			continue
+		}
+		if err := r.EnqueueUnique(tc.secondMsg, ttl); !errors.Is(err, errors.ErrTaskIdConflict) {
+			t.Errorf("Second message: EnqueueUnique returned %v, want %v", err, errors.ErrTaskIdConflict)
 			continue
 		}
 	}
@@ -946,6 +1021,45 @@ func TestSchedule(t *testing.T) {
 	}
 }
 
+func TestScheduleTaskIdConflictError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	m1 := base.TaskMessage{
+		ID:        "custom_id",
+		Type:      "foo",
+		Payload:   nil,
+		UniqueKey: "unique_key_one",
+	}
+	m2 := base.TaskMessage{
+		ID:        "custom_id",
+		Type:      "bar",
+		Payload:   nil,
+		UniqueKey: "unique_key_two",
+	}
+	processAt := time.Now().Add(30 * time.Second)
+
+	tests := []struct {
+		firstMsg  *base.TaskMessage
+		secondMsg *base.TaskMessage
+	}{
+		{firstMsg: &m1, secondMsg: &m2},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case.
+
+		if err := r.Schedule(tc.firstMsg, processAt); err != nil {
+			t.Errorf("First message: Schedule failed: %v", err)
+			continue
+		}
+		if err := r.Schedule(tc.secondMsg, processAt); !errors.Is(err, errors.ErrTaskIdConflict) {
+			t.Errorf("Second message: Schedule returned %v, want %v", err, errors.ErrTaskIdConflict)
+			continue
+		}
+	}
+}
+
 func TestScheduleUnique(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -1035,6 +1149,46 @@ func TestScheduleUnique(t *testing.T) {
 		gotTTL := r.client.TTL(context.Background(), tc.msg.UniqueKey).Val()
 		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL %q = %v, want %v", tc.msg.UniqueKey, gotTTL, tc.ttl)
+			continue
+		}
+	}
+}
+
+func TestScheduleUniqueTaskIdConflictError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	m1 := base.TaskMessage{
+		ID:        "custom_id",
+		Type:      "foo",
+		Payload:   nil,
+		UniqueKey: "unique_key_one",
+	}
+	m2 := base.TaskMessage{
+		ID:        "custom_id",
+		Type:      "bar",
+		Payload:   nil,
+		UniqueKey: "unique_key_two",
+	}
+	const ttl = 30 * time.Second
+	processAt := time.Now().Add(30 * time.Second)
+
+	tests := []struct {
+		firstMsg  *base.TaskMessage
+		secondMsg *base.TaskMessage
+	}{
+		{firstMsg: &m1, secondMsg: &m2},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case.
+
+		if err := r.ScheduleUnique(tc.firstMsg, processAt, ttl); err != nil {
+			t.Errorf("First message: ScheduleUnique failed: %v", err)
+			continue
+		}
+		if err := r.ScheduleUnique(tc.secondMsg, processAt, ttl); !errors.Is(err, errors.ErrTaskIdConflict) {
+			t.Errorf("Second message: ScheduleUnique returned %v, want %v", err, errors.ErrTaskIdConflict)
 			continue
 		}
 	}
