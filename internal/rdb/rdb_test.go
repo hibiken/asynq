@@ -436,7 +436,8 @@ func TestDequeue(t *testing.T) {
 		}
 		for queue, want := range tc.wantDeadlines {
 			gotDeadlines := h.GetDeadlinesEntries(t, r.client, queue)
-			if diff := cmp.Diff(want, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
+			cmpOpts := []cmp.Option{h.SortZSetEntryOpt, h.EquateInt64Approx(2)} // allow up to 2 second margin in Score
+			if diff := cmp.Diff(want, gotDeadlines, cmpOpts...); diff != "" {
 				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.DeadlinesKey(queue), diff)
 			}
 		}
