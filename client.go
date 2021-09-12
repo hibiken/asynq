@@ -45,6 +45,7 @@ const (
 	UniqueOpt
 	ProcessAtOpt
 	ProcessInOpt
+	TaskIDOpt
 )
 
 // Option specifies the task processing behavior.
@@ -63,6 +64,7 @@ type Option interface {
 type (
 	retryOption     int
 	queueOption     string
+	taskIDOption    string
 	timeoutOption   time.Duration
 	deadlineOption  time.Time
 	uniqueOption    time.Duration
@@ -93,6 +95,15 @@ func Queue(qname string) Option {
 func (qname queueOption) String() string     { return fmt.Sprintf("Queue(%q)", string(qname)) }
 func (qname queueOption) Type() OptionType   { return QueueOpt }
 func (qname queueOption) Value() interface{} { return string(qname) }
+
+// TaskID returns an option to specify the task ID.
+func TaskID(id string) Option {
+	return taskIDOption(id)
+}
+
+func (id taskIDOption) String() string     { return fmt.Sprintf("TaskID(%q)", string(id)) }
+func (id taskIDOption) Type() OptionType   { return TaskIDOpt }
+func (id taskIDOption) Value() interface{} { return string(id) }
 
 // Timeout returns an option to specify how long a task may run.
 // If the timeout elapses before the Handler returns, then the task
@@ -172,9 +183,15 @@ func (d processInOption) Value() interface{} { return time.Duration(d) }
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
 var ErrDuplicateTask = errors.New("task already exists")
 
+// ErrTaskIDConflict indicates that the given task could not be enqueued since its task ID already exists.
+//
+// ErrTaskIDConflict error only applies to tasks enqueued with a TaskID option.
+var ErrTaskIDConflict = errors.New("task ID conflicts with another task")
+
 type option struct {
 	retry     int
 	queue     string
+	taskID    string
 	timeout   time.Duration
 	deadline  time.Time
 	uniqueTTL time.Duration
@@ -189,6 +206,7 @@ func composeOptions(opts ...Option) (option, error) {
 	res := option{
 		retry:     defaultMaxRetry,
 		queue:     base.DefaultQueueName,
+		taskID:    uuid.NewString(),
 		timeout:   0, // do not set to deafultTimeout here
 		deadline:  time.Time{},
 		processAt: time.Now(),
@@ -203,6 +221,12 @@ func composeOptions(opts ...Option) (option, error) {
 				return option{}, err
 			}
 			res.queue = qname
+		case taskIDOption:
+			id := string(opt)
+			if err := validateTaskID(id); err != nil {
+				return option{}, err
+			}
+			res.taskID = id
 		case timeoutOption:
 			res.timeout = time.Duration(opt)
 		case deadlineOption:
@@ -218,6 +242,14 @@ func composeOptions(opts ...Option) (option, error) {
 		}
 	}
 	return res, nil
+}
+
+// validates user provided task ID string.
+func validateTaskID(id string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("task ID cannot be empty")
+	}
+	return nil
 }
 
 const (
@@ -276,7 +308,7 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 		uniqueKey = base.UniqueKey(opt.queue, task.Type(), task.Payload())
 	}
 	msg := &base.TaskMessage{
-		ID:        uuid.NewString(),
+		ID:        opt.taskID,
 		Type:      task.Type(),
 		Payload:   task.Payload(),
 		Queue:     opt.queue,
@@ -298,6 +330,8 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 	switch {
 	case errors.Is(err, errors.ErrDuplicateTask):
 		return nil, fmt.Errorf("%w", ErrDuplicateTask)
+	case errors.Is(err, errors.ErrTaskIdConflict):
+		return nil, fmt.Errorf("%w", ErrTaskIDConflict)
 	case err != nil:
 		return nil, err
 	}

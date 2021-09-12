@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/rdb"
@@ -178,11 +177,7 @@ func (i *Inspector) DeleteQueue(qname string, force bool) error {
 // Returns ErrQueueNotFound if a queue with the given name doesn't exist.
 // Returns ErrTaskNotFound if a task with the given id doesn't exist in the queue.
 func (i *Inspector) GetTaskInfo(qname, id string) (*TaskInfo, error) {
-	taskid, err := uuid.Parse(id)
-	if err != nil {
-		return nil, fmt.Errorf("asynq: %s is not a valid task id", id)
-	}
-	info, err := i.rdb.GetTaskInfo(qname, taskid)
+	info, err := i.rdb.GetTaskInfo(qname, id)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
@@ -437,11 +432,7 @@ func (i *Inspector) DeleteTask(qname, id string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return fmt.Errorf("asynq: %v", err)
 	}
-	taskid, err := uuid.Parse(id)
-	if err != nil {
-		return fmt.Errorf("asynq: %s is not a valid task id", id)
-	}
-	err = i.rdb.DeleteTask(qname, taskid)
+	err := i.rdb.DeleteTask(qname, id)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return fmt.Errorf("asynq: %w", ErrQueueNotFound)
@@ -495,11 +486,7 @@ func (i *Inspector) RunTask(qname, id string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return fmt.Errorf("asynq: %v", err)
 	}
-	taskid, err := uuid.Parse(id)
-	if err != nil {
-		return fmt.Errorf("asynq: %s is not a valid task id", id)
-	}
-	err = i.rdb.RunTask(qname, taskid)
+	err := i.rdb.RunTask(qname, id)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return fmt.Errorf("asynq: %w", ErrQueueNotFound)
@@ -552,11 +539,7 @@ func (i *Inspector) ArchiveTask(qname, id string) error {
 	if err := base.ValidateQueueName(qname); err != nil {
 		return fmt.Errorf("asynq: err")
 	}
-	taskid, err := uuid.Parse(id)
-	if err != nil {
-		return fmt.Errorf("asynq: %s is not a valid task id", id)
-	}
-	err = i.rdb.ArchiveTask(qname, taskid)
+	err := i.rdb.ArchiveTask(qname, id)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return fmt.Errorf("asynq: %w", ErrQueueNotFound)

@@ -444,6 +444,100 @@ func TestClientEnqueue(t *testing.T) {
 	}
 }
 
+func TestClientEnqueueWithTaskIDOption(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	task := NewTask("send_email", nil)
+	now := time.Now()
+
+	tests := []struct {
+		desc        string
+		task        *Task
+		opts        []Option
+		wantInfo    *TaskInfo
+		wantPending map[string][]*base.TaskMessage
+	}{
+		{
+			desc: "With a valid TaskID option",
+			task: task,
+			opts: []Option{
+				TaskID("custom_id"),
+			},
+			wantInfo: &TaskInfo{
+				ID:            "custom_id",
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {
+					{
+						ID:       "custom_id",
+						Type:     task.Type(),
+						Payload:  task.Payload(),
+						Retry:    defaultMaxRetry,
+						Queue:    "default",
+						Timeout:  int64(defaultTimeout.Seconds()),
+						Deadline: noDeadline.Unix(),
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r) // clean up db before each test case.
+
+		gotInfo, err := client.Enqueue(tc.task, tc.opts...)
+		if err != nil {
+			t.Errorf("got non-nil error %v, want nil", err)
+			continue
+		}
+
+		cmpOptions := []cmp.Option{
+			cmpopts.EquateApproxTime(500 * time.Millisecond),
+		}
+		if diff := cmp.Diff(tc.wantInfo, gotInfo, cmpOptions...); diff != "" {
+			t.Errorf("%s;\nEnqueue(task) returned %v, want %v; (-want,+got)\n%s",
+				tc.desc, gotInfo, tc.wantInfo, diff)
+		}
+
+		for qname, want := range tc.wantPending {
+			got := h.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.PendingKey(qname), diff)
+			}
+		}
+	}
+}
+
+func TestClientEnqueueWithConflictingTaskID(t *testing.T) {
+	setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	const taskID = "custom_id"
+	task := NewTask("foo", nil)
+
+	if _, err := client.Enqueue(task, TaskID(taskID)); err != nil {
+		t.Fatalf("First task: Enqueue failed: %v", err)
+	}
+	_, err := client.Enqueue(task, TaskID(taskID))
+	if !errors.Is(err, ErrTaskIDConflict) {
+		t.Errorf("Second task: Enqueue returned %v, want %v", err, ErrTaskIDConflict)
+	}
+}
+
 func TestClientEnqueueWithProcessInOption(t *testing.T) {
 	r := setup(t)
 	client := NewClient(getRedisConnOpt(t))
@@ -595,6 +689,16 @@ func TestClientEnqueueError(t *testing.T) {
 			desc: "With blank task typename",
 			task: NewTask("    ", h.JSON(map[string]interface{}{})),
 			opts: []Option{},
+		},
+		{
+			desc: "With empty task ID",
+			task: NewTask("foo", nil),
+			opts: []Option{TaskID("")},
+		},
+		{
+			desc: "With blank task ID",
+			task: NewTask("foo", nil),
+			opts: []Option{TaskID("  ")},
 		},
 	}
 
