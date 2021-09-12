@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `NewTask` takes `Option` as variadic argument
 
+### Added
+
+- `TaskID` option is added to allow user to specify task ID.
+- `ErrTaskIDConflict` sentinel error value is added.
+
 ### Removed
 
 - `Client.SetDefaultOptions` is removed. Use `NewTask` instead to pass default options for tasks.
