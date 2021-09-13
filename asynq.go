@@ -81,6 +81,13 @@ type TaskInfo struct {
 	// NextProcessAt is the time the task is scheduled to be processed,
 	// zero if not applicable.
 	NextProcessAt time.Time
+
+	// ResulTTL is the retention period after the task is successfully processed.
+	ResultTTL time.Duration
+
+	// CompletedAt is the time the task is processed successfully.
+	// Zero value (i.e. time.Time{}) indicates no value.
+	CompletedAt time.Time
 }
 
 func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time.Time) *TaskInfo {
@@ -93,6 +100,7 @@ func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time
 		Retried:       msg.Retried,
 		LastErr:       msg.ErrorMsg,
 		Timeout:       time.Duration(msg.Timeout) * time.Second,
+		ResultTTL:     time.Duration(msg.ResultTTL) * time.Second,
 		NextProcessAt: nextProcessAt,
 	}
 	if msg.LastFailedAt == 0 {
@@ -105,6 +113,12 @@ func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time
 		info.Deadline = time.Time{}
 	} else {
 		info.Deadline = time.Unix(msg.Deadline, 0)
+	}
+
+	if msg.CompletedAt == 0 {
+		info.CompletedAt = time.Time{}
+	} else {
+		info.CompletedAt = time.Unix(msg.CompletedAt, 0)
 	}
 
 	switch state {

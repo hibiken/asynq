@@ -416,6 +416,40 @@ func TestClientEnqueue(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "With ResultTTL option",
+			task: task,
+			opts: []Option{
+				ResultTTL(24 * time.Hour),
+			},
+			wantInfo: &TaskInfo{
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
+				ResultTTL:     24 * time.Hour,
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {
+					{
+						Type:      task.Type(),
+						Payload:   task.Payload(),
+						Retry:     defaultMaxRetry,
+						Queue:     "default",
+						Timeout:   int64(defaultTimeout.Seconds()),
+						Deadline:  noDeadline.Unix(),
+						ResultTTL: int64((24 * time.Hour).Seconds()),
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {
