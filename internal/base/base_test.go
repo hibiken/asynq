@@ -139,6 +139,23 @@ func TestArchivedKey(t *testing.T) {
 	}
 }
 
+func TestCompletedKey(t *testing.T) {
+	tests := []struct {
+		qname string
+		want  string
+	}{
+		{"default", "asynq:{default}:completed"},
+		{"custom", "asynq:{custom}:completed"},
+	}
+
+	for _, tc := range tests {
+		got := CompletedKey(tc.qname)
+		if got != tc.want {
+			t.Errorf("CompletedKey(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
 func TestPausedKey(t *testing.T) {
 	tests := []struct {
 		qname string

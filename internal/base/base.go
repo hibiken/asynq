@@ -48,6 +48,7 @@ const (
 	TaskStateScheduled
 	TaskStateRetry
 	TaskStateArchived
+	TaskStateCompleted
 )
 
 func (s TaskState) String() string {
@@ -62,6 +63,8 @@ func (s TaskState) String() string {
 		return "retry"
 	case TaskStateArchived:
 		return "archived"
+	case TaskStateCompleted:
+		return "completed"
 	}
 	panic(fmt.Sprintf("internal error: unknown task state %d", s))
 }
@@ -78,6 +81,8 @@ func TaskStateFromString(s string) (TaskState, error) {
 		return TaskStateRetry, nil
 	case "archived":
 		return TaskStateArchived, nil
+	case "completed":
+		return TaskStateCompleted, nil
 	}
 	return 0, errors.E(errors.FailedPrecondition, fmt.Sprintf("%q is not supported task state", s))
 }
@@ -134,6 +139,10 @@ func ArchivedKey(qname string) string {
 // DeadlinesKey returns a redis key for the deadlines.
 func DeadlinesKey(qname string) string {
 	return fmt.Sprintf("%sdeadlines", QueueKeyPrefix(qname))
+}
+
+func CompletedKey(qname string) string {
+	return fmt.Sprintf("%scompleted", QueueKeyPrefix(qname))
 }
 
 // PausedKey returns a redis key to indicate that the given queue is paused.
