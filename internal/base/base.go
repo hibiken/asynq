@@ -663,6 +663,7 @@ type Broker interface {
 	EnqueueUnique(msg *TaskMessage, ttl time.Duration) error
 	Dequeue(qnames ...string) (*TaskMessage, time.Time, error)
 	Done(msg *TaskMessage) error
+	MarkAsComplete(msg *TaskMessage) error
 	Requeue(msg *TaskMessage) error
 	Schedule(msg *TaskMessage, processAt time.Time) error
 	ScheduleUnique(msg *TaskMessage, processAt time.Time, ttl time.Duration) error

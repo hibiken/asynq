@@ -81,6 +81,15 @@ func (tb *TestBroker) Done(msg *base.TaskMessage) error {
 	return tb.real.Done(msg)
 }
 
+func (tb *TestBroker) MarkAsComplete(msg *base.TaskMessage) error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.MarkAsComplete(msg)
+}
+
 func (tb *TestBroker) Requeue(msg *base.TaskMessage) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
