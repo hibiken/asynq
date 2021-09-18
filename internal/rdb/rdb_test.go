@@ -2082,6 +2082,93 @@ func TestForwardIfReady(t *testing.T) {
 	}
 }
 
+func newCompletedTask(qname, typename string, payload []byte, completedAt time.Time) *base.TaskMessage {
+	msg := h.NewTaskMessageWithQueue(typename, payload, qname)
+	msg.CompletedAt = completedAt.Unix()
+	return msg
+}
+
+func TestDeleteExpiredCompletedTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	secondAgo := now.Add(-time.Second)
+	hourFromNow := now.Add(time.Hour)
+	hourAgo := now.Add(-time.Hour)
+	minuteAgo := now.Add(-time.Minute)
+
+	t1 := newCompletedTask("default", "task1", nil, hourAgo)
+	t2 := newCompletedTask("default", "task2", nil, minuteAgo)
+	t3 := newCompletedTask("default", "task3", nil, secondAgo)
+	t4 := newCompletedTask("critical", "critical_task", nil, hourAgo)
+	t5 := newCompletedTask("low", "low_priority_task", nil, hourAgo)
+
+	tests := []struct {
+		desc          string
+		completed     map[string][]base.Z
+		qname         string
+		wantCompleted map[string][]base.Z
+	}{
+		{
+			desc: "deletes expired task from default queue",
+			completed: map[string][]base.Z{
+				"default": {
+					{Message: t1, Score: secondAgo.Unix()},
+					{Message: t2, Score: hourFromNow.Unix()},
+					{Message: t3, Score: now.Unix()},
+				},
+			},
+			qname: "default",
+			wantCompleted: map[string][]base.Z{
+				"default": {
+					{Message: t2, Score: hourFromNow.Unix()},
+				},
+			},
+		},
+		{
+			desc: "deletes expired task from specified queue",
+			completed: map[string][]base.Z{
+				"default": {
+					{Message: t2, Score: secondAgo.Unix()},
+				},
+				"critical": {
+					{Message: t4, Score: secondAgo.Unix()},
+				},
+				"low": {
+					{Message: t5, Score: now.Unix()},
+				},
+			},
+			qname: "critical",
+			wantCompleted: map[string][]base.Z{
+				"default": {
+					{Message: t2, Score: secondAgo.Unix()},
+				},
+				"critical": {},
+				"low": {
+					{Message: t5, Score: now.Unix()},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedAllCompletedQueues(t, r.client, tc.completed)
+
+		if err := r.DeleteExpiredCompletedTasks(tc.qname); err != nil {
+			t.Errorf("DeleteExpiredCompletedTasks(%q) failed: %v", tc.qname, err)
+			continue
+		}
+
+		for qname, want := range tc.wantCompleted {
+			got := h.GetCompletedEntries(t, r.client, qname)
+			if diff := cmp.Diff(want, got, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("%s: diff found in %q completed set: want=%v, got=%v\n%s", tc.desc, qname, want, got, diff)
+			}
+		}
+	}
+}
+
 func TestListDeadlineExceeded(t *testing.T) {
 	t1 := h.NewTaskMessageWithQueue("task1", nil, "default")
 	t2 := h.NewTaskMessageWithQueue("task2", nil, "default")

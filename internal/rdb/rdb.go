@@ -794,6 +794,57 @@ func (r *RDB) forwardAll(qname string) (err error) {
 	return nil
 }
 
+// KEYS[1] -> asynq:{<qname>}:completed
+// ARGV[1] -> current time in unix time
+// ARGV[2] -> task key prefix
+// ARGV[3] -> batch size (i.e. maximum number of tasks to delete)
+//
+// Returns the number of tasks deleted.
+var deleteExpiredCompletedTasksCmd = redis.NewScript(`
+local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, tonumber(ARGV[3]))
+for _, id in ipairs(ids) do
+	redis.call("DEL", ARGV[2] .. id)
+	redis.call("ZREM", KEYS[1], id)
+end
+return table.getn(ids)`)
+
+// DeleteExpiredCompletedTasks checks for any expired tasks in the given queue's completed set,
+// and delete all expired tasks.
+func (r *RDB) DeleteExpiredCompletedTasks(qname string) error {
+	// Note: Do this operation in fix batches to prevent long running script.
+	const batchSize = 100
+	for {
+		n, err := r.deleteExpiredCompletedTasks(qname, batchSize)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return nil
+		}
+	}
+}
+
+// deleteExpiredCompletedTasks runs the lua script to delete expired deleted task with the specified
+// batch size. It reports the number of tasks deleted.
+func (r *RDB) deleteExpiredCompletedTasks(qname string, batchSize int) (int64, error) {
+	var op errors.Op = "rdb.DeleteExpiredCompletedTasks"
+	keys := []string{base.CompletedKey(qname)}
+	argv := []interface{}{
+		time.Now().Unix(),
+		base.TaskKeyPrefix(qname),
+		batchSize,
+	}
+	res, err := deleteExpiredCompletedTasksCmd.Run(context.Background(), r.client, keys, argv...).Result()
+	if err != nil {
+		return 0, errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, errors.E(op, errors.Internal, fmt.Sprintf("unexpected return value from Lua script: %v", res))
+	}
+	return n, nil
+}
+
 // KEYS[1] -> asynq:{<qname>}:deadlines
 // ARGV[1] -> deadline in unix time
 // ARGV[2] -> task key prefix
