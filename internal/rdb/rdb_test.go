@@ -2573,3 +2573,39 @@ func TestCancelationPubSub(t *testing.T) {
 	}
 	mu.Unlock()
 }
+
+func TestWriteResult(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	tests := []struct {
+		qname  string
+		taskID string
+		data   []byte
+	}{
+		{
+			qname:  "default",
+			taskID: uuid.NewString(),
+			data:   []byte("hello"),
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+
+		n, err := r.WriteResult(tc.qname, tc.taskID, tc.data)
+		if err != nil {
+			t.Errorf("WriteResult failed: %v", err)
+			continue
+		}
+		if n != len(tc.data) {
+			t.Errorf("WriteResult returned %d, want %d", n, len(tc.data))
+		}
+
+		taskKey := base.TaskKey(tc.qname, tc.taskID)
+		got := r.client.HGet(context.Background(), taskKey, "result").Val()
+		if got != string(tc.data) {
+			t.Errorf("`result` field under %q key is set to %q, want %q", taskKey, got, string(tc.data))
+		}
+	}
+}

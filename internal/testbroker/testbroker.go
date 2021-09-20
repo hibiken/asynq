@@ -198,6 +198,15 @@ func (tb *TestBroker) PublishCancelation(id string) error {
 	return tb.real.PublishCancelation(id)
 }
 
+func (tb *TestBroker) WriteResult(qname, id string, data []byte) (int, error) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return 0, errRedisDown
+	}
+	return tb.real.WriteResult(qname, id, data)
+}
+
 func (tb *TestBroker) Ping() error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()

@@ -1052,3 +1052,13 @@ func (r *RDB) ClearSchedulerHistory(entryID string) error {
 	}
 	return nil
 }
+
+// WriteResult writes the given result data for the specified task.
+func (r *RDB) WriteResult(qname, taskID string, data []byte) (int, error) {
+	var op errors.Op = "rdb.WriteResult"
+	taskKey := base.TaskKey(qname, taskID)
+	if err := r.client.HSet(context.Background(), taskKey, "result", data).Err(); err != nil {
+		return 0, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "hset", Err: err})
+	}
+	return len(data), nil
+}

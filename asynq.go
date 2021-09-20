@@ -454,3 +454,22 @@ func parseRedisSentinelURI(u *url.URL) (RedisConnOpt, error) {
 	}
 	return RedisFailoverClientOpt{MasterName: master, SentinelAddrs: addrs, Password: password}, nil
 }
+
+// ResultWriter is a client interface to write result data for a task.
+// ResultWriter instance should be retrieved by calling GetResultWriter function with the context
+// passed to Handler.
+type ResultWriter struct {
+	id     string // task ID this writer is responsible for
+	qname  string // queue name the task belongs to
+	broker base.Broker
+}
+
+// Write writes the given data as a result of the task the ResultWriter is associated with.
+func (w *ResultWriter) Write(data []byte) (n int, err error) {
+	return w.broker.WriteResult(w.qname, w.id, data)
+}
+
+// TaskID returns the ID of the task the ResultWriter is associated with.
+func (w *ResultWriter) TaskID() string {
+	return w.id
+}

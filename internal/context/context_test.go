@@ -12,9 +12,14 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/rdb"
 )
 
 func TestCreateContextWithFutureDeadline(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	rdbClient := rdb.NewRDB(r)
+
 	tests := []struct {
 		deadline time.Time
 	}{
@@ -28,7 +33,11 @@ func TestCreateContextWithFutureDeadline(t *testing.T) {
 			Payload: nil,
 		}
 
+<<<<<<< HEAD:internal/context/context_test.go
 		ctx, cancel := New(msg, tc.deadline)
+=======
+		ctx, cancel := createContext(msg, tc.deadline, rdbClient)
+>>>>>>> 59894e5... Add ResultWriter type:context_test.go
 
 		select {
 		case x := <-ctx.Done():
@@ -55,6 +64,10 @@ func TestCreateContextWithFutureDeadline(t *testing.T) {
 }
 
 func TestCreateContextWithPastDeadline(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	rdbClient := rdb.NewRDB(r)
+
 	tests := []struct {
 		deadline time.Time
 	}{
@@ -68,7 +81,11 @@ func TestCreateContextWithPastDeadline(t *testing.T) {
 			Payload: nil,
 		}
 
+<<<<<<< HEAD:internal/context/context_test.go
 		ctx, cancel := New(msg, tc.deadline)
+=======
+		ctx, cancel := createContext(msg, tc.deadline, rdbClient)
+>>>>>>> 59894e5... Add ResultWriter type:context_test.go
 		defer cancel()
 
 		select {
@@ -87,7 +104,36 @@ func TestCreateContextWithPastDeadline(t *testing.T) {
 	}
 }
 
+func TestGetResultWriterFromContext(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	rdbClient := rdb.NewRDB(r)
+	const deadline = time.Now().Add(30 * time.Minute)
+
+	tests := []struct {
+		msg *base.TaskMessage
+	}{
+		{msg: &base.TaskMessage{ID: uuid.NewString(), Type: "task1", Queue: "default"}},
+	}
+
+	for _, tc := range tests {
+		ctx, cancel := createContext(tc.msg, deadline, rdbClient)
+		defer cancel()
+
+		w, ok := GetResultWriter(ctx)
+		if !ok {
+			t.Error("GetResultWriter returned ok == false")
+		}
+
+		// TODO: Call Write and verify the result are written
+	}
+}
+
 func TestGetTaskMetadataFromContext(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	rdbClient := rdb.NewRDB(r)
+
 	tests := []struct {
 		desc string
 		msg  *base.TaskMessage
@@ -98,7 +144,11 @@ func TestGetTaskMetadataFromContext(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+<<<<<<< HEAD:internal/context/context_test.go
 		ctx, cancel := New(tc.msg, time.Now().Add(30*time.Minute))
+=======
+		ctx, cancel := createContext(tc.msg, time.Now().Add(30*time.Minute), rdbClient)
+>>>>>>> 59894e5... Add ResultWriter type:context_test.go
 		defer cancel()
 
 		id, ok := GetTaskID(ctx)
