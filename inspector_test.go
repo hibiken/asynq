@@ -952,6 +952,82 @@ func TestInspectorListArchivedTasks(t *testing.T) {
 	}
 }
 
+func newCompletedTaskMessage(typename, qname string, resultTTL time.Duration, completedAt time.Time) *base.TaskMessage {
+	msg := h.NewTaskMessageWithQueue(typename, nil, qname)
+	msg.ResultTTL = int64(resultTTL.Seconds())
+	msg.CompletedAt = completedAt.Unix()
+	return msg
+}
+
+func createCompletedTask(z base.Z) *TaskInfo {
+	return newTaskInfo(
+		z.Message,
+		base.TaskStateCompleted,
+		time.Time{}, // zero value for n/a
+	)
+}
+
+func TestInspectorListCompletedTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	m1 := newCompletedTaskMessage("task1", "default", 1*time.Hour, now.Add(-3*time.Minute))     // Expires in 57 mins
+	m2 := newCompletedTaskMessage("task2", "default", 30*time.Minute, now.Add(-10*time.Minute)) // Expires in 20 mins
+	m3 := newCompletedTaskMessage("task3", "default", 2*time.Hour, now.Add(-30*time.Minute))    // Expires in 90 mins
+	m4 := newCompletedTaskMessage("task4", "custom", 15*time.Minute, now.Add(-2*time.Minute))   // Expires in 13 mins
+	z1 := base.Z{Message: m1, Score: m1.CompletedAt + m1.ResultTTL}
+	z2 := base.Z{Message: m2, Score: m2.CompletedAt + m2.ResultTTL}
+	z3 := base.Z{Message: m3, Score: m3.CompletedAt + m3.ResultTTL}
+	z4 := base.Z{Message: m4, Score: m4.CompletedAt + m4.ResultTTL}
+
+	inspector := NewInspector(getRedisConnOpt(t))
+
+	tests := []struct {
+		desc      string
+		completed map[string][]base.Z
+		qname     string
+		want      []*TaskInfo
+	}{
+		{
+			desc: "with a few completed tasks",
+			completed: map[string][]base.Z{
+				"default": {z1, z2, z3},
+				"custom":  {z4},
+			},
+			qname: "default",
+			// Should be sorted by expiration time (CompletedAt + ResultTTL).
+			want: []*TaskInfo{
+				createCompletedTask(z2),
+				createCompletedTask(z1),
+				createCompletedTask(z3),
+			},
+		},
+		{
+			desc: "with empty completed queue",
+			completed: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			want:  []*TaskInfo(nil),
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		h.SeedAllCompletedQueues(t, r, tc.completed)
+
+		got, err := inspector.ListCompletedTasks(tc.qname)
+		if err != nil {
+			t.Errorf("%s; ListCompletedTasks(%q) returned error: %v", tc.desc, tc.qname, err)
+			continue
+		}
+		if diff := cmp.Diff(tc.want, got, cmp.AllowUnexported(TaskInfo{})); diff != "" {
+			t.Errorf("%s; ListCompletedTasks(%q) = %v, want %v; (-want,+got)\n%s",
+				tc.desc, tc.qname, got, tc.want, diff)
+		}
+	}
+}
+
 func TestInspectorListPagination(t *testing.T) {
 	// Create 100 tasks.
 	var msgs []*base.TaskMessage
@@ -1049,6 +1125,9 @@ func TestInspectorListTasksQueueNotFoundError(t *testing.T) {
 		}
 		if _, err := inspector.ListArchivedTasks(tc.qname); !errors.Is(err, tc.wantErr) {
 			t.Errorf("ListArchivedTasks(%q) returned error %v, want %v", tc.qname, err, tc.wantErr)
+		}
+		if _, err := inspector.ListCompletedTasks(tc.qname); !errors.Is(err, tc.wantErr) {
+			t.Errorf("ListCompletedTasks(%q) returned error %v, want %v", tc.qname, err, tc.wantErr)
 		}
 	}
 }

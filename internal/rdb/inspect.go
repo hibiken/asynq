@@ -103,7 +103,7 @@ return res`)
 // CurrentStats returns a current state of the queues.
 func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 	var op errors.Op = "rdb.CurrentStats"
-	exists, err := r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
+	exists, err := r.queueExists(qname)
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, err)
 	}
@@ -270,7 +270,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 	if n < 1 {
 		return nil, errors.E(op, errors.FailedPrecondition, "the number of days must be positive")
 	}
-	exists, err := r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
+	exists, err := r.queueExists(qname)
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
 	}
@@ -347,7 +347,7 @@ func reverse(x []string) {
 // checkQueueExists verifies whether the queue exists.
 // It returns QueueNotFoundError if queue doesn't exist.
 func (r *RDB) checkQueueExists(qname string) error {
-	exists, err := r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
+	exists, err := r.queueExists(qname)
 	if err != nil {
 		return errors.E(errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
 	}
@@ -462,7 +462,11 @@ func (p Pagination) stop() int64 {
 // ListPending returns pending tasks that are ready to be processed.
 func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
 	var op errors.Op = "rdb.ListPending"
-	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
+	exists, err := r.queueExists(qname)
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
+	}
+	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	res, err := r.listMessages(base.PendingKey(qname), qname, pgn)
@@ -475,7 +479,11 @@ func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskMessage, er
 // ListActive returns all tasks that are currently being processed for the given queue.
 func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
 	var op errors.Op = "rdb.ListActive"
-	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
+	exists, err := r.queueExists(qname)
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
+	}
+	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	res, err := r.listMessages(base.ActiveKey(qname), qname, pgn)
@@ -531,7 +539,11 @@ func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskMessa
 // to be processed in the future.
 func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]base.Z, error) {
 	var op errors.Op = "rdb.ListScheduled"
-	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
+	exists, err := r.queueExists(qname)
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
+	}
+	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	res, err := r.listZSetEntries(base.ScheduledKey(qname), qname, pgn)
@@ -545,7 +557,11 @@ func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]base.Z, error) {
 // and willl be retried in the future.
 func (r *RDB) ListRetry(qname string, pgn Pagination) ([]base.Z, error) {
 	var op errors.Op = "rdb.ListRetry"
-	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
+	exists, err := r.queueExists(qname)
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
+	}
+	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	res, err := r.listZSetEntries(base.RetryKey(qname), qname, pgn)
@@ -558,7 +574,11 @@ func (r *RDB) ListRetry(qname string, pgn Pagination) ([]base.Z, error) {
 // ListArchived returns all tasks from the given queue that have exhausted its retry limit.
 func (r *RDB) ListArchived(qname string, pgn Pagination) ([]base.Z, error) {
 	var op errors.Op = "rdb.ListArchived"
-	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
+	exists, err := r.queueExists(qname)
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
+	}
+	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	zs, err := r.listZSetEntries(base.ArchivedKey(qname), qname, pgn)
@@ -566,6 +586,28 @@ func (r *RDB) ListArchived(qname string, pgn Pagination) ([]base.Z, error) {
 		return nil, errors.E(op, errors.CanonicalCode(err), err)
 	}
 	return zs, nil
+}
+
+// ListCompleted returns all tasks from the given queue that have completed successfully.
+func (r *RDB) ListCompleted(qname string, pgn Pagination) ([]base.Z, error) {
+	var op errors.Op = "rdb.ListCompleted"
+	exists, err := r.queueExists(qname)
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
+	}
+	if !exists {
+		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
+	}
+	zs, err := r.listZSetEntries(base.CompletedKey(qname), qname, pgn)
+	if err != nil {
+		return nil, errors.E(op, errors.CanonicalCode(err), err)
+	}
+	return zs, nil
+}
+
+// Reports whether a queue with the given name exists.
+func (r *RDB) queueExists(qname string) (bool, error) {
+	return r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
 }
 
 // KEYS[1] -> key for ids set (e.g. asynq:{<qname>}:scheduled)
@@ -1334,7 +1376,7 @@ return 1`)
 // the queue is empty.
 func (r *RDB) RemoveQueue(qname string, force bool) error {
 	var op errors.Op = "rdb.RemoveQueue"
-	exists, err := r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
+	exists, err := r.queueExists(qname)
 	if err != nil {
 		return err
 	}

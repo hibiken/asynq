@@ -381,6 +381,34 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Task
 	return tasks, nil
 }
 
+// ListCompletedTasks retrieves completed tasks from the specified queue.
+// Tasks are sorted by expiration time (i.e. CompletedAt + ResultTTL) in descending order.
+//
+// By default, it retrieves the first 30 tasks.
+func (i *Inspector) ListCompletedTasks(qname string, opts ...ListOption) ([]*TaskInfo, error) {
+	if err := base.ValidateQueueName(qname); err != nil {
+		return nil, fmt.Errorf("asynq: %v", err)
+	}
+	opt := composeListOptions(opts...)
+	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
+	zs, err := i.rdb.ListCompleted(qname, pgn)
+	switch {
+	case errors.IsQueueNotFound(err):
+		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case err != nil:
+		return nil, fmt.Errorf("asynq: %v", err)
+	}
+	var tasks []*TaskInfo
+	for _, z := range zs {
+		tasks = append(tasks, newTaskInfo(
+			z.Message,
+			base.TaskStateCompleted,
+			time.Time{},
+		))
+	}
+	return tasks, nil
+}
+
 // DeleteAllPendingTasks deletes all pending tasks from the specified queue,
 // and reports the number tasks deleted.
 func (i *Inspector) DeleteAllPendingTasks(qname string) (int, error) {

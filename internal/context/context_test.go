@@ -108,7 +108,7 @@ func TestGetResultWriterFromContext(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	rdbClient := rdb.NewRDB(r)
-	const deadline = time.Now().Add(30 * time.Minute)
+	deadline := time.Now().Add(30 * time.Minute)
 
 	tests := []struct {
 		msg *base.TaskMessage
@@ -120,7 +120,7 @@ func TestGetResultWriterFromContext(t *testing.T) {
 		ctx, cancel := createContext(tc.msg, deadline, rdbClient)
 		defer cancel()
 
-		w, ok := GetResultWriter(ctx)
+		_, ok := GetResultWriter(ctx)
 		if !ok {
 			t.Error("GetResultWriter returned ok == false")
 		}

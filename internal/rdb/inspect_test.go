@@ -1115,7 +1115,7 @@ func TestListArchived(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
 		got, err := r.ListArchived(tc.qname, Pagination{Size: 20, Page: 0})
-		op := fmt.Sprintf("r.ListDead(%q, Pagination{Size: 20, Page: 0})", tc.qname)
+		op := fmt.Sprintf("r.ListArchived(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
@@ -1156,7 +1156,148 @@ func TestListArchivedPagination(t *testing.T) {
 
 	for _, tc := range tests {
 		got, err := r.ListArchived(tc.qname, Pagination{Size: tc.size, Page: tc.page})
-		op := fmt.Sprintf("r.ListDead(Pagination{Size: %d, Page: %d})",
+		op := fmt.Sprintf("r.ListArchived(Pagination{Size: %d, Page: %d})",
+			tc.size, tc.page)
+		if err != nil {
+			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
+			continue
+		}
+
+		if len(got) != tc.wantSize {
+			t.Errorf("%s; %s returned list of size %d, want %d",
+				tc.desc, op, len(got), tc.wantSize)
+			continue
+		}
+
+		if tc.wantSize == 0 {
+			continue
+		}
+
+		first := got[0].Message
+		if first.Type != tc.wantFirst {
+			t.Errorf("%s; %s returned a list with first message %q, want %q",
+				tc.desc, op, first.Type, tc.wantFirst)
+		}
+
+		last := got[len(got)-1].Message
+		if last.Type != tc.wantLast {
+			t.Errorf("%s; %s returned a list with the last message %q, want %q",
+				tc.desc, op, last.Type, tc.wantLast)
+		}
+	}
+}
+
+func TestListCompleted(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	msg1 := &base.TaskMessage{
+		ID:          uuid.NewString(),
+		Type:        "foo",
+		Queue:       "default",
+		CompletedAt: time.Now().Add(-2 * time.Hour).Unix(),
+	}
+	msg2 := &base.TaskMessage{
+		ID:          uuid.NewString(),
+		Type:        "foo",
+		Queue:       "default",
+		CompletedAt: time.Now().Add(-5 * time.Hour).Unix(),
+	}
+	msg3 := &base.TaskMessage{
+		ID:          uuid.NewString(),
+		Type:        "foo",
+		Queue:       "custom",
+		CompletedAt: time.Now().Add(-5 * time.Hour).Unix(),
+	}
+	expireAt1 := time.Now().Add(3 * time.Hour)
+	expireAt2 := time.Now().Add(4 * time.Hour)
+	expireAt3 := time.Now().Add(5 * time.Hour)
+
+	tests := []struct {
+		completed map[string][]base.Z
+		qname     string
+		want      []base.Z
+	}{
+		{
+			completed: map[string][]base.Z{
+				"default": {
+					{Message: msg1, Score: expireAt1.Unix()},
+					{Message: msg2, Score: expireAt2.Unix()},
+				},
+				"custom": {
+					{Message: msg3, Score: expireAt3.Unix()},
+				},
+			},
+			qname: "default",
+			want: []base.Z{
+				{Message: msg1, Score: expireAt1.Unix()},
+				{Message: msg2, Score: expireAt2.Unix()},
+			},
+		},
+		{
+			completed: map[string][]base.Z{
+				"default": {
+					{Message: msg1, Score: expireAt1.Unix()},
+					{Message: msg2, Score: expireAt2.Unix()},
+				},
+				"custom": {
+					{Message: msg3, Score: expireAt3.Unix()},
+				},
+			},
+			qname: "custom",
+			want: []base.Z{
+				{Message: msg3, Score: expireAt3.Unix()},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllCompletedQueues(t, r.client, tc.completed)
+
+		got, err := r.ListCompleted(tc.qname, Pagination{Size: 20, Page: 0})
+		op := fmt.Sprintf("r.ListCompleted(%q, Pagination{Size: 20, Page: 0})", tc.qname)
+		if err != nil {
+			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
+			continue
+		}
+		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
+			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
+				op, got, err, tc.want, diff)
+			continue
+		}
+	}
+
+}
+
+func TestListCompletedPagination(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	var entries []base.Z
+	for i := 0; i < 100; i++ {
+		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
+		entries = append(entries, base.Z{Message: msg, Score: int64(i)})
+	}
+	h.SeedCompletedQueue(t, r.client, entries, "default")
+
+	tests := []struct {
+		desc      string
+		qname     string
+		page      int
+		size      int
+		wantSize  int
+		wantFirst string
+		wantLast  string
+	}{
+		{"first page", "default", 0, 20, 20, "task 0", "task 19"},
+		{"second page", "default", 1, 20, 20, "task 20", "task 39"},
+		{"different page size", "default", 2, 30, 30, "task 60", "task 89"},
+		{"last page", "default", 3, 30, 10, "task 90", "task 99"},
+		{"out of range", "default", 4, 30, 0, "", ""},
+	}
+
+	for _, tc := range tests {
+		got, err := r.ListCompleted(tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListCompleted(Pagination{Size: %d, Page: %d})",
 			tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)

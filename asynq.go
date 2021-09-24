@@ -90,6 +90,15 @@ type TaskInfo struct {
 	CompletedAt time.Time
 }
 
+// If t is non-zero, returns time converted from t as unix time in seconds.
+// If t is zero, returns zero value of time.Time.
+func fromUnixTimeOrZero(t int64) time.Time {
+	if t == 0 {
+		return time.Time{}
+	}
+	return time.Unix(t, 0)
+}
+
 func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time.Time) *TaskInfo {
 	info := TaskInfo{
 		ID:            msg.ID,
@@ -100,25 +109,11 @@ func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time
 		Retried:       msg.Retried,
 		LastErr:       msg.ErrorMsg,
 		Timeout:       time.Duration(msg.Timeout) * time.Second,
+		Deadline:      fromUnixTimeOrZero(msg.Deadline),
 		ResultTTL:     time.Duration(msg.ResultTTL) * time.Second,
 		NextProcessAt: nextProcessAt,
-	}
-	if msg.LastFailedAt == 0 {
-		info.LastFailedAt = time.Time{}
-	} else {
-		info.LastFailedAt = time.Unix(msg.LastFailedAt, 0)
-	}
-
-	if msg.Deadline == 0 {
-		info.Deadline = time.Time{}
-	} else {
-		info.Deadline = time.Unix(msg.Deadline, 0)
-	}
-
-	if msg.CompletedAt == 0 {
-		info.CompletedAt = time.Time{}
-	} else {
-		info.CompletedAt = time.Unix(msg.CompletedAt, 0)
+		LastFailedAt:  fromUnixTimeOrZero(msg.LastFailedAt),
+		CompletedAt:   fromUnixTimeOrZero(msg.CompletedAt),
 	}
 
 	switch state {
@@ -132,6 +127,8 @@ func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time
 		info.State = TaskStateRetry
 	case base.TaskStateArchived:
 		info.State = TaskStateArchived
+	case base.TaskStateCompleted:
+		info.State = TaskStateCompleted
 	default:
 		panic(fmt.Sprintf("internal error: unknown state: %d", state))
 	}
@@ -156,6 +153,10 @@ const (
 
 	// Indicates that the task is archived and stored for inspection purposes.
 	TaskStateArchived
+
+	// Indicates that the task is processed successfully and stored until the retention perioid specified
+	// by result_ttl expires.
+	TaskStateCompleted
 )
 
 func (s TaskState) String() string {
@@ -170,6 +171,8 @@ func (s TaskState) String() string {
 		return "retry"
 	case TaskStateArchived:
 		return "archived"
+	case TaskStateCompleted:
+		return "completed"
 	}
 	panic("asynq: unknown task state")
 }
