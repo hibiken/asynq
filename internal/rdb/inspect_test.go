@@ -315,16 +315,19 @@ func TestGetTaskInfo(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 
+	now := time.Now()
+	fiveMinsFromNow := now.Add(5 * time.Minute)
+	oneHourFromNow := now.Add(1 * time.Hour)
+	twoHoursAgo := now.Add(-2 * time.Hour)
+
 	m1 := h.NewTaskMessageWithQueue("task1", nil, "default")
 	m2 := h.NewTaskMessageWithQueue("task2", nil, "default")
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 	m5 := h.NewTaskMessageWithQueue("task5", nil, "custom")
-
-	now := time.Now()
-	fiveMinsFromNow := now.Add(5 * time.Minute)
-	oneHourFromNow := now.Add(1 * time.Hour)
-	twoHoursAgo := now.Add(-2 * time.Hour)
+	m6 := h.NewTaskMessageWithQueue("task5", nil, "custom")
+	m6.CompletedAt = twoHoursAgo.Unix()
+	m6.ResultTTL = int64((24 * time.Hour).Seconds())
 
 	fixtures := struct {
 		active    map[string][]*base.TaskMessage
@@ -332,6 +335,7 @@ func TestGetTaskInfo(t *testing.T) {
 		scheduled map[string][]base.Z
 		retry     map[string][]base.Z
 		archived  map[string][]base.Z
+		completed map[string][]base.Z
 	}{
 		active: map[string][]*base.TaskMessage{
 			"default": {m1},
@@ -353,6 +357,10 @@ func TestGetTaskInfo(t *testing.T) {
 			"default": {},
 			"custom":  {{Message: m4, Score: twoHoursAgo.Unix()}},
 		},
+		completed: map[string][]base.Z{
+			"default": {},
+			"custom":  {{Message: m6, Score: m6.CompletedAt + m6.ResultTTL}},
+		},
 	}
 
 	h.SeedAllActiveQueues(t, r.client, fixtures.active)
@@ -360,6 +368,11 @@ func TestGetTaskInfo(t *testing.T) {
 	h.SeedAllScheduledQueues(t, r.client, fixtures.scheduled)
 	h.SeedAllRetryQueues(t, r.client, fixtures.retry)
 	h.SeedAllArchivedQueues(t, r.client, fixtures.archived)
+	h.SeedAllCompletedQueues(t, r.client, fixtures.completed)
+	// Write result data for the completed task.
+	if err := r.client.HSet(context.Background(), base.TaskKey(m6.Queue, m6.ID), "result", "foobar").Err(); err != nil {
+		t.Fatalf("Failed to write result data under task key: %v", err)
+	}
 
 	tests := []struct {
 		qname string
@@ -373,6 +386,7 @@ func TestGetTaskInfo(t *testing.T) {
 				Message:       m1,
 				State:         base.TaskStateActive,
 				NextProcessAt: time.Time{}, // zero value for N/A
+				Result:        nil,
 			},
 		},
 		{
@@ -382,6 +396,7 @@ func TestGetTaskInfo(t *testing.T) {
 				Message:       m2,
 				State:         base.TaskStateScheduled,
 				NextProcessAt: fiveMinsFromNow,
+				Result:        nil,
 			},
 		},
 		{
@@ -391,6 +406,7 @@ func TestGetTaskInfo(t *testing.T) {
 				Message:       m3,
 				State:         base.TaskStateRetry,
 				NextProcessAt: oneHourFromNow,
+				Result:        nil,
 			},
 		},
 		{
@@ -400,6 +416,7 @@ func TestGetTaskInfo(t *testing.T) {
 				Message:       m4,
 				State:         base.TaskStateArchived,
 				NextProcessAt: time.Time{}, // zero value for N/A
+				Result:        nil,
 			},
 		},
 		{
@@ -409,6 +426,17 @@ func TestGetTaskInfo(t *testing.T) {
 				Message:       m5,
 				State:         base.TaskStatePending,
 				NextProcessAt: now,
+				Result:        nil,
+			},
+		},
+		{
+			qname: "custom",
+			id:    m6.ID,
+			want: &base.TaskInfo{
+				Message:       m6,
+				State:         base.TaskStateCompleted,
+				NextProcessAt: time.Time{}, // zero value for N/A
+				Result:        []byte("foobar"),
 			},
 		},
 	}

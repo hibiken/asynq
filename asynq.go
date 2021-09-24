@@ -88,6 +88,10 @@ type TaskInfo struct {
 	// CompletedAt is the time the task is processed successfully.
 	// Zero value (i.e. time.Time{}) indicates no value.
 	CompletedAt time.Time
+
+	// Result holds the result data associated with the task.
+	// Use ResultWriter to write result data from the Handler.
+	Result []byte
 }
 
 // If t is non-zero, returns time converted from t as unix time in seconds.
@@ -99,7 +103,7 @@ func fromUnixTimeOrZero(t int64) time.Time {
 	return time.Unix(t, 0)
 }
 
-func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time.Time) *TaskInfo {
+func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time.Time, result []byte) *TaskInfo {
 	info := TaskInfo{
 		ID:            msg.ID,
 		Queue:         msg.Queue,
@@ -114,6 +118,7 @@ func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time
 		NextProcessAt: nextProcessAt,
 		LastFailedAt:  fromUnixTimeOrZero(msg.LastFailedAt),
 		CompletedAt:   fromUnixTimeOrZero(msg.CompletedAt),
+		Result:        result,
 	}
 
 	switch state {

@@ -299,6 +299,7 @@ type TaskInfo struct {
 	Message       *TaskMessage
 	State         TaskState
 	NextProcessAt time.Time
+	Result        []byte
 }
 
 // Z represents sorted set member.

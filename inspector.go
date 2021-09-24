@@ -186,7 +186,7 @@ func (i *Inspector) GetTaskInfo(qname, id string) (*TaskInfo, error) {
 	case err != nil:
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
-	return newTaskInfo(info.Message, info.State, info.NextProcessAt), nil
+	return newTaskInfo(info.Message, info.State, info.NextProcessAt, info.Result), nil
 }
 
 // ListOption specifies behavior of list operation.
