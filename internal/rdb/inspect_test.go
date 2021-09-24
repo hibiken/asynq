@@ -544,21 +544,24 @@ func TestListPending(t *testing.T) {
 	tests := []struct {
 		pending map[string][]*base.TaskMessage
 		qname   string
-		want    []*base.TaskMessage
+		want    []*base.TaskInfo
 	}{
 		{
 			pending: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {m1, m2},
 			},
 			qname: base.DefaultQueueName,
-			want:  []*base.TaskMessage{m1, m2},
+			want: []*base.TaskInfo{
+				{Message: m1, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
+				{Message: m2, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
+			},
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: nil,
 			},
 			qname: base.DefaultQueueName,
-			want:  []*base.TaskMessage(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -567,7 +570,10 @@ func TestListPending(t *testing.T) {
 				"low":                 {m4},
 			},
 			qname: base.DefaultQueueName,
-			want:  []*base.TaskMessage{m1, m2},
+			want: []*base.TaskInfo{
+				{Message: m1, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
+				{Message: m2, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
+			},
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -576,7 +582,9 @@ func TestListPending(t *testing.T) {
 				"low":                 {m4},
 			},
 			qname: "critical",
-			want:  []*base.TaskMessage{m3},
+			want: []*base.TaskInfo{
+				{Message: m3, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
+			},
 		},
 	}
 
@@ -590,7 +598,7 @@ func TestListPending(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmpopts.EquateApproxTime(2*time.Second)); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
 		}
@@ -650,13 +658,13 @@ func TestListPendingPagination(t *testing.T) {
 			continue
 		}
 
-		first := got[0]
+		first := got[0].Message
 		if first.Type != tc.wantFirst {
 			t.Errorf("%s; %s returned a list with first message %q, want %q",
 				tc.desc, op, first.Type, tc.wantFirst)
 		}
 
-		last := got[len(got)-1]
+		last := got[len(got)-1].Message
 		if last.Type != tc.wantLast {
 			t.Errorf("%s; %s returned a list with the last message %q, want %q",
 				tc.desc, op, last.Type, tc.wantLast)
@@ -756,13 +764,13 @@ func TestListActivePagination(t *testing.T) {
 			continue
 		}
 
-		first := got[0]
+		first := got[0].Message
 		if first.Type != tc.wantFirst {
 			t.Errorf("%s; %s returned a list with first message %q, want %q",
 				tc.desc, op, first.Type, tc.wantFirst)
 		}
 
-		last := got[len(got)-1]
+		last := got[len(got)-1].Message
 		if last.Type != tc.wantLast {
 			t.Errorf("%s; %s returned a list with the last message %q, want %q",
 				tc.desc, op, last.Type, tc.wantLast)
