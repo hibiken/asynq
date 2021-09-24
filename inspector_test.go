@@ -424,7 +424,7 @@ func TestInspectorHistory(t *testing.T) {
 }
 
 func createPendingTask(msg *base.TaskMessage) *TaskInfo {
-	return newTaskInfo(msg, base.TaskStatePending, time.Now())
+	return newTaskInfo(msg, base.TaskStatePending, time.Now(), nil)
 }
 
 func TestInspectorGetTaskInfo(t *testing.T) {
@@ -489,6 +489,7 @@ func TestInspectorGetTaskInfo(t *testing.T) {
 				m1,
 				base.TaskStateActive,
 				time.Time{}, // zero value for n/a
+				nil,
 			),
 		},
 		{
@@ -498,6 +499,7 @@ func TestInspectorGetTaskInfo(t *testing.T) {
 				m2,
 				base.TaskStateScheduled,
 				fiveMinsFromNow,
+				nil,
 			),
 		},
 		{
@@ -507,6 +509,7 @@ func TestInspectorGetTaskInfo(t *testing.T) {
 				m3,
 				base.TaskStateRetry,
 				oneHourFromNow,
+				nil,
 			),
 		},
 		{
@@ -516,6 +519,7 @@ func TestInspectorGetTaskInfo(t *testing.T) {
 				m4,
 				base.TaskStateArchived,
 				time.Time{}, // zero value for n/a
+				nil,
 			),
 		},
 		{
@@ -525,6 +529,7 @@ func TestInspectorGetTaskInfo(t *testing.T) {
 				m5,
 				base.TaskStatePending,
 				now,
+				nil,
 			),
 		},
 	}
@@ -722,8 +727,8 @@ func TestInspectorListActiveTasks(t *testing.T) {
 			},
 			qname: "default",
 			want: []*TaskInfo{
-				newTaskInfo(m1, base.TaskStateActive, time.Time{}),
-				newTaskInfo(m2, base.TaskStateActive, time.Time{}),
+				newTaskInfo(m1, base.TaskStateActive, time.Time{}, nil),
+				newTaskInfo(m2, base.TaskStateActive, time.Time{}, nil),
 			},
 		},
 	}
@@ -749,6 +754,7 @@ func createScheduledTask(z base.Z) *TaskInfo {
 		z.Message,
 		base.TaskStateScheduled,
 		time.Unix(z.Score, 0),
+		nil,
 	)
 }
 
@@ -818,6 +824,7 @@ func createRetryTask(z base.Z) *TaskInfo {
 		z.Message,
 		base.TaskStateRetry,
 		time.Unix(z.Score, 0),
+		nil,
 	)
 }
 
@@ -888,6 +895,7 @@ func createArchivedTask(z base.Z) *TaskInfo {
 		z.Message,
 		base.TaskStateArchived,
 		time.Time{}, // zero value for n/a
+		nil,
 	)
 }
 
@@ -964,6 +972,7 @@ func createCompletedTask(z base.Z) *TaskInfo {
 		z.Message,
 		base.TaskStateCompleted,
 		time.Time{}, // zero value for n/a
+		nil,         // TODO: Test with result data
 	)
 }
 

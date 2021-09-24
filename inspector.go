@@ -259,17 +259,21 @@ func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*TaskI
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	msgs, err := i.rdb.ListPending(qname, pgn)
+	infos, err := i.rdb.ListPending(qname, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
 	case err != nil:
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
-	now := time.Now()
 	var tasks []*TaskInfo
-	for _, m := range msgs {
-		tasks = append(tasks, newTaskInfo(m, base.TaskStatePending, now))
+	for _, i := range infos {
+		tasks = append(tasks, newTaskInfo(
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
+		))
 	}
 	return tasks, err
 }
@@ -283,7 +287,7 @@ func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*TaskIn
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	msgs, err := i.rdb.ListActive(qname, pgn)
+	infos, err := i.rdb.ListActive(qname, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
@@ -291,8 +295,13 @@ func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*TaskIn
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
-	for _, m := range msgs {
-		tasks = append(tasks, newTaskInfo(m, base.TaskStateActive, time.Time{}))
+	for _, i := range infos {
+		tasks = append(tasks, newTaskInfo(
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
+		))
 	}
 	return tasks, err
 }
@@ -307,7 +316,7 @@ func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*Tas
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	zs, err := i.rdb.ListScheduled(qname, pgn)
+	infos, err := i.rdb.ListScheduled(qname, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
@@ -315,11 +324,12 @@ func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*Tas
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
-	for _, z := range zs {
+	for _, i := range infos {
 		tasks = append(tasks, newTaskInfo(
-			z.Message,
-			base.TaskStateScheduled,
-			time.Unix(z.Score, 0),
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
 		))
 	}
 	return tasks, nil
@@ -335,7 +345,7 @@ func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*TaskInf
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	zs, err := i.rdb.ListRetry(qname, pgn)
+	infos, err := i.rdb.ListRetry(qname, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
@@ -343,11 +353,12 @@ func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*TaskInf
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
-	for _, z := range zs {
+	for _, i := range infos {
 		tasks = append(tasks, newTaskInfo(
-			z.Message,
-			base.TaskStateRetry,
-			time.Unix(z.Score, 0),
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
 		))
 	}
 	return tasks, nil
@@ -363,7 +374,7 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Task
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	zs, err := i.rdb.ListArchived(qname, pgn)
+	infos, err := i.rdb.ListArchived(qname, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
@@ -371,11 +382,12 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Task
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
-	for _, z := range zs {
+	for _, i := range infos {
 		tasks = append(tasks, newTaskInfo(
-			z.Message,
-			base.TaskStateArchived,
-			time.Time{},
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
 		))
 	}
 	return tasks, nil
@@ -391,7 +403,7 @@ func (i *Inspector) ListCompletedTasks(qname string, opts ...ListOption) ([]*Tas
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	zs, err := i.rdb.ListCompleted(qname, pgn)
+	infos, err := i.rdb.ListCompleted(qname, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
@@ -399,11 +411,12 @@ func (i *Inspector) ListCompletedTasks(qname string, opts ...ListOption) ([]*Tas
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
-	for _, z := range zs {
+	for _, i := range infos {
 		tasks = append(tasks, newTaskInfo(
-			z.Message,
-			base.TaskStateCompleted,
-			time.Time{},
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
 		))
 	}
 	return tasks, nil
