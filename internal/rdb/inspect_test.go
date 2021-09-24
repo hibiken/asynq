@@ -2058,13 +2058,13 @@ func TestRunAllArchivedTasks(t *testing.T) {
 
 		got, err := r.RunAllArchivedTasks(tc.qname)
 		if err != nil {
-			t.Errorf("%s; r.RunAllDeadTasks(%q) = %v, %v; want %v, nil",
+			t.Errorf("%s; r.RunAllArchivedTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
 			continue
 		}
 
 		if got != tc.want {
-			t.Errorf("%s; r.RunAllDeadTasks(%q) = %v, %v; want %v, nil",
+			t.Errorf("%s; r.RunAllArchivedTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
 		}
 
@@ -3463,15 +3463,85 @@ func TestDeleteAllArchivedTasks(t *testing.T) {
 
 		got, err := r.DeleteAllArchivedTasks(tc.qname)
 		if err != nil {
-			t.Errorf("r.DeleteAllDeadTasks(%q) returned error: %v", tc.qname, err)
+			t.Errorf("r.DeleteAllArchivedTasks(%q) returned error: %v", tc.qname, err)
 		}
 		if got != tc.want {
-			t.Errorf("r.DeleteAllDeadTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
+			t.Errorf("r.DeleteAllArchivedTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantArchived {
 			gotArchived := h.GetArchivedMessages(t, r.client, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ArchivedKey(qname), diff)
+			}
+		}
+	}
+}
+
+func newCompletedTaskMessage(qname, typename string, resultTTL time.Duration, completedAt time.Time) *base.TaskMessage {
+	msg := h.NewTaskMessageWithQueue(typename, nil, qname)
+	msg.ResultTTL = int64(resultTTL.Seconds())
+	msg.CompletedAt = completedAt.Unix()
+	return msg
+}
+
+func TestDeleteAllCompletedTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	m1 := newCompletedTaskMessage("default", "task1", 30*time.Minute, now.Add(-2*time.Minute))
+	m2 := newCompletedTaskMessage("default", "task2", 30*time.Minute, now.Add(-5*time.Minute))
+	m3 := newCompletedTaskMessage("custom", "task3", 30*time.Minute, now.Add(-5*time.Minute))
+
+	tests := []struct {
+		completed     map[string][]base.Z
+		qname         string
+		want          int64
+		wantCompleted map[string][]*base.TaskMessage
+	}{
+		{
+			completed: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: m1.CompletedAt + m1.ResultTTL},
+					{Message: m2, Score: m2.CompletedAt + m2.ResultTTL},
+				},
+				"custom": {
+					{Message: m3, Score: m2.CompletedAt + m3.ResultTTL},
+				},
+			},
+			qname: "default",
+			want:  2,
+			wantCompleted: map[string][]*base.TaskMessage{
+				"default": {},
+				"custom":  {m3},
+			},
+		},
+		{
+			completed: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			want:  0,
+			wantCompleted: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllCompletedQueues(t, r.client, tc.completed)
+
+		got, err := r.DeleteAllCompletedTasks(tc.qname)
+		if err != nil {
+			t.Errorf("r.DeleteAllCompletedTasks(%q) returned error: %v", tc.qname, err)
+		}
+		if got != tc.want {
+			t.Errorf("r.DeleteAllCompletedTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
+		}
+		for qname, want := range tc.wantCompleted {
+			gotCompleted := h.GetCompletedMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotCompleted, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.CompletedKey(qname), diff)
 			}
 		}
 	}
@@ -3530,10 +3600,10 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 
 		got, err := r.DeleteAllArchivedTasks(tc.qname)
 		if err != nil {
-			t.Errorf("r.DeleteAllDeadTasks(%q) returned error: %v", tc.qname, err)
+			t.Errorf("r.DeleteAllArchivedTasks(%q) returned error: %v", tc.qname, err)
 		}
 		if got != tc.want {
-			t.Errorf("r.DeleteAllDeadTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
+			t.Errorf("r.DeleteAllArchivedTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantArchived {
 			gotArchived := h.GetArchivedMessages(t, r.client, qname)

@@ -1394,6 +1394,72 @@ func TestInspectorDeleteAllArchivedTasks(t *testing.T) {
 	}
 }
 
+func TestInspectorDeleteAllCompletedTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	m1 := newCompletedTaskMessage("task1", "default", 30*time.Minute, now.Add(-2*time.Minute))
+	m2 := newCompletedTaskMessage("task2", "default", 30*time.Minute, now.Add(-5*time.Minute))
+	m3 := newCompletedTaskMessage("task3", "default", 30*time.Minute, now.Add(-10*time.Minute))
+	m4 := newCompletedTaskMessage("task4", "custom", 30*time.Minute, now.Add(-3*time.Minute))
+	z1 := base.Z{Message: m1, Score: m1.CompletedAt + m1.ResultTTL}
+	z2 := base.Z{Message: m2, Score: m2.CompletedAt + m2.ResultTTL}
+	z3 := base.Z{Message: m3, Score: m3.CompletedAt + m3.ResultTTL}
+	z4 := base.Z{Message: m4, Score: m4.CompletedAt + m4.ResultTTL}
+
+	inspector := NewInspector(getRedisConnOpt(t))
+
+	tests := []struct {
+		completed     map[string][]base.Z
+		qname         string
+		want          int
+		wantCompleted map[string][]base.Z
+	}{
+		{
+			completed: map[string][]base.Z{
+				"default": {z1, z2, z3},
+				"custom":  {z4},
+			},
+			qname: "default",
+			want:  3,
+			wantCompleted: map[string][]base.Z{
+				"default": {},
+				"custom":  {z4},
+			},
+		},
+		{
+			completed: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			want:  0,
+			wantCompleted: map[string][]base.Z{
+				"default": {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		h.SeedAllCompletedQueues(t, r, tc.completed)
+
+		got, err := inspector.DeleteAllCompletedTasks(tc.qname)
+		if err != nil {
+			t.Errorf("DeleteAllCompletedTasks(%q) returned error: %v", tc.qname, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("DeleteAllCompletedTasks(%q) = %d, want %d", tc.qname, got, tc.want)
+		}
+		for qname, want := range tc.wantCompleted {
+			gotCompleted := h.GetCompletedEntries(t, r, qname)
+			if diff := cmp.Diff(want, gotCompleted, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected completed tasks in queue %q: (-want, +got)\n%s", qname, diff)
+			}
+		}
+	}
+}
+
 func TestInspectorArchiveAllPendingTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()

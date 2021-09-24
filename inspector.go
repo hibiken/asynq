@@ -449,6 +449,16 @@ func (i *Inspector) DeleteAllArchivedTasks(qname string) (int, error) {
 	return int(n), err
 }
 
+// DeleteAllCompletedTasks deletes all completed tasks from the specified queue,
+// and reports the number tasks deleted.
+func (i *Inspector) DeleteAllCompletedTasks(qname string) (int, error) {
+	if err := base.ValidateQueueName(qname); err != nil {
+		return 0, err
+	}
+	n, err := i.rdb.DeleteAllCompletedTasks(qname)
+	return int(n), err
+}
+
 // DeleteTask deletes a task with the given id from the given queue.
 // The task needs to be in pending, scheduled, retry, or archived state,
 // otherwise DeleteTask will return an error.

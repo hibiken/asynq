@@ -1174,6 +1174,20 @@ func (r *RDB) DeleteAllScheduledTasks(qname string) (int64, error) {
 	return n, nil
 }
 
+// DeleteAllCompletedTasks deletes all completed tasks from the given queue
+// and returns the number of tasks deleted.
+func (r *RDB) DeleteAllCompletedTasks(qname string) (int64, error) {
+	var op errors.Op = "rdb.DeleteAllCompletedTasks"
+	n, err := r.deleteAll(base.CompletedKey(qname), qname)
+	if errors.IsQueueNotFound(err) {
+		return 0, errors.E(op, errors.NotFound, err)
+	}
+	if err != nil {
+		return 0, errors.E(op, errors.Unknown, err)
+	}
+	return n, nil
+}
+
 // deleteAllCmd deletes tasks from the given zset.
 //
 // Input:
