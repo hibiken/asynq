@@ -684,7 +684,7 @@ func TestListActive(t *testing.T) {
 	tests := []struct {
 		inProgress map[string][]*base.TaskMessage
 		qname      string
-		want       []*base.TaskMessage
+		want       []*base.TaskInfo
 	}{
 		{
 			inProgress: map[string][]*base.TaskMessage{
@@ -693,14 +693,17 @@ func TestListActive(t *testing.T) {
 				"low":      {m4},
 			},
 			qname: "default",
-			want:  []*base.TaskMessage{m1, m2},
+			want: []*base.TaskInfo{
+				{Message: m1, State: base.TaskStateActive, NextProcessAt: time.Time{}, Result: nil},
+				{Message: m2, State: base.TaskStateActive, NextProcessAt: time.Time{}, Result: nil},
+			},
 		},
 		{
 			inProgress: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			qname: "default",
-			want:  []*base.TaskMessage(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 	}
 
@@ -714,7 +717,7 @@ func TestListActive(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.inProgress)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmpopts.EquateApproxTime(1*time.Second)); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
 		}
@@ -793,7 +796,7 @@ func TestListScheduled(t *testing.T) {
 	tests := []struct {
 		scheduled map[string][]base.Z
 		qname     string
-		want      []base.Z
+		want      []*base.TaskInfo
 	}{
 		{
 			scheduled: map[string][]base.Z{
@@ -808,10 +811,10 @@ func TestListScheduled(t *testing.T) {
 			},
 			qname: "default",
 			// should be sorted by score in ascending order
-			want: []base.Z{
-				{Message: m3, Score: p3.Unix()},
-				{Message: m1, Score: p1.Unix()},
-				{Message: m2, Score: p2.Unix()},
+			want: []*base.TaskInfo{
+				{Message: m3, NextProcessAt: p3, State: base.TaskStateScheduled, Result: nil},
+				{Message: m1, NextProcessAt: p1, State: base.TaskStateScheduled, Result: nil},
+				{Message: m2, NextProcessAt: p2, State: base.TaskStateScheduled, Result: nil},
 			},
 		},
 		{
@@ -826,8 +829,8 @@ func TestListScheduled(t *testing.T) {
 				},
 			},
 			qname: "custom",
-			want: []base.Z{
-				{Message: m4, Score: p4.Unix()},
+			want: []*base.TaskInfo{
+				{Message: m4, NextProcessAt: p4, State: base.TaskStateScheduled, Result: nil},
 			},
 		},
 		{
@@ -835,7 +838,7 @@ func TestListScheduled(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []base.Z(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 	}
 
@@ -849,7 +852,7 @@ func TestListScheduled(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmpopts.EquateApproxTime(1*time.Second)); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
 		}
@@ -951,7 +954,7 @@ func TestListRetry(t *testing.T) {
 	tests := []struct {
 		retry map[string][]base.Z
 		qname string
-		want  []base.Z
+		want  []*base.TaskInfo
 	}{
 		{
 			retry: map[string][]base.Z{
@@ -964,9 +967,9 @@ func TestListRetry(t *testing.T) {
 				},
 			},
 			qname: "default",
-			want: []base.Z{
-				{Message: m1, Score: p1.Unix()},
-				{Message: m2, Score: p2.Unix()},
+			want: []*base.TaskInfo{
+				{Message: m1, NextProcessAt: p1, State: base.TaskStateRetry, Result: nil},
+				{Message: m2, NextProcessAt: p2, State: base.TaskStateRetry, Result: nil},
 			},
 		},
 		{
@@ -980,8 +983,8 @@ func TestListRetry(t *testing.T) {
 				},
 			},
 			qname: "custom",
-			want: []base.Z{
-				{Message: m3, Score: p3.Unix()},
+			want: []*base.TaskInfo{
+				{Message: m3, NextProcessAt: p3, State: base.TaskStateRetry, Result: nil},
 			},
 		},
 		{
@@ -989,7 +992,7 @@ func TestListRetry(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []base.Z(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 	}
 
@@ -1003,7 +1006,7 @@ func TestListRetry(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmpopts.EquateApproxTime(1*time.Second)); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
 				op, got, err, tc.want, diff)
 			continue
@@ -1104,7 +1107,7 @@ func TestListArchived(t *testing.T) {
 	tests := []struct {
 		archived map[string][]base.Z
 		qname    string
-		want     []base.Z
+		want     []*base.TaskInfo
 	}{
 		{
 			archived: map[string][]base.Z{
@@ -1117,9 +1120,9 @@ func TestListArchived(t *testing.T) {
 				},
 			},
 			qname: "default",
-			want: []base.Z{
-				{Message: m2, Score: f2.Unix()}, // FIXME: shouldn't be sorted in the other order?
-				{Message: m1, Score: f1.Unix()},
+			want: []*base.TaskInfo{
+				{Message: m2, NextProcessAt: time.Time{}, State: base.TaskStateArchived, Result: nil}, // FIXME: shouldn't be sorted in the other order?
+				{Message: m1, NextProcessAt: time.Time{}, State: base.TaskStateArchived, Result: nil},
 			},
 		},
 		{
@@ -1133,8 +1136,8 @@ func TestListArchived(t *testing.T) {
 				},
 			},
 			qname: "custom",
-			want: []base.Z{
-				{Message: m3, Score: f3.Unix()},
+			want: []*base.TaskInfo{
+				{Message: m3, NextProcessAt: time.Time{}, State: base.TaskStateArchived, Result: nil},
 			},
 		},
 		{
@@ -1142,7 +1145,7 @@ func TestListArchived(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []base.Z(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 	}
 
@@ -1156,7 +1159,7 @@ func TestListArchived(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
 				op, got, err, tc.want, diff)
 			continue
@@ -1251,7 +1254,7 @@ func TestListCompleted(t *testing.T) {
 	tests := []struct {
 		completed map[string][]base.Z
 		qname     string
-		want      []base.Z
+		want      []*base.TaskInfo
 	}{
 		{
 			completed: map[string][]base.Z{
@@ -1264,9 +1267,9 @@ func TestListCompleted(t *testing.T) {
 				},
 			},
 			qname: "default",
-			want: []base.Z{
-				{Message: msg1, Score: expireAt1.Unix()},
-				{Message: msg2, Score: expireAt2.Unix()},
+			want: []*base.TaskInfo{
+				{Message: msg1, NextProcessAt: time.Time{}, State: base.TaskStateCompleted, Result: nil},
+				{Message: msg2, NextProcessAt: time.Time{}, State: base.TaskStateCompleted, Result: nil},
 			},
 		},
 		{
@@ -1280,8 +1283,8 @@ func TestListCompleted(t *testing.T) {
 				},
 			},
 			qname: "custom",
-			want: []base.Z{
-				{Message: msg3, Score: expireAt3.Unix()},
+			want: []*base.TaskInfo{
+				{Message: msg3, NextProcessAt: time.Time{}, State: base.TaskStateCompleted, Result: nil},
 			},
 		},
 	}
@@ -1296,7 +1299,7 @@ func TestListCompleted(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
 				op, got, err, tc.want, diff)
 			continue
