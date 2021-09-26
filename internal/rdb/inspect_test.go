@@ -67,6 +67,7 @@ func TestCurrentStats(t *testing.T) {
 		scheduled  map[string][]base.Z
 		retry      map[string][]base.Z
 		archived   map[string][]base.Z
+		completed  map[string][]base.Z
 		processed  map[string]int
 		failed     map[string]int
 		paused     []string
@@ -102,6 +103,11 @@ func TestCurrentStats(t *testing.T) {
 				"critical": {},
 				"low":      {},
 			},
+			completed: map[string][]base.Z{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
 			processed: map[string]int{
 				"default":  120,
 				"critical": 100,
@@ -123,6 +129,7 @@ func TestCurrentStats(t *testing.T) {
 				Scheduled: 2,
 				Retry:     0,
 				Archived:  0,
+				Completed: 0,
 				Processed: 120,
 				Failed:    2,
 				Timestamp: now,
@@ -157,6 +164,11 @@ func TestCurrentStats(t *testing.T) {
 				"critical": {},
 				"low":      {},
 			},
+			completed: map[string][]base.Z{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
 			processed: map[string]int{
 				"default":  120,
 				"critical": 100,
@@ -178,6 +190,7 @@ func TestCurrentStats(t *testing.T) {
 				Scheduled: 0,
 				Retry:     0,
 				Archived:  0,
+				Completed: 0,
 				Processed: 100,
 				Failed:    0,
 				Timestamp: now,
@@ -197,6 +210,7 @@ func TestCurrentStats(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.SeedAllCompletedQueues(t, r.client, tc.completed)
 		for qname, n := range tc.processed {
 			processedKey := base.ProcessedKey(qname, now)
 			r.client.Set(context.Background(), processedKey, n, 0)
