@@ -276,6 +276,7 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 		scheduled map[string][]base.Z
 		retry     map[string][]base.Z
 		archived  map[string][]base.Z
+		completed map[string][]base.Z
 		processed map[string]int
 		failed    map[string]int
 		qname     string
@@ -310,6 +311,11 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 				"critical": {},
 				"low":      {},
 			},
+			completed: map[string][]base.Z{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
 			processed: map[string]int{
 				"default":  120,
 				"critical": 100,
@@ -329,6 +335,7 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 				Scheduled: 2,
 				Retry:     0,
 				Archived:  0,
+				Completed: 0,
 				Processed: 120,
 				Failed:    2,
 				Paused:    false,
@@ -344,6 +351,7 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r, tc.scheduled)
 		h.SeedAllRetryQueues(t, r, tc.retry)
 		h.SeedAllArchivedQueues(t, r, tc.archived)
+		h.SeedAllCompletedQueues(t, r, tc.completed)
 		for qname, n := range tc.processed {
 			processedKey := base.ProcessedKey(qname, now)
 			r.Set(context.Background(), processedKey, n, 0)

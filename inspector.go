@@ -66,6 +66,8 @@ type QueueInfo struct {
 	Retry int
 	// Number of archived tasks.
 	Archived int
+	// Number of stored completed tasks.
+	Completed int
 
 	// Total number of tasks being processed during the given date.
 	// The number includes both succeeded and failed tasks.
@@ -99,6 +101,7 @@ func (i *Inspector) GetQueueInfo(qname string) (*QueueInfo, error) {
 		Scheduled:   stats.Scheduled,
 		Retry:       stats.Retry,
 		Archived:    stats.Archived,
+		Completed:   stats.Completed,
 		Processed:   stats.Processed,
 		Failed:      stats.Failed,
 		Paused:      stats.Paused,
