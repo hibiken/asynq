@@ -63,7 +63,7 @@ func cronList(cmd *cobra.Command, args []string) {
 	cols := []string{"EntryID", "Spec", "Type", "Payload", "Options", "Next", "Prev"}
 	printRows := func(w io.Writer, tmpl string) {
 		for _, e := range entries {
-			fmt.Fprintf(w, tmpl, e.ID, e.Spec, e.Task.Type(), formatPayload(e.Task.Payload()), e.Opts,
+			fmt.Fprintf(w, tmpl, e.ID, e.Spec, e.Task.Type(), sprintBytes(e.Task.Payload()), e.Opts,
 				nextEnqueue(e.Next), prevEnqueue(e.Prev))
 		}
 	}

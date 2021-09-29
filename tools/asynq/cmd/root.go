@@ -199,9 +199,9 @@ func printTable(cols []string, printRows func(w io.Writer, tmpl string)) {
 	tw.Flush()
 }
 
-// formatPayload returns string representation of payload if data is printable.
-// If data is not printable, it returns a string describing payload is not printable.
-func formatPayload(payload []byte) string {
+// sprintBytes returns a string representation of the given byte slice if data is printable.
+// If data is not printable, it returns a string describing it is not printable.
+func sprintBytes(payload []byte) string {
 	if !isPrintable(payload) {
 		return "non-printable bytes"
 	}
