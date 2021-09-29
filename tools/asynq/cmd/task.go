@@ -520,6 +520,8 @@ func taskDeleteAll(cmd *cobra.Command, args []string) {
 		n, err = i.DeleteAllRetryTasks(qname)
 	case "archived":
 		n, err = i.DeleteAllArchivedTasks(qname)
+	case "completed":
+		n, err = i.DeleteAllCompletedTasks(qname)
 	default:
 		fmt.Printf("error: unsupported state %q\n", state)
 		os.Exit(1)
