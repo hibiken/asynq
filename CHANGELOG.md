@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `NewTask` takes `Option` as variadic argument
+- Bumped minimum supported go version to 1.14 (i.e. go1.14 or higher is required).
 
 ### Added
 
