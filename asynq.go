@@ -82,10 +82,10 @@ type TaskInfo struct {
 	// zero if not applicable.
 	NextProcessAt time.Time
 
-	// ResulTTL is the retention period after the task is successfully processed.
+	// ResulTTL is duration of the retention period after the task is successfully processed.
 	ResultTTL time.Duration
 
-	// CompletedAt is the time the task is processed successfully.
+	// CompletedAt is the time when the task is processed successfully.
 	// Zero value (i.e. time.Time{}) indicates no value.
 	CompletedAt time.Time
 

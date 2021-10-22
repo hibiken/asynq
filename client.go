@@ -180,7 +180,7 @@ func (d processInOption) String() string     { return fmt.Sprintf("ProcessIn(%v)
 func (d processInOption) Type() OptionType   { return ProcessInOpt }
 func (d processInOption) Value() interface{} { return time.Duration(d) }
 
-// ResultTTL returns an option to specify the retention period for the task.
+// ResultTTL returns an option to specify the duration of retention period for the task.
 // If this option is provided, the task will be stored as a completed task after successful processing.
 // A completed task will be deleted after the TTL expires.
 func ResultTTL(ttl time.Duration) Option {
