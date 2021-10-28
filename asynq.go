@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/url"
@@ -26,10 +27,19 @@ type Task struct {
 
 	// opts holds options for the task.
 	opts []Option
+
+	// w is the ResultWriter for the task.
+	w *ResultWriter
 }
 
 func (t *Task) Type() string    { return t.typename }
 func (t *Task) Payload() []byte { return t.payload }
+
+// ResultWriter returns a pointer to the ResultWriter associated with the task.
+//
+// Nil pointer is returned if called on a newly created task (i.e. task created by calling NewTask).
+// Only the tasks passed to Handler.ProcessTask have a valid ResultWriter pointer.
+func (t *Task) ResultWriter() *ResultWriter { return t.w }
 
 // NewTask returns a new Task given a type name and payload data.
 // Options can be passed to configure task processing behavior.
@@ -38,6 +48,15 @@ func NewTask(typename string, payload []byte, opts ...Option) *Task {
 		typename: typename,
 		payload:  payload,
 		opts:     opts,
+	}
+}
+
+// newTask creates a task with the given typename, payload and ResultWriter.
+func newTask(typename string, payload []byte, w *ResultWriter) *Task {
+	return &Task{
+		typename: typename,
+		payload:  payload,
+		w:        w,
 	}
 }
 
@@ -470,10 +489,16 @@ type ResultWriter struct {
 	id     string // task ID this writer is responsible for
 	qname  string // queue name the task belongs to
 	broker base.Broker
+	ctx    context.Context // context associated with the task
 }
 
 // Write writes the given data as a result of the task the ResultWriter is associated with.
 func (w *ResultWriter) Write(data []byte) (n int, err error) {
+	select {
+	case <-w.ctx.Done():
+		return 0, fmt.Errorf("failed to result task result: %v", w.ctx.Err())
+	default:
+	}
 	return w.broker.WriteResult(w.qname, w.id, data)
 }
 

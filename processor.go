@@ -208,7 +208,17 @@ func (p *processor) exec() {
 
 			resCh := make(chan error, 1)
 			go func() {
-				resCh <- p.perform(ctx, NewTask(msg.Type, msg.Payload))
+				task := newTask(
+					msg.Type,
+					msg.Payload,
+					&ResultWriter{
+						id:     msg.ID,
+						qname:  msg.Queue,
+						broker: p.broker,
+						ctx:    ctx,
+					},
+				)
+				resCh <- p.perform(ctx, task)
 			}()
 
 			select {

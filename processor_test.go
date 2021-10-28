@@ -20,6 +20,12 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 )
 
+var taskCmpOpts = []cmp.Option{
+	sortTaskOpt,                               // sort the tasks
+	cmp.AllowUnexported(Task{}),               // allow typename, payload fields to be compared
+	cmpopts.IgnoreFields(Task{}, "opts", "w"), // ignore opts, w fields
+}
+
 // fakeHeartbeater receives from starting and finished channels and do nothing.
 func fakeHeartbeater(starting <-chan *workerInfo, finished <-chan *base.TaskMessage, done <-chan struct{}) {
 	for {
@@ -133,7 +139,7 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 		p.shutdown()
 
 		mu.Lock()
-		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Task{})); diff != "" {
+		if diff := cmp.Diff(tc.wantProcessed, processed, taskCmpOpts...); diff != "" {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 		mu.Unlock()
@@ -206,7 +212,7 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 		p.shutdown()
 
 		mu.Lock()
-		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Task{})); diff != "" {
+		if diff := cmp.Diff(tc.wantProcessed, processed, taskCmpOpts...); diff != "" {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 		mu.Unlock()
@@ -263,7 +269,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 		p.shutdown()
 
 		mu.Lock()
-		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Task{})); diff != "" {
+		if diff := cmp.Diff(tc.wantProcessed, processed, taskCmpOpts...); diff != "" {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 		mu.Unlock()
@@ -610,7 +616,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		}
 		p.shutdown()
 
-		if diff := cmp.Diff(tc.wantProcessed, processed, sortTaskOpt, cmp.AllowUnexported(Task{})); diff != "" {
+		if diff := cmp.Diff(tc.wantProcessed, processed, taskCmpOpts...); diff != "" {
 			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
 		}
 
