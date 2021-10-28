@@ -101,8 +101,8 @@ type TaskInfo struct {
 	// zero if not applicable.
 	NextProcessAt time.Time
 
-	// ResultTTL is duration of the retention period after the task is successfully processed.
-	ResultTTL time.Duration
+	// Retention is duration of the retention period after the task is successfully processed.
+	Retention time.Duration
 
 	// CompletedAt is the time when the task is processed successfully.
 	// Zero value (i.e. time.Time{}) indicates no value.
@@ -133,7 +133,7 @@ func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time
 		LastErr:       msg.ErrorMsg,
 		Timeout:       time.Duration(msg.Timeout) * time.Second,
 		Deadline:      fromUnixTimeOrZero(msg.Deadline),
-		ResultTTL:     time.Duration(msg.ResultTTL) * time.Second,
+		Retention:     time.Duration(msg.Retention) * time.Second,
 		NextProcessAt: nextProcessAt,
 		LastFailedAt:  fromUnixTimeOrZero(msg.LastFailedAt),
 		CompletedAt:   fromUnixTimeOrZero(msg.CompletedAt),

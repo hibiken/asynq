@@ -433,7 +433,7 @@ func (r *RDB) MarkAsComplete(msg *base.TaskMessage) error {
 	argv := []interface{}{
 		msg.ID,
 		statsExpireAt.Unix(),
-		now.Unix() + msg.ResultTTL,
+		now.Unix() + msg.Retention,
 		encoded,
 	}
 	// Note: We cannot pass empty unique key when running this script in redis-cluster.

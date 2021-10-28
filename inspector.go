@@ -397,7 +397,7 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Task
 }
 
 // ListCompletedTasks retrieves completed tasks from the specified queue.
-// Tasks are sorted by expiration time (i.e. CompletedAt + ResultTTL) in descending order.
+// Tasks are sorted by expiration time (i.e. CompletedAt + Retention) in descending order.
 //
 // By default, it retrieves the first 30 tasks.
 func (i *Inspector) ListCompletedTasks(qname string, opts ...ListOption) ([]*TaskInfo, error) {
@@ -844,6 +844,12 @@ func parseOption(s string) (Option, error) {
 			return nil, err
 		}
 		return ProcessIn(d), nil
+	case "Retention":
+		d, err := time.ParseDuration(arg)
+		if err != nil {
+			return nil, err
+		}
+		return Retention(d), nil
 	default:
 		return nil, fmt.Errorf("cannot not parse option string %q", s)
 	}

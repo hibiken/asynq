@@ -251,7 +251,7 @@ func (p *processor) requeue(msg *base.TaskMessage) {
 }
 
 func (p *processor) handleSucceededMessage(ctx context.Context, msg *base.TaskMessage) {
-	if msg.ResultTTL > 0 {
+	if msg.Retention > 0 {
 		p.markAsComplete(ctx, msg)
 	} else {
 		p.markAsDone(ctx, msg)

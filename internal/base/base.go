@@ -239,8 +239,8 @@ type TaskMessage struct {
 	// Empty string indicates that no uniqueness lock was used.
 	UniqueKey string
 
-	// ResultTTL specifies the number of seconds the task should be retained after completion.
-	ResultTTL int64
+	// Retention specifies the number of seconds the task should be retained after completion.
+	Retention int64
 
 	// CompletedAt is the time the task was processed successfully in Unix time,
 	// the number of seconds elapsed since January 1, 1970 UTC.
@@ -266,7 +266,7 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 		Timeout:      msg.Timeout,
 		Deadline:     msg.Deadline,
 		UniqueKey:    msg.UniqueKey,
-		ResultTtl:    msg.ResultTTL,
+		Retention:    msg.Retention,
 		CompletedAt:  msg.CompletedAt,
 	})
 }
@@ -289,7 +289,7 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 		Timeout:      pbmsg.GetTimeout(),
 		Deadline:     pbmsg.GetDeadline(),
 		UniqueKey:    pbmsg.GetUniqueKey(),
-		ResultTTL:    pbmsg.GetResultTtl(),
+		Retention:    pbmsg.GetRetention(),
 		CompletedAt:  pbmsg.GetCompletedAt(),
 	}, nil
 }

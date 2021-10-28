@@ -413,8 +413,8 @@ func TestProcessorMarkAsComplete(t *testing.T) {
 	msg1 := h.NewTaskMessage("one", nil)
 	msg2 := h.NewTaskMessage("two", nil)
 	msg3 := h.NewTaskMessageWithQueue("three", nil, "custom")
-	msg1.ResultTTL = 3600
-	msg3.ResultTTL = 7200
+	msg1.Retention = 3600
+	msg3.Retention = 7200
 
 	handler := func(ctx context.Context, task *Task) error { return nil }
 
@@ -444,8 +444,8 @@ func TestProcessorMarkAsComplete(t *testing.T) {
 			},
 			wantCompleted: func(completedAt time.Time) map[string][]base.Z {
 				return map[string][]base.Z{
-					"default": {{Message: h.TaskMessageWithCompletedAt(*msg1, completedAt), Score: completedAt.Unix() + msg1.ResultTTL}},
-					"custom":  {{Message: h.TaskMessageWithCompletedAt(*msg3, completedAt), Score: completedAt.Unix() + msg3.ResultTTL}},
+					"default": {{Message: h.TaskMessageWithCompletedAt(*msg1, completedAt), Score: completedAt.Unix() + msg1.Retention}},
+					"custom":  {{Message: h.TaskMessageWithCompletedAt(*msg3, completedAt), Score: completedAt.Unix() + msg3.Retention}},
 				}
 			},
 		},

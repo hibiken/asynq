@@ -46,7 +46,7 @@ const (
 	ProcessAtOpt
 	ProcessInOpt
 	TaskIDOpt
-	ResultTTLOpt
+	RetentionOpt
 )
 
 // Option specifies the task processing behavior.
@@ -71,7 +71,7 @@ type (
 	uniqueOption    time.Duration
 	processAtOption time.Time
 	processInOption time.Duration
-	resultTTLOption time.Duration
+	retentionOption time.Duration
 )
 
 // MaxRetry returns an option to specify the max number of times
@@ -180,16 +180,16 @@ func (d processInOption) String() string     { return fmt.Sprintf("ProcessIn(%v)
 func (d processInOption) Type() OptionType   { return ProcessInOpt }
 func (d processInOption) Value() interface{} { return time.Duration(d) }
 
-// ResultTTL returns an option to specify the duration of retention period for the task.
+// Retention returns an option to specify the duration of retention period for the task.
 // If this option is provided, the task will be stored as a completed task after successful processing.
-// A completed task will be deleted after the TTL expires.
-func ResultTTL(ttl time.Duration) Option {
-	return resultTTLOption(ttl)
+// A completed task will be deleted after the specified duration elapses.
+func Retention(d time.Duration) Option {
+	return retentionOption(d)
 }
 
-func (ttl resultTTLOption) String() string     { return fmt.Sprintf("ResultTTL(%v)", time.Duration(ttl)) }
-func (ttl resultTTLOption) Type() OptionType   { return ResultTTLOpt }
-func (ttl resultTTLOption) Value() interface{} { return time.Duration(ttl) }
+func (ttl retentionOption) String() string     { return fmt.Sprintf("Retention(%v)", time.Duration(ttl)) }
+func (ttl retentionOption) Type() OptionType   { return RetentionOpt }
+func (ttl retentionOption) Value() interface{} { return time.Duration(ttl) }
 
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
@@ -209,7 +209,7 @@ type option struct {
 	deadline  time.Time
 	uniqueTTL time.Duration
 	processAt time.Time
-	resultTTL time.Duration
+	retention time.Duration
 }
 
 // composeOptions merges user provided options into the default options
@@ -251,8 +251,8 @@ func composeOptions(opts ...Option) (option, error) {
 			res.processAt = time.Time(opt)
 		case processInOption:
 			res.processAt = time.Now().Add(time.Duration(opt))
-		case resultTTLOption:
-			res.resultTTL = time.Duration(opt)
+		case retentionOption:
+			res.retention = time.Duration(opt)
 		default:
 			// ignore unexpected option
 		}
@@ -332,7 +332,7 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 		Deadline:  deadline.Unix(),
 		Timeout:   int64(timeout.Seconds()),
 		UniqueKey: uniqueKey,
-		ResultTTL: int64(opt.resultTTL.Seconds()),
+		Retention: int64(opt.retention.Seconds()),
 	}
 	now := time.Now()
 	var state base.TaskState

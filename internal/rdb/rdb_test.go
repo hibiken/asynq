@@ -815,7 +815,7 @@ func TestMarkAsComplete(t *testing.T) {
 		Timeout:   1800,
 		Deadline:  0,
 		Queue:     "default",
-		ResultTTL: 3600,
+		Retention: 3600,
 	}
 	t2 := &base.TaskMessage{
 		ID:        uuid.NewString(),
@@ -824,7 +824,7 @@ func TestMarkAsComplete(t *testing.T) {
 		Timeout:   0,
 		Deadline:  now.Add(2 * time.Hour).Unix(),
 		Queue:     "custom",
-		ResultTTL: 7200,
+		Retention: 7200,
 	}
 	t3 := &base.TaskMessage{
 		ID:        uuid.NewString(),
@@ -834,7 +834,7 @@ func TestMarkAsComplete(t *testing.T) {
 		Deadline:  0,
 		UniqueKey: "asynq:{default}:unique:b0804ec967f48520697662a204f5fe72",
 		Queue:     "default",
-		ResultTTL: 1800,
+		Retention: 1800,
 	}
 	t1Deadline := now.Unix() + t1.Timeout
 	t2Deadline := t2.Deadline
@@ -875,7 +875,7 @@ func TestMarkAsComplete(t *testing.T) {
 			},
 			wantCompleted: func(completedAt time.Time) map[string][]base.Z {
 				return map[string][]base.Z{
-					"default": {{Message: h.TaskMessageWithCompletedAt(*t1, completedAt), Score: completedAt.Unix() + t1.ResultTTL}},
+					"default": {{Message: h.TaskMessageWithCompletedAt(*t1, completedAt), Score: completedAt.Unix() + t1.Retention}},
 					"custom":  {},
 				}
 			},
@@ -900,7 +900,7 @@ func TestMarkAsComplete(t *testing.T) {
 			},
 			wantCompleted: func(completedAt time.Time) map[string][]base.Z {
 				return map[string][]base.Z{
-					"default": {{Message: h.TaskMessageWithCompletedAt(*t1, completedAt), Score: completedAt.Unix() + t1.ResultTTL}},
+					"default": {{Message: h.TaskMessageWithCompletedAt(*t1, completedAt), Score: completedAt.Unix() + t1.Retention}},
 				}
 			},
 		},
@@ -929,7 +929,7 @@ func TestMarkAsComplete(t *testing.T) {
 			},
 			wantCompleted: func(completedAt time.Time) map[string][]base.Z {
 				return map[string][]base.Z{
-					"default": {{Message: h.TaskMessageWithCompletedAt(*t3, completedAt), Score: completedAt.Unix() + t3.ResultTTL}},
+					"default": {{Message: h.TaskMessageWithCompletedAt(*t3, completedAt), Score: completedAt.Unix() + t3.Retention}},
 					"custom":  {},
 				}
 			},

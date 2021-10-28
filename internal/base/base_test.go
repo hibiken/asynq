@@ -376,7 +376,7 @@ func TestMessageEncoding(t *testing.T) {
 				Retried:   0,
 				Timeout:   1800,
 				Deadline:  1692311100,
-				ResultTTL: 3600,
+				Retention: 3600,
 			},
 			out: &TaskMessage{
 				Type:      "task1",
@@ -387,7 +387,7 @@ func TestMessageEncoding(t *testing.T) {
 				Retried:   0,
 				Timeout:   1800,
 				Deadline:  1692311100,
-				ResultTTL: 3600,
+				Retention: 3600,
 			},
 		},
 	}

@@ -417,10 +417,10 @@ func TestClientEnqueue(t *testing.T) {
 			},
 		},
 		{
-			desc: "With ResultTTL option",
+			desc: "With Retention option",
 			task: task,
 			opts: []Option{
-				ResultTTL(24 * time.Hour),
+				Retention(24 * time.Hour),
 			},
 			wantInfo: &TaskInfo{
 				Queue:         "default",
@@ -434,7 +434,7 @@ func TestClientEnqueue(t *testing.T) {
 				Timeout:       defaultTimeout,
 				Deadline:      time.Time{},
 				NextProcessAt: now,
-				ResultTTL:     24 * time.Hour,
+				Retention:     24 * time.Hour,
 			},
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {
@@ -445,7 +445,7 @@ func TestClientEnqueue(t *testing.T) {
 						Queue:     "default",
 						Timeout:   int64(defaultTimeout.Seconds()),
 						Deadline:  noDeadline.Unix(),
-						ResultTTL: int64((24 * time.Hour).Seconds()),
+						Retention: int64((24 * time.Hour).Seconds()),
 					},
 				},
 			},

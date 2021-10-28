@@ -968,9 +968,9 @@ func TestInspectorListArchivedTasks(t *testing.T) {
 	}
 }
 
-func newCompletedTaskMessage(typename, qname string, resultTTL time.Duration, completedAt time.Time) *base.TaskMessage {
+func newCompletedTaskMessage(typename, qname string, retention time.Duration, completedAt time.Time) *base.TaskMessage {
 	msg := h.NewTaskMessageWithQueue(typename, nil, qname)
-	msg.ResultTTL = int64(resultTTL.Seconds())
+	msg.Retention = int64(retention.Seconds())
 	msg.CompletedAt = completedAt.Unix()
 	return msg
 }
@@ -992,10 +992,10 @@ func TestInspectorListCompletedTasks(t *testing.T) {
 	m2 := newCompletedTaskMessage("task2", "default", 30*time.Minute, now.Add(-10*time.Minute)) // Expires in 20 mins
 	m3 := newCompletedTaskMessage("task3", "default", 2*time.Hour, now.Add(-30*time.Minute))    // Expires in 90 mins
 	m4 := newCompletedTaskMessage("task4", "custom", 15*time.Minute, now.Add(-2*time.Minute))   // Expires in 13 mins
-	z1 := base.Z{Message: m1, Score: m1.CompletedAt + m1.ResultTTL}
-	z2 := base.Z{Message: m2, Score: m2.CompletedAt + m2.ResultTTL}
-	z3 := base.Z{Message: m3, Score: m3.CompletedAt + m3.ResultTTL}
-	z4 := base.Z{Message: m4, Score: m4.CompletedAt + m4.ResultTTL}
+	z1 := base.Z{Message: m1, Score: m1.CompletedAt + m1.Retention}
+	z2 := base.Z{Message: m2, Score: m2.CompletedAt + m2.Retention}
+	z3 := base.Z{Message: m3, Score: m3.CompletedAt + m3.Retention}
+	z4 := base.Z{Message: m4, Score: m4.CompletedAt + m4.Retention}
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
@@ -1012,7 +1012,7 @@ func TestInspectorListCompletedTasks(t *testing.T) {
 				"custom":  {z4},
 			},
 			qname: "default",
-			// Should be sorted by expiration time (CompletedAt + ResultTTL).
+			// Should be sorted by expiration time (CompletedAt + Retention).
 			want: []*TaskInfo{
 				createCompletedTask(z2),
 				createCompletedTask(z1),
@@ -1419,10 +1419,10 @@ func TestInspectorDeleteAllCompletedTasks(t *testing.T) {
 	m2 := newCompletedTaskMessage("task2", "default", 30*time.Minute, now.Add(-5*time.Minute))
 	m3 := newCompletedTaskMessage("task3", "default", 30*time.Minute, now.Add(-10*time.Minute))
 	m4 := newCompletedTaskMessage("task4", "custom", 30*time.Minute, now.Add(-3*time.Minute))
-	z1 := base.Z{Message: m1, Score: m1.CompletedAt + m1.ResultTTL}
-	z2 := base.Z{Message: m2, Score: m2.CompletedAt + m2.ResultTTL}
-	z3 := base.Z{Message: m3, Score: m3.CompletedAt + m3.ResultTTL}
-	z4 := base.Z{Message: m4, Score: m4.CompletedAt + m4.ResultTTL}
+	z1 := base.Z{Message: m1, Score: m1.CompletedAt + m1.Retention}
+	z2 := base.Z{Message: m2, Score: m2.CompletedAt + m2.Retention}
+	z3 := base.Z{Message: m3, Score: m3.CompletedAt + m3.Retention}
+	z4 := base.Z{Message: m4, Score: m4.CompletedAt + m4.Retention}
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
@@ -3196,6 +3196,7 @@ func TestParseOption(t *testing.T) {
 		{`Unique(1h)`, UniqueOpt, 1 * time.Hour},
 		{ProcessAt(oneHourFromNow).String(), ProcessAtOpt, oneHourFromNow},
 		{`ProcessIn(10m)`, ProcessInOpt, 10 * time.Minute},
+		{`Retention(24h)`, RetentionOpt, 24 * time.Hour},
 	}
 
 	for _, tc := range tests {
@@ -3227,7 +3228,7 @@ func TestParseOption(t *testing.T) {
 				if gotVal != tc.wantVal.(int) {
 					t.Fatalf("got value %v, want %v", gotVal, tc.wantVal)
 				}
-			case TimeoutOpt, UniqueOpt, ProcessInOpt:
+			case TimeoutOpt, UniqueOpt, ProcessInOpt, RetentionOpt:
 				gotVal, ok := got.Value().(time.Duration)
 				if !ok {
 					t.Fatal("returned Option with non duration value")

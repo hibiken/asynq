@@ -341,7 +341,7 @@ func TestGetTaskInfo(t *testing.T) {
 	m5 := h.NewTaskMessageWithQueue("task5", nil, "custom")
 	m6 := h.NewTaskMessageWithQueue("task5", nil, "custom")
 	m6.CompletedAt = twoHoursAgo.Unix()
-	m6.ResultTTL = int64((24 * time.Hour).Seconds())
+	m6.Retention = int64((24 * time.Hour).Seconds())
 
 	fixtures := struct {
 		active    map[string][]*base.TaskMessage
@@ -373,7 +373,7 @@ func TestGetTaskInfo(t *testing.T) {
 		},
 		completed: map[string][]base.Z{
 			"default": {},
-			"custom":  {{Message: m6, Score: m6.CompletedAt + m6.ResultTTL}},
+			"custom":  {{Message: m6, Score: m6.CompletedAt + m6.Retention}},
 		},
 	}
 
@@ -3530,9 +3530,9 @@ func TestDeleteAllArchivedTasks(t *testing.T) {
 	}
 }
 
-func newCompletedTaskMessage(qname, typename string, resultTTL time.Duration, completedAt time.Time) *base.TaskMessage {
+func newCompletedTaskMessage(qname, typename string, retention time.Duration, completedAt time.Time) *base.TaskMessage {
 	msg := h.NewTaskMessageWithQueue(typename, nil, qname)
-	msg.ResultTTL = int64(resultTTL.Seconds())
+	msg.Retention = int64(retention.Seconds())
 	msg.CompletedAt = completedAt.Unix()
 	return msg
 }
@@ -3554,11 +3554,11 @@ func TestDeleteAllCompletedTasks(t *testing.T) {
 		{
 			completed: map[string][]base.Z{
 				"default": {
-					{Message: m1, Score: m1.CompletedAt + m1.ResultTTL},
-					{Message: m2, Score: m2.CompletedAt + m2.ResultTTL},
+					{Message: m1, Score: m1.CompletedAt + m1.Retention},
+					{Message: m2, Score: m2.CompletedAt + m2.Retention},
 				},
 				"custom": {
-					{Message: m3, Score: m2.CompletedAt + m3.ResultTTL},
+					{Message: m3, Score: m2.CompletedAt + m3.Retention},
 				},
 			},
 			qname: "default",
