@@ -23,9 +23,14 @@ func ExampleNewSemaphore() {
 	// call sema.Close() when appropriate
 
 	_ = asynq.HandlerFunc(func(ctx context.Context, task *asynq.Task) error {
-		if !sema.Acquire(ctx) {
+		ok, err := sema.Acquire(ctx)
+		if err != nil {
+			return err
+		}
+		if !ok {
 			return &RateLimitError{RetryIn: 30 * time.Second}
 		}
+
 		// Make sure to release the token once we're done.
 		defer sema.Release(ctx)
 

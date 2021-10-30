@@ -2,7 +2,7 @@
 // Use of this source code is governed by a MIT license
 // that can be found in the LICENSE file.
 
-package asynq
+package context
 
 import (
 	"context"
@@ -27,8 +27,8 @@ type ctxKey int
 // Its value of zero is arbitrary.
 const metadataCtxKey ctxKey = 0
 
-// createContext returns a context and cancel function for a given task message.
-func createContext(msg *base.TaskMessage, deadline time.Time) (context.Context, context.CancelFunc) {
+// New returns a context and cancel function for a given task message.
+func New(msg *base.TaskMessage, deadline time.Time) (context.Context, context.CancelFunc) {
 	metadata := taskMetadata{
 		id:         msg.ID.String(),
 		maxRetry:   msg.Retry,
