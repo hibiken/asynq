@@ -13,7 +13,6 @@ import (
 	"time"
 
 	h "github.com/hibiken/asynq/internal/asynqtest"
-	asynqcontext "github.com/hibiken/asynq/internal/context"
 )
 
 // Creates a new task of type "task<n>" with payload {"data": n}.
@@ -105,7 +104,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 				n = 1
 				b.Logf("internal error: could not get data from payload")
 			}
-			retried, ok := asynqcontext.GetRetryCount(ctx)
+			retried, ok := GetRetryCount(ctx)
 			if !ok {
 				b.Logf("internal error: could not get retry count from context")
 			}
