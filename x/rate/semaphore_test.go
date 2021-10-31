@@ -43,14 +43,14 @@ func TestNewSemaphore(t *testing.T) {
 			connOpt:   &badConnOpt{},
 		},
 		{
-			desc:      "Zero maxConcurrency should panic",
-			wantPanic: "rate.NewSemaphore: maxConcurrency cannot be less than 1",
+			desc:      "Zero maxTokens should panic",
+			wantPanic: "rate.NewSemaphore: maxTokens cannot be less than 1",
 		},
 		{
-			desc:           "Empty name should panic",
+			desc:           "Empty scope should panic",
 			maxConcurrency: 2,
 			name:           "    ",
-			wantPanic:      "rate.NewSemaphore: name should not be empty",
+			wantPanic:      "rate.NewSemaphore: scope should not be empty",
 		},
 	}
 
@@ -86,7 +86,7 @@ func TestNewSemaphore_Acquire(t *testing.T) {
 		wantErr        string
 	}{
 		{
-			desc:           "Should acquire lock when current lock count is less than maxConcurrency",
+			desc:           "Should acquire lock when current lock count is less than maxTokens",
 			name:           "task-1",
 			maxConcurrency: 3,
 			taskIDs:        []uuid.UUID{uuid.New(), uuid.New()},
@@ -99,7 +99,7 @@ func TestNewSemaphore_Acquire(t *testing.T) {
 			want: []bool{true, true},
 		},
 		{
-			desc:           "Should fail acquiring lock when current lock count is equal to maxConcurrency",
+			desc:           "Should fail acquiring lock when current lock count is equal to maxTokens",
 			name:           "task-2",
 			maxConcurrency: 3,
 			taskIDs:        []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New()},
@@ -250,7 +250,7 @@ func TestNewSemaphore_Release(t *testing.T) {
 				}, time.Now().Add(time.Second))
 			},
 			wantCount: 1,
-			wantErr:   fmt.Sprintf("no lock found for task %q", testID.String()),
+			wantErr:   fmt.Sprintf("no token found for task %q", testID.String()),
 		},
 	}
 
