@@ -14,8 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Retention` option is added to allow user to specify task retention after completion.
 - `TaskID` option is added to allow user to specify task ID.
 - `ErrTaskIDConflict` sentinel error value is added.
+- `ResultWriter` type is added and provided through `Task.RetulsWriter` method.
+- `TaskInfo` has new fields  `CompletedAt`, `Result` and `Retention`.
 
 ### Removed
 
