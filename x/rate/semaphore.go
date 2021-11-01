@@ -1,3 +1,4 @@
+// Package rate contains rate limiting strategies for asynq.Handler(s).
 package rate
 
 import (
@@ -51,9 +52,9 @@ local count = redis.call("ZCARD", KEYS[1])
 
 if (count < tonumber(ARGV[1])) then
      redis.call("ZADD", KEYS[1], ARGV[3], ARGV[4])
-     return true
+     return 'true'
 else
-    return false
+     return 'false'
 end
 `)
 
@@ -75,18 +76,13 @@ func (s *Semaphore) Acquire(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("provided context is missing task ID value")
 	}
 
-	b, err := acquireCmd.Run(ctx, s.rc,
+	return acquireCmd.Run(ctx, s.rc,
 		[]string{semaphoreKey(s.scope)},
 		s.maxTokens,
 		time.Now().Unix(),
 		d.Unix(),
 		taskID,
 	).Bool()
-	if err == redis.Nil {
-		return b, nil
-	}
-
-	return b, err
 }
 
 // Release will release the token on the counting semaphore.
