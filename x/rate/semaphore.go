@@ -109,6 +109,6 @@ func (s *Semaphore) Close() error {
 	return s.rc.Close()
 }
 
-func semaphoreKey(name string) string {
-	return fmt.Sprintf("asynq:sema:%s", name)
+func semaphoreKey(scope string) string {
+	return fmt.Sprintf("asynq:sema:%s", scope)
 }
