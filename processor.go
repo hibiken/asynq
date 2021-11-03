@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
+	asynqcontext "github.com/hibiken/asynq/internal/context"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/log"
 	"golang.org/x/time/rate"
@@ -189,7 +190,7 @@ func (p *processor) exec() {
 				<-p.sema // release token
 			}()
 
-			ctx, cancel := createContext(msg, deadline)
+			ctx, cancel := asynqcontext.New(msg, deadline)
 			p.cancelations.Add(msg.ID.String(), cancel)
 			defer func() {
 				cancel()

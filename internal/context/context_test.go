@@ -2,7 +2,7 @@
 // Use of this source code is governed by a MIT license
 // that can be found in the LICENSE file.
 
-package asynq
+package context
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func TestCreateContextWithFutureDeadline(t *testing.T) {
 			Payload: nil,
 		}
 
-		ctx, cancel := createContext(msg, tc.deadline)
+		ctx, cancel := New(msg, tc.deadline)
 
 		select {
 		case x := <-ctx.Done():
@@ -68,7 +68,7 @@ func TestCreateContextWithPastDeadline(t *testing.T) {
 			Payload: nil,
 		}
 
-		ctx, cancel := createContext(msg, tc.deadline)
+		ctx, cancel := New(msg, tc.deadline)
 		defer cancel()
 
 		select {
@@ -98,7 +98,7 @@ func TestGetTaskMetadataFromContext(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		ctx, cancel := createContext(tc.msg, time.Now().Add(30*time.Minute))
+		ctx, cancel := New(tc.msg, time.Now().Add(30*time.Minute))
 		defer cancel()
 
 		id, ok := GetTaskID(ctx)
