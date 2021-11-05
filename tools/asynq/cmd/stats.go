@@ -7,11 +7,13 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
+	"unicode/utf8"
 
 	"github.com/fatih/color"
 	"github.com/hibiken/asynq/internal/rdb"
@@ -58,6 +60,7 @@ type AggregateStats struct {
 	Scheduled int
 	Retry     int
 	Archived  int
+	Completed int
 	Processed int
 	Failed    int
 	Timestamp time.Time
@@ -85,6 +88,7 @@ func stats(cmd *cobra.Command, args []string) {
 		aggStats.Scheduled += s.Scheduled
 		aggStats.Retry += s.Retry
 		aggStats.Archived += s.Archived
+		aggStats.Completed += s.Completed
 		aggStats.Processed += s.Processed
 		aggStats.Failed += s.Failed
 		aggStats.Timestamp = s.Timestamp
@@ -124,21 +128,49 @@ func stats(cmd *cobra.Command, args []string) {
 }
 
 func printStatsByState(s *AggregateStats) {
-	format := strings.Repeat("%v\t", 5) + "\n"
+	format := strings.Repeat("%v\t", 6) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	fmt.Fprintf(tw, format, "active", "pending", "scheduled", "retry", "archived")
-	fmt.Fprintf(tw, format, "----------", "--------", "---------", "-----", "----")
-	fmt.Fprintf(tw, format, s.Active, s.Pending, s.Scheduled, s.Retry, s.Archived)
+	fmt.Fprintf(tw, format, "active", "pending", "scheduled", "retry", "archived", "completed")
+	width := maxInt(9 /* defaultWidth */, maxWidthOf(s.Active, s.Pending, s.Scheduled, s.Retry, s.Archived, s.Completed)) // length of widest column
+	sep := strings.Repeat("-", width)
+	fmt.Fprintf(tw, format, sep, sep, sep, sep, sep, sep)
+	fmt.Fprintf(tw, format, s.Active, s.Pending, s.Scheduled, s.Retry, s.Archived, s.Completed)
 	tw.Flush()
+}
+
+// numDigits returns the number of digits in n.
+func numDigits(n int) int {
+	return len(strconv.Itoa(n))
+}
+
+// maxWidthOf returns the max number of digits amount the provided vals.
+func maxWidthOf(vals ...int) int {
+	max := 0
+	for _, v := range vals {
+		if vw := numDigits(v); vw > max {
+			max = vw
+		}
+	}
+	return max
+}
+
+func maxInt(a, b int) int {
+	return int(math.Max(float64(a), float64(b)))
 }
 
 func printStatsByQueue(stats []*rdb.Stats) {
 	var headers, seps, counts []string
+	maxHeaderWidth := 0
 	for _, s := range stats {
 		title := queueTitle(s)
 		headers = append(headers, title)
-		seps = append(seps, strings.Repeat("-", len(title)))
+		if w := utf8.RuneCountInString(title); w > maxHeaderWidth {
+			maxHeaderWidth = w
+		}
 		counts = append(counts, strconv.Itoa(s.Size))
+	}
+	for i := 0; i < len(headers); i++ {
+		seps = append(seps, strings.Repeat("-", maxHeaderWidth))
 	}
 	format := strings.Repeat("%v\t", len(headers)) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)

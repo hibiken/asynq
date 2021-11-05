@@ -51,6 +51,15 @@ message TaskMessage {
 	// Empty string indicates that no uniqueness lock was used.
   string unique_key = 10;
 
+  // Retention period specified in a number of seconds.
+  // The task will be stored in redis as a completed task until the TTL
+  // expires.
+  int64 retention = 12;
+
+  // Time when the task completed in success in Unix time,
+  // the number of seconds elapsed since January 1, 1970 UTC.
+  // This field is populated if result_ttl > 0 upon completion.
+  int64 completed_at = 13;
 };
 
 // ServerInfo holds information about a running server.

@@ -330,7 +330,7 @@ end
 return redis.status_reply("OK")
 `)
 
-// Done removes the task from active queue to mark the task as done.
+// Done removes the task from active queue and deletes the task.
 // It removes a uniqueness lock acquired by the task, if any.
 func (r *RDB) Done(msg *base.TaskMessage) error {
 	var op errors.Op = "rdb.Done"
@@ -346,11 +346,102 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 		msg.ID,
 		expireAt.Unix(),
 	}
+	// Note: We cannot pass empty unique key when running this script in redis-cluster.
 	if len(msg.UniqueKey) > 0 {
 		keys = append(keys, msg.UniqueKey)
 		return r.runScript(op, doneUniqueCmd, keys, argv...)
 	}
 	return r.runScript(op, doneCmd, keys, argv...)
+}
+
+// KEYS[1] -> asynq:{<qname>}:active
+// KEYS[2] -> asynq:{<qname>}:deadlines
+// KEYS[3] -> asynq:{<qname>}:completed
+// KEYS[4] -> asynq:{<qname>}:t:<task_id>
+// KEYS[5] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
+// ARGV[1] -> task ID
+// ARGV[2] -> stats expiration timestamp
+// ARGV[3] -> task exipration time in unix time
+// ARGV[4] -> task message data
+var markAsCompleteCmd = redis.NewScript(`
+if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
+  return redis.error_reply("NOT FOUND")
+end
+if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
+  return redis.error_reply("NOT FOUND")
+end
+if redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1]) ~= 1 then
+  redis.redis.error_reply("INTERNAL")
+end
+redis.call("HSET", KEYS[4], "msg", ARGV[4], "state", "completed")
+local n = redis.call("INCR", KEYS[5])
+if tonumber(n) == 1 then
+	redis.call("EXPIREAT", KEYS[5], ARGV[2])
+end
+return redis.status_reply("OK")
+`)
+
+// KEYS[1] -> asynq:{<qname>}:active
+// KEYS[2] -> asynq:{<qname>}:deadlines
+// KEYS[3] -> asynq:{<qname>}:completed
+// KEYS[4] -> asynq:{<qname>}:t:<task_id>
+// KEYS[5] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
+// KEYS[6] -> asynq:{<qname>}:unique:{<checksum>}
+// ARGV[1] -> task ID
+// ARGV[2] -> stats expiration timestamp
+// ARGV[3] -> task exipration time in unix time
+// ARGV[4] -> task message data
+var markAsCompleteUniqueCmd = redis.NewScript(`
+if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
+  return redis.error_reply("NOT FOUND")
+end
+if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
+  return redis.error_reply("NOT FOUND")
+end
+if redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1]) ~= 1 then
+  redis.redis.error_reply("INTERNAL")
+end
+redis.call("HSET", KEYS[4], "msg", ARGV[4], "state", "completed")
+local n = redis.call("INCR", KEYS[5])
+if tonumber(n) == 1 then
+	redis.call("EXPIREAT", KEYS[5], ARGV[2])
+end
+if redis.call("GET", KEYS[6]) == ARGV[1] then
+  redis.call("DEL", KEYS[6])
+end
+return redis.status_reply("OK")
+`)
+
+// MarkAsComplete removes the task from active queue to mark the task as completed.
+// It removes a uniqueness lock acquired by the task, if any.
+func (r *RDB) MarkAsComplete(msg *base.TaskMessage) error {
+	var op errors.Op = "rdb.MarkAsComplete"
+	now := time.Now()
+	statsExpireAt := now.Add(statsTTL)
+	msg.CompletedAt = now.Unix()
+	encoded, err := base.EncodeMessage(msg)
+	if err != nil {
+		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
+	}
+	keys := []string{
+		base.ActiveKey(msg.Queue),
+		base.DeadlinesKey(msg.Queue),
+		base.CompletedKey(msg.Queue),
+		base.TaskKey(msg.Queue, msg.ID),
+		base.ProcessedKey(msg.Queue, now),
+	}
+	argv := []interface{}{
+		msg.ID,
+		statsExpireAt.Unix(),
+		now.Unix() + msg.Retention,
+		encoded,
+	}
+	// Note: We cannot pass empty unique key when running this script in redis-cluster.
+	if len(msg.UniqueKey) > 0 {
+		keys = append(keys, msg.UniqueKey)
+		return r.runScript(op, markAsCompleteUniqueCmd, keys, argv...)
+	}
+	return r.runScript(op, markAsCompleteCmd, keys, argv...)
 }
 
 // KEYS[1] -> asynq:{<qname>}:active
@@ -703,6 +794,57 @@ func (r *RDB) forwardAll(qname string) (err error) {
 	return nil
 }
 
+// KEYS[1] -> asynq:{<qname>}:completed
+// ARGV[1] -> current time in unix time
+// ARGV[2] -> task key prefix
+// ARGV[3] -> batch size (i.e. maximum number of tasks to delete)
+//
+// Returns the number of tasks deleted.
+var deleteExpiredCompletedTasksCmd = redis.NewScript(`
+local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, tonumber(ARGV[3]))
+for _, id in ipairs(ids) do
+	redis.call("DEL", ARGV[2] .. id)
+	redis.call("ZREM", KEYS[1], id)
+end
+return table.getn(ids)`)
+
+// DeleteExpiredCompletedTasks checks for any expired tasks in the given queue's completed set,
+// and delete all expired tasks.
+func (r *RDB) DeleteExpiredCompletedTasks(qname string) error {
+	// Note: Do this operation in fix batches to prevent long running script.
+	const batchSize = 100
+	for {
+		n, err := r.deleteExpiredCompletedTasks(qname, batchSize)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return nil
+		}
+	}
+}
+
+// deleteExpiredCompletedTasks runs the lua script to delete expired deleted task with the specified
+// batch size. It reports the number of tasks deleted.
+func (r *RDB) deleteExpiredCompletedTasks(qname string, batchSize int) (int64, error) {
+	var op errors.Op = "rdb.DeleteExpiredCompletedTasks"
+	keys := []string{base.CompletedKey(qname)}
+	argv := []interface{}{
+		time.Now().Unix(),
+		base.TaskKeyPrefix(qname),
+		batchSize,
+	}
+	res, err := deleteExpiredCompletedTasksCmd.Run(context.Background(), r.client, keys, argv...).Result()
+	if err != nil {
+		return 0, errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, errors.E(op, errors.Internal, fmt.Sprintf("unexpected return value from Lua script: %v", res))
+	}
+	return n, nil
+}
+
 // KEYS[1] -> asynq:{<qname>}:deadlines
 // ARGV[1] -> deadline in unix time
 // ARGV[2] -> task key prefix
@@ -909,4 +1051,14 @@ func (r *RDB) ClearSchedulerHistory(entryID string) error {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "del", Err: err})
 	}
 	return nil
+}
+
+// WriteResult writes the given result data for the specified task.
+func (r *RDB) WriteResult(qname, taskID string, data []byte) (int, error) {
+	var op errors.Op = "rdb.WriteResult"
+	taskKey := base.TaskKey(qname, taskID)
+	if err := r.client.HSet(context.Background(), taskKey, "result", data).Err(); err != nil {
+		return 0, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "hset", Err: err})
+	}
+	return len(data), nil
 }

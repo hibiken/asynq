@@ -29,7 +29,6 @@ func TestCreateContextWithFutureDeadline(t *testing.T) {
 		}
 
 		ctx, cancel := New(msg, tc.deadline)
-
 		select {
 		case x := <-ctx.Done():
 			t.Errorf("<-ctx.Done() == %v, want nothing (it should block)", x)

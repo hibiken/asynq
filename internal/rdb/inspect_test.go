@@ -67,6 +67,7 @@ func TestCurrentStats(t *testing.T) {
 		scheduled  map[string][]base.Z
 		retry      map[string][]base.Z
 		archived   map[string][]base.Z
+		completed  map[string][]base.Z
 		processed  map[string]int
 		failed     map[string]int
 		paused     []string
@@ -102,6 +103,11 @@ func TestCurrentStats(t *testing.T) {
 				"critical": {},
 				"low":      {},
 			},
+			completed: map[string][]base.Z{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
 			processed: map[string]int{
 				"default":  120,
 				"critical": 100,
@@ -123,6 +129,7 @@ func TestCurrentStats(t *testing.T) {
 				Scheduled: 2,
 				Retry:     0,
 				Archived:  0,
+				Completed: 0,
 				Processed: 120,
 				Failed:    2,
 				Timestamp: now,
@@ -157,6 +164,11 @@ func TestCurrentStats(t *testing.T) {
 				"critical": {},
 				"low":      {},
 			},
+			completed: map[string][]base.Z{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
 			processed: map[string]int{
 				"default":  120,
 				"critical": 100,
@@ -178,6 +190,7 @@ func TestCurrentStats(t *testing.T) {
 				Scheduled: 0,
 				Retry:     0,
 				Archived:  0,
+				Completed: 0,
 				Processed: 100,
 				Failed:    0,
 				Timestamp: now,
@@ -197,6 +210,7 @@ func TestCurrentStats(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.SeedAllCompletedQueues(t, r.client, tc.completed)
 		for qname, n := range tc.processed {
 			processedKey := base.ProcessedKey(qname, now)
 			r.client.Set(context.Background(), processedKey, n, 0)
@@ -315,16 +329,19 @@ func TestGetTaskInfo(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 
+	now := time.Now()
+	fiveMinsFromNow := now.Add(5 * time.Minute)
+	oneHourFromNow := now.Add(1 * time.Hour)
+	twoHoursAgo := now.Add(-2 * time.Hour)
+
 	m1 := h.NewTaskMessageWithQueue("task1", nil, "default")
 	m2 := h.NewTaskMessageWithQueue("task2", nil, "default")
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 	m5 := h.NewTaskMessageWithQueue("task5", nil, "custom")
-
-	now := time.Now()
-	fiveMinsFromNow := now.Add(5 * time.Minute)
-	oneHourFromNow := now.Add(1 * time.Hour)
-	twoHoursAgo := now.Add(-2 * time.Hour)
+	m6 := h.NewTaskMessageWithQueue("task5", nil, "custom")
+	m6.CompletedAt = twoHoursAgo.Unix()
+	m6.Retention = int64((24 * time.Hour).Seconds())
 
 	fixtures := struct {
 		active    map[string][]*base.TaskMessage
@@ -332,6 +349,7 @@ func TestGetTaskInfo(t *testing.T) {
 		scheduled map[string][]base.Z
 		retry     map[string][]base.Z
 		archived  map[string][]base.Z
+		completed map[string][]base.Z
 	}{
 		active: map[string][]*base.TaskMessage{
 			"default": {m1},
@@ -353,6 +371,10 @@ func TestGetTaskInfo(t *testing.T) {
 			"default": {},
 			"custom":  {{Message: m4, Score: twoHoursAgo.Unix()}},
 		},
+		completed: map[string][]base.Z{
+			"default": {},
+			"custom":  {{Message: m6, Score: m6.CompletedAt + m6.Retention}},
+		},
 	}
 
 	h.SeedAllActiveQueues(t, r.client, fixtures.active)
@@ -360,6 +382,11 @@ func TestGetTaskInfo(t *testing.T) {
 	h.SeedAllScheduledQueues(t, r.client, fixtures.scheduled)
 	h.SeedAllRetryQueues(t, r.client, fixtures.retry)
 	h.SeedAllArchivedQueues(t, r.client, fixtures.archived)
+	h.SeedAllCompletedQueues(t, r.client, fixtures.completed)
+	// Write result data for the completed task.
+	if err := r.client.HSet(context.Background(), base.TaskKey(m6.Queue, m6.ID), "result", "foobar").Err(); err != nil {
+		t.Fatalf("Failed to write result data under task key: %v", err)
+	}
 
 	tests := []struct {
 		qname string
@@ -373,6 +400,7 @@ func TestGetTaskInfo(t *testing.T) {
 				Message:       m1,
 				State:         base.TaskStateActive,
 				NextProcessAt: time.Time{}, // zero value for N/A
+				Result:        nil,
 			},
 		},
 		{
@@ -382,6 +410,7 @@ func TestGetTaskInfo(t *testing.T) {
 				Message:       m2,
 				State:         base.TaskStateScheduled,
 				NextProcessAt: fiveMinsFromNow,
+				Result:        nil,
 			},
 		},
 		{
@@ -391,6 +420,7 @@ func TestGetTaskInfo(t *testing.T) {
 				Message:       m3,
 				State:         base.TaskStateRetry,
 				NextProcessAt: oneHourFromNow,
+				Result:        nil,
 			},
 		},
 		{
@@ -400,6 +430,7 @@ func TestGetTaskInfo(t *testing.T) {
 				Message:       m4,
 				State:         base.TaskStateArchived,
 				NextProcessAt: time.Time{}, // zero value for N/A
+				Result:        nil,
 			},
 		},
 		{
@@ -409,6 +440,17 @@ func TestGetTaskInfo(t *testing.T) {
 				Message:       m5,
 				State:         base.TaskStatePending,
 				NextProcessAt: now,
+				Result:        nil,
+			},
+		},
+		{
+			qname: "custom",
+			id:    m6.ID,
+			want: &base.TaskInfo{
+				Message:       m6,
+				State:         base.TaskStateCompleted,
+				NextProcessAt: time.Time{}, // zero value for N/A
+				Result:        []byte("foobar"),
 			},
 		},
 	}
@@ -516,21 +558,24 @@ func TestListPending(t *testing.T) {
 	tests := []struct {
 		pending map[string][]*base.TaskMessage
 		qname   string
-		want    []*base.TaskMessage
+		want    []*base.TaskInfo
 	}{
 		{
 			pending: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: {m1, m2},
 			},
 			qname: base.DefaultQueueName,
-			want:  []*base.TaskMessage{m1, m2},
+			want: []*base.TaskInfo{
+				{Message: m1, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
+				{Message: m2, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
+			},
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
 				base.DefaultQueueName: nil,
 			},
 			qname: base.DefaultQueueName,
-			want:  []*base.TaskMessage(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -539,7 +584,10 @@ func TestListPending(t *testing.T) {
 				"low":                 {m4},
 			},
 			qname: base.DefaultQueueName,
-			want:  []*base.TaskMessage{m1, m2},
+			want: []*base.TaskInfo{
+				{Message: m1, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
+				{Message: m2, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
+			},
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -548,7 +596,9 @@ func TestListPending(t *testing.T) {
 				"low":                 {m4},
 			},
 			qname: "critical",
-			want:  []*base.TaskMessage{m3},
+			want: []*base.TaskInfo{
+				{Message: m3, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
+			},
 		},
 	}
 
@@ -562,7 +612,7 @@ func TestListPending(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmpopts.EquateApproxTime(2*time.Second)); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
 		}
@@ -622,13 +672,13 @@ func TestListPendingPagination(t *testing.T) {
 			continue
 		}
 
-		first := got[0]
+		first := got[0].Message
 		if first.Type != tc.wantFirst {
 			t.Errorf("%s; %s returned a list with first message %q, want %q",
 				tc.desc, op, first.Type, tc.wantFirst)
 		}
 
-		last := got[len(got)-1]
+		last := got[len(got)-1].Message
 		if last.Type != tc.wantLast {
 			t.Errorf("%s; %s returned a list with the last message %q, want %q",
 				tc.desc, op, last.Type, tc.wantLast)
@@ -648,7 +698,7 @@ func TestListActive(t *testing.T) {
 	tests := []struct {
 		inProgress map[string][]*base.TaskMessage
 		qname      string
-		want       []*base.TaskMessage
+		want       []*base.TaskInfo
 	}{
 		{
 			inProgress: map[string][]*base.TaskMessage{
@@ -657,14 +707,17 @@ func TestListActive(t *testing.T) {
 				"low":      {m4},
 			},
 			qname: "default",
-			want:  []*base.TaskMessage{m1, m2},
+			want: []*base.TaskInfo{
+				{Message: m1, State: base.TaskStateActive, NextProcessAt: time.Time{}, Result: nil},
+				{Message: m2, State: base.TaskStateActive, NextProcessAt: time.Time{}, Result: nil},
+			},
 		},
 		{
 			inProgress: map[string][]*base.TaskMessage{
 				"default": {},
 			},
 			qname: "default",
-			want:  []*base.TaskMessage(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 	}
 
@@ -678,7 +731,7 @@ func TestListActive(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.inProgress)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmpopts.EquateApproxTime(1*time.Second)); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
 		}
@@ -728,13 +781,13 @@ func TestListActivePagination(t *testing.T) {
 			continue
 		}
 
-		first := got[0]
+		first := got[0].Message
 		if first.Type != tc.wantFirst {
 			t.Errorf("%s; %s returned a list with first message %q, want %q",
 				tc.desc, op, first.Type, tc.wantFirst)
 		}
 
-		last := got[len(got)-1]
+		last := got[len(got)-1].Message
 		if last.Type != tc.wantLast {
 			t.Errorf("%s; %s returned a list with the last message %q, want %q",
 				tc.desc, op, last.Type, tc.wantLast)
@@ -757,7 +810,7 @@ func TestListScheduled(t *testing.T) {
 	tests := []struct {
 		scheduled map[string][]base.Z
 		qname     string
-		want      []base.Z
+		want      []*base.TaskInfo
 	}{
 		{
 			scheduled: map[string][]base.Z{
@@ -772,10 +825,10 @@ func TestListScheduled(t *testing.T) {
 			},
 			qname: "default",
 			// should be sorted by score in ascending order
-			want: []base.Z{
-				{Message: m3, Score: p3.Unix()},
-				{Message: m1, Score: p1.Unix()},
-				{Message: m2, Score: p2.Unix()},
+			want: []*base.TaskInfo{
+				{Message: m3, NextProcessAt: p3, State: base.TaskStateScheduled, Result: nil},
+				{Message: m1, NextProcessAt: p1, State: base.TaskStateScheduled, Result: nil},
+				{Message: m2, NextProcessAt: p2, State: base.TaskStateScheduled, Result: nil},
 			},
 		},
 		{
@@ -790,8 +843,8 @@ func TestListScheduled(t *testing.T) {
 				},
 			},
 			qname: "custom",
-			want: []base.Z{
-				{Message: m4, Score: p4.Unix()},
+			want: []*base.TaskInfo{
+				{Message: m4, NextProcessAt: p4, State: base.TaskStateScheduled, Result: nil},
 			},
 		},
 		{
@@ -799,7 +852,7 @@ func TestListScheduled(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []base.Z(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 	}
 
@@ -813,7 +866,7 @@ func TestListScheduled(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmpopts.EquateApproxTime(1*time.Second)); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s", op, got, err, tc.want, diff)
 			continue
 		}
@@ -915,7 +968,7 @@ func TestListRetry(t *testing.T) {
 	tests := []struct {
 		retry map[string][]base.Z
 		qname string
-		want  []base.Z
+		want  []*base.TaskInfo
 	}{
 		{
 			retry: map[string][]base.Z{
@@ -928,9 +981,9 @@ func TestListRetry(t *testing.T) {
 				},
 			},
 			qname: "default",
-			want: []base.Z{
-				{Message: m1, Score: p1.Unix()},
-				{Message: m2, Score: p2.Unix()},
+			want: []*base.TaskInfo{
+				{Message: m1, NextProcessAt: p1, State: base.TaskStateRetry, Result: nil},
+				{Message: m2, NextProcessAt: p2, State: base.TaskStateRetry, Result: nil},
 			},
 		},
 		{
@@ -944,8 +997,8 @@ func TestListRetry(t *testing.T) {
 				},
 			},
 			qname: "custom",
-			want: []base.Z{
-				{Message: m3, Score: p3.Unix()},
+			want: []*base.TaskInfo{
+				{Message: m3, NextProcessAt: p3, State: base.TaskStateRetry, Result: nil},
 			},
 		},
 		{
@@ -953,7 +1006,7 @@ func TestListRetry(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []base.Z(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 	}
 
@@ -967,7 +1020,7 @@ func TestListRetry(t *testing.T) {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmpopts.EquateApproxTime(1*time.Second)); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
 				op, got, err, tc.want, diff)
 			continue
@@ -1068,7 +1121,7 @@ func TestListArchived(t *testing.T) {
 	tests := []struct {
 		archived map[string][]base.Z
 		qname    string
-		want     []base.Z
+		want     []*base.TaskInfo
 	}{
 		{
 			archived: map[string][]base.Z{
@@ -1081,9 +1134,9 @@ func TestListArchived(t *testing.T) {
 				},
 			},
 			qname: "default",
-			want: []base.Z{
-				{Message: m2, Score: f2.Unix()}, // FIXME: shouldn't be sorted in the other order?
-				{Message: m1, Score: f1.Unix()},
+			want: []*base.TaskInfo{
+				{Message: m2, NextProcessAt: time.Time{}, State: base.TaskStateArchived, Result: nil}, // FIXME: shouldn't be sorted in the other order?
+				{Message: m1, NextProcessAt: time.Time{}, State: base.TaskStateArchived, Result: nil},
 			},
 		},
 		{
@@ -1097,8 +1150,8 @@ func TestListArchived(t *testing.T) {
 				},
 			},
 			qname: "custom",
-			want: []base.Z{
-				{Message: m3, Score: f3.Unix()},
+			want: []*base.TaskInfo{
+				{Message: m3, NextProcessAt: time.Time{}, State: base.TaskStateArchived, Result: nil},
 			},
 		},
 		{
@@ -1106,7 +1159,7 @@ func TestListArchived(t *testing.T) {
 				"default": {},
 			},
 			qname: "default",
-			want:  []base.Z(nil),
+			want:  []*base.TaskInfo(nil),
 		},
 	}
 
@@ -1115,12 +1168,12 @@ func TestListArchived(t *testing.T) {
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
 		got, err := r.ListArchived(tc.qname, Pagination{Size: 20, Page: 0})
-		op := fmt.Sprintf("r.ListDead(%q, Pagination{Size: 20, Page: 0})", tc.qname)
+		op := fmt.Sprintf("r.ListArchived(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
 		}
-		if diff := cmp.Diff(tc.want, got, zScoreCmpOpt); diff != "" {
+		if diff := cmp.Diff(tc.want, got); diff != "" {
 			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
 				op, got, err, tc.want, diff)
 			continue
@@ -1156,7 +1209,148 @@ func TestListArchivedPagination(t *testing.T) {
 
 	for _, tc := range tests {
 		got, err := r.ListArchived(tc.qname, Pagination{Size: tc.size, Page: tc.page})
-		op := fmt.Sprintf("r.ListDead(Pagination{Size: %d, Page: %d})",
+		op := fmt.Sprintf("r.ListArchived(Pagination{Size: %d, Page: %d})",
+			tc.size, tc.page)
+		if err != nil {
+			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
+			continue
+		}
+
+		if len(got) != tc.wantSize {
+			t.Errorf("%s; %s returned list of size %d, want %d",
+				tc.desc, op, len(got), tc.wantSize)
+			continue
+		}
+
+		if tc.wantSize == 0 {
+			continue
+		}
+
+		first := got[0].Message
+		if first.Type != tc.wantFirst {
+			t.Errorf("%s; %s returned a list with first message %q, want %q",
+				tc.desc, op, first.Type, tc.wantFirst)
+		}
+
+		last := got[len(got)-1].Message
+		if last.Type != tc.wantLast {
+			t.Errorf("%s; %s returned a list with the last message %q, want %q",
+				tc.desc, op, last.Type, tc.wantLast)
+		}
+	}
+}
+
+func TestListCompleted(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	msg1 := &base.TaskMessage{
+		ID:          uuid.NewString(),
+		Type:        "foo",
+		Queue:       "default",
+		CompletedAt: time.Now().Add(-2 * time.Hour).Unix(),
+	}
+	msg2 := &base.TaskMessage{
+		ID:          uuid.NewString(),
+		Type:        "foo",
+		Queue:       "default",
+		CompletedAt: time.Now().Add(-5 * time.Hour).Unix(),
+	}
+	msg3 := &base.TaskMessage{
+		ID:          uuid.NewString(),
+		Type:        "foo",
+		Queue:       "custom",
+		CompletedAt: time.Now().Add(-5 * time.Hour).Unix(),
+	}
+	expireAt1 := time.Now().Add(3 * time.Hour)
+	expireAt2 := time.Now().Add(4 * time.Hour)
+	expireAt3 := time.Now().Add(5 * time.Hour)
+
+	tests := []struct {
+		completed map[string][]base.Z
+		qname     string
+		want      []*base.TaskInfo
+	}{
+		{
+			completed: map[string][]base.Z{
+				"default": {
+					{Message: msg1, Score: expireAt1.Unix()},
+					{Message: msg2, Score: expireAt2.Unix()},
+				},
+				"custom": {
+					{Message: msg3, Score: expireAt3.Unix()},
+				},
+			},
+			qname: "default",
+			want: []*base.TaskInfo{
+				{Message: msg1, NextProcessAt: time.Time{}, State: base.TaskStateCompleted, Result: nil},
+				{Message: msg2, NextProcessAt: time.Time{}, State: base.TaskStateCompleted, Result: nil},
+			},
+		},
+		{
+			completed: map[string][]base.Z{
+				"default": {
+					{Message: msg1, Score: expireAt1.Unix()},
+					{Message: msg2, Score: expireAt2.Unix()},
+				},
+				"custom": {
+					{Message: msg3, Score: expireAt3.Unix()},
+				},
+			},
+			qname: "custom",
+			want: []*base.TaskInfo{
+				{Message: msg3, NextProcessAt: time.Time{}, State: base.TaskStateCompleted, Result: nil},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllCompletedQueues(t, r.client, tc.completed)
+
+		got, err := r.ListCompleted(tc.qname, Pagination{Size: 20, Page: 0})
+		op := fmt.Sprintf("r.ListCompleted(%q, Pagination{Size: 20, Page: 0})", tc.qname)
+		if err != nil {
+			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
+			continue
+		}
+		if diff := cmp.Diff(tc.want, got); diff != "" {
+			t.Errorf("%s = %v, %v, want %v, nil; (-want, +got)\n%s",
+				op, got, err, tc.want, diff)
+			continue
+		}
+	}
+
+}
+
+func TestListCompletedPagination(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	var entries []base.Z
+	for i := 0; i < 100; i++ {
+		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
+		entries = append(entries, base.Z{Message: msg, Score: int64(i)})
+	}
+	h.SeedCompletedQueue(t, r.client, entries, "default")
+
+	tests := []struct {
+		desc      string
+		qname     string
+		page      int
+		size      int
+		wantSize  int
+		wantFirst string
+		wantLast  string
+	}{
+		{"first page", "default", 0, 20, 20, "task 0", "task 19"},
+		{"second page", "default", 1, 20, 20, "task 20", "task 39"},
+		{"different page size", "default", 2, 30, 30, "task 60", "task 89"},
+		{"last page", "default", 3, 30, 10, "task 90", "task 99"},
+		{"out of range", "default", 4, 30, 0, "", ""},
+	}
+
+	for _, tc := range tests {
+		got, err := r.ListCompleted(tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListCompleted(Pagination{Size: %d, Page: %d})",
 			tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
@@ -1917,13 +2111,13 @@ func TestRunAllArchivedTasks(t *testing.T) {
 
 		got, err := r.RunAllArchivedTasks(tc.qname)
 		if err != nil {
-			t.Errorf("%s; r.RunAllDeadTasks(%q) = %v, %v; want %v, nil",
+			t.Errorf("%s; r.RunAllArchivedTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
 			continue
 		}
 
 		if got != tc.want {
-			t.Errorf("%s; r.RunAllDeadTasks(%q) = %v, %v; want %v, nil",
+			t.Errorf("%s; r.RunAllArchivedTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
 		}
 
@@ -3322,15 +3516,85 @@ func TestDeleteAllArchivedTasks(t *testing.T) {
 
 		got, err := r.DeleteAllArchivedTasks(tc.qname)
 		if err != nil {
-			t.Errorf("r.DeleteAllDeadTasks(%q) returned error: %v", tc.qname, err)
+			t.Errorf("r.DeleteAllArchivedTasks(%q) returned error: %v", tc.qname, err)
 		}
 		if got != tc.want {
-			t.Errorf("r.DeleteAllDeadTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
+			t.Errorf("r.DeleteAllArchivedTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantArchived {
 			gotArchived := h.GetArchivedMessages(t, r.client, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ArchivedKey(qname), diff)
+			}
+		}
+	}
+}
+
+func newCompletedTaskMessage(qname, typename string, retention time.Duration, completedAt time.Time) *base.TaskMessage {
+	msg := h.NewTaskMessageWithQueue(typename, nil, qname)
+	msg.Retention = int64(retention.Seconds())
+	msg.CompletedAt = completedAt.Unix()
+	return msg
+}
+
+func TestDeleteAllCompletedTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	m1 := newCompletedTaskMessage("default", "task1", 30*time.Minute, now.Add(-2*time.Minute))
+	m2 := newCompletedTaskMessage("default", "task2", 30*time.Minute, now.Add(-5*time.Minute))
+	m3 := newCompletedTaskMessage("custom", "task3", 30*time.Minute, now.Add(-5*time.Minute))
+
+	tests := []struct {
+		completed     map[string][]base.Z
+		qname         string
+		want          int64
+		wantCompleted map[string][]*base.TaskMessage
+	}{
+		{
+			completed: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: m1.CompletedAt + m1.Retention},
+					{Message: m2, Score: m2.CompletedAt + m2.Retention},
+				},
+				"custom": {
+					{Message: m3, Score: m2.CompletedAt + m3.Retention},
+				},
+			},
+			qname: "default",
+			want:  2,
+			wantCompleted: map[string][]*base.TaskMessage{
+				"default": {},
+				"custom":  {m3},
+			},
+		},
+		{
+			completed: map[string][]base.Z{
+				"default": {},
+			},
+			qname: "default",
+			want:  0,
+			wantCompleted: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllCompletedQueues(t, r.client, tc.completed)
+
+		got, err := r.DeleteAllCompletedTasks(tc.qname)
+		if err != nil {
+			t.Errorf("r.DeleteAllCompletedTasks(%q) returned error: %v", tc.qname, err)
+		}
+		if got != tc.want {
+			t.Errorf("r.DeleteAllCompletedTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
+		}
+		for qname, want := range tc.wantCompleted {
+			gotCompleted := h.GetCompletedMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotCompleted, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.CompletedKey(qname), diff)
 			}
 		}
 	}
@@ -3389,10 +3653,10 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 
 		got, err := r.DeleteAllArchivedTasks(tc.qname)
 		if err != nil {
-			t.Errorf("r.DeleteAllDeadTasks(%q) returned error: %v", tc.qname, err)
+			t.Errorf("r.DeleteAllArchivedTasks(%q) returned error: %v", tc.qname, err)
 		}
 		if got != tc.want {
-			t.Errorf("r.DeleteAllDeadTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
+			t.Errorf("r.DeleteAllArchivedTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantArchived {
 			gotArchived := h.GetArchivedMessages(t, r.client, qname)
