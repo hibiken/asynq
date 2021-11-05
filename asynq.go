@@ -178,8 +178,7 @@ const (
 	// Indicates that the task is archived and stored for inspection purposes.
 	TaskStateArchived
 
-	// Indicates that the task is processed successfully and stored until the retention perioid specified
-	// by result_ttl expires.
+	// Indicates that the task is processed successfully and retained until the retention TTL expires.
 	TaskStateCompleted
 )
 
@@ -483,8 +482,7 @@ func parseRedisSentinelURI(u *url.URL) (RedisConnOpt, error) {
 }
 
 // ResultWriter is a client interface to write result data for a task.
-// ResultWriter instance should be retrieved by calling GetResultWriter function with the context
-// passed to Handler.
+// It writes the data to the redis instance the server is connected to.
 type ResultWriter struct {
 	id     string // task ID this writer is responsible for
 	qname  string // queue name the task belongs to
