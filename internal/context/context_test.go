@@ -28,16 +28,7 @@ func TestCreateContextWithFutureDeadline(t *testing.T) {
 			Payload: nil,
 		}
 
-<<<<<<< HEAD:internal/context/context_test.go
-<<<<<<< HEAD:internal/context/context_test.go
 		ctx, cancel := New(msg, tc.deadline)
-=======
-		ctx, cancel := createContext(msg, tc.deadline, rdbClient)
->>>>>>> 59894e5... Add ResultWriter type:context_test.go
-=======
-		ctx, cancel := createContext(msg, tc.deadline)
->>>>>>> fa97563... Add ResultWriter to Task:context_test.go
-
 		select {
 		case x := <-ctx.Done():
 			t.Errorf("<-ctx.Done() == %v, want nothing (it should block)", x)
@@ -76,15 +67,7 @@ func TestCreateContextWithPastDeadline(t *testing.T) {
 			Payload: nil,
 		}
 
-<<<<<<< HEAD:internal/context/context_test.go
-<<<<<<< HEAD:internal/context/context_test.go
 		ctx, cancel := New(msg, tc.deadline)
-=======
-		ctx, cancel := createContext(msg, tc.deadline, rdbClient)
->>>>>>> 59894e5... Add ResultWriter type:context_test.go
-=======
-		ctx, cancel := createContext(msg, tc.deadline)
->>>>>>> fa97563... Add ResultWriter to Task:context_test.go
 		defer cancel()
 
 		select {
@@ -114,15 +97,7 @@ func TestGetTaskMetadataFromContext(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-<<<<<<< HEAD:internal/context/context_test.go
-<<<<<<< HEAD:internal/context/context_test.go
 		ctx, cancel := New(tc.msg, time.Now().Add(30*time.Minute))
-=======
-		ctx, cancel := createContext(tc.msg, time.Now().Add(30*time.Minute), rdbClient)
->>>>>>> 59894e5... Add ResultWriter type:context_test.go
-=======
-		ctx, cancel := createContext(tc.msg, time.Now().Add(30*time.Minute))
->>>>>>> fa97563... Add ResultWriter to Task:context_test.go
 		defer cancel()
 
 		id, ok := GetTaskID(ctx)
