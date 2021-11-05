@@ -139,6 +139,23 @@ func TestArchivedKey(t *testing.T) {
 	}
 }
 
+func TestCompletedKey(t *testing.T) {
+	tests := []struct {
+		qname string
+		want  string
+	}{
+		{"default", "asynq:{default}:completed"},
+		{"custom", "asynq:{custom}:completed"},
+	}
+
+	for _, tc := range tests {
+		got := CompletedKey(tc.qname)
+		if got != tc.want {
+			t.Errorf("CompletedKey(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
 func TestPausedKey(t *testing.T) {
 	tests := []struct {
 		qname string
@@ -351,24 +368,26 @@ func TestMessageEncoding(t *testing.T) {
 	}{
 		{
 			in: &TaskMessage{
-				Type:     "task1",
-				Payload:  toBytes(map[string]interface{}{"a": 1, "b": "hello!", "c": true}),
-				ID:       id,
-				Queue:    "default",
-				Retry:    10,
-				Retried:  0,
-				Timeout:  1800,
-				Deadline: 1692311100,
+				Type:      "task1",
+				Payload:   toBytes(map[string]interface{}{"a": 1, "b": "hello!", "c": true}),
+				ID:        id,
+				Queue:     "default",
+				Retry:     10,
+				Retried:   0,
+				Timeout:   1800,
+				Deadline:  1692311100,
+				Retention: 3600,
 			},
 			out: &TaskMessage{
-				Type:     "task1",
-				Payload:  toBytes(map[string]interface{}{"a": json.Number("1"), "b": "hello!", "c": true}),
-				ID:       id,
-				Queue:    "default",
-				Retry:    10,
-				Retried:  0,
-				Timeout:  1800,
-				Deadline: 1692311100,
+				Type:      "task1",
+				Payload:   toBytes(map[string]interface{}{"a": json.Number("1"), "b": "hello!", "c": true}),
+				ID:        id,
+				Queue:     "default",
+				Retry:     10,
+				Retried:   0,
+				Timeout:   1800,
+				Deadline:  1692311100,
+				Retention: 3600,
 			},
 		},
 	}

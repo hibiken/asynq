@@ -139,6 +139,12 @@ func TaskMessageWithError(t base.TaskMessage, errMsg string, failedAt time.Time)
 	return &t
 }
 
+// TaskMessageWithCompletedAt returns an updated copy of t after completion.
+func TaskMessageWithCompletedAt(t base.TaskMessage, completedAt time.Time) *base.TaskMessage {
+	t.CompletedAt = completedAt.Unix()
+	return &t
+}
+
 // MustMarshal marshals given task message and returns a json string.
 // Calling test will fail if marshaling errors out.
 func MustMarshal(tb testing.TB, msg *base.TaskMessage) string {
@@ -224,6 +230,13 @@ func SeedDeadlines(tb testing.TB, r redis.UniversalClient, entries []base.Z, qna
 	seedRedisZSet(tb, r, base.DeadlinesKey(qname), entries, base.TaskStateActive)
 }
 
+// SeedCompletedQueue initializes the completed set witht the given entries.
+func SeedCompletedQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
+	tb.Helper()
+	r.SAdd(context.Background(), base.AllQueues, qname)
+	seedRedisZSet(tb, r, base.CompletedKey(qname), entries, base.TaskStateCompleted)
+}
+
 // SeedAllPendingQueues initializes all of the specified queues with the given messages.
 //
 // pending maps a queue name to a list of messages.
@@ -271,6 +284,14 @@ func SeedAllDeadlines(tb testing.TB, r redis.UniversalClient, deadlines map[stri
 	tb.Helper()
 	for q, entries := range deadlines {
 		SeedDeadlines(tb, r, entries, q)
+	}
+}
+
+// SeedAllCompletedQueues initializes all of the completed queues with the given entries.
+func SeedAllCompletedQueues(tb testing.TB, r redis.UniversalClient, completed map[string][]base.Z) {
+	tb.Helper()
+	for q, entries := range completed {
+		SeedCompletedQueue(tb, r, entries, q)
 	}
 }
 
@@ -367,6 +388,13 @@ func GetArchivedMessages(tb testing.TB, r redis.UniversalClient, qname string) [
 	return getMessagesFromZSet(tb, r, qname, base.ArchivedKey, base.TaskStateArchived)
 }
 
+// GetCompletedMessages returns all completed task messages in the given queue.
+// It also asserts the state field of the task.
+func GetCompletedMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
+	tb.Helper()
+	return getMessagesFromZSet(tb, r, qname, base.CompletedKey, base.TaskStateCompleted)
+}
+
 // GetScheduledEntries returns all scheduled messages and its score in the given queue.
 // It also asserts the state field of the task.
 func GetScheduledEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
@@ -393,6 +421,13 @@ func GetArchivedEntries(tb testing.TB, r redis.UniversalClient, qname string) []
 func GetDeadlinesEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
 	tb.Helper()
 	return getMessagesFromZSetWithScores(tb, r, qname, base.DeadlinesKey, base.TaskStateActive)
+}
+
+// GetCompletedEntries returns all completed messages and its score in the given queue.
+// It also asserts the state field of the task.
+func GetCompletedEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
+	tb.Helper()
+	return getMessagesFromZSetWithScores(tb, r, qname, base.CompletedKey, base.TaskStateCompleted)
 }
 
 // Retrieves all messages stored under `keyFn(qname)` key in redis list.

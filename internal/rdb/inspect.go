@@ -40,6 +40,7 @@ type Stats struct {
 	Scheduled int
 	Retry     int
 	Archived  int
+	Completed int
 	// Total number of tasks processed during the current date.
 	// The number includes both succeeded and failed tasks.
 	Processed int
@@ -67,9 +68,10 @@ type DailyStats struct {
 // KEYS[3] -> asynq:<qname>:scheduled
 // KEYS[4] -> asynq:<qname>:retry
 // KEYS[5] -> asynq:<qname>:archived
-// KEYS[6] -> asynq:<qname>:processed:<yyyy-mm-dd>
-// KEYS[7] -> asynq:<qname>:failed:<yyyy-mm-dd>
-// KEYS[8] -> asynq:<qname>:paused
+// KEYS[6] -> asynq:<qname>:completed
+// KEYS[7] -> asynq:<qname>:processed:<yyyy-mm-dd>
+// KEYS[8] -> asynq:<qname>:failed:<yyyy-mm-dd>
+// KEYS[9] -> asynq:<qname>:paused
 var currentStatsCmd = redis.NewScript(`
 local res = {}
 table.insert(res, KEYS[1])
@@ -82,28 +84,30 @@ table.insert(res, KEYS[4])
 table.insert(res, redis.call("ZCARD", KEYS[4]))
 table.insert(res, KEYS[5])
 table.insert(res, redis.call("ZCARD", KEYS[5]))
+table.insert(res, KEYS[6])
+table.insert(res, redis.call("ZCARD", KEYS[6]))
 local pcount = 0
-local p = redis.call("GET", KEYS[6])
+local p = redis.call("GET", KEYS[7])
 if p then
 	pcount = tonumber(p) 
 end
-table.insert(res, KEYS[6])
+table.insert(res, KEYS[7])
 table.insert(res, pcount)
 local fcount = 0
-local f = redis.call("GET", KEYS[7])
+local f = redis.call("GET", KEYS[8])
 if f then
 	fcount = tonumber(f)
 end
-table.insert(res, KEYS[7])
-table.insert(res, fcount)
 table.insert(res, KEYS[8])
-table.insert(res, redis.call("EXISTS", KEYS[8]))
+table.insert(res, fcount)
+table.insert(res, KEYS[9])
+table.insert(res, redis.call("EXISTS", KEYS[9]))
 return res`)
 
 // CurrentStats returns a current state of the queues.
 func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 	var op errors.Op = "rdb.CurrentStats"
-	exists, err := r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
+	exists, err := r.queueExists(qname)
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, err)
 	}
@@ -117,6 +121,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		base.ScheduledKey(qname),
 		base.RetryKey(qname),
 		base.ArchivedKey(qname),
+		base.CompletedKey(qname),
 		base.ProcessedKey(qname, now),
 		base.FailedKey(qname, now),
 		base.PausedKey(qname),
@@ -152,6 +157,9 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		case base.ArchivedKey(qname):
 			stats.Archived = val
 			size += val
+		case base.CompletedKey(qname):
+			stats.Completed = val
+			size += val
 		case base.ProcessedKey(qname, now):
 			stats.Processed = val
 		case base.FailedKey(qname, now):
@@ -182,6 +190,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 // KEYS[3] -> asynq:{qname}:scheduled
 // KEYS[4] -> asynq:{qname}:retry
 // KEYS[5] -> asynq:{qname}:archived
+// KEYS[6] -> asynq:{qname}:completed
 //
 // ARGV[1] -> asynq:{qname}:t:
 // ARGV[2] -> sample_size (e.g 20)
@@ -208,7 +217,7 @@ for i=1,2 do
         memusg = memusg + m
     end
 end
-for i=3,5 do
+for i=3,6 do
     local ids = redis.call("ZRANGE", KEYS[i], 0, sample_size - 1)
     local sample_total = 0
     if (table.getn(ids) > 0) then
@@ -237,6 +246,7 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 		base.ScheduledKey(qname),
 		base.RetryKey(qname),
 		base.ArchivedKey(qname),
+		base.CompletedKey(qname),
 	}
 	argv := []interface{}{
 		base.TaskKeyPrefix(qname),
@@ -270,7 +280,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 	if n < 1 {
 		return nil, errors.E(op, errors.FailedPrecondition, "the number of days must be positive")
 	}
-	exists, err := r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
+	exists, err := r.queueExists(qname)
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
 	}
@@ -337,7 +347,8 @@ func parseInfo(infoStr string) (map[string]string, error) {
 	return info, nil
 }
 
-func reverse(x []string) {
+// TODO: Use generics once available.
+func reverse(x []*base.TaskInfo) {
 	for i := len(x)/2 - 1; i >= 0; i-- {
 		opp := len(x) - 1 - i
 		x[i], x[opp] = x[opp], x[i]
@@ -347,7 +358,7 @@ func reverse(x []string) {
 // checkQueueExists verifies whether the queue exists.
 // It returns QueueNotFoundError if queue doesn't exist.
 func (r *RDB) checkQueueExists(qname string) error {
-	exists, err := r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
+	exists, err := r.queueExists(qname)
 	if err != nil {
 		return errors.E(errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
 	}
@@ -364,24 +375,25 @@ func (r *RDB) checkQueueExists(qname string) error {
 // ARGV[3] -> queue key prefix (asynq:{<qname>}:)
 //
 // Output:
-// Tuple of {msg, state, nextProcessAt}
+// Tuple of {msg, state, nextProcessAt, result}
 // msg: encoded task message
 // state: string describing the state of the task
 // nextProcessAt: unix time in seconds, zero if not applicable.
+// result: result data associated with the task
 //
 // If the task key doesn't exist, it returns error with a message "NOT FOUND"
 var getTaskInfoCmd = redis.NewScript(`
 	if redis.call("EXISTS", KEYS[1]) == 0 then
 		return redis.error_reply("NOT FOUND")
 	end
-	local msg, state = unpack(redis.call("HMGET", KEYS[1], "msg", "state"))
+	local msg, state, result = unpack(redis.call("HMGET", KEYS[1], "msg", "state", "result"))
 	if state == "scheduled" or state == "retry" then
-		return {msg, state, redis.call("ZSCORE", ARGV[3] .. state, ARGV[1])}
+		return {msg, state, redis.call("ZSCORE", ARGV[3] .. state, ARGV[1]), result}
 	end
 	if state == "pending" then
-		return {msg, state, ARGV[2]}
+		return {msg, state, ARGV[2], result}
 	end
-	return {msg, state, 0}
+	return {msg, state, 0, result}
 `)
 
 // GetTaskInfo returns a TaskInfo describing the task from the given queue.
@@ -407,7 +419,7 @@ func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 	if err != nil {
 		return nil, errors.E(op, errors.Internal, "unexpected value returned from Lua script")
 	}
-	if len(vals) != 3 {
+	if len(vals) != 4 {
 		return nil, errors.E(op, errors.Internal, "unepxected number of values returned from Lua script")
 	}
 	encoded, err := cast.ToStringE(vals[0])
@@ -419,6 +431,10 @@ func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 		return nil, errors.E(op, errors.Internal, "unexpected value returned from Lua script")
 	}
 	processAtUnix, err := cast.ToInt64E(vals[2])
+	if err != nil {
+		return nil, errors.E(op, errors.Internal, "unexpected value returned from Lua script")
+	}
+	resultStr, err := cast.ToStringE(vals[3])
 	if err != nil {
 		return nil, errors.E(op, errors.Internal, "unexpected value returned from Lua script")
 	}
@@ -434,10 +450,15 @@ func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 	if processAtUnix != 0 {
 		nextProcessAt = time.Unix(processAtUnix, 0)
 	}
+	var result []byte
+	if len(resultStr) > 0 {
+		result = []byte(resultStr)
+	}
 	return &base.TaskInfo{
 		Message:       msg,
 		State:         state,
 		NextProcessAt: nextProcessAt,
+		Result:        result,
 	}, nil
 }
 
@@ -460,12 +481,16 @@ func (p Pagination) stop() int64 {
 }
 
 // ListPending returns pending tasks that are ready to be processed.
-func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
+func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListPending"
-	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
+	exists, err := r.queueExists(qname)
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
+	}
+	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	res, err := r.listMessages(base.PendingKey(qname), qname, pgn)
+	res, err := r.listMessages(qname, base.TaskStatePending, pgn)
 	if err != nil {
 		return nil, errors.E(op, errors.CanonicalCode(err), err)
 	}
@@ -473,12 +498,16 @@ func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskMessage, er
 }
 
 // ListActive returns all tasks that are currently being processed for the given queue.
-func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskMessage, error) {
+func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListActive"
-	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
+	exists, err := r.queueExists(qname)
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
+	}
+	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	res, err := r.listMessages(base.ActiveKey(qname), qname, pgn)
+	res, err := r.listMessages(qname, base.TaskStateActive, pgn)
 	if err != nil {
 		return nil, errors.E(op, errors.CanonicalCode(err), err)
 	}
@@ -491,16 +520,27 @@ func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskMessage, err
 // ARGV[3] -> task key prefix
 var listMessagesCmd = redis.NewScript(`
 local ids = redis.call("LRange", KEYS[1], ARGV[1], ARGV[2])
-local res = {}
+local data = {}
 for _, id in ipairs(ids) do
 	local key = ARGV[3] .. id
-	table.insert(res, redis.call("HGET", key, "msg"))
+	local msg, result = unpack(redis.call("HMGET", key, "msg","result"))
+	table.insert(data, msg)
+	table.insert(data, result)
 end
-return res
+return data
 `)
 
-// listMessages returns a list of TaskMessage in Redis list with the given key.
-func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskMessage, error) {
+// listMessages returns a list of TaskInfo in Redis list with the given key.
+func (r *RDB) listMessages(qname string, state base.TaskState, pgn Pagination) ([]*base.TaskInfo, error) {
+	var key string
+	switch state {
+	case base.TaskStateActive:
+		key = base.ActiveKey(qname)
+	case base.TaskStatePending:
+		key = base.PendingKey(qname)
+	default:
+		panic(fmt.Sprintf("unsupported task state: %v", state))
+	}
 	// Note: Because we use LPUSH to redis list, we need to calculate the
 	// correct range and reverse the list to get the tasks with pagination.
 	stop := -pgn.start() - 1
@@ -514,27 +554,44 @@ func (r *RDB) listMessages(key, qname string, pgn Pagination) ([]*base.TaskMessa
 	if err != nil {
 		return nil, errors.E(errors.Internal, fmt.Errorf("cast error: Lua script returned unexpected value: %v", res))
 	}
-	reverse(data)
-	var msgs []*base.TaskMessage
-	for _, s := range data {
-		m, err := base.DecodeMessage([]byte(s))
+	var infos []*base.TaskInfo
+	for i := 0; i < len(data); i += 2 {
+		m, err := base.DecodeMessage([]byte(data[i]))
 		if err != nil {
 			continue // bad data, ignore and continue
 		}
-		msgs = append(msgs, m)
+		var res []byte
+		if len(data[i+1]) > 0 {
+			res = []byte(data[i+1])
+		}
+		var nextProcessAt time.Time
+		if state == base.TaskStatePending {
+			nextProcessAt = time.Now()
+		}
+		infos = append(infos, &base.TaskInfo{
+			Message:       m,
+			State:         state,
+			NextProcessAt: nextProcessAt,
+			Result:        res,
+		})
 	}
-	return msgs, nil
+	reverse(infos)
+	return infos, nil
 
 }
 
 // ListScheduled returns all tasks from the given queue that are scheduled
 // to be processed in the future.
-func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]base.Z, error) {
+func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListScheduled"
-	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
+	exists, err := r.queueExists(qname)
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
+	}
+	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	res, err := r.listZSetEntries(base.ScheduledKey(qname), qname, pgn)
+	res, err := r.listZSetEntries(qname, base.TaskStateScheduled, pgn)
 	if err != nil {
 		return nil, errors.E(op, errors.CanonicalCode(err), err)
 	}
@@ -543,12 +600,16 @@ func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]base.Z, error) {
 
 // ListRetry returns all tasks from the given queue that have failed before
 // and willl be retried in the future.
-func (r *RDB) ListRetry(qname string, pgn Pagination) ([]base.Z, error) {
+func (r *RDB) ListRetry(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListRetry"
-	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
+	exists, err := r.queueExists(qname)
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
+	}
+	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	res, err := r.listZSetEntries(base.RetryKey(qname), qname, pgn)
+	res, err := r.listZSetEntries(qname, base.TaskStateRetry, pgn)
 	if err != nil {
 		return nil, errors.E(op, errors.CanonicalCode(err), err)
 	}
@@ -556,16 +617,42 @@ func (r *RDB) ListRetry(qname string, pgn Pagination) ([]base.Z, error) {
 }
 
 // ListArchived returns all tasks from the given queue that have exhausted its retry limit.
-func (r *RDB) ListArchived(qname string, pgn Pagination) ([]base.Z, error) {
+func (r *RDB) ListArchived(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListArchived"
-	if !r.client.SIsMember(context.Background(), base.AllQueues, qname).Val() {
+	exists, err := r.queueExists(qname)
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
+	}
+	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	zs, err := r.listZSetEntries(base.ArchivedKey(qname), qname, pgn)
+	zs, err := r.listZSetEntries(qname, base.TaskStateArchived, pgn)
 	if err != nil {
 		return nil, errors.E(op, errors.CanonicalCode(err), err)
 	}
 	return zs, nil
+}
+
+// ListCompleted returns all tasks from the given queue that have completed successfully.
+func (r *RDB) ListCompleted(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+	var op errors.Op = "rdb.ListCompleted"
+	exists, err := r.queueExists(qname)
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
+	}
+	if !exists {
+		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
+	}
+	zs, err := r.listZSetEntries(qname, base.TaskStateCompleted, pgn)
+	if err != nil {
+		return nil, errors.E(op, errors.CanonicalCode(err), err)
+	}
+	return zs, nil
+}
+
+// Reports whether a queue with the given name exists.
+func (r *RDB) queueExists(qname string) (bool, error) {
+	return r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
 }
 
 // KEYS[1] -> key for ids set (e.g. asynq:{<qname>}:scheduled)
@@ -574,21 +661,38 @@ func (r *RDB) ListArchived(qname string, pgn Pagination) ([]base.Z, error) {
 // ARGV[3] -> task key prefix
 //
 // Returns an array populated with
-// [msg1, score1, msg2, score2, ..., msgN, scoreN]
+// [msg1, score1, result1, msg2, score2, result2, ..., msgN, scoreN, resultN]
 var listZSetEntriesCmd = redis.NewScript(`
-local res = {}
+local data = {}
 local id_score_pairs = redis.call("ZRANGE", KEYS[1], ARGV[1], ARGV[2], "WITHSCORES")
 for i = 1, table.getn(id_score_pairs), 2 do
-	local key = ARGV[3] .. id_score_pairs[i]
-	table.insert(res, redis.call("HGET", key, "msg"))
-	table.insert(res, id_score_pairs[i+1])
+	local id = id_score_pairs[i]
+	local score = id_score_pairs[i+1]
+	local key = ARGV[3] .. id
+	local msg, res = unpack(redis.call("HMGET", key, "msg", "result"))
+	table.insert(data, msg)
+	table.insert(data, score)
+	table.insert(data, res)
 end
-return res
+return data
 `)
 
 // listZSetEntries returns a list of message and score pairs in Redis sorted-set
 // with the given key.
-func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, error) {
+func (r *RDB) listZSetEntries(qname string, state base.TaskState, pgn Pagination) ([]*base.TaskInfo, error) {
+	var key string
+	switch state {
+	case base.TaskStateScheduled:
+		key = base.ScheduledKey(qname)
+	case base.TaskStateRetry:
+		key = base.RetryKey(qname)
+	case base.TaskStateArchived:
+		key = base.ArchivedKey(qname)
+	case base.TaskStateCompleted:
+		key = base.CompletedKey(qname)
+	default:
+		panic(fmt.Sprintf("unsupported task state: %v", state))
+	}
 	res, err := listZSetEntriesCmd.Run(context.Background(), r.client, []string{key},
 		pgn.start(), pgn.stop(), base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
@@ -598,8 +702,8 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, erro
 	if err != nil {
 		return nil, errors.E(errors.Internal, fmt.Errorf("cast error: Lua script returned unexpected value: %v", res))
 	}
-	var zs []base.Z
-	for i := 0; i < len(data); i += 2 {
+	var infos []*base.TaskInfo
+	for i := 0; i < len(data); i += 3 {
 		s, err := cast.ToStringE(data[i])
 		if err != nil {
 			return nil, errors.E(errors.Internal, fmt.Errorf("cast error: Lua script returned unexpected value: %v", res))
@@ -608,13 +712,30 @@ func (r *RDB) listZSetEntries(key, qname string, pgn Pagination) ([]base.Z, erro
 		if err != nil {
 			return nil, errors.E(errors.Internal, fmt.Errorf("cast error: Lua script returned unexpected value: %v", res))
 		}
+		resStr, err := cast.ToStringE(data[i+2])
+		if err != nil {
+			return nil, errors.E(errors.Internal, fmt.Errorf("cast error: Lua script returned unexpected value: %v", res))
+		}
 		msg, err := base.DecodeMessage([]byte(s))
 		if err != nil {
 			continue // bad data, ignore and continue
 		}
-		zs = append(zs, base.Z{Message: msg, Score: score})
+		var nextProcessAt time.Time
+		if state == base.TaskStateScheduled || state == base.TaskStateRetry {
+			nextProcessAt = time.Unix(score, 0)
+		}
+		var resBytes []byte
+		if len(resStr) > 0 {
+			resBytes = []byte(resStr)
+		}
+		infos = append(infos, &base.TaskInfo{
+			Message:       msg,
+			State:         state,
+			NextProcessAt: nextProcessAt,
+			Result:        resBytes,
+		})
 	}
-	return zs, nil
+	return infos, nil
 }
 
 // RunAllScheduledTasks enqueues all scheduled tasks from the given queue
@@ -1132,6 +1253,20 @@ func (r *RDB) DeleteAllScheduledTasks(qname string) (int64, error) {
 	return n, nil
 }
 
+// DeleteAllCompletedTasks deletes all completed tasks from the given queue
+// and returns the number of tasks deleted.
+func (r *RDB) DeleteAllCompletedTasks(qname string) (int64, error) {
+	var op errors.Op = "rdb.DeleteAllCompletedTasks"
+	n, err := r.deleteAll(base.CompletedKey(qname), qname)
+	if errors.IsQueueNotFound(err) {
+		return 0, errors.E(op, errors.NotFound, err)
+	}
+	if err != nil {
+		return 0, errors.E(op, errors.Unknown, err)
+	}
+	return n, nil
+}
+
 // deleteAllCmd deletes tasks from the given zset.
 //
 // Input:
@@ -1334,7 +1469,7 @@ return 1`)
 // the queue is empty.
 func (r *RDB) RemoveQueue(qname string, force bool) error {
 	var op errors.Op = "rdb.RemoveQueue"
-	exists, err := r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
+	exists, err := r.queueExists(qname)
 	if err != nil {
 		return err
 	}

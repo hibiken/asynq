@@ -81,6 +81,15 @@ func (tb *TestBroker) Done(msg *base.TaskMessage) error {
 	return tb.real.Done(msg)
 }
 
+func (tb *TestBroker) MarkAsComplete(msg *base.TaskMessage) error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.MarkAsComplete(msg)
+}
+
 func (tb *TestBroker) Requeue(msg *base.TaskMessage) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
@@ -135,6 +144,15 @@ func (tb *TestBroker) ForwardIfReady(qnames ...string) error {
 	return tb.real.ForwardIfReady(qnames...)
 }
 
+func (tb *TestBroker) DeleteExpiredCompletedTasks(qname string) error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.DeleteExpiredCompletedTasks(qname)
+}
+
 func (tb *TestBroker) ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*base.TaskMessage, error) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
@@ -178,6 +196,15 @@ func (tb *TestBroker) PublishCancelation(id string) error {
 		return errRedisDown
 	}
 	return tb.real.PublishCancelation(id)
+}
+
+func (tb *TestBroker) WriteResult(qname, id string, data []byte) (int, error) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return 0, errRedisDown
+	}
+	return tb.real.WriteResult(qname, id, data)
 }
 
 func (tb *TestBroker) Ping() error {

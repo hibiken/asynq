@@ -66,6 +66,8 @@ type QueueInfo struct {
 	Retry int
 	// Number of archived tasks.
 	Archived int
+	// Number of stored completed tasks.
+	Completed int
 
 	// Total number of tasks being processed during the given date.
 	// The number includes both succeeded and failed tasks.
@@ -99,6 +101,7 @@ func (i *Inspector) GetQueueInfo(qname string) (*QueueInfo, error) {
 		Scheduled:   stats.Scheduled,
 		Retry:       stats.Retry,
 		Archived:    stats.Archived,
+		Completed:   stats.Completed,
 		Processed:   stats.Processed,
 		Failed:      stats.Failed,
 		Paused:      stats.Paused,
@@ -186,7 +189,7 @@ func (i *Inspector) GetTaskInfo(qname, id string) (*TaskInfo, error) {
 	case err != nil:
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
-	return newTaskInfo(info.Message, info.State, info.NextProcessAt), nil
+	return newTaskInfo(info.Message, info.State, info.NextProcessAt, info.Result), nil
 }
 
 // ListOption specifies behavior of list operation.
@@ -259,17 +262,21 @@ func (i *Inspector) ListPendingTasks(qname string, opts ...ListOption) ([]*TaskI
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	msgs, err := i.rdb.ListPending(qname, pgn)
+	infos, err := i.rdb.ListPending(qname, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
 	case err != nil:
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
-	now := time.Now()
 	var tasks []*TaskInfo
-	for _, m := range msgs {
-		tasks = append(tasks, newTaskInfo(m, base.TaskStatePending, now))
+	for _, i := range infos {
+		tasks = append(tasks, newTaskInfo(
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
+		))
 	}
 	return tasks, err
 }
@@ -283,7 +290,7 @@ func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*TaskIn
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	msgs, err := i.rdb.ListActive(qname, pgn)
+	infos, err := i.rdb.ListActive(qname, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
@@ -291,8 +298,13 @@ func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*TaskIn
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
-	for _, m := range msgs {
-		tasks = append(tasks, newTaskInfo(m, base.TaskStateActive, time.Time{}))
+	for _, i := range infos {
+		tasks = append(tasks, newTaskInfo(
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
+		))
 	}
 	return tasks, err
 }
@@ -307,7 +319,7 @@ func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*Tas
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	zs, err := i.rdb.ListScheduled(qname, pgn)
+	infos, err := i.rdb.ListScheduled(qname, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
@@ -315,11 +327,12 @@ func (i *Inspector) ListScheduledTasks(qname string, opts ...ListOption) ([]*Tas
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
-	for _, z := range zs {
+	for _, i := range infos {
 		tasks = append(tasks, newTaskInfo(
-			z.Message,
-			base.TaskStateScheduled,
-			time.Unix(z.Score, 0),
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
 		))
 	}
 	return tasks, nil
@@ -335,7 +348,7 @@ func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*TaskInf
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	zs, err := i.rdb.ListRetry(qname, pgn)
+	infos, err := i.rdb.ListRetry(qname, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
@@ -343,11 +356,12 @@ func (i *Inspector) ListRetryTasks(qname string, opts ...ListOption) ([]*TaskInf
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
-	for _, z := range zs {
+	for _, i := range infos {
 		tasks = append(tasks, newTaskInfo(
-			z.Message,
-			base.TaskStateRetry,
-			time.Unix(z.Score, 0),
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
 		))
 	}
 	return tasks, nil
@@ -363,7 +377,7 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Task
 	}
 	opt := composeListOptions(opts...)
 	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
-	zs, err := i.rdb.ListArchived(qname, pgn)
+	infos, err := i.rdb.ListArchived(qname, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
 		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
@@ -371,11 +385,41 @@ func (i *Inspector) ListArchivedTasks(qname string, opts ...ListOption) ([]*Task
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	var tasks []*TaskInfo
-	for _, z := range zs {
+	for _, i := range infos {
 		tasks = append(tasks, newTaskInfo(
-			z.Message,
-			base.TaskStateArchived,
-			time.Time{},
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
+		))
+	}
+	return tasks, nil
+}
+
+// ListCompletedTasks retrieves completed tasks from the specified queue.
+// Tasks are sorted by expiration time (i.e. CompletedAt + Retention) in descending order.
+//
+// By default, it retrieves the first 30 tasks.
+func (i *Inspector) ListCompletedTasks(qname string, opts ...ListOption) ([]*TaskInfo, error) {
+	if err := base.ValidateQueueName(qname); err != nil {
+		return nil, fmt.Errorf("asynq: %v", err)
+	}
+	opt := composeListOptions(opts...)
+	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
+	infos, err := i.rdb.ListCompleted(qname, pgn)
+	switch {
+	case errors.IsQueueNotFound(err):
+		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case err != nil:
+		return nil, fmt.Errorf("asynq: %v", err)
+	}
+	var tasks []*TaskInfo
+	for _, i := range infos {
+		tasks = append(tasks, newTaskInfo(
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
 		))
 	}
 	return tasks, nil
@@ -418,6 +462,16 @@ func (i *Inspector) DeleteAllArchivedTasks(qname string) (int, error) {
 		return 0, err
 	}
 	n, err := i.rdb.DeleteAllArchivedTasks(qname)
+	return int(n), err
+}
+
+// DeleteAllCompletedTasks deletes all completed tasks from the specified queue,
+// and reports the number tasks deleted.
+func (i *Inspector) DeleteAllCompletedTasks(qname string) (int, error) {
+	if err := base.ValidateQueueName(qname); err != nil {
+		return 0, err
+	}
+	n, err := i.rdb.DeleteAllCompletedTasks(qname)
 	return int(n), err
 }
 
@@ -790,6 +844,12 @@ func parseOption(s string) (Option, error) {
 			return nil, err
 		}
 		return ProcessIn(d), nil
+	case "Retention":
+		d, err := time.ParseDuration(arg)
+		if err != nil {
+			return nil, err
+		}
+		return Retention(d), nil
 	default:
 		return nil, fmt.Errorf("cannot not parse option string %q", s)
 	}

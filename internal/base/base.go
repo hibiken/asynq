@@ -48,6 +48,7 @@ const (
 	TaskStateScheduled
 	TaskStateRetry
 	TaskStateArchived
+	TaskStateCompleted
 )
 
 func (s TaskState) String() string {
@@ -62,6 +63,8 @@ func (s TaskState) String() string {
 		return "retry"
 	case TaskStateArchived:
 		return "archived"
+	case TaskStateCompleted:
+		return "completed"
 	}
 	panic(fmt.Sprintf("internal error: unknown task state %d", s))
 }
@@ -78,6 +81,8 @@ func TaskStateFromString(s string) (TaskState, error) {
 		return TaskStateRetry, nil
 	case "archived":
 		return TaskStateArchived, nil
+	case "completed":
+		return TaskStateCompleted, nil
 	}
 	return 0, errors.E(errors.FailedPrecondition, fmt.Sprintf("%q is not supported task state", s))
 }
@@ -134,6 +139,10 @@ func ArchivedKey(qname string) string {
 // DeadlinesKey returns a redis key for the deadlines.
 func DeadlinesKey(qname string) string {
 	return fmt.Sprintf("%sdeadlines", QueueKeyPrefix(qname))
+}
+
+func CompletedKey(qname string) string {
+	return fmt.Sprintf("%scompleted", QueueKeyPrefix(qname))
 }
 
 // PausedKey returns a redis key to indicate that the given queue is paused.
@@ -229,6 +238,15 @@ type TaskMessage struct {
 	//
 	// Empty string indicates that no uniqueness lock was used.
 	UniqueKey string
+
+	// Retention specifies the number of seconds the task should be retained after completion.
+	Retention int64
+
+	// CompletedAt is the time the task was processed successfully in Unix time,
+	// the number of seconds elapsed since January 1, 1970 UTC.
+	//
+	// Use zero to indicate no value.
+	CompletedAt int64
 }
 
 // EncodeMessage marshals the given task message and returns an encoded bytes.
@@ -248,6 +266,8 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 		Timeout:      msg.Timeout,
 		Deadline:     msg.Deadline,
 		UniqueKey:    msg.UniqueKey,
+		Retention:    msg.Retention,
+		CompletedAt:  msg.CompletedAt,
 	})
 }
 
@@ -269,6 +289,8 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 		Timeout:      pbmsg.GetTimeout(),
 		Deadline:     pbmsg.GetDeadline(),
 		UniqueKey:    pbmsg.GetUniqueKey(),
+		Retention:    pbmsg.GetRetention(),
+		CompletedAt:  pbmsg.GetCompletedAt(),
 	}, nil
 }
 
@@ -277,6 +299,7 @@ type TaskInfo struct {
 	Message       *TaskMessage
 	State         TaskState
 	NextProcessAt time.Time
+	Result        []byte
 }
 
 // Z represents sorted set member.
@@ -641,16 +664,19 @@ type Broker interface {
 	EnqueueUnique(msg *TaskMessage, ttl time.Duration) error
 	Dequeue(qnames ...string) (*TaskMessage, time.Time, error)
 	Done(msg *TaskMessage) error
+	MarkAsComplete(msg *TaskMessage) error
 	Requeue(msg *TaskMessage) error
 	Schedule(msg *TaskMessage, processAt time.Time) error
 	ScheduleUnique(msg *TaskMessage, processAt time.Time, ttl time.Duration) error
 	Retry(msg *TaskMessage, processAt time.Time, errMsg string, isFailure bool) error
 	Archive(msg *TaskMessage, errMsg string) error
 	ForwardIfReady(qnames ...string) error
+	DeleteExpiredCompletedTasks(qname string) error
 	ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*TaskMessage, error)
 	WriteServerState(info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error
 	ClearServerState(host string, pid int, serverID string) error
 	CancelationPubSub() (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers
 	PublishCancelation(id string) error
+	WriteResult(qname, id string, data []byte) (n int, err error)
 	Close() error
 }

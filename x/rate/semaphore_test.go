@@ -4,14 +4,15 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/base"
 	asynqcontext "github.com/hibiken/asynq/internal/context"
-	"strings"
-	"testing"
-	"time"
 )
 
 var (
@@ -80,16 +81,16 @@ func TestNewSemaphore_Acquire(t *testing.T) {
 		desc           string
 		name           string
 		maxConcurrency int
-		taskIDs        []uuid.UUID
-		ctxFunc        func(uuid.UUID) (context.Context, context.CancelFunc)
+		taskIDs        []string
+		ctxFunc        func(string) (context.Context, context.CancelFunc)
 		want           []bool
 	}{
 		{
 			desc:           "Should acquire token when current token count is less than maxTokens",
 			name:           "task-1",
 			maxConcurrency: 3,
-			taskIDs:        []uuid.UUID{uuid.New(), uuid.New()},
-			ctxFunc: func(id uuid.UUID) (context.Context, context.CancelFunc) {
+			taskIDs:        []string{uuid.NewString(), uuid.NewString()},
+			ctxFunc: func(id string) (context.Context, context.CancelFunc) {
 				return asynqcontext.New(&base.TaskMessage{
 					ID:    id,
 					Queue: "task-1",
@@ -101,8 +102,8 @@ func TestNewSemaphore_Acquire(t *testing.T) {
 			desc:           "Should fail acquiring token when current token count is equal to maxTokens",
 			name:           "task-2",
 			maxConcurrency: 3,
-			taskIDs:        []uuid.UUID{uuid.New(), uuid.New(), uuid.New(), uuid.New()},
-			ctxFunc: func(id uuid.UUID) (context.Context, context.CancelFunc) {
+			taskIDs:        []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()},
+			ctxFunc: func(id string) (context.Context, context.CancelFunc) {
 				return asynqcontext.New(&base.TaskMessage{
 					ID:    id,
 					Queue: "task-2",
@@ -148,16 +149,16 @@ func TestNewSemaphore_Acquire_Error(t *testing.T) {
 		desc           string
 		name           string
 		maxConcurrency int
-		taskIDs        []uuid.UUID
-		ctxFunc        func(uuid.UUID) (context.Context, context.CancelFunc)
+		taskIDs        []string
+		ctxFunc        func(string) (context.Context, context.CancelFunc)
 		errStr         string
 	}{
 		{
 			desc:           "Should return error if context has no deadline",
 			name:           "task-3",
 			maxConcurrency: 1,
-			taskIDs:        []uuid.UUID{uuid.New(), uuid.New()},
-			ctxFunc: func(id uuid.UUID) (context.Context, context.CancelFunc) {
+			taskIDs:        []string{uuid.NewString(), uuid.NewString()},
+			ctxFunc: func(id string) (context.Context, context.CancelFunc) {
 				return context.Background(), func() {}
 			},
 			errStr: "provided context must have a deadline",
@@ -166,8 +167,8 @@ func TestNewSemaphore_Acquire_Error(t *testing.T) {
 			desc:           "Should return error when context is missing taskID",
 			name:           "task-4",
 			maxConcurrency: 1,
-			taskIDs:        []uuid.UUID{uuid.New()},
-			ctxFunc: func(_ uuid.UUID) (context.Context, context.CancelFunc) {
+			taskIDs:        []string{uuid.NewString()},
+			ctxFunc: func(_ string) (context.Context, context.CancelFunc) {
 				return context.WithTimeout(context.Background(), time.Second)
 			},
 			errStr: "provided context is missing task ID value",
@@ -191,7 +192,7 @@ func TestNewSemaphore_Acquire_Error(t *testing.T) {
 				ctx, cancel := tt.ctxFunc(tt.taskIDs[i])
 
 				_, err := sema.Acquire(ctx)
-				if err == nil || err.Error() != tt.errStr  {
+				if err == nil || err.Error() != tt.errStr {
 					t.Errorf("%s;\nSemaphore.Acquire() got error %v want error %v", tt.desc, err, tt.errStr)
 				}
 
@@ -206,13 +207,13 @@ func TestNewSemaphore_Acquire_StaleToken(t *testing.T) {
 	rc := opt.MakeRedisClient().(redis.UniversalClient)
 	defer rc.Close()
 
-	taskID := uuid.New()
+	taskID := uuid.NewString()
 
 	// adding a set member to mimic the case where token is acquired but the goroutine crashed,
 	// in which case, the token will not be explicitly removed and should be present already
 	rc.ZAdd(context.Background(), semaphoreKey("stale-token"), &redis.Z{
 		Score:  float64(time.Now().Add(-10 * time.Second).Unix()),
-		Member: taskID.String(),
+		Member: taskID,
 	})
 
 	sema := NewSemaphore(opt, "stale-token", 1)
@@ -238,15 +239,15 @@ func TestNewSemaphore_Release(t *testing.T) {
 	tests := []struct {
 		desc      string
 		name      string
-		taskIDs   []uuid.UUID
-		ctxFunc   func(uuid.UUID) (context.Context, context.CancelFunc)
+		taskIDs   []string
+		ctxFunc   func(string) (context.Context, context.CancelFunc)
 		wantCount int64
 	}{
 		{
 			desc:    "Should decrease token count",
 			name:    "task-5",
-			taskIDs: []uuid.UUID{uuid.New()},
-			ctxFunc: func(id uuid.UUID) (context.Context, context.CancelFunc) {
+			taskIDs: []string{uuid.NewString()},
+			ctxFunc: func(id string) (context.Context, context.CancelFunc) {
 				return asynqcontext.New(&base.TaskMessage{
 					ID:    id,
 					Queue: "task-3",
@@ -256,8 +257,8 @@ func TestNewSemaphore_Release(t *testing.T) {
 		{
 			desc:    "Should decrease token count by 2",
 			name:    "task-6",
-			taskIDs: []uuid.UUID{uuid.New(), uuid.New()},
-			ctxFunc: func(id uuid.UUID) (context.Context, context.CancelFunc) {
+			taskIDs: []string{uuid.NewString(), uuid.NewString()},
+			ctxFunc: func(id string) (context.Context, context.CancelFunc) {
 				return asynqcontext.New(&base.TaskMessage{
 					ID:    id,
 					Queue: "task-4",
@@ -280,7 +281,7 @@ func TestNewSemaphore_Release(t *testing.T) {
 			for i := 0; i < len(tt.taskIDs); i++ {
 				members = append(members, &redis.Z{
 					Score:  float64(time.Now().Add(time.Duration(i) * time.Second).Unix()),
-					Member: tt.taskIDs[i].String(),
+					Member: tt.taskIDs[i],
 				})
 			}
 			if err := rc.ZAdd(context.Background(), semaphoreKey(tt.name), members...).Err(); err != nil {
@@ -313,20 +314,20 @@ func TestNewSemaphore_Release(t *testing.T) {
 }
 
 func TestNewSemaphore_Release_Error(t *testing.T) {
-	testID := uuid.New()
+	testID := uuid.NewString()
 
 	tests := []struct {
-		desc      string
-		name      string
-		taskIDs   []uuid.UUID
-		ctxFunc   func(uuid.UUID) (context.Context, context.CancelFunc)
-		errStr    string
+		desc    string
+		name    string
+		taskIDs []string
+		ctxFunc func(string) (context.Context, context.CancelFunc)
+		errStr  string
 	}{
 		{
 			desc:    "Should return error when context is missing taskID",
 			name:    "task-7",
-			taskIDs: []uuid.UUID{uuid.New()},
-			ctxFunc: func(_ uuid.UUID) (context.Context, context.CancelFunc) {
+			taskIDs: []string{uuid.NewString()},
+			ctxFunc: func(_ string) (context.Context, context.CancelFunc) {
 				return context.WithTimeout(context.Background(), time.Second)
 			},
 			errStr: "provided context is missing task ID value",
@@ -334,14 +335,14 @@ func TestNewSemaphore_Release_Error(t *testing.T) {
 		{
 			desc:    "Should return error when context has taskID which never acquired token",
 			name:    "task-8",
-			taskIDs: []uuid.UUID{uuid.New()},
-			ctxFunc: func(_ uuid.UUID) (context.Context, context.CancelFunc) {
+			taskIDs: []string{uuid.NewString()},
+			ctxFunc: func(_ string) (context.Context, context.CancelFunc) {
 				return asynqcontext.New(&base.TaskMessage{
 					ID:    testID,
 					Queue: "task-4",
 				}, time.Now().Add(time.Second))
 			},
-			errStr: fmt.Sprintf("no token found for task %q", testID.String()),
+			errStr: fmt.Sprintf("no token found for task %q", testID),
 		},
 	}
 
@@ -359,7 +360,7 @@ func TestNewSemaphore_Release_Error(t *testing.T) {
 			for i := 0; i < len(tt.taskIDs); i++ {
 				members = append(members, &redis.Z{
 					Score:  float64(time.Now().Add(time.Duration(i) * time.Second).Unix()),
-					Member: tt.taskIDs[i].String(),
+					Member: tt.taskIDs[i],
 				})
 			}
 			if err := rc.ZAdd(context.Background(), semaphoreKey(tt.name), members...).Err(); err != nil {

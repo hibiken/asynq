@@ -86,6 +86,7 @@ The value for the state flag should be one of:
 - scheduled
 - retry
 - archived
+- completed
 
 List opeartion paginates the result set.
 By default, the command fetches the first 30 tasks.
@@ -189,6 +190,8 @@ func taskList(cmd *cobra.Command, args []string) {
 		listRetryTasks(qname, pageNum, pageSize)
 	case "archived":
 		listArchivedTasks(qname, pageNum, pageSize)
+	case "completed":
+		listCompletedTasks(qname, pageNum, pageSize)
 	default:
 		fmt.Printf("error: state=%q is not supported\n", state)
 		os.Exit(1)
@@ -210,7 +213,7 @@ func listActiveTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload))
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload))
 			}
 		},
 	)
@@ -231,7 +234,7 @@ func listPendingTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload))
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload))
 			}
 		},
 	)
@@ -252,7 +255,7 @@ func listScheduledTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload", "Process In"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload), formatProcessAt(t.NextProcessAt))
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload), formatProcessAt(t.NextProcessAt))
 			}
 		},
 	)
@@ -284,8 +287,8 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload", "Next Retry", "Last Error", "Last Failed", "Retried", "Max Retry"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload), formatProcessAt(t.NextProcessAt),
-					t.LastErr, formatLastFailedAt(t.LastFailedAt), t.Retried, t.MaxRetry)
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload), formatProcessAt(t.NextProcessAt),
+					t.LastErr, formatPastTime(t.LastFailedAt), t.Retried, t.MaxRetry)
 			}
 		},
 	)
@@ -306,7 +309,27 @@ func listArchivedTasks(qname string, pageNum, pageSize int) {
 		[]string{"ID", "Type", "Payload", "Last Failed", "Last Error"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload), formatLastFailedAt(t.LastFailedAt), t.LastErr)
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload), formatPastTime(t.LastFailedAt), t.LastErr)
+			}
+		})
+}
+
+func listCompletedTasks(qname string, pageNum, pageSize int) {
+	i := createInspector()
+	tasks, err := i.ListCompletedTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	if len(tasks) == 0 {
+		fmt.Printf("No completed tasks in %q queue\n", qname)
+		return
+	}
+	printTable(
+		[]string{"ID", "Type", "Payload", "CompletedAt", "Result"},
+		func(w io.Writer, tmpl string) {
+			for _, t := range tasks {
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload), formatPastTime(t.CompletedAt), sprintBytes(t.Result))
 			}
 		})
 }
@@ -356,7 +379,7 @@ func printTaskInfo(info *asynq.TaskInfo) {
 	if len(info.LastErr) != 0 {
 		fmt.Println()
 		bold.Println("Last Failure")
-		fmt.Printf("Failed at:     %s\n", formatLastFailedAt(info.LastFailedAt))
+		fmt.Printf("Failed at:     %s\n", formatPastTime(info.LastFailedAt))
 		fmt.Printf("Error message: %s\n", info.LastErr)
 	}
 }
@@ -371,11 +394,12 @@ func formatNextProcessAt(processAt time.Time) string {
 	return fmt.Sprintf("%s (in %v)", processAt.Format(time.UnixDate), processAt.Sub(time.Now()).Round(time.Second))
 }
 
-func formatLastFailedAt(lastFailedAt time.Time) string {
-	if lastFailedAt.IsZero() || lastFailedAt.Unix() == 0 {
+// formatPastTime takes t which is time in the past and returns a user-friendly string.
+func formatPastTime(t time.Time) string {
+	if t.IsZero() || t.Unix() == 0 {
 		return ""
 	}
-	return lastFailedAt.Format(time.UnixDate)
+	return t.Format(time.UnixDate)
 }
 
 func taskArchive(cmd *cobra.Command, args []string) {
@@ -496,6 +520,8 @@ func taskDeleteAll(cmd *cobra.Command, args []string) {
 		n, err = i.DeleteAllRetryTasks(qname)
 	case "archived":
 		n, err = i.DeleteAllArchivedTasks(qname)
+	case "completed":
+		n, err = i.DeleteAllCompletedTasks(qname)
 	default:
 		fmt.Printf("error: unsupported state %q\n", state)
 		os.Exit(1)

@@ -677,17 +677,17 @@ func TestDone(t *testing.T) {
 		Payload:   nil,
 		Timeout:   1800,
 		Deadline:  0,
-		UniqueKey: "asynq:{default}:unique:reindex:nil",
+		UniqueKey: "asynq:{default}:unique:b0804ec967f48520697662a204f5fe72",
 		Queue:     "default",
 	}
 	t1Deadline := now.Unix() + t1.Timeout
 	t2Deadline := t2.Deadline
-	t3Deadline := now.Unix() + t3.Deadline
+	t3Deadline := now.Unix() + t3.Timeout
 
 	tests := []struct {
 		desc          string
 		active        map[string][]*base.TaskMessage // initial state of the active list
-		deadlines     map[string][]base.Z            // initial state of deadlines set
+		deadlines     map[string][]base.Z            // initial state of the deadlines set
 		target        *base.TaskMessage              // task to remove
 		wantActive    map[string][]*base.TaskMessage // final state of the active list
 		wantDeadlines map[string][]base.Z            // final state of the deadline set
@@ -783,6 +783,201 @@ func TestDone(t *testing.T) {
 			gotDeadlines := h.GetDeadlinesEntries(t, r.client, queue)
 			if diff := cmp.Diff(want, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("%s; mismatch found in %q: (-want, +got):\n%s", tc.desc, base.DeadlinesKey(queue), diff)
+				continue
+			}
+		}
+
+		processedKey := base.ProcessedKey(tc.target.Queue, time.Now())
+		gotProcessed := r.client.Get(context.Background(), processedKey).Val()
+		if gotProcessed != "1" {
+			t.Errorf("%s; GET %q = %q, want 1", tc.desc, processedKey, gotProcessed)
+		}
+
+		gotTTL := r.client.TTL(context.Background(), processedKey).Val()
+		if gotTTL > statsTTL {
+			t.Errorf("%s; TTL %q = %v, want less than or equal to %v", tc.desc, processedKey, gotTTL, statsTTL)
+		}
+
+		if len(tc.target.UniqueKey) > 0 && r.client.Exists(context.Background(), tc.target.UniqueKey).Val() != 0 {
+			t.Errorf("%s; Uniqueness lock %q still exists", tc.desc, tc.target.UniqueKey)
+		}
+	}
+}
+
+func TestMarkAsComplete(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	t1 := &base.TaskMessage{
+		ID:        uuid.NewString(),
+		Type:      "send_email",
+		Payload:   nil,
+		Timeout:   1800,
+		Deadline:  0,
+		Queue:     "default",
+		Retention: 3600,
+	}
+	t2 := &base.TaskMessage{
+		ID:        uuid.NewString(),
+		Type:      "export_csv",
+		Payload:   nil,
+		Timeout:   0,
+		Deadline:  now.Add(2 * time.Hour).Unix(),
+		Queue:     "custom",
+		Retention: 7200,
+	}
+	t3 := &base.TaskMessage{
+		ID:        uuid.NewString(),
+		Type:      "reindex",
+		Payload:   nil,
+		Timeout:   1800,
+		Deadline:  0,
+		UniqueKey: "asynq:{default}:unique:b0804ec967f48520697662a204f5fe72",
+		Queue:     "default",
+		Retention: 1800,
+	}
+	t1Deadline := now.Unix() + t1.Timeout
+	t2Deadline := t2.Deadline
+	t3Deadline := now.Unix() + t3.Timeout
+
+	tests := []struct {
+		desc          string
+		active        map[string][]*base.TaskMessage                  // initial state of the active list
+		deadlines     map[string][]base.Z                             // initial state of the deadlines set
+		completed     map[string][]base.Z                             // initial state of the completed set
+		target        *base.TaskMessage                               // task to mark as completed
+		wantActive    map[string][]*base.TaskMessage                  // final state of the active list
+		wantDeadlines map[string][]base.Z                             // final state of the deadline set
+		wantCompleted func(completedAt time.Time) map[string][]base.Z // final state of the completed set
+	}{
+		{
+			desc: "select a message from the correct queue",
+			active: map[string][]*base.TaskMessage{
+				"default": {t1},
+				"custom":  {t2},
+			},
+			deadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}},
+				"custom":  {{Message: t2, Score: t2Deadline}},
+			},
+			completed: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			target: t1,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+				"custom":  {t2},
+			},
+			wantDeadlines: map[string][]base.Z{
+				"default": {},
+				"custom":  {{Message: t2, Score: t2Deadline}},
+			},
+			wantCompleted: func(completedAt time.Time) map[string][]base.Z {
+				return map[string][]base.Z{
+					"default": {{Message: h.TaskMessageWithCompletedAt(*t1, completedAt), Score: completedAt.Unix() + t1.Retention}},
+					"custom":  {},
+				}
+			},
+		},
+		{
+			desc: "with one queue",
+			active: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			deadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}},
+			},
+			completed: map[string][]base.Z{
+				"default": {},
+			},
+			target: t1,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantDeadlines: map[string][]base.Z{
+				"default": {},
+			},
+			wantCompleted: func(completedAt time.Time) map[string][]base.Z {
+				return map[string][]base.Z{
+					"default": {{Message: h.TaskMessageWithCompletedAt(*t1, completedAt), Score: completedAt.Unix() + t1.Retention}},
+				}
+			},
+		},
+		{
+			desc: "with multiple messages in a queue",
+			active: map[string][]*base.TaskMessage{
+				"default": {t1, t3},
+				"custom":  {t2},
+			},
+			deadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}, {Message: t3, Score: t3Deadline}},
+				"custom":  {{Message: t2, Score: t2Deadline}},
+			},
+			completed: map[string][]base.Z{
+				"default": {},
+				"custom":  {},
+			},
+			target: t3,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {t1},
+				"custom":  {t2},
+			},
+			wantDeadlines: map[string][]base.Z{
+				"default": {{Message: t1, Score: t1Deadline}},
+				"custom":  {{Message: t2, Score: t2Deadline}},
+			},
+			wantCompleted: func(completedAt time.Time) map[string][]base.Z {
+				return map[string][]base.Z{
+					"default": {{Message: h.TaskMessageWithCompletedAt(*t3, completedAt), Score: completedAt.Unix() + t3.Retention}},
+					"custom":  {},
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllDeadlines(t, r.client, tc.deadlines)
+		h.SeedAllActiveQueues(t, r.client, tc.active)
+		h.SeedAllCompletedQueues(t, r.client, tc.completed)
+		for _, msgs := range tc.active {
+			for _, msg := range msgs {
+				// Set uniqueness lock if unique key is present.
+				if len(msg.UniqueKey) > 0 {
+					err := r.client.SetNX(context.Background(), msg.UniqueKey, msg.ID, time.Minute).Err()
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+		}
+
+		completedAt := time.Now()
+		err := r.MarkAsComplete(tc.target)
+		if err != nil {
+			t.Errorf("%s; (*RDB).MarkAsCompleted(task) = %v, want nil", tc.desc, err)
+			continue
+		}
+
+		for queue, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q: (-want, +got):\n%s", tc.desc, base.ActiveKey(queue), diff)
+				continue
+			}
+		}
+		for queue, want := range tc.wantDeadlines {
+			gotDeadlines := h.GetDeadlinesEntries(t, r.client, queue)
+			if diff := cmp.Diff(want, gotDeadlines, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q: (-want, +got):\n%s", tc.desc, base.DeadlinesKey(queue), diff)
+				continue
+			}
+		}
+		for queue, want := range tc.wantCompleted(completedAt) {
+			gotCompleted := h.GetCompletedEntries(t, r.client, queue)
+			if diff := cmp.Diff(want, gotCompleted, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q: (-want, +got):\n%s", tc.desc, base.CompletedKey(queue), diff)
 				continue
 			}
 		}
@@ -1887,6 +2082,93 @@ func TestForwardIfReady(t *testing.T) {
 	}
 }
 
+func newCompletedTask(qname, typename string, payload []byte, completedAt time.Time) *base.TaskMessage {
+	msg := h.NewTaskMessageWithQueue(typename, payload, qname)
+	msg.CompletedAt = completedAt.Unix()
+	return msg
+}
+
+func TestDeleteExpiredCompletedTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	secondAgo := now.Add(-time.Second)
+	hourFromNow := now.Add(time.Hour)
+	hourAgo := now.Add(-time.Hour)
+	minuteAgo := now.Add(-time.Minute)
+
+	t1 := newCompletedTask("default", "task1", nil, hourAgo)
+	t2 := newCompletedTask("default", "task2", nil, minuteAgo)
+	t3 := newCompletedTask("default", "task3", nil, secondAgo)
+	t4 := newCompletedTask("critical", "critical_task", nil, hourAgo)
+	t5 := newCompletedTask("low", "low_priority_task", nil, hourAgo)
+
+	tests := []struct {
+		desc          string
+		completed     map[string][]base.Z
+		qname         string
+		wantCompleted map[string][]base.Z
+	}{
+		{
+			desc: "deletes expired task from default queue",
+			completed: map[string][]base.Z{
+				"default": {
+					{Message: t1, Score: secondAgo.Unix()},
+					{Message: t2, Score: hourFromNow.Unix()},
+					{Message: t3, Score: now.Unix()},
+				},
+			},
+			qname: "default",
+			wantCompleted: map[string][]base.Z{
+				"default": {
+					{Message: t2, Score: hourFromNow.Unix()},
+				},
+			},
+		},
+		{
+			desc: "deletes expired task from specified queue",
+			completed: map[string][]base.Z{
+				"default": {
+					{Message: t2, Score: secondAgo.Unix()},
+				},
+				"critical": {
+					{Message: t4, Score: secondAgo.Unix()},
+				},
+				"low": {
+					{Message: t5, Score: now.Unix()},
+				},
+			},
+			qname: "critical",
+			wantCompleted: map[string][]base.Z{
+				"default": {
+					{Message: t2, Score: secondAgo.Unix()},
+				},
+				"critical": {},
+				"low": {
+					{Message: t5, Score: now.Unix()},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedAllCompletedQueues(t, r.client, tc.completed)
+
+		if err := r.DeleteExpiredCompletedTasks(tc.qname); err != nil {
+			t.Errorf("DeleteExpiredCompletedTasks(%q) failed: %v", tc.qname, err)
+			continue
+		}
+
+		for qname, want := range tc.wantCompleted {
+			got := h.GetCompletedEntries(t, r.client, qname)
+			if diff := cmp.Diff(want, got, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("%s: diff found in %q completed set: want=%v, got=%v\n%s", tc.desc, qname, want, got, diff)
+			}
+		}
+	}
+}
+
 func TestListDeadlineExceeded(t *testing.T) {
 	t1 := h.NewTaskMessageWithQueue("task1", nil, "default")
 	t2 := h.NewTaskMessageWithQueue("task2", nil, "default")
@@ -2290,4 +2572,40 @@ func TestCancelationPubSub(t *testing.T) {
 		t.Errorf("subscriber received %v, want %v; (-want,+got)\n%s", received, publish, diff)
 	}
 	mu.Unlock()
+}
+
+func TestWriteResult(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	tests := []struct {
+		qname  string
+		taskID string
+		data   []byte
+	}{
+		{
+			qname:  "default",
+			taskID: uuid.NewString(),
+			data:   []byte("hello"),
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+
+		n, err := r.WriteResult(tc.qname, tc.taskID, tc.data)
+		if err != nil {
+			t.Errorf("WriteResult failed: %v", err)
+			continue
+		}
+		if n != len(tc.data) {
+			t.Errorf("WriteResult returned %d, want %d", n, len(tc.data))
+		}
+
+		taskKey := base.TaskKey(tc.qname, tc.taskID)
+		got := r.client.HGet(context.Background(), taskKey, "result").Val()
+		if got != string(tc.data) {
+			t.Errorf("`result` field under %q key is set to %q, want %q", taskKey, got, string(tc.data))
+		}
+	}
 }
