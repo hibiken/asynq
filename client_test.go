@@ -734,6 +734,11 @@ func TestClientEnqueueError(t *testing.T) {
 			task: NewTask("foo", nil),
 			opts: []Option{TaskID("  ")},
 		},
+		{
+			desc: "With unique option less than 1s",
+			task: NewTask("foo", nil),
+			opts: []Option{Unique(300 * time.Millisecond)},
+		},
 	}
 
 	for _, tc := range tests {

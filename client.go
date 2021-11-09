@@ -143,6 +143,7 @@ func (t deadlineOption) Value() interface{} { return time.Time(t) }
 // Task enqueued with this option is guaranteed to be unique within the given ttl.
 // Once the task gets processed successfully or once the TTL has expired, another task with the same uniqueness may be enqueued.
 // ErrDuplicateTask error is returned when enqueueing a duplicate task.
+// TTL duration must be greater than or equal to 1 second.
 //
 // Uniqueness of a task is based on the following properties:
 //     - Task Type
@@ -246,7 +247,11 @@ func composeOptions(opts ...Option) (option, error) {
 		case deadlineOption:
 			res.deadline = time.Time(opt)
 		case uniqueOption:
-			res.uniqueTTL = time.Duration(opt)
+			ttl := time.Duration(opt)
+			if ttl < 1*time.Second {
+				return option{}, errors.New("Unique TTL cannot be less than 1s")
+			}
+			res.uniqueTTL = ttl
 		case processAtOption:
 			res.processAt = time.Time(opt)
 		case processInOption:
