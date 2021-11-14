@@ -879,7 +879,7 @@ func TestListScheduledPagination(t *testing.T) {
 	// create 100 tasks with an increasing number of wait time.
 	for i := 0; i < 100; i++ {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
-		if err := r.Schedule(msg, time.Now().Add(time.Duration(i)*time.Second)); err != nil {
+		if err := r.Schedule(context.Background(), msg, time.Now().Add(time.Duration(i)*time.Second)); err != nil {
 			t.Fatal(err)
 		}
 	}

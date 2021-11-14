@@ -126,7 +126,7 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 
 		p.start(&sync.WaitGroup{})
 		for _, msg := range tc.incoming {
-			err := rdbClient.Enqueue(msg)
+			err := rdbClient.Enqueue(context.Background(), msg)
 			if err != nil {
 				p.shutdown()
 				t.Fatal(err)

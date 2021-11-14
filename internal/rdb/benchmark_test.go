@@ -5,6 +5,7 @@
 package rdb
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 
 func BenchmarkEnqueue(b *testing.B) {
 	r := setup(b)
+	ctx := context.Background()
 	msg := asynqtest.NewTaskMessage("task1", nil)
 	b.ResetTimer()
 
@@ -23,7 +25,7 @@ func BenchmarkEnqueue(b *testing.B) {
 		asynqtest.FlushDB(b, r.client)
 		b.StartTimer()
 
-		if err := r.Enqueue(msg); err != nil {
+		if err := r.Enqueue(ctx, msg); err != nil {
 			b.Fatalf("Enqueue failed: %v", err)
 		}
 	}
@@ -31,6 +33,7 @@ func BenchmarkEnqueue(b *testing.B) {
 
 func BenchmarkEnqueueUnique(b *testing.B) {
 	r := setup(b)
+	ctx := context.Background()
 	msg := &base.TaskMessage{
 		Type:      "task1",
 		Payload:   nil,
@@ -45,7 +48,7 @@ func BenchmarkEnqueueUnique(b *testing.B) {
 		asynqtest.FlushDB(b, r.client)
 		b.StartTimer()
 
-		if err := r.EnqueueUnique(msg, uniqueTTL); err != nil {
+		if err := r.EnqueueUnique(ctx, msg, uniqueTTL); err != nil {
 			b.Fatalf("EnqueueUnique failed: %v", err)
 		}
 	}
@@ -53,6 +56,7 @@ func BenchmarkEnqueueUnique(b *testing.B) {
 
 func BenchmarkSchedule(b *testing.B) {
 	r := setup(b)
+	ctx := context.Background()
 	msg := asynqtest.NewTaskMessage("task1", nil)
 	processAt := time.Now().Add(3 * time.Minute)
 	b.ResetTimer()
@@ -62,7 +66,7 @@ func BenchmarkSchedule(b *testing.B) {
 		asynqtest.FlushDB(b, r.client)
 		b.StartTimer()
 
-		if err := r.Schedule(msg, processAt); err != nil {
+		if err := r.Schedule(ctx, msg, processAt); err != nil {
 			b.Fatalf("Schedule failed: %v", err)
 		}
 	}
@@ -70,6 +74,7 @@ func BenchmarkSchedule(b *testing.B) {
 
 func BenchmarkScheduleUnique(b *testing.B) {
 	r := setup(b)
+	ctx := context.Background()
 	msg := &base.TaskMessage{
 		Type:      "task1",
 		Payload:   nil,
@@ -85,7 +90,7 @@ func BenchmarkScheduleUnique(b *testing.B) {
 		asynqtest.FlushDB(b, r.client)
 		b.StartTimer()
 
-		if err := r.ScheduleUnique(msg, processAt, uniqueTTL); err != nil {
+		if err := r.ScheduleUnique(ctx, msg, processAt, uniqueTTL); err != nil {
 			b.Fatalf("EnqueueUnique failed: %v", err)
 		}
 	}
@@ -93,6 +98,7 @@ func BenchmarkScheduleUnique(b *testing.B) {
 
 func BenchmarkDequeueSingleQueue(b *testing.B) {
 	r := setup(b)
+	ctx := context.Background()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -101,7 +107,7 @@ func BenchmarkDequeueSingleQueue(b *testing.B) {
 		for i := 0; i < 10; i++ {
 			m := asynqtest.NewTaskMessageWithQueue(
 				fmt.Sprintf("task%d", i), nil, base.DefaultQueueName)
-			if err := r.Enqueue(m); err != nil {
+			if err := r.Enqueue(ctx, m); err != nil {
 				b.Fatalf("Enqueue failed: %v", err)
 			}
 		}
@@ -116,6 +122,7 @@ func BenchmarkDequeueSingleQueue(b *testing.B) {
 func BenchmarkDequeueMultipleQueues(b *testing.B) {
 	qnames := []string{"critical", "default", "low"}
 	r := setup(b)
+	ctx := context.Background()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -125,7 +132,7 @@ func BenchmarkDequeueMultipleQueues(b *testing.B) {
 			for _, qname := range qnames {
 				m := asynqtest.NewTaskMessageWithQueue(
 					fmt.Sprintf("%s_task%d", qname, i), nil, qname)
-				if err := r.Enqueue(m); err != nil {
+				if err := r.Enqueue(ctx, m); err != nil {
 					b.Fatalf("Enqueue failed: %v", err)
 				}
 			}

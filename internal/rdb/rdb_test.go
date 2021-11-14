@@ -78,7 +78,7 @@ func TestEnqueue(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case.
 
-		err := r.Enqueue(tc.msg)
+		err := r.Enqueue(context.Background(), tc.msg)
 		if err != nil {
 			t.Errorf("(*RDB).Enqueue(msg) = %v, want nil", err)
 			continue
@@ -148,11 +148,11 @@ func TestEnqueueTaskIdConflictError(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case.
 
-		if err := r.Enqueue(tc.firstMsg); err != nil {
+		if err := r.Enqueue(context.Background(), tc.firstMsg); err != nil {
 			t.Errorf("First message: Enqueue failed: %v", err)
 			continue
 		}
-		if err := r.Enqueue(tc.secondMsg); !errors.Is(err, errors.ErrTaskIdConflict) {
+		if err := r.Enqueue(context.Background(), tc.secondMsg); !errors.Is(err, errors.ErrTaskIdConflict) {
 			t.Errorf("Second message: Enqueue returned %v, want %v", err, errors.ErrTaskIdConflict)
 			continue
 		}
@@ -181,7 +181,7 @@ func TestEnqueueUnique(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case.
 
 		// Enqueue the first message, should succeed.
-		err := r.EnqueueUnique(tc.msg, tc.ttl)
+		err := r.EnqueueUnique(context.Background(), tc.msg, tc.ttl)
 		if err != nil {
 			t.Errorf("First message: (*RDB).EnqueueUnique(%v, %v) = %v, want nil",
 				tc.msg, tc.ttl, err)
@@ -241,7 +241,7 @@ func TestEnqueueUnique(t *testing.T) {
 		}
 
 		// Enqueue the second message, should fail.
-		got := r.EnqueueUnique(tc.msg, tc.ttl)
+		got := r.EnqueueUnique(context.Background(), tc.msg, tc.ttl)
 		if !errors.Is(got, errors.ErrDuplicateTask) {
 			t.Errorf("Second message: (*RDB).EnqueueUnique(msg, ttl) = %v, want %v", got, errors.ErrDuplicateTask)
 			continue
@@ -282,11 +282,11 @@ func TestEnqueueUniqueTaskIdConflictError(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case.
 
-		if err := r.EnqueueUnique(tc.firstMsg, ttl); err != nil {
+		if err := r.EnqueueUnique(context.Background(), tc.firstMsg, ttl); err != nil {
 			t.Errorf("First message: EnqueueUnique failed: %v", err)
 			continue
 		}
-		if err := r.EnqueueUnique(tc.secondMsg, ttl); !errors.Is(err, errors.ErrTaskIdConflict) {
+		if err := r.EnqueueUnique(context.Background(), tc.secondMsg, ttl); !errors.Is(err, errors.ErrTaskIdConflict) {
 			t.Errorf("Second message: EnqueueUnique returned %v, want %v", err, errors.ErrTaskIdConflict)
 			continue
 		}
@@ -1162,7 +1162,7 @@ func TestSchedule(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 
-		err := r.Schedule(tc.msg, tc.processAt)
+		err := r.Schedule(context.Background(), tc.msg, tc.processAt)
 		if err != nil {
 			t.Errorf("(*RDB).Schedule(%v, %v) = %v, want nil",
 				tc.msg, tc.processAt, err)
@@ -1245,11 +1245,11 @@ func TestScheduleTaskIdConflictError(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case.
 
-		if err := r.Schedule(tc.firstMsg, processAt); err != nil {
+		if err := r.Schedule(context.Background(), tc.firstMsg, processAt); err != nil {
 			t.Errorf("First message: Schedule failed: %v", err)
 			continue
 		}
-		if err := r.Schedule(tc.secondMsg, processAt); !errors.Is(err, errors.ErrTaskIdConflict) {
+		if err := r.Schedule(context.Background(), tc.secondMsg, processAt); !errors.Is(err, errors.ErrTaskIdConflict) {
 			t.Errorf("Second message: Schedule returned %v, want %v", err, errors.ErrTaskIdConflict)
 			continue
 		}
@@ -1279,7 +1279,7 @@ func TestScheduleUnique(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 
 		desc := "(*RDB).ScheduleUnique(msg, processAt, ttl)"
-		err := r.ScheduleUnique(tc.msg, tc.processAt, tc.ttl)
+		err := r.ScheduleUnique(context.Background(), tc.msg, tc.processAt, tc.ttl)
 		if err != nil {
 			t.Errorf("Frist task: %s = %v, want nil", desc, err)
 			continue
@@ -1336,7 +1336,7 @@ func TestScheduleUnique(t *testing.T) {
 		}
 
 		// Enqueue the second message, should fail.
-		got := r.ScheduleUnique(tc.msg, tc.processAt, tc.ttl)
+		got := r.ScheduleUnique(context.Background(), tc.msg, tc.processAt, tc.ttl)
 		if !errors.Is(got, errors.ErrDuplicateTask) {
 			t.Errorf("Second task: %s = %v, want %v", desc, got, errors.ErrDuplicateTask)
 			continue
@@ -1379,11 +1379,11 @@ func TestScheduleUniqueTaskIdConflictError(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case.
 
-		if err := r.ScheduleUnique(tc.firstMsg, processAt, ttl); err != nil {
+		if err := r.ScheduleUnique(context.Background(), tc.firstMsg, processAt, ttl); err != nil {
 			t.Errorf("First message: ScheduleUnique failed: %v", err)
 			continue
 		}
-		if err := r.ScheduleUnique(tc.secondMsg, processAt, ttl); !errors.Is(err, errors.ErrTaskIdConflict) {
+		if err := r.ScheduleUnique(context.Background(), tc.secondMsg, processAt, ttl); !errors.Is(err, errors.ErrTaskIdConflict) {
 			t.Errorf("Second message: ScheduleUnique returned %v, want %v", err, errors.ErrTaskIdConflict)
 			continue
 		}

@@ -293,7 +293,7 @@ func (c *Client) Close() error {
 	return c.rdb.Close()
 }
 
-// Enqueue enqueues the given task to queue.
+// Enqueue enqueues the given task to a queue.
 //
 // Enqueue returns TaskInfo and nil error if the task is enqueued successfully, otherwise returns a non-nil error.
 //
@@ -309,7 +309,7 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 	return c.EnqueueContext(context.Background(), task, opts...)
 }
 
-// EnqueueContext enqueuees the given task to a queue.
+// EnqueueContext enqueues the given task to a queue.
 //
 // EnqueueContext returns TaskInfo and nil error if the task is enqueued successfully, otherwise returns a non-nil error.
 //
@@ -320,7 +320,7 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 //
 // If no ProcessAt or ProcessIn options are provided, the task will be pending immediately.
 //
-// The given context applies to the enqueue operation. To specify task timeout and deadline, use Timeout and Deadline option instead.
+// The first argument context applies to the enqueue operation. To specify task timeout and deadline, use Timeout and Deadline option instead.
 func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option) (*TaskInfo, error) {
 	if strings.TrimSpace(task.Type()) == "" {
 		return nil, fmt.Errorf("task typename cannot be empty")
