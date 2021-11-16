@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -292,7 +293,7 @@ func (c *Client) Close() error {
 	return c.rdb.Close()
 }
 
-// Enqueue enqueues the given task to be processed asynchronously.
+// Enqueue enqueues the given task to a queue.
 //
 // Enqueue returns TaskInfo and nil error if the task is enqueued successfully, otherwise returns a non-nil error.
 //
@@ -302,7 +303,25 @@ func (c *Client) Close() error {
 // By deafult, max retry is set to 25 and timeout is set to 30 minutes.
 //
 // If no ProcessAt or ProcessIn options are provided, the task will be pending immediately.
+//
+// Enqueue uses context.Background internally; to specify the context, use EnqueueContext.
 func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
+	return c.EnqueueContext(context.Background(), task, opts...)
+}
+
+// EnqueueContext enqueues the given task to a queue.
+//
+// EnqueueContext returns TaskInfo and nil error if the task is enqueued successfully, otherwise returns a non-nil error.
+//
+// The argument opts specifies the behavior of task processing.
+// If there are conflicting Option values the last one overrides others.
+// Any options provided to NewTask can be overridden by options passed to Enqueue.
+// By deafult, max retry is set to 25 and timeout is set to 30 minutes.
+//
+// If no ProcessAt or ProcessIn options are provided, the task will be pending immediately.
+//
+// The first argument context applies to the enqueue operation. To specify task timeout and deadline, use Timeout and Deadline option instead.
+func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option) (*TaskInfo, error) {
 	if strings.TrimSpace(task.Type()) == "" {
 		return nil, fmt.Errorf("task typename cannot be empty")
 	}
@@ -343,10 +362,10 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 	var state base.TaskState
 	if opt.processAt.Before(now) || opt.processAt.Equal(now) {
 		opt.processAt = now
-		err = c.enqueue(msg, opt.uniqueTTL)
+		err = c.enqueue(ctx, msg, opt.uniqueTTL)
 		state = base.TaskStatePending
 	} else {
-		err = c.schedule(msg, opt.processAt, opt.uniqueTTL)
+		err = c.schedule(ctx, msg, opt.processAt, opt.uniqueTTL)
 		state = base.TaskStateScheduled
 	}
 	switch {
@@ -360,17 +379,17 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 	return newTaskInfo(msg, state, opt.processAt, nil), nil
 }
 
-func (c *Client) enqueue(msg *base.TaskMessage, uniqueTTL time.Duration) error {
+func (c *Client) enqueue(ctx context.Context, msg *base.TaskMessage, uniqueTTL time.Duration) error {
 	if uniqueTTL > 0 {
-		return c.rdb.EnqueueUnique(msg, uniqueTTL)
+		return c.rdb.EnqueueUnique(ctx, msg, uniqueTTL)
 	}
-	return c.rdb.Enqueue(msg)
+	return c.rdb.Enqueue(ctx, msg)
 }
 
-func (c *Client) schedule(msg *base.TaskMessage, t time.Time, uniqueTTL time.Duration) error {
+func (c *Client) schedule(ctx context.Context, msg *base.TaskMessage, t time.Time, uniqueTTL time.Duration) error {
 	if uniqueTTL > 0 {
 		ttl := t.Add(uniqueTTL).Sub(time.Now())
-		return c.rdb.ScheduleUnique(msg, t, ttl)
+		return c.rdb.ScheduleUnique(ctx, msg, t, ttl)
 	}
-	return c.rdb.Schedule(msg, t)
+	return c.rdb.Schedule(ctx, msg, t)
 }

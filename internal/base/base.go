@@ -660,14 +660,14 @@ func (c *Cancelations) Get(id string) (fn context.CancelFunc, ok bool) {
 // See rdb.RDB as a reference implementation.
 type Broker interface {
 	Ping() error
-	Enqueue(msg *TaskMessage) error
-	EnqueueUnique(msg *TaskMessage, ttl time.Duration) error
+	Enqueue(ctx context.Context, msg *TaskMessage) error
+	EnqueueUnique(ctx context.Context, msg *TaskMessage, ttl time.Duration) error
 	Dequeue(qnames ...string) (*TaskMessage, time.Time, error)
 	Done(msg *TaskMessage) error
 	MarkAsComplete(msg *TaskMessage) error
 	Requeue(msg *TaskMessage) error
-	Schedule(msg *TaskMessage, processAt time.Time) error
-	ScheduleUnique(msg *TaskMessage, processAt time.Time, ttl time.Duration) error
+	Schedule(ctx context.Context, msg *TaskMessage, processAt time.Time) error
+	ScheduleUnique(ctx context.Context, msg *TaskMessage, processAt time.Time, ttl time.Duration) error
 	Retry(msg *TaskMessage, processAt time.Time, errMsg string, isFailure bool) error
 	Archive(msg *TaskMessage, errMsg string) error
 	ForwardIfReady(qnames ...string) error

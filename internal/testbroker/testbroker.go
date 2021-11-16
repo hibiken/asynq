@@ -6,6 +6,7 @@
 package testbroker
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
@@ -45,22 +46,22 @@ func (tb *TestBroker) Wakeup() {
 	tb.sleeping = false
 }
 
-func (tb *TestBroker) Enqueue(msg *base.TaskMessage) error {
+func (tb *TestBroker) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return errRedisDown
 	}
-	return tb.real.Enqueue(msg)
+	return tb.real.Enqueue(ctx, msg)
 }
 
-func (tb *TestBroker) EnqueueUnique(msg *base.TaskMessage, ttl time.Duration) error {
+func (tb *TestBroker) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time.Duration) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return errRedisDown
 	}
-	return tb.real.EnqueueUnique(msg, ttl)
+	return tb.real.EnqueueUnique(ctx, msg, ttl)
 }
 
 func (tb *TestBroker) Dequeue(qnames ...string) (*base.TaskMessage, time.Time, error) {
@@ -99,22 +100,22 @@ func (tb *TestBroker) Requeue(msg *base.TaskMessage) error {
 	return tb.real.Requeue(msg)
 }
 
-func (tb *TestBroker) Schedule(msg *base.TaskMessage, processAt time.Time) error {
+func (tb *TestBroker) Schedule(ctx context.Context, msg *base.TaskMessage, processAt time.Time) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return errRedisDown
 	}
-	return tb.real.Schedule(msg, processAt)
+	return tb.real.Schedule(ctx, msg, processAt)
 }
 
-func (tb *TestBroker) ScheduleUnique(msg *base.TaskMessage, processAt time.Time, ttl time.Duration) error {
+func (tb *TestBroker) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, processAt time.Time, ttl time.Duration) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return errRedisDown
 	}
-	return tb.real.ScheduleUnique(msg, processAt, ttl)
+	return tb.real.ScheduleUnique(ctx, msg, processAt, ttl)
 }
 
 func (tb *TestBroker) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string, isFailure bool) error {
