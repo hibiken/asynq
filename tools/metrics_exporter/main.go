@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -29,16 +30,22 @@ type BrokerMetricsCollector struct {
 	inspector *asynq.Inspector
 }
 
-// metricsBundle is a structure that bundles all of the collected metrics data.
-type metricsBundle struct {
-	tasksQueued float64
-}
-
-// collectMetrics gathers all metrics data from the broker and updates the metrics values.
+// collectQueueInfo gathers QueueInfo of all queues.
 // Since this operation is expensive, it must be called once per collection.
-func (bmc *BrokerMetricsCollector) collectMetrics() (*metricsBundle, error) {
-	// TODO: This is where we do expensive collection of metrics.
-	return &metricsBundle{tasksQueued: 1024.00}, nil
+func (bmc *BrokerMetricsCollector) collectQueueInfo() ([]*asynq.QueueInfo, error) {
+	qnames, err := bmc.inspector.Queues()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get queue names: %v", err)
+	}
+	infos := make([]*asynq.QueueInfo, len(qnames))
+	for i, qname := range qnames {
+		qinfo, err := bmc.inspector.GetQueueInfo(qname)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get queue info: %v", err)
+		}
+		infos[i] = qinfo
+	}
+	return infos, nil
 }
 
 // Descriptors used by BrokerMetricsCollector
@@ -46,8 +53,16 @@ var (
 	tasksQueuedDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "tasks_enqueued_total"),
 		"Number of tasks enqueued.",
-		[]string{"queue"}, nil,
+		[]string{"queue", "state"}, nil,
 	)
+	// Number of tasks processed (succedeed or failed)
+	// tasksProcessed = prometheus.NewDesc()
+
+	// Number of tasks failed
+	// taskFailed = prometheus.NewDesc()
+
+	// paused queue count
+	// pausedQueues = prometheus.NewDesc()
 )
 
 func (bmc *BrokerMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
@@ -55,16 +70,54 @@ func (bmc *BrokerMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (bmc *BrokerMetricsCollector) Collect(ch chan<- prometheus.Metric) {
-	data, err := bmc.collectMetrics()
+	queueInfos, err := bmc.collectQueueInfo()
 	if err != nil {
 		log.Printf("Failed to collect metrics data: %v", err)
 	}
-	ch <- prometheus.MustNewConstMetric(
-		tasksQueuedDesc,
-		prometheus.GaugeValue,
-		data.tasksQueued,
-		"default_queue", // TODO: We need to figure out how to dynamicallly do this.
-	)
+	for _, info := range queueInfos {
+		ch <- prometheus.MustNewConstMetric(
+			tasksQueuedDesc,
+			prometheus.GaugeValue,
+			float64(info.Active),
+			info.Queue,
+			"active",
+		)
+		ch <- prometheus.MustNewConstMetric(
+			tasksQueuedDesc,
+			prometheus.GaugeValue,
+			float64(info.Pending),
+			info.Queue,
+			"pending",
+		)
+		ch <- prometheus.MustNewConstMetric(
+			tasksQueuedDesc,
+			prometheus.GaugeValue,
+			float64(info.Scheduled),
+			info.Queue,
+			"scheduled",
+		)
+		ch <- prometheus.MustNewConstMetric(
+			tasksQueuedDesc,
+			prometheus.GaugeValue,
+			float64(info.Retry),
+			info.Queue,
+			"retry",
+		)
+		ch <- prometheus.MustNewConstMetric(
+			tasksQueuedDesc,
+			prometheus.GaugeValue,
+			float64(info.Archived),
+			info.Queue,
+			"archived",
+		)
+		ch <- prometheus.MustNewConstMetric(
+			tasksQueuedDesc,
+			prometheus.GaugeValue,
+			float64(info.Completed),
+			info.Queue,
+			"completed",
+		)
+	}
 }
 
 func NewBrokerMetricsCollector(inspector *asynq.Inspector) *BrokerMetricsCollector {
@@ -72,7 +125,7 @@ func NewBrokerMetricsCollector(inspector *asynq.Inspector) *BrokerMetricsCollect
 }
 
 func init() {
-	flag.StringVar(&flagRedisAddr, "redis-addr", "127.0.0.1:9763", "host:port of redis server to connect to")
+	flag.StringVar(&flagRedisAddr, "redis-addr", "127.0.0.1:6379", "host:port of redis server to connect to")
 	flag.IntVar(&flagRedisDB, "redis-db", 0, "redis DB number to use")
 	flag.StringVar(&flagRedisPassword, "redis-password", "", "password used to connect to redis server")
 	flag.StringVar(&flagRedisUsername, "redis-username", "", "username used to connect to redis server")
