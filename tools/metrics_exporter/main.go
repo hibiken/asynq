@@ -52,17 +52,27 @@ func (bmc *BrokerMetricsCollector) collectQueueInfo() ([]*asynq.QueueInfo, error
 var (
 	tasksQueuedDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "tasks_enqueued_total"),
-		"Number of tasks enqueued.",
+		"Number of tasks enqueued; broken down by queue and state.",
 		[]string{"queue", "state"}, nil,
 	)
-	// Number of tasks processed (succedeed or failed)
-	// tasksProcessed = prometheus.NewDesc()
 
-	// Number of tasks failed
-	// taskFailed = prometheus.NewDesc()
+	tasksProcessed = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "tasks_processed_total"),
+		"Number of tasks processed (succedeed or failed); broken down by queue.",
+		[]string{"queue"}, nil,
+	)
 
-	// paused queue count
-	// pausedQueues = prometheus.NewDesc()
+	tasksFailed = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "tasks_failed_total"),
+		"Number of tasks failed; broken down by queue.",
+		[]string{"queue"}, nil,
+	)
+
+	pausedQueues = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "queue_paused_total"),
+		"Number of queues paused",
+		[]string{"queue"}, nil,
+	)
 )
 
 func (bmc *BrokerMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
@@ -117,6 +127,28 @@ func (bmc *BrokerMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			info.Queue,
 			"completed",
 		)
+		ch <- prometheus.MustNewConstMetric(
+			tasksProcessed,
+			prometheus.CounterValue,
+			float64(info.Processed),
+			info.Queue,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			tasksFailed,
+			prometheus.CounterValue,
+			float64(info.Failed),
+			info.Queue,
+		)
+		pausedValue := 0 // zero to indicate "not paused"
+		if info.Paused {
+			pausedValue = 1
+		}
+		ch <- prometheus.MustNewConstMetric(
+			pausedQueues,
+			prometheus.GaugeValue,
+			float64(pausedValue),
+			info.Queue,
+		)
 	}
 }
 
@@ -151,5 +183,6 @@ func main() {
 	)
 
 	http.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-	log.Fatal(http.ListenAndServe(":9876", nil))
+	log.Printf("exporter server is listening on port: %d\n", flagPort)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", flagPort), nil))
 }
