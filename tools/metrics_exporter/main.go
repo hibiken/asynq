@@ -165,6 +165,7 @@ func init() {
 }
 
 func main() {
+	flag.Parse()
 	// Using NewPedanticRegistry here to test the implementation of Collectors and Metrics.
 	reg := prometheus.NewPedanticRegistry()
 
