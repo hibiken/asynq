@@ -44,15 +44,9 @@ var (
 		[]string{"queue", "state"}, nil,
 	)
 
-	tasksProcessed = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "", "tasks_processed_total"),
-		"Number of tasks processed (succedeed or failed); broken down by queue.",
-		[]string{"queue"}, nil,
-	)
-
-	tasksFailed = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "", "tasks_failed_total"),
-		"Number of tasks failed; broken down by queue.",
+	queueSizeDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "queue_size"),
+		"Number of tasks in a queue",
 		[]string{"queue"}, nil,
 	)
 
@@ -115,18 +109,14 @@ func (bmc *BrokerMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			info.Queue,
 			"completed",
 		)
+
 		ch <- prometheus.MustNewConstMetric(
-			tasksProcessed,
-			prometheus.CounterValue,
-			float64(info.Processed),
+			queueSizeDesc,
+			prometheus.GaugeValue,
+			float64(info.Size),
 			info.Queue,
 		)
-		ch <- prometheus.MustNewConstMetric(
-			tasksFailed,
-			prometheus.CounterValue,
-			float64(info.Failed),
-			info.Queue,
-		)
+
 		pausedValue := 0 // zero to indicate "not paused"
 		if info.Paused {
 			pausedValue = 1
