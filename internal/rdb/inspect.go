@@ -63,7 +63,7 @@ type DailyStats struct {
 	Time time.Time
 }
 
-// KEYS[1] -> asynq:<qname>
+// KEYS[1] -> asynq:<qname>:pending
 // KEYS[2] -> asynq:<qname>:active
 // KEYS[3] -> asynq:<qname>:scheduled
 // KEYS[4] -> asynq:<qname>:retry
