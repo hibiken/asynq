@@ -73,6 +73,7 @@ func (r *RDB) runScriptWithErrorCode(ctx context.Context, op errors.Op, script *
 // ARGV[2] -> task ID
 // ARGV[3] -> task timeout in seconds (0 if not timeout)
 // ARGV[4] -> task deadline in unix time (0 if no deadline)
+// ARGV[5] -> current time
 //
 // Output:
 // Returns 1 if successfully enqueued
@@ -85,7 +86,8 @@ redis.call("HSET", KEYS[1],
            "msg", ARGV[1],
            "state", "pending",
            "timeout", ARGV[3],
-           "deadline", ARGV[4])
+           "deadline", ARGV[4],
+           "pending_since", ARGV[5])
 redis.call("LPUSH", KEYS[2], ARGV[2])
 return 1
 `)
@@ -109,6 +111,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 		msg.ID,
 		msg.Timeout,
 		msg.Deadline,
+		time.Now().Unix(),
 	}
 	n, err := r.runScriptWithErrorCode(ctx, op, enqueueCmd, keys, argv...)
 	if err != nil {
@@ -131,6 +134,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 // ARGV[3] -> task message data
 // ARGV[4] -> task timeout in seconds (0 if not timeout)
 // ARGV[5] -> task deadline in unix time (0 if no deadline)
+// ARGV[6] -> current time
 //
 // Output:
 // Returns 1 if successfully enqueued
@@ -149,6 +153,7 @@ redis.call("HSET", KEYS[2],
            "state", "pending",
            "timeout", ARGV[4],
            "deadline", ARGV[5],
+		   "pending_since", ARGV[6],
            "unique_key", KEYS[1])
 redis.call("LPUSH", KEYS[3], ARGV[1])
 return 1
@@ -176,6 +181,7 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 		encoded,
 		msg.Timeout,
 		msg.Deadline,
+		time.Now().Unix(),
 	}
 	n, err := r.runScriptWithErrorCode(ctx, op, enqueueUniqueCmd, keys, argv...)
 	if err != nil {
@@ -762,15 +768,17 @@ local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, 10
 for _, id in ipairs(ids) do
 	redis.call("LPUSH", KEYS[2], id)
 	redis.call("ZREM", KEYS[1], id)
-	redis.call("HSET", ARGV[2] .. id, "state", "pending")
+	redis.call("HSET", ARGV[2] .. id,
+               "state", "pending",
+               "pending_since", ARGV[1])
 end
 return table.getn(ids)`)
 
 // forward moves tasks with a score less than the current unix time
 // from the src zset to the dst list. It returns the number of tasks moved.
 func (r *RDB) forward(src, dst, taskKeyPrefix string) (int, error) {
-	now := float64(time.Now().Unix())
-	res, err := forwardCmd.Run(context.Background(), r.client, []string{src, dst}, now, taskKeyPrefix).Result()
+	res, err := forwardCmd.Run(context.Background(), r.client,
+		[]string{src, dst}, time.Now().Unix(), taskKeyPrefix).Result()
 	if err != nil {
 		return 0, errors.E(errors.Internal, fmt.Sprintf("redis eval error: %v", err))
 	}

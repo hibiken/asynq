@@ -78,6 +78,7 @@ func TestEnqueue(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case.
 
+		enqueueTime := time.Now()
 		err := r.Enqueue(context.Background(), tc.msg)
 		if err != nil {
 			t.Errorf("(*RDB).Enqueue(msg) = %v, want nil", err)
@@ -114,6 +115,10 @@ func TestEnqueue(t *testing.T) {
 		deadline := r.client.HGet(context.Background(), taskKey, "deadline").Val() // "deadline" field
 		if want := strconv.Itoa(int(tc.msg.Deadline)); deadline != want {
 			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
+		}
+		pendingSince := r.client.HGet(context.Background(), taskKey, "pending_since").Val() // "pending_since" field
+		if want := strconv.Itoa(int(enqueueTime.Unix())); pendingSince != want {
+			t.Errorf("pending_since field under task-key is set to %v, want %v", pendingSince, want)
 		}
 
 		// Check queue is in the AllQueues set.
@@ -181,6 +186,7 @@ func TestEnqueueUnique(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case.
 
 		// Enqueue the first message, should succeed.
+		enqueueTime := time.Now()
 		err := r.EnqueueUnique(context.Background(), tc.msg, tc.ttl)
 		if err != nil {
 			t.Errorf("First message: (*RDB).EnqueueUnique(%v, %v) = %v, want nil",
@@ -229,6 +235,10 @@ func TestEnqueueUnique(t *testing.T) {
 		deadline := r.client.HGet(context.Background(), taskKey, "deadline").Val() // "deadline" field
 		if want := strconv.Itoa(int(tc.msg.Deadline)); deadline != want {
 			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
+		}
+		pendingSince := r.client.HGet(context.Background(), taskKey, "pending_since").Val() // "pending_since" field
+		if want := strconv.Itoa(int(enqueueTime.Unix())); pendingSince != want {
+			t.Errorf("pending_since field under task-key is set to %v, want %v", pendingSince, want)
 		}
 		uniqueKey := r.client.HGet(context.Background(), taskKey, "unique_key").Val() // "unique_key" field
 		if uniqueKey != tc.msg.UniqueKey {
@@ -2055,6 +2065,7 @@ func TestForwardIfReady(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
+		now := time.Now() // time when the method is called
 		err := r.ForwardIfReady(tc.qnames...)
 		if err != nil {
 			t.Errorf("(*RDB).CheckScheduled(%v) = %v, want nil", tc.qnames, err)
@@ -2065,6 +2076,13 @@ func TestForwardIfReady(t *testing.T) {
 			gotPending := h.GetPendingMessages(t, r.client, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
+			}
+			// Make sure "pending_since" field is set
+			for _, msg := range gotPending {
+				pendingSince := r.client.HGet(context.Background(), base.TaskKey(msg.Queue, msg.ID), "pending_since").Val()
+				if want := strconv.Itoa(int(now.Unix())); pendingSince != want {
+					t.Error("pending_since field is not set for newly pending message")
+				}
 			}
 		}
 		for qname, want := range tc.wantScheduled {
