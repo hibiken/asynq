@@ -21,6 +21,7 @@ import (
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
+	"github.com/hibiken/asynq/internal/timeutil"
 )
 
 // variables used for package testing.
@@ -67,6 +68,9 @@ func TestEnqueue(t *testing.T) {
 	t2 := h.NewTaskMessageWithQueue("generate_csv", h.JSON(map[string]interface{}{}), "csv")
 	t3 := h.NewTaskMessageWithQueue("sync", nil, "low")
 
+	enqueueTime := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(enqueueTime))
+
 	tests := []struct {
 		msg *base.TaskMessage
 	}{
@@ -78,7 +82,6 @@ func TestEnqueue(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case.
 
-		enqueueTime := time.Now()
 		err := r.Enqueue(context.Background(), tc.msg)
 		if err != nil {
 			t.Errorf("(*RDB).Enqueue(msg) = %v, want nil", err)
@@ -117,7 +120,7 @@ func TestEnqueue(t *testing.T) {
 			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
 		}
 		pendingSince := r.client.HGet(context.Background(), taskKey, "pending_since").Val() // "pending_since" field
-		if want := strconv.Itoa(int(enqueueTime.Unix())); pendingSince != want {
+		if want := strconv.Itoa(int(timeutil.UnixMilli(enqueueTime))); pendingSince != want {
 			t.Errorf("pending_since field under task-key is set to %v, want %v", pendingSince, want)
 		}
 
@@ -175,6 +178,9 @@ func TestEnqueueUnique(t *testing.T) {
 		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]interface{}{"user_id": 123})),
 	}
 
+	enqueueTime := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(enqueueTime))
+
 	tests := []struct {
 		msg *base.TaskMessage
 		ttl time.Duration // uniqueness ttl
@@ -186,7 +192,6 @@ func TestEnqueueUnique(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case.
 
 		// Enqueue the first message, should succeed.
-		enqueueTime := time.Now()
 		err := r.EnqueueUnique(context.Background(), tc.msg, tc.ttl)
 		if err != nil {
 			t.Errorf("First message: (*RDB).EnqueueUnique(%v, %v) = %v, want nil",
@@ -237,7 +242,7 @@ func TestEnqueueUnique(t *testing.T) {
 			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
 		}
 		pendingSince := r.client.HGet(context.Background(), taskKey, "pending_since").Val() // "pending_since" field
-		if want := strconv.Itoa(int(enqueueTime.Unix())); pendingSince != want {
+		if want := strconv.Itoa(int(timeutil.UnixMilli(enqueueTime))); pendingSince != want {
 			t.Errorf("pending_since field under task-key is set to %v, want %v", pendingSince, want)
 		}
 		uniqueKey := r.client.HGet(context.Background(), taskKey, "unique_key").Val() // "unique_key" field
@@ -2065,7 +2070,9 @@ func TestForwardIfReady(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		now := time.Now() // time when the method is called
+		now := time.Now()
+		r.SetClock(timeutil.NewSimulatedClock(now))
+
 		err := r.ForwardIfReady(tc.qnames...)
 		if err != nil {
 			t.Errorf("(*RDB).CheckScheduled(%v) = %v, want nil", tc.qnames, err)
@@ -2080,7 +2087,7 @@ func TestForwardIfReady(t *testing.T) {
 			// Make sure "pending_since" field is set
 			for _, msg := range gotPending {
 				pendingSince := r.client.HGet(context.Background(), base.TaskKey(msg.Queue, msg.ID), "pending_since").Val()
-				if want := strconv.Itoa(int(now.Unix())); pendingSince != want {
+				if want := strconv.Itoa(int(timeutil.UnixMilli(now))); pendingSince != want {
 					t.Error("pending_since field is not set for newly pending message")
 				}
 			}
