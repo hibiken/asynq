@@ -232,6 +232,7 @@ if redis.call("EXISTS", KEYS[2]) == 0 then
 	if id then
 		local key = ARGV[2] .. id
 		redis.call("HSET", key, "state", "active")
+		redis.call("HDEL", key, "pending_since")
 		local data = redis.call("HMGET", key, "msg", "timeout", "deadline")
 		local msg = data[1]	
 		local timeout = tonumber(data[2])
