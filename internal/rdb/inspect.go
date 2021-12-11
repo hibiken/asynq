@@ -46,6 +46,8 @@ type Stats struct {
 	Processed int
 	// Total number of tasks failed during the current date.
 	Failed int
+	// Latency of the queue, measured by the oldest pending task in the queue.
+	Latency time.Duration
 	// Time this stats was taken.
 	Timestamp time.Time
 }
@@ -72,10 +74,13 @@ type DailyStats struct {
 // KEYS[7] -> asynq:<qname>:processed:<yyyy-mm-dd>
 // KEYS[8] -> asynq:<qname>:failed:<yyyy-mm-dd>
 // KEYS[9] -> asynq:<qname>:paused
+//
+// ARGV[1] -> task key prefix
 var currentStatsCmd = redis.NewScript(`
 local res = {}
+local pendingTaskCount = redis.call("LLEN", KEYS[1])
 table.insert(res, KEYS[1])
-table.insert(res, redis.call("LLEN", KEYS[1]))
+table.insert(res, pendingTaskCount)
 table.insert(res, KEYS[2])
 table.insert(res, redis.call("LLEN", KEYS[2]))
 table.insert(res, KEYS[3])
@@ -102,6 +107,13 @@ table.insert(res, KEYS[8])
 table.insert(res, fcount)
 table.insert(res, KEYS[9])
 table.insert(res, redis.call("EXISTS", KEYS[9]))
+table.insert(res, "oldest_pending_since")
+if pendingTaskCount > 0 then
+	local id = redis.call("LRANGE", KEYS[1], -1, -1)[1]
+	table.insert(res, redis.call("HGET", ARGV[1] .. id, "pending_since"))
+else
+	table.insert(res, 0)
+end
 return res`)
 
 // CurrentStats returns a current state of the queues.
@@ -125,7 +137,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		base.ProcessedKey(qname, now),
 		base.FailedKey(qname, now),
 		base.PausedKey(qname),
-	}).Result()
+	}, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, err)
 	}
@@ -169,6 +181,12 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 				stats.Paused = false
 			} else {
 				stats.Paused = true
+			}
+		case "oldest_pending_since":
+			if val == 0 {
+				stats.Latency = 0
+			} else {
+				stats.Latency = r.clock.Now().Sub(time.Unix(0, int64(val)))
 			}
 		}
 	}

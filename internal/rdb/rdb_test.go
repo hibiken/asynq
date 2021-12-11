@@ -120,7 +120,7 @@ func TestEnqueue(t *testing.T) {
 			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
 		}
 		pendingSince := r.client.HGet(context.Background(), taskKey, "pending_since").Val() // "pending_since" field
-		if want := strconv.Itoa(int(timeutil.UnixMilli(enqueueTime))); pendingSince != want {
+		if want := strconv.Itoa(int(enqueueTime.UnixNano())); pendingSince != want {
 			t.Errorf("pending_since field under task-key is set to %v, want %v", pendingSince, want)
 		}
 
@@ -242,7 +242,7 @@ func TestEnqueueUnique(t *testing.T) {
 			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
 		}
 		pendingSince := r.client.HGet(context.Background(), taskKey, "pending_since").Val() // "pending_since" field
-		if want := strconv.Itoa(int(timeutil.UnixMilli(enqueueTime))); pendingSince != want {
+		if want := strconv.Itoa(int(enqueueTime.UnixNano())); pendingSince != want {
 			t.Errorf("pending_since field under task-key is set to %v, want %v", pendingSince, want)
 		}
 		uniqueKey := r.client.HGet(context.Background(), taskKey, "unique_key").Val() // "unique_key" field
@@ -2087,7 +2087,7 @@ func TestForwardIfReady(t *testing.T) {
 			// Make sure "pending_since" field is set
 			for _, msg := range gotPending {
 				pendingSince := r.client.HGet(context.Background(), base.TaskKey(msg.Queue, msg.ID), "pending_since").Val()
-				if want := strconv.Itoa(int(timeutil.UnixMilli(now))); pendingSince != want {
+				if want := strconv.Itoa(int(now.UnixNano())); pendingSince != want {
 					t.Error("pending_since field is not set for newly pending message")
 				}
 			}

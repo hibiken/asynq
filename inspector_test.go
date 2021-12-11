@@ -19,6 +19,7 @@ import (
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq/internal/timeutil"
 )
 
 func TestInspectorQueues(t *testing.T) {
@@ -269,18 +270,20 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 	ignoreMemUsg := cmpopts.IgnoreFields(QueueInfo{}, "MemoryUsage")
 
 	inspector := NewInspector(getRedisConnOpt(t))
+	inspector.rdb.SetClock(timeutil.NewSimulatedClock(now))
 
 	tests := []struct {
-		pending   map[string][]*base.TaskMessage
-		active    map[string][]*base.TaskMessage
-		scheduled map[string][]base.Z
-		retry     map[string][]base.Z
-		archived  map[string][]base.Z
-		completed map[string][]base.Z
-		processed map[string]int
-		failed    map[string]int
-		qname     string
-		want      *QueueInfo
+		pending                         map[string][]*base.TaskMessage
+		active                          map[string][]*base.TaskMessage
+		scheduled                       map[string][]base.Z
+		retry                           map[string][]base.Z
+		archived                        map[string][]base.Z
+		completed                       map[string][]base.Z
+		processed                       map[string]int
+		failed                          map[string]int
+		oldestPendingMessageEnqueueTime map[string]time.Time
+		qname                           string
+		want                            *QueueInfo
 	}{
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -326,9 +329,15 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 				"critical": 0,
 				"low":      5,
 			},
+			oldestPendingMessageEnqueueTime: map[string]time.Time{
+				"default":  now.Add(-15 * time.Second),
+				"critical": now.Add(-200 * time.Millisecond),
+				"low":      now.Add(-30 * time.Second),
+			},
 			qname: "default",
 			want: &QueueInfo{
 				Queue:     "default",
+				Latency:   15 * time.Second,
 				Size:      4,
 				Pending:   1,
 				Active:    1,
@@ -352,13 +361,21 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 		h.SeedAllRetryQueues(t, r, tc.retry)
 		h.SeedAllArchivedQueues(t, r, tc.archived)
 		h.SeedAllCompletedQueues(t, r, tc.completed)
+		ctx := context.Background()
 		for qname, n := range tc.processed {
 			processedKey := base.ProcessedKey(qname, now)
-			r.Set(context.Background(), processedKey, n, 0)
+			r.Set(ctx, processedKey, n, 0)
 		}
 		for qname, n := range tc.failed {
 			failedKey := base.FailedKey(qname, now)
-			r.Set(context.Background(), failedKey, n, 0)
+			r.Set(ctx, failedKey, n, 0)
+		}
+		for qname, enqueueTime := range tc.oldestPendingMessageEnqueueTime {
+			if enqueueTime.IsZero() {
+				continue
+			}
+			oldestPendingMessageID := r.LRange(ctx, base.PendingKey(qname), -1, -1).Val()[0] // get the right most msg in the list
+			r.HSet(ctx, base.TaskKey(qname, oldestPendingMessageID), "pending_since", enqueueTime.UnixNano())
 		}
 
 		got, err := inspector.GetQueueInfo(tc.qname)

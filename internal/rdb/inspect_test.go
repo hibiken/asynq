@@ -17,6 +17,7 @@ import (
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
+	"github.com/hibiken/asynq/internal/timeutil"
 )
 
 func TestAllQueues(t *testing.T) {
@@ -60,19 +61,21 @@ func TestCurrentStats(t *testing.T) {
 	m5 := h.NewTaskMessageWithQueue("important_notification", nil, "critical")
 	m6 := h.NewTaskMessageWithQueue("minor_notification", nil, "low")
 	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
 
 	tests := []struct {
-		pending    map[string][]*base.TaskMessage
-		inProgress map[string][]*base.TaskMessage
-		scheduled  map[string][]base.Z
-		retry      map[string][]base.Z
-		archived   map[string][]base.Z
-		completed  map[string][]base.Z
-		processed  map[string]int
-		failed     map[string]int
-		paused     []string
-		qname      string
-		want       *Stats
+		pending                         map[string][]*base.TaskMessage
+		active                          map[string][]*base.TaskMessage
+		scheduled                       map[string][]base.Z
+		retry                           map[string][]base.Z
+		archived                        map[string][]base.Z
+		completed                       map[string][]base.Z
+		processed                       map[string]int
+		failed                          map[string]int
+		paused                          []string
+		oldestPendingMessageEnqueueTime map[string]time.Time
+		qname                           string
+		want                            *Stats
 	}{
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -80,7 +83,7 @@ func TestCurrentStats(t *testing.T) {
 				"critical": {m5},
 				"low":      {m6},
 			},
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default":  {m2},
 				"critical": {},
 				"low":      {},
@@ -117,6 +120,11 @@ func TestCurrentStats(t *testing.T) {
 				"default":  2,
 				"critical": 0,
 				"low":      1,
+			},
+			oldestPendingMessageEnqueueTime: map[string]time.Time{
+				"default":  now.Add(-15 * time.Second),
+				"critical": now.Add(-200 * time.Millisecond),
+				"low":      now.Add(-30 * time.Second),
 			},
 			paused: []string{},
 			qname:  "default",
@@ -132,16 +140,17 @@ func TestCurrentStats(t *testing.T) {
 				Completed: 0,
 				Processed: 120,
 				Failed:    2,
+				Latency:   15 * time.Second,
 				Timestamp: now,
 			},
 		},
 		{
 			pending: map[string][]*base.TaskMessage{
 				"default":  {m1},
-				"critical": {m5},
+				"critical": {},
 				"low":      {m6},
 			},
-			inProgress: map[string][]*base.TaskMessage{
+			active: map[string][]*base.TaskMessage{
 				"default":  {m2},
 				"critical": {},
 				"low":      {},
@@ -179,13 +188,18 @@ func TestCurrentStats(t *testing.T) {
 				"critical": 0,
 				"low":      1,
 			},
+			oldestPendingMessageEnqueueTime: map[string]time.Time{
+				"default":  now.Add(-15 * time.Second),
+				"critical": time.Time{}, // zero value since there's no pending task in this queue
+				"low":      now.Add(-30 * time.Second),
+			},
 			paused: []string{"critical", "low"},
 			qname:  "critical",
 			want: &Stats{
 				Queue:     "critical",
 				Paused:    true,
-				Size:      1,
-				Pending:   1,
+				Size:      0,
+				Pending:   0,
 				Active:    0,
 				Scheduled: 0,
 				Retry:     0,
@@ -193,6 +207,7 @@ func TestCurrentStats(t *testing.T) {
 				Completed: 0,
 				Processed: 100,
 				Failed:    0,
+				Latency:   0,
 				Timestamp: now,
 			},
 		},
@@ -206,18 +221,26 @@ func TestCurrentStats(t *testing.T) {
 			}
 		}
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
+		h.SeedAllActiveQueues(t, r.client, tc.active)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 		h.SeedAllCompletedQueues(t, r.client, tc.completed)
+		ctx := context.Background()
 		for qname, n := range tc.processed {
 			processedKey := base.ProcessedKey(qname, now)
-			r.client.Set(context.Background(), processedKey, n, 0)
+			r.client.Set(ctx, processedKey, n, 0)
 		}
 		for qname, n := range tc.failed {
 			failedKey := base.FailedKey(qname, now)
-			r.client.Set(context.Background(), failedKey, n, 0)
+			r.client.Set(ctx, failedKey, n, 0)
+		}
+		for qname, enqueueTime := range tc.oldestPendingMessageEnqueueTime {
+			if enqueueTime.IsZero() {
+				continue
+			}
+			oldestPendingMessageID := r.client.LRange(ctx, base.PendingKey(qname), -1, -1).Val()[0] // get the right most msg in the list
+			r.client.HSet(ctx, base.TaskKey(qname, oldestPendingMessageID), "pending_since", enqueueTime.UnixNano())
 		}
 
 		got, err := r.CurrentStats(tc.qname)

@@ -85,7 +85,7 @@ func (r *RDB) runScriptWithErrorCode(ctx context.Context, op errors.Op, script *
 // ARGV[2] -> task ID
 // ARGV[3] -> task timeout in seconds (0 if not timeout)
 // ARGV[4] -> task deadline in unix time (0 if no deadline)
-// ARGV[5] -> current uinx time in millisecond
+// ARGV[5] -> current unix time in nsec
 //
 // Output:
 // Returns 1 if successfully enqueued
@@ -123,7 +123,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 		msg.ID,
 		msg.Timeout,
 		msg.Deadline,
-		timeutil.UnixMilli(r.clock.Now()),
+		r.clock.Now().UnixNano(),
 	}
 	n, err := r.runScriptWithErrorCode(ctx, op, enqueueCmd, keys, argv...)
 	if err != nil {
@@ -146,7 +146,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 // ARGV[3] -> task message data
 // ARGV[4] -> task timeout in seconds (0 if not timeout)
 // ARGV[5] -> task deadline in unix time (0 if no deadline)
-// ARGV[6] -> current unix time in milliseconds
+// ARGV[6] -> current unix time in nsec
 //
 // Output:
 // Returns 1 if successfully enqueued
@@ -193,7 +193,7 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 		encoded,
 		msg.Timeout,
 		msg.Deadline,
-		timeutil.UnixMilli(r.clock.Now()),
+		r.clock.Now().UnixNano(),
 	}
 	n, err := r.runScriptWithErrorCode(ctx, op, enqueueUniqueCmd, keys, argv...)
 	if err != nil {
@@ -774,7 +774,7 @@ func (r *RDB) ForwardIfReady(qnames ...string) error {
 // KEYS[2] -> asynq:{<qname>}:pending
 // ARGV[1] -> current unix time in seconds
 // ARGV[2] -> task key prefix
-// ARGV[3] -> current unix time in milliseconds
+// ARGV[3] -> current unix time in nsec
 // Note: Script moves tasks up to 100 at a time to keep the runtime of script short.
 var forwardCmd = redis.NewScript(`
 local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, 100)
@@ -792,7 +792,7 @@ return table.getn(ids)`)
 func (r *RDB) forward(src, dst, taskKeyPrefix string) (int, error) {
 	now := r.clock.Now()
 	res, err := forwardCmd.Run(context.Background(), r.client,
-		[]string{src, dst}, now.Unix(), taskKeyPrefix, timeutil.UnixMilli(now)).Result()
+		[]string{src, dst}, now.Unix(), taskKeyPrefix, now.UnixNano()).Result()
 	if err != nil {
 		return 0, errors.E(errors.Internal, fmt.Sprintf("redis eval error: %v", err))
 	}
