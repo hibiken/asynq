@@ -165,7 +165,7 @@ redis.call("HSET", KEYS[2],
            "state", "pending",
            "timeout", ARGV[4],
            "deadline", ARGV[5],
-		   "pending_since", ARGV[6],
+           "pending_since", ARGV[6],
            "unique_key", KEYS[1])
 redis.call("LPUSH", KEYS[3], ARGV[1])
 return 1
