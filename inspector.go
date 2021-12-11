@@ -52,6 +52,9 @@ type QueueInfo struct {
 	// It is an approximate memory usage value in bytes since the value is computed by sampling.
 	MemoryUsage int64
 
+	// Latency of the queue, measured by the oldest pending task in the queue.
+	Latency time.Duration
+
 	// Size is the total number of tasks in the queue.
 	// The value is the sum of Pending, Active, Scheduled, Retry, and Archived.
 	Size int
@@ -95,6 +98,7 @@ func (i *Inspector) GetQueueInfo(qname string) (*QueueInfo, error) {
 	return &QueueInfo{
 		Queue:       stats.Queue,
 		MemoryUsage: stats.MemoryUsage,
+		Latency:     stats.Latency,
 		Size:        stats.Size,
 		Pending:     stats.Pending,
 		Active:      stats.Active,

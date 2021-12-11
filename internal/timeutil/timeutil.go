@@ -36,11 +36,3 @@ func (c *SimulatedClock) Now() time.Time { return c.t }
 func (c *SimulatedClock) SetTime(t time.Time) { c.t = t }
 
 func (c *SimulatedClock) AdvanceTime(d time.Duration) { c.t.Add(d) }
-
-// UnixMilli returns t as a Unix time, the number of milliseconds elapsed since
-// January 1, 1970 UTC.
-//
-// TODO: Use time.UnixMilli() when we drop support for go1.16 or below
-func UnixMilli(t time.Time) int64 {
-	return t.UnixNano() / 1e6
-}
