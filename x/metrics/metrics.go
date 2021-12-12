@@ -12,22 +12,22 @@ import (
 // Namespace used in fully-qualified metrics names.
 const namespace = "asynq"
 
-// BrokerMetricsCollector gathers broker metrics.
+// QueueMetricsCollector gathers broker metrics.
 // It implements prometheus.Collector interface.
-type BrokerMetricsCollector struct {
+type QueueMetricsCollector struct {
 	inspector *asynq.Inspector
 }
 
 // collectQueueInfo gathers QueueInfo of all queues.
 // Since this operation is expensive, it must be called once per collection.
-func (bmc *BrokerMetricsCollector) collectQueueInfo() ([]*asynq.QueueInfo, error) {
-	qnames, err := bmc.inspector.Queues()
+func (qmc *QueueMetricsCollector) collectQueueInfo() ([]*asynq.QueueInfo, error) {
+	qnames, err := qmc.inspector.Queues()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get queue names: %v", err)
 	}
 	infos := make([]*asynq.QueueInfo, len(qnames))
 	for i, qname := range qnames {
-		qinfo, err := bmc.inspector.GetQueueInfo(qname)
+		qinfo, err := qmc.inspector.GetQueueInfo(qname)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get queue info: %v", err)
 		}
@@ -36,7 +36,7 @@ func (bmc *BrokerMetricsCollector) collectQueueInfo() ([]*asynq.QueueInfo, error
 	return infos, nil
 }
 
-// Descriptors used by BrokerMetricsCollector
+// Descriptors used by QueueMetricsCollector
 var (
 	tasksQueuedDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "tasks_enqueued_total"),
@@ -57,12 +57,12 @@ var (
 	)
 )
 
-func (bmc *BrokerMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
-	prometheus.DescribeByCollect(bmc, ch)
+func (qmc *QueueMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
+	prometheus.DescribeByCollect(qmc, ch)
 }
 
-func (bmc *BrokerMetricsCollector) Collect(ch chan<- prometheus.Metric) {
-	queueInfos, err := bmc.collectQueueInfo()
+func (qmc *QueueMetricsCollector) Collect(ch chan<- prometheus.Metric) {
+	queueInfos, err := qmc.collectQueueInfo()
 	if err != nil {
 		log.Printf("Failed to collect metrics data: %v", err)
 	}
@@ -130,6 +130,6 @@ func (bmc *BrokerMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func NewBrokerMetricsCollector(inspector *asynq.Inspector) *BrokerMetricsCollector {
-	return &BrokerMetricsCollector{inspector: inspector}
+func NewBrokerMetricsCollector(inspector *asynq.Inspector) *QueueMetricsCollector {
+	return &QueueMetricsCollector{inspector: inspector}
 }
