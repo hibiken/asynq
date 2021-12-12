@@ -1,4 +1,5 @@
 // TODO: Package description
+// TODO: Should the package name singular (metric)?
 package metrics
 
 import (
@@ -47,6 +48,12 @@ var (
 	queueSizeDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "queue_size"),
 		"Number of tasks in a queue",
+		[]string{"queue"}, nil,
+	)
+
+	queueLatencyDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "queue_latency_seconds"),
+		"Number of seconds the oldest pending task is waiting in pending state to be processed.",
 		[]string{"queue"}, nil,
 	)
 
@@ -117,6 +124,13 @@ func (qmc *QueueMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			info.Queue,
 		)
 
+		ch <- prometheus.MustNewConstMetric(
+			queueLatencyDesc,
+			prometheus.GaugeValue,
+			info.Latency.Seconds(),
+			info.Queue,
+		)
+
 		pausedValue := 0 // zero to indicate "not paused"
 		if info.Paused {
 			pausedValue = 1
@@ -130,6 +144,6 @@ func (qmc *QueueMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func NewBrokerMetricsCollector(inspector *asynq.Inspector) *QueueMetricsCollector {
+func NewQueueMetricsCollector(inspector *asynq.Inspector) *QueueMetricsCollector {
 	return &QueueMetricsCollector{inspector: inspector}
 }
