@@ -57,7 +57,7 @@ type Config struct {
 	// Maximum number of concurrent processing of tasks.
 	//
 	// If set to a zero or negative value, NewServer will overwrite the value
-	// to the number of CPUs usable by the currennt process.
+	// to the number of CPUs usable by the current process.
 	Concurrency int
 
 	// Function to calculate retry delay for a failed task.
