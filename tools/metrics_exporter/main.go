@@ -43,7 +43,7 @@ func main() {
 	})
 
 	reg.MustRegister(
-		metrics.NewBrokerMetricsCollector(inspector),
+		metrics.NewQueueMetricsCollector(inspector),
 		// Add the standard process and go metrics to the registry
 		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
 		prometheus.NewGoCollector(),

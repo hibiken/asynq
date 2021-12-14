@@ -13,7 +13,7 @@ import (
 // Namespace used in fully-qualified metrics names.
 const namespace = "asynq"
 
-// QueueMetricsCollector gathers broker metrics.
+// QueueMetricsCollector gathers queue metrics.
 // It implements prometheus.Collector interface.
 type QueueMetricsCollector struct {
 	inspector *asynq.Inspector
@@ -54,6 +54,12 @@ var (
 	queueLatencyDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "queue_latency_seconds"),
 		"Number of seconds the oldest pending task is waiting in pending state to be processed.",
+		[]string{"queue"}, nil,
+	)
+
+	queueMemUsgDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "queue_memory_usage_approx_bytes"),
+		"Number of memory used by a given queue (approximated number by sampling).",
 		[]string{"queue"}, nil,
 	)
 
@@ -128,6 +134,13 @@ func (qmc *QueueMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			queueLatencyDesc,
 			prometheus.GaugeValue,
 			info.Latency.Seconds(),
+			info.Queue,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			queueMemUsgDesc,
+			prometheus.GaugeValue,
+			float64(info.MemoryUsage),
 			info.Queue,
 		)
 
