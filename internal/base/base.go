@@ -150,6 +150,16 @@ func PausedKey(qname string) string {
 	return fmt.Sprintf("%spaused", QueueKeyPrefix(qname))
 }
 
+// ProcessedTotalKey returns a redis key for total processed count for the given queue.
+func ProcessedTotalKey(qname string) string {
+	return fmt.Sprintf("%sprocessed", QueueKeyPrefix(qname))
+}
+
+// FailedTotalKey returns a redis key for total failure count for the given queue.
+func FailedTotalKey(qname string) string {
+	return fmt.Sprintf("%sfailed", QueueKeyPrefix(qname))
+}
+
 // ProcessedKey returns a redis key for processed count for the given day for the queue.
 func ProcessedKey(qname string, t time.Time) string {
 	return fmt.Sprintf("%sprocessed:%s", QueueKeyPrefix(qname), t.UTC().Format("2006-01-02"))
