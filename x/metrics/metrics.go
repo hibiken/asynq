@@ -1,5 +1,4 @@
-// TODO: Package description
-// TODO: Should the package name singular (metric)?
+// Package metrics provides implementations of prometheus.Collector to collect Asynq queue metrics.
 package metrics
 
 import (
@@ -15,6 +14,8 @@ const namespace = "asynq"
 
 // QueueMetricsCollector gathers queue metrics.
 // It implements prometheus.Collector interface.
+//
+// All metrics exported from this collector have prefix "asynq".
 type QueueMetricsCollector struct {
 	inspector *asynq.Inspector
 }
@@ -157,6 +158,7 @@ func (qmc *QueueMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
+// NewQueueMetricsCollector returns a collector that exports metrics about Asynq queues.
 func NewQueueMetricsCollector(inspector *asynq.Inspector) *QueueMetricsCollector {
 	return &QueueMetricsCollector{inspector: inspector}
 }
