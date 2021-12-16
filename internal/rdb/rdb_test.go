@@ -807,15 +807,56 @@ func TestDone(t *testing.T) {
 		if gotProcessed != "1" {
 			t.Errorf("%s; GET %q = %q, want 1", tc.desc, processedKey, gotProcessed)
 		}
-
 		gotTTL := r.client.TTL(context.Background(), processedKey).Val()
 		if gotTTL > statsTTL {
 			t.Errorf("%s; TTL %q = %v, want less than or equal to %v", tc.desc, processedKey, gotTTL, statsTTL)
 		}
 
+		processedTotalKey := base.ProcessedTotalKey(tc.target.Queue)
+		gotProcessedTotal := r.client.Get(context.Background(), processedTotalKey).Val()
+		if gotProcessedTotal != "1" {
+			t.Errorf("%s; GET %q = %q, want 1", tc.desc, processedTotalKey, gotProcessedTotal)
+		}
+
 		if len(tc.target.UniqueKey) > 0 && r.client.Exists(context.Background(), tc.target.UniqueKey).Val() != 0 {
 			t.Errorf("%s; Uniqueness lock %q still exists", tc.desc, tc.target.UniqueKey)
 		}
+	}
+}
+
+// Make sure that processed_total counter wraps to 1 when reaching int64 max value.
+func TestDoneWithMaxCounter(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	msg := &base.TaskMessage{
+		ID:       uuid.NewString(),
+		Type:     "foo",
+		Payload:  nil,
+		Timeout:  1800,
+		Deadline: 0,
+		Queue:    "default",
+	}
+
+	z := base.Z{
+		Message: msg,
+		Score:   time.Now().Add(5 * time.Minute).Unix(),
+	}
+	h.SeedDeadlines(t, r.client, []base.Z{z}, msg.Queue)
+	h.SeedActiveQueue(t, r.client, []*base.TaskMessage{msg}, msg.Queue)
+
+	processedTotalKey := base.ProcessedTotalKey(msg.Queue)
+	ctx := context.Background()
+	if err := r.client.Set(ctx, processedTotalKey, base.MaxInt64, 0).Err(); err != nil {
+		t.Fatalf("Redis command failed: SET %q %v", processedTotalKey, base.MaxInt64)
+	}
+
+	if err := r.Done(msg); err != nil {
+		t.Fatalf("RDB.Done failed: %v", err)
+	}
+
+	gotProcessedTotal := r.client.Get(ctx, processedTotalKey).Val()
+	if gotProcessedTotal != "1" {
+		t.Errorf("GET %q = %v, want 1", processedTotalKey, gotProcessedTotal)
 	}
 }
 
@@ -1573,6 +1614,18 @@ func TestRetry(t *testing.T) {
 		if gotTTL > statsTTL {
 			t.Errorf("TTL %q = %v, want less than or equal to %v", failedKey, gotTTL, statsTTL)
 		}
+
+		processedTotalKey := base.ProcessedTotalKey(tc.msg.Queue)
+		gotProcessedTotal := r.client.Get(context.Background(), processedTotalKey).Val()
+		if gotProcessedTotal != "1" {
+			t.Errorf("GET %q = %q, want 1", processedTotalKey, gotProcessedTotal)
+		}
+
+		failedTotalKey := base.FailedTotalKey(tc.msg.Queue)
+		gotFailedTotal := r.client.Get(context.Background(), failedTotalKey).Val()
+		if gotFailedTotal != "1" {
+			t.Errorf("GET %q = %q, want 1", failedTotalKey, gotFailedTotal)
+		}
 	}
 }
 
@@ -1739,6 +1792,18 @@ func TestRetryWithNonFailureError(t *testing.T) {
 		gotFailed := r.client.Get(context.Background(), failedKey).Val()
 		if gotFailed != "" {
 			t.Errorf("GET %q = %q, want empty", failedKey, gotFailed)
+		}
+
+		processedTotalKey := base.ProcessedTotalKey(tc.msg.Queue)
+		gotProcessedTotal := r.client.Get(context.Background(), processedTotalKey).Val()
+		if gotProcessedTotal != "" {
+			t.Errorf("GET %q = %q, want empty", processedTotalKey, gotProcessedTotal)
+		}
+
+		failedTotalKey := base.FailedTotalKey(tc.msg.Queue)
+		gotFailedTotal := r.client.Get(context.Background(), failedTotalKey).Val()
+		if gotFailedTotal != "" {
+			t.Errorf("GET %q = %q, want empty", failedTotalKey, gotFailedTotal)
 		}
 	}
 }
@@ -1949,6 +2014,18 @@ func TestArchive(t *testing.T) {
 		gotTTL = r.client.TTL(context.Background(), processedKey).Val()
 		if gotTTL > statsTTL {
 			t.Errorf("TTL %q = %v, want less than or equal to %v", failedKey, gotTTL, statsTTL)
+		}
+
+		processedTotalKey := base.ProcessedTotalKey(tc.target.Queue)
+		gotProcessedTotal := r.client.Get(context.Background(), processedTotalKey).Val()
+		if gotProcessedTotal != "1" {
+			t.Errorf("GET %q = %q, want 1", processedTotalKey, gotProcessedTotal)
+		}
+
+		failedTotalKey := base.FailedTotalKey(tc.target.Queue)
+		gotFailedTotal := r.client.Get(context.Background(), failedTotalKey).Val()
+		if gotFailedTotal != "1" {
+			t.Errorf("GET %q = %q, want 1", failedTotalKey, gotFailedTotal)
 		}
 	}
 }
