@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Package `x/metrics` is added.
+- Tool `tools/metrics_exporter` binary is added.
+
 ## [0.19.1] - 2021-12-12
 
 ### Added

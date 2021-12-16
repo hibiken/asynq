@@ -14,8 +14,9 @@
 # Ignore examples for now
 /examples
 
-# Ignore command binary
+# Ignore tool binaries
 /tools/asynq/asynq
+/tools/metrics_exporter/metrics_exporter
 
 # Ignore asynq config file
 .asynq.*
