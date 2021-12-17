@@ -303,8 +303,10 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, deadline time.Ti
 // KEYS[2] -> asynq:{<qname>}:deadlines
 // KEYS[3] -> asynq:{<qname>}:t:<task_id>
 // KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
+// KEYS[5] -> asynq:{<qname>}:processed
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
+// ARGV[3] -> max int64 value
 var doneCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
@@ -319,6 +321,12 @@ local n = redis.call("INCR", KEYS[4])
 if tonumber(n) == 1 then
 	redis.call("EXPIREAT", KEYS[4], ARGV[2])
 end
+local total = redis.call("GET", KEYS[5])
+if tonumber(total) == tonumber(ARGV[3]) then
+	redis.call("SET", KEYS[5], 1)
+else
+	redis.call("INCR", KEYS[5])
+end
 return redis.status_reply("OK")
 `)
 
@@ -326,9 +334,11 @@ return redis.status_reply("OK")
 // KEYS[2] -> asynq:{<qname>}:deadlines
 // KEYS[3] -> asynq:{<qname>}:t:<task_id>
 // KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
-// KEYS[5] -> unique key
+// KEYS[5] -> asynq:{<qname>}:processed
+// KEYS[6] -> unique key
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
+// ARGV[3] -> max int64 value
 var doneUniqueCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
@@ -343,8 +353,14 @@ local n = redis.call("INCR", KEYS[4])
 if tonumber(n) == 1 then
 	redis.call("EXPIREAT", KEYS[4], ARGV[2])
 end
-if redis.call("GET", KEYS[5]) == ARGV[1] then
-  redis.call("DEL", KEYS[5])
+local total = redis.call("GET", KEYS[5])
+if tonumber(total) == tonumber(ARGV[3]) then
+	redis.call("SET", KEYS[5], 1)
+else
+	redis.call("INCR", KEYS[5])
+end
+if redis.call("GET", KEYS[6]) == ARGV[1] then
+  redis.call("DEL", KEYS[6])
 end
 return redis.status_reply("OK")
 `)
@@ -361,10 +377,12 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 		base.DeadlinesKey(msg.Queue),
 		base.TaskKey(msg.Queue, msg.ID),
 		base.ProcessedKey(msg.Queue, now),
+		base.ProcessedTotalKey(msg.Queue),
 	}
 	argv := []interface{}{
 		msg.ID,
 		expireAt.Unix(),
+		base.MaxInt64,
 	}
 	// Note: We cannot pass empty unique key when running this script in redis-cluster.
 	if len(msg.UniqueKey) > 0 {
@@ -379,10 +397,13 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 // KEYS[3] -> asynq:{<qname>}:completed
 // KEYS[4] -> asynq:{<qname>}:t:<task_id>
 // KEYS[5] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
+// KEYS[6] -> asynq:{<qname>}:processed
+//
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
 // ARGV[3] -> task exipration time in unix time
 // ARGV[4] -> task message data
+// ARGV[5] -> max int64 value
 var markAsCompleteCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
@@ -398,6 +419,12 @@ local n = redis.call("INCR", KEYS[5])
 if tonumber(n) == 1 then
 	redis.call("EXPIREAT", KEYS[5], ARGV[2])
 end
+local total = redis.call("GET", KEYS[6])
+if tonumber(total) == tonumber(ARGV[5]) then
+	redis.call("SET", KEYS[6], 1)
+else
+	redis.call("INCR", KEYS[6])
+end
 return redis.status_reply("OK")
 `)
 
@@ -406,11 +433,14 @@ return redis.status_reply("OK")
 // KEYS[3] -> asynq:{<qname>}:completed
 // KEYS[4] -> asynq:{<qname>}:t:<task_id>
 // KEYS[5] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
-// KEYS[6] -> asynq:{<qname>}:unique:{<checksum>}
+// KEYS[6] -> asynq:{<qname>}:processed
+// KEYS[7] -> asynq:{<qname>}:unique:{<checksum>}
+//
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
 // ARGV[3] -> task exipration time in unix time
 // ARGV[4] -> task message data
+// ARGV[5] -> max int64 value
 var markAsCompleteUniqueCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
@@ -426,8 +456,14 @@ local n = redis.call("INCR", KEYS[5])
 if tonumber(n) == 1 then
 	redis.call("EXPIREAT", KEYS[5], ARGV[2])
 end
-if redis.call("GET", KEYS[6]) == ARGV[1] then
-  redis.call("DEL", KEYS[6])
+local total = redis.call("GET", KEYS[6])
+if tonumber(total) == tonumber(ARGV[5]) then
+	redis.call("SET", KEYS[6], 1)
+else
+	redis.call("INCR", KEYS[6])
+end
+if redis.call("GET", KEYS[7]) == ARGV[1] then
+  redis.call("DEL", KEYS[7])
 end
 return redis.status_reply("OK")
 `)
@@ -450,12 +486,14 @@ func (r *RDB) MarkAsComplete(msg *base.TaskMessage) error {
 		base.CompletedKey(msg.Queue),
 		base.TaskKey(msg.Queue, msg.ID),
 		base.ProcessedKey(msg.Queue, now),
+		base.ProcessedTotalKey(msg.Queue),
 	}
 	argv := []interface{}{
 		msg.ID,
 		statsExpireAt.Unix(),
 		now.Unix() + msg.Retention,
 		encoded,
+		base.MaxInt64,
 	}
 	// Note: We cannot pass empty unique key when running this script in redis-cluster.
 	if len(msg.UniqueKey) > 0 {
@@ -625,11 +663,15 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 // KEYS[4] -> asynq:{<qname>}:retry
 // KEYS[5] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[6] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
+// KEYS[7] -> asynq:{<qname>}:processed
+// KEYS[8] -> asynq:{<qname>}:failed
+//
 // ARGV[1] -> task ID
 // ARGV[2] -> updated base.TaskMessage value
 // ARGV[3] -> retry_at UNIX timestamp
 // ARGV[4] -> stats expiration timestamp
 // ARGV[5] -> is_failure (bool)
+// ARGV[6] -> max int64 value
 var retryCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[2], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
@@ -648,6 +690,14 @@ if tonumber(ARGV[5]) == 1 then
 	if tonumber(m) == 1 then
 		redis.call("EXPIREAT", KEYS[6], ARGV[4])
 	end
+    local total = redis.call("GET", KEYS[7])
+    if tonumber(total) == tonumber(ARGV[6]) then
+    	redis.call("SET", KEYS[7], 1)
+    	redis.call("SET", KEYS[8], 1)
+    else
+    	redis.call("INCR", KEYS[7])
+    	redis.call("INCR", KEYS[8])
+    end
 end
 return redis.status_reply("OK")`)
 
@@ -676,6 +726,8 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string, i
 		base.RetryKey(msg.Queue),
 		base.ProcessedKey(msg.Queue, now),
 		base.FailedKey(msg.Queue, now),
+		base.ProcessedTotalKey(msg.Queue),
+		base.FailedTotalKey(msg.Queue),
 	}
 	argv := []interface{}{
 		msg.ID,
@@ -683,6 +735,7 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string, i
 		processAt.Unix(),
 		expireAt.Unix(),
 		isFailure,
+		base.MaxInt64,
 	}
 	return r.runScript(ctx, op, retryCmd, keys, argv...)
 }
@@ -698,12 +751,16 @@ const (
 // KEYS[4] -> asynq:{<qname>}:archived
 // KEYS[5] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[6] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
+// KEYS[7] -> asynq:{<qname>}:processed
+// KEYS[8] -> asynq:{<qname>}:failed
+//
 // ARGV[1] -> task ID
 // ARGV[2] -> updated base.TaskMessage value
 // ARGV[3] -> died_at UNIX timestamp
 // ARGV[4] -> cutoff timestamp (e.g., 90 days ago)
 // ARGV[5] -> max number of tasks in archive (e.g., 100)
 // ARGV[6] -> stats expiration timestamp
+// ARGV[7] -> max int64 value
 var archiveCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[2], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
@@ -722,6 +779,14 @@ end
 local m = redis.call("INCR", KEYS[6])
 if tonumber(m) == 1 then
 	redis.call("EXPIREAT", KEYS[6], ARGV[6])
+end
+local total = redis.call("GET", KEYS[7])
+if tonumber(total) == tonumber(ARGV[7]) then
+   	redis.call("SET", KEYS[7], 1)
+   	redis.call("SET", KEYS[8], 1)
+else
+  	redis.call("INCR", KEYS[7])
+   	redis.call("INCR", KEYS[8])
 end
 return redis.status_reply("OK")`)
 
@@ -747,6 +812,8 @@ func (r *RDB) Archive(msg *base.TaskMessage, errMsg string) error {
 		base.ArchivedKey(msg.Queue),
 		base.ProcessedKey(msg.Queue, now),
 		base.FailedKey(msg.Queue, now),
+		base.ProcessedTotalKey(msg.Queue),
+		base.FailedTotalKey(msg.Queue),
 	}
 	argv := []interface{}{
 		msg.ID,
@@ -755,6 +822,7 @@ func (r *RDB) Archive(msg *base.TaskMessage, errMsg string) error {
 		cutoff.Unix(),
 		maxArchiveSize,
 		expireAt.Unix(),
+		base.MaxInt64,
 	}
 	return r.runScript(ctx, op, archiveCmd, keys, argv...)
 }

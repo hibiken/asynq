@@ -39,6 +39,12 @@ const (
 	CancelChannel = "asynq:cancel"     // PubSub channel
 )
 
+// Max value for int64.
+//
+// Use this value to check if a redis counter value reached maximum.
+// As documeted in https://redis.io/commands/INCR, a string stored at a redis key is interpreted as a base-10 64 bit signed integer.
+const MaxInt64 = 1<<63 - 1
+
 // TaskState denotes the state of a task.
 type TaskState int
 
@@ -148,6 +154,16 @@ func CompletedKey(qname string) string {
 // PausedKey returns a redis key to indicate that the given queue is paused.
 func PausedKey(qname string) string {
 	return fmt.Sprintf("%spaused", QueueKeyPrefix(qname))
+}
+
+// ProcessedTotalKey returns a redis key for total processed count for the given queue.
+func ProcessedTotalKey(qname string) string {
+	return fmt.Sprintf("%sprocessed", QueueKeyPrefix(qname))
+}
+
+// FailedTotalKey returns a redis key for total failure count for the given queue.
+func FailedTotalKey(qname string) string {
+	return fmt.Sprintf("%sfailed", QueueKeyPrefix(qname))
 }
 
 // ProcessedKey returns a redis key for processed count for the given day for the queue.

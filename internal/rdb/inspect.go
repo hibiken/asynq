@@ -41,11 +41,18 @@ type Stats struct {
 	Retry     int
 	Archived  int
 	Completed int
-	// Total number of tasks processed during the current date.
+
+	// Number of tasks processed within the current date.
 	// The number includes both succeeded and failed tasks.
 	Processed int
-	// Total number of tasks failed during the current date.
+	// Number of tasks failed within the current date.
 	Failed int
+
+	// Total number of tasks processed (both succeeded and failed) from this queue.
+	ProcessedTotal int
+	// Total number of tasks failed.
+	FailedTotal int
+
 	// Latency of the queue, measured by the oldest pending task in the queue.
 	Latency time.Duration
 	// Time this stats was taken.
@@ -65,15 +72,17 @@ type DailyStats struct {
 	Time time.Time
 }
 
-// KEYS[1] -> asynq:<qname>:pending
-// KEYS[2] -> asynq:<qname>:active
-// KEYS[3] -> asynq:<qname>:scheduled
-// KEYS[4] -> asynq:<qname>:retry
-// KEYS[5] -> asynq:<qname>:archived
-// KEYS[6] -> asynq:<qname>:completed
-// KEYS[7] -> asynq:<qname>:processed:<yyyy-mm-dd>
-// KEYS[8] -> asynq:<qname>:failed:<yyyy-mm-dd>
-// KEYS[9] -> asynq:<qname>:paused
+// KEYS[1] ->  asynq:<qname>:pending
+// KEYS[2] ->  asynq:<qname>:active
+// KEYS[3] ->  asynq:<qname>:scheduled
+// KEYS[4] ->  asynq:<qname>:retry
+// KEYS[5] ->  asynq:<qname>:archived
+// KEYS[6] ->  asynq:<qname>:completed
+// KEYS[7] ->  asynq:<qname>:processed:<yyyy-mm-dd>
+// KEYS[8] ->  asynq:<qname>:failed:<yyyy-mm-dd>
+// KEYS[9] ->  asynq:<qname>:processed
+// KEYS[10] -> asynq:<qname>:failed
+// KEYS[11] -> asynq:<qname>:paused
 //
 // ARGV[1] -> task key prefix
 var currentStatsCmd = redis.NewScript(`
@@ -91,22 +100,17 @@ table.insert(res, KEYS[5])
 table.insert(res, redis.call("ZCARD", KEYS[5]))
 table.insert(res, KEYS[6])
 table.insert(res, redis.call("ZCARD", KEYS[6]))
-local pcount = 0
-local p = redis.call("GET", KEYS[7])
-if p then
-	pcount = tonumber(p) 
+for i=7,10 do
+    local count = 0
+	local n = redis.call("GET", KEYS[i])	
+	if n then
+	    count = tonumber(n)
+	end
+	table.insert(res, KEYS[i])
+	table.insert(res, count)
 end
-table.insert(res, KEYS[7])
-table.insert(res, pcount)
-local fcount = 0
-local f = redis.call("GET", KEYS[8])
-if f then
-	fcount = tonumber(f)
-end
-table.insert(res, KEYS[8])
-table.insert(res, fcount)
-table.insert(res, KEYS[9])
-table.insert(res, redis.call("EXISTS", KEYS[9]))
+table.insert(res, KEYS[11])
+table.insert(res, redis.call("EXISTS", KEYS[11]))
 table.insert(res, "oldest_pending_since")
 if pendingTaskCount > 0 then
 	local id = redis.call("LRANGE", KEYS[1], -1, -1)[1]
@@ -136,6 +140,8 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		base.CompletedKey(qname),
 		base.ProcessedKey(qname, now),
 		base.FailedKey(qname, now),
+		base.ProcessedTotalKey(qname),
+		base.FailedTotalKey(qname),
 		base.PausedKey(qname),
 	}, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
@@ -176,6 +182,10 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 			stats.Processed = val
 		case base.FailedKey(qname, now):
 			stats.Failed = val
+		case base.ProcessedTotalKey(qname):
+			stats.ProcessedTotal = val
+		case base.FailedTotalKey(qname):
+			stats.FailedTotal = val
 		case base.PausedKey(qname):
 			if val == 0 {
 				stats.Paused = false

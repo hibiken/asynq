@@ -64,6 +64,18 @@ var (
 		[]string{"queue"}, nil,
 	)
 
+	tasksProcessedTotalDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "tasks_processed_total"),
+		"Number of tasks processed (both succeeded and failed); broken down by queue",
+		[]string{"queue"}, nil,
+	)
+
+	tasksFailedTotalDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "tasks_failed_total"),
+		"Number of tasks failed; broken down by queue",
+		[]string{"queue"}, nil,
+	)
+
 	pausedQueues = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "", "queue_paused_total"),
 		"Number of queues paused",
@@ -142,6 +154,20 @@ func (qmc *QueueMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			queueMemUsgDesc,
 			prometheus.GaugeValue,
 			float64(info.MemoryUsage),
+			info.Queue,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			tasksProcessedTotalDesc,
+			prometheus.CounterValue,
+			float64(info.ProcessedTotal),
+			info.Queue,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			tasksFailedTotalDesc,
+			prometheus.CounterValue,
+			float64(info.FailedTotal),
 			info.Queue,
 		)
 

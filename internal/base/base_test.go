@@ -173,6 +173,40 @@ func TestPausedKey(t *testing.T) {
 	}
 }
 
+func TestProcessedTotalKey(t *testing.T) {
+	tests := []struct {
+		qname string
+		want  string
+	}{
+		{"default", "asynq:{default}:processed"},
+		{"custom", "asynq:{custom}:processed"},
+	}
+
+	for _, tc := range tests {
+		got := ProcessedTotalKey(tc.qname)
+		if got != tc.want {
+			t.Errorf("ProcessedTotalKey(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
+func TestFailedTotalKey(t *testing.T) {
+	tests := []struct {
+		qname string
+		want  string
+	}{
+		{"default", "asynq:{default}:failed"},
+		{"custom", "asynq:{custom}:failed"},
+	}
+
+	for _, tc := range tests {
+		got := FailedTotalKey(tc.qname)
+		if got != tc.want {
+			t.Errorf("FailedTotalKey(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
 func TestProcessedKey(t *testing.T) {
 	tests := []struct {
 		qname string
