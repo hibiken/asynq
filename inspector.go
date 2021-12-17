@@ -72,11 +72,16 @@ type QueueInfo struct {
 	// Number of stored completed tasks.
 	Completed int
 
-	// Total number of tasks being processed during the given date.
+	// Total number of tasks being processed within the given date (counter resets daily).
 	// The number includes both succeeded and failed tasks.
 	Processed int
-	// Total number of tasks failed to be processed during the given date.
+	// Total number of tasks failed to be processed within the given date (counter resets daily).
 	Failed int
+
+	// Total number of tasks processed (cumulative).
+	ProcessedTotal int
+	// Total number of tasks failed (cumulative).
+	FailedTotal int
 
 	// Paused indicates whether the queue is paused.
 	// If true, tasks in the queue will not be processed.
@@ -96,20 +101,22 @@ func (i *Inspector) GetQueueInfo(qname string) (*QueueInfo, error) {
 		return nil, err
 	}
 	return &QueueInfo{
-		Queue:       stats.Queue,
-		MemoryUsage: stats.MemoryUsage,
-		Latency:     stats.Latency,
-		Size:        stats.Size,
-		Pending:     stats.Pending,
-		Active:      stats.Active,
-		Scheduled:   stats.Scheduled,
-		Retry:       stats.Retry,
-		Archived:    stats.Archived,
-		Completed:   stats.Completed,
-		Processed:   stats.Processed,
-		Failed:      stats.Failed,
-		Paused:      stats.Paused,
-		Timestamp:   stats.Timestamp,
+		Queue:          stats.Queue,
+		MemoryUsage:    stats.MemoryUsage,
+		Latency:        stats.Latency,
+		Size:           stats.Size,
+		Pending:        stats.Pending,
+		Active:         stats.Active,
+		Scheduled:      stats.Scheduled,
+		Retry:          stats.Retry,
+		Archived:       stats.Archived,
+		Completed:      stats.Completed,
+		Processed:      stats.Processed,
+		Failed:         stats.Failed,
+		ProcessedTotal: stats.ProcessedTotal,
+		FailedTotal:    stats.FailedTotal,
+		Paused:         stats.Paused,
+		Timestamp:      stats.Timestamp,
 	}, nil
 }
 

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Package `x/metrics` is added.
 - Tool `tools/metrics_exporter` binary is added.
+- `ProcessedTotal` and `FailedTotal` fields were added to `QueueInfo` struct.
 
 ## [0.19.1] - 2021-12-12
 

@@ -281,6 +281,8 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 		completed                       map[string][]base.Z
 		processed                       map[string]int
 		failed                          map[string]int
+		processedTotal                  map[string]int
+		failedTotal                     map[string]int
 		oldestPendingMessageEnqueueTime map[string]time.Time
 		qname                           string
 		want                            *QueueInfo
@@ -329,6 +331,16 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 				"critical": 0,
 				"low":      5,
 			},
+			processedTotal: map[string]int{
+				"default":  11111,
+				"critical": 22222,
+				"low":      33333,
+			},
+			failedTotal: map[string]int{
+				"default":  111,
+				"critical": 222,
+				"low":      333,
+			},
 			oldestPendingMessageEnqueueTime: map[string]time.Time{
 				"default":  now.Add(-15 * time.Second),
 				"critical": now.Add(-200 * time.Millisecond),
@@ -336,19 +348,21 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 			},
 			qname: "default",
 			want: &QueueInfo{
-				Queue:     "default",
-				Latency:   15 * time.Second,
-				Size:      4,
-				Pending:   1,
-				Active:    1,
-				Scheduled: 2,
-				Retry:     0,
-				Archived:  0,
-				Completed: 0,
-				Processed: 120,
-				Failed:    2,
-				Paused:    false,
-				Timestamp: now,
+				Queue:          "default",
+				Latency:        15 * time.Second,
+				Size:           4,
+				Pending:        1,
+				Active:         1,
+				Scheduled:      2,
+				Retry:          0,
+				Archived:       0,
+				Completed:      0,
+				Processed:      120,
+				Failed:         2,
+				ProcessedTotal: 11111,
+				FailedTotal:    111,
+				Paused:         false,
+				Timestamp:      now,
 			},
 		},
 	}
@@ -363,12 +377,16 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 		h.SeedAllCompletedQueues(t, r, tc.completed)
 		ctx := context.Background()
 		for qname, n := range tc.processed {
-			processedKey := base.ProcessedKey(qname, now)
-			r.Set(ctx, processedKey, n, 0)
+			r.Set(ctx, base.ProcessedKey(qname, now), n, 0)
 		}
 		for qname, n := range tc.failed {
-			failedKey := base.FailedKey(qname, now)
-			r.Set(ctx, failedKey, n, 0)
+			r.Set(ctx, base.FailedKey(qname, now), n, 0)
+		}
+		for qname, n := range tc.processedTotal {
+			r.Set(ctx, base.ProcessedTotalKey(qname), n, 0)
+		}
+		for qname, n := range tc.failedTotal {
+			r.Set(ctx, base.FailedTotalKey(qname), n, 0)
 		}
 		for qname, enqueueTime := range tc.oldestPendingMessageEnqueueTime {
 			if enqueueTime.IsZero() {
