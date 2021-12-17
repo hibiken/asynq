@@ -45,7 +45,7 @@ type Stats struct {
 	// Number of tasks processed within the current date.
 	// The number includes both succeeded and failed tasks.
 	Processed int
-	// Number number of tasks failed within the current date.
+	// Number of tasks failed within the current date.
 	Failed int
 
 	// Total number of tasks processed (both succeeded and failed) from this queue.

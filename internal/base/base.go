@@ -41,7 +41,7 @@ const (
 
 // Max value for int64.
 //
-// Use this value to check for redis counter value reached maximum.
+// Use this value to check if a redis counter value reached maximum.
 // As documeted in https://redis.io/commands/INCR, a string stored at a redis key is interpreted as a base-10 64 bit signed integer.
 const MaxInt64 = 1<<63 - 1
 
