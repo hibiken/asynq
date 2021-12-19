@@ -8,6 +8,7 @@ package rdb
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -382,7 +383,7 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 	argv := []interface{}{
 		msg.ID,
 		expireAt.Unix(),
-		base.MaxInt64,
+		math.MaxInt64,
 	}
 	// Note: We cannot pass empty unique key when running this script in redis-cluster.
 	if len(msg.UniqueKey) > 0 {
@@ -493,7 +494,7 @@ func (r *RDB) MarkAsComplete(msg *base.TaskMessage) error {
 		statsExpireAt.Unix(),
 		now.Unix() + msg.Retention,
 		encoded,
-		base.MaxInt64,
+		math.MaxInt64,
 	}
 	// Note: We cannot pass empty unique key when running this script in redis-cluster.
 	if len(msg.UniqueKey) > 0 {
@@ -735,7 +736,7 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string, i
 		processAt.Unix(),
 		expireAt.Unix(),
 		isFailure,
-		base.MaxInt64,
+		math.MaxInt64,
 	}
 	return r.runScript(ctx, op, retryCmd, keys, argv...)
 }
@@ -822,7 +823,7 @@ func (r *RDB) Archive(msg *base.TaskMessage, errMsg string) error {
 		cutoff.Unix(),
 		maxArchiveSize,
 		expireAt.Unix(),
-		base.MaxInt64,
+		math.MaxInt64,
 	}
 	return r.runScript(ctx, op, archiveCmd, keys, argv...)
 }
