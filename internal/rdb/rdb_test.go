@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -846,8 +847,8 @@ func TestDoneWithMaxCounter(t *testing.T) {
 
 	processedTotalKey := base.ProcessedTotalKey(msg.Queue)
 	ctx := context.Background()
-	if err := r.client.Set(ctx, processedTotalKey, base.MaxInt64, 0).Err(); err != nil {
-		t.Fatalf("Redis command failed: SET %q %v", processedTotalKey, base.MaxInt64)
+	if err := r.client.Set(ctx, processedTotalKey, math.MaxInt64, 0).Err(); err != nil {
+		t.Fatalf("Redis command failed: SET %q %v", processedTotalKey, math.MaxInt64)
 	}
 
 	if err := r.Done(msg); err != nil {
