@@ -38,6 +38,7 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 - [Periodic Tasks](https://github.com/hibiken/asynq/wiki/Periodic-Tasks)
 - [Support Redis Cluster](https://github.com/hibiken/asynq/wiki/Redis-Cluster) for automatic sharding and high availability
 - [Support Redis Sentinels](https://github.com/hibiken/asynq/wiki/Automatic-Failover) for high availability
+- Integration with [Prometheus](https://prometheus.io/) to collect and visualize queue metrics
 - [Web UI](#web-ui) to inspect and remote-control queues and tasks
 - [CLI](#command-line-tool) to inspect and remote-control queues and tasks
 
@@ -270,6 +271,9 @@ Here's a few screenshots of the Web UI:
 **Tasks view**
 
 ![Web UI TasksView](https://user-images.githubusercontent.com/11155743/114697070-1f0a0300-9d26-11eb-855c-d3ec263865b7.png)
+
+**Metrics view**
+<img width="1532" alt="Screen Shot 2021-12-19 at 4 37 19 PM" src="https://user-images.githubusercontent.com/10953044/146777420-cae6c476-bac6-469c-acce-b2f6584e8707.png">
 
 **Settings and adaptive dark mode**
 
