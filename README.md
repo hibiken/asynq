@@ -67,7 +67,7 @@ package tasks
 
 import (
     "fmt"
-
+    "encoding/json"
     "github.com/hibiken/asynq"
 )
 
