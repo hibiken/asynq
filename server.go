@@ -144,6 +144,12 @@ type Config struct {
 	//
 	// If unset or zero, the interval is set to 15 seconds.
 	HealthCheckInterval time.Duration
+
+	// DelayedTaskCheckInterval specifies the interval between checks run on 'scheduled' and 'retry'
+	// tasks, and forwarding them to 'pending' state if they are ready to be processed.
+	//
+	// If unset or zero, the interval is set to 5 seconds.
+	DelayedTaskCheckInterval time.Duration
 }
 
 // An ErrorHandler handles an error occured during task processing.
@@ -287,6 +293,8 @@ const (
 	defaultShutdownTimeout = 8 * time.Second
 
 	defaultHealthCheckInterval = 15 * time.Second
+
+	defaultDelayedTaskCheckInterval = 5 * time.Second
 )
 
 // NewServer returns a new Server given a redis connection option
@@ -362,11 +370,15 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		starting:       starting,
 		finished:       finished,
 	})
+	delayedTaskCheckInterval := cfg.DelayedTaskCheckInterval
+	if delayedTaskCheckInterval == 0 {
+		delayedTaskCheckInterval = defaultDelayedTaskCheckInterval
+	}
 	forwarder := newForwarder(forwarderParams{
 		logger:   logger,
 		broker:   rdb,
 		queues:   qnames,
-		interval: 5 * time.Second,
+		interval: delayedTaskCheckInterval,
 	})
 	subscriber := newSubscriber(subscriberParams{
 		logger:       logger,
