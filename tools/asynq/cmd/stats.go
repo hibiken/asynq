@@ -5,6 +5,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -40,8 +41,11 @@ Example: watch -n 3 asynq stats -> Shows current state of tasks every three seco
 	Run:  stats,
 }
 
+var jsonFlag bool
+
 func init() {
 	rootCmd.AddCommand(statsCmd)
+	statsCmd.Flags().BoolVar(&jsonFlag, "json", false, "Output stats in JSON format.")
 
 	// Here you will define your flags and configuration settings.
 
@@ -55,15 +59,21 @@ func init() {
 }
 
 type AggregateStats struct {
-	Active    int
-	Pending   int
-	Scheduled int
-	Retry     int
-	Archived  int
-	Completed int
-	Processed int
-	Failed    int
-	Timestamp time.Time
+	Active    int       `json:"active"`
+	Pending   int       `json:"pending"`
+	Scheduled int       `json:"scheduled"`
+	Retry     int       `json:"retry"`
+	Archived  int       `json:"archived"`
+	Completed int       `json:"completed"`
+	Processed int       `json:"processed"`
+	Failed    int       `json:"failed"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+type FullStats struct {
+	Aggregate  AggregateStats    `json:"aggregate"`
+	QueueStats []*rdb.Stats      `json:"queues"`
+	RedisInfo  map[string]string `json:"redis"`
 }
 
 func stats(cmd *cobra.Command, args []string) {
@@ -104,6 +114,23 @@ func stats(cmd *cobra.Command, args []string) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
+	if jsonFlag {
+		statsJSON, err := json.Marshal(FullStats{
+			Aggregate:  aggStats,
+			QueueStats: stats,
+			RedisInfo:  info,
+		})
+
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		fmt.Println(string(statsJSON))
+		return
+	}
+
 	bold := color.New(color.Bold)
 	bold.Println("Task Count by State")
 	printStatsByState(&aggStats)
