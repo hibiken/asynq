@@ -2665,8 +2665,11 @@ func TestArchiveAllPendingTasks(t *testing.T) {
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
-	t1 := time.Now().Add(1 * time.Minute)
-	t2 := time.Now().Add(1 * time.Hour)
+	now := time.Now()
+	t1 := now.Add(1 * time.Minute)
+	t2 := now.Add(1 * time.Hour)
+
+	r.SetClock(timeutil.NewSimulatedClock(now))
 
 	tests := []struct {
 		pending      map[string][]*base.TaskMessage
@@ -2690,8 +2693,8 @@ func TestArchiveAllPendingTasks(t *testing.T) {
 			},
 			wantArchived: map[string][]base.Z{
 				"default": {
-					{Message: m1, Score: time.Now().Unix()},
-					{Message: m2, Score: time.Now().Unix()},
+					{Message: m1, Score: now.Unix()},
+					{Message: m2, Score: now.Unix()},
 				},
 			},
 		},
@@ -2709,7 +2712,7 @@ func TestArchiveAllPendingTasks(t *testing.T) {
 			},
 			wantArchived: map[string][]base.Z{
 				"default": {
-					{Message: m1, Score: time.Now().Unix()},
+					{Message: m1, Score: now.Unix()},
 					{Message: m2, Score: t2.Unix()},
 				},
 			},
@@ -2754,8 +2757,8 @@ func TestArchiveAllPendingTasks(t *testing.T) {
 			wantArchived: map[string][]base.Z{
 				"default": {},
 				"custom": {
-					{Message: m3, Score: time.Now().Unix()},
-					{Message: m4, Score: time.Now().Unix()},
+					{Message: m3, Score: now.Unix()},
+					{Message: m4, Score: now.Unix()},
 				},
 			},
 		},
@@ -2783,7 +2786,7 @@ func TestArchiveAllPendingTasks(t *testing.T) {
 
 		for qname, want := range tc.wantArchived {
 			gotArchived := h.GetArchivedEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
 			}
@@ -2797,10 +2800,13 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
-	t1 := time.Now().Add(1 * time.Minute)
-	t2 := time.Now().Add(1 * time.Hour)
-	t3 := time.Now().Add(2 * time.Hour)
-	t4 := time.Now().Add(3 * time.Hour)
+	now := time.Now()
+	t1 := now.Add(1 * time.Minute)
+	t2 := now.Add(1 * time.Hour)
+	t3 := now.Add(2 * time.Hour)
+	t4 := now.Add(3 * time.Hour)
+
+	r.SetClock(timeutil.NewSimulatedClock(now))
 
 	tests := []struct {
 		retry        map[string][]base.Z
@@ -2827,8 +2833,8 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 			},
 			wantArchived: map[string][]base.Z{
 				"default": {
-					{Message: m1, Score: time.Now().Unix()},
-					{Message: m2, Score: time.Now().Unix()},
+					{Message: m1, Score: now.Unix()},
+					{Message: m2, Score: now.Unix()},
 				},
 			},
 		},
@@ -2846,7 +2852,7 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 			},
 			wantArchived: map[string][]base.Z{
 				"default": {
-					{Message: m1, Score: time.Now().Unix()},
+					{Message: m1, Score: now.Unix()},
 					{Message: m2, Score: t2.Unix()},
 				},
 			},
@@ -2900,8 +2906,8 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 			wantArchived: map[string][]base.Z{
 				"default": {},
 				"custom": {
-					{Message: m3, Score: time.Now().Unix()},
-					{Message: m4, Score: time.Now().Unix()},
+					{Message: m3, Score: now.Unix()},
+					{Message: m4, Score: now.Unix()},
 				},
 			},
 		},
@@ -2921,7 +2927,7 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 
 		for qname, want := range tc.wantRetry {
 			gotRetry := h.GetRetryEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.RetryKey(qname), diff)
 			}
@@ -2929,7 +2935,7 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 
 		for qname, want := range tc.wantArchived {
 			gotArchived := h.GetArchivedEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
 			}
@@ -2944,10 +2950,13 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 	m2 := h.NewTaskMessage("task2", nil)
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
-	t1 := time.Now().Add(time.Minute)
-	t2 := time.Now().Add(time.Hour)
-	t3 := time.Now().Add(time.Hour)
-	t4 := time.Now().Add(time.Hour)
+	now := time.Now()
+	t1 := now.Add(time.Minute)
+	t2 := now.Add(time.Hour)
+	t3 := now.Add(time.Hour)
+	t4 := now.Add(time.Hour)
+
+	r.SetClock(timeutil.NewSimulatedClock(now))
 
 	tests := []struct {
 		scheduled     map[string][]base.Z
@@ -2974,8 +2983,8 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 			},
 			wantArchived: map[string][]base.Z{
 				"default": {
-					{Message: m1, Score: time.Now().Unix()},
-					{Message: m2, Score: time.Now().Unix()},
+					{Message: m1, Score: now.Unix()},
+					{Message: m2, Score: now.Unix()},
 				},
 			},
 		},
@@ -2993,7 +3002,7 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 			},
 			wantArchived: map[string][]base.Z{
 				"default": {
-					{Message: m1, Score: time.Now().Unix()},
+					{Message: m1, Score: now.Unix()},
 					{Message: m2, Score: t2.Unix()},
 				},
 			},
@@ -3047,8 +3056,8 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 			wantArchived: map[string][]base.Z{
 				"default": {},
 				"custom": {
-					{Message: m3, Score: time.Now().Unix()},
-					{Message: m4, Score: time.Now().Unix()},
+					{Message: m3, Score: now.Unix()},
+					{Message: m4, Score: now.Unix()},
 				},
 			},
 		},
@@ -3068,7 +3077,7 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ScheduledKey(qname), diff)
 			}
@@ -3076,7 +3085,7 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 
 		for qname, want := range tc.wantArchived {
 			gotArchived := h.GetArchivedEntries(t, r.client, qname)
-			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
+			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
 			}
