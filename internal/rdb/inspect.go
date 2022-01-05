@@ -130,7 +130,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	now := time.Now()
+	now := r.clock.Now()
 	res, err := currentStatsCmd.Run(context.Background(), r.client, []string{
 		base.PendingKey(qname),
 		base.ActiveKey(qname),
@@ -316,7 +316,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	const day = 24 * time.Hour
-	now := time.Now().UTC()
+	now := r.clock.Now().UTC()
 	var days []time.Time
 	var keys []string
 	for i := 0; i < n; i++ {
@@ -433,7 +433,7 @@ func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 	keys := []string{base.TaskKey(qname, id)}
 	argv := []interface{}{
 		id,
-		time.Now().Unix(),
+		r.clock.Now().Unix(),
 		base.QueueKeyPrefix(qname),
 	}
 	res, err := getTaskInfoCmd.Run(context.Background(), r.client, keys, argv...).Result()
@@ -594,7 +594,7 @@ func (r *RDB) listMessages(qname string, state base.TaskState, pgn Pagination) (
 		}
 		var nextProcessAt time.Time
 		if state == base.TaskStatePending {
-			nextProcessAt = time.Now()
+			nextProcessAt = r.clock.Now()
 		}
 		infos = append(infos, &base.TaskInfo{
 			Message:       m,
@@ -999,7 +999,7 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 		base.PendingKey(qname),
 		base.ArchivedKey(qname),
 	}
-	now := time.Now()
+	now := r.clock.Now()
 	argv := []interface{}{
 		now.Unix(),
 		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
@@ -1079,7 +1079,7 @@ func (r *RDB) ArchiveTask(qname, id string) error {
 		base.TaskKey(qname, id),
 		base.ArchivedKey(qname),
 	}
-	now := time.Now()
+	now := r.clock.Now()
 	argv := []interface{}{
 		id,
 		now.Unix(),
@@ -1144,7 +1144,7 @@ func (r *RDB) archiveAll(src, dst, qname string) (int64, error) {
 		src,
 		dst,
 	}
-	now := time.Now()
+	now := r.clock.Now()
 	argv := []interface{}{
 		now.Unix(),
 		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
@@ -1550,7 +1550,7 @@ return keys`)
 
 // ListServers returns the list of server info.
 func (r *RDB) ListServers() ([]*base.ServerInfo, error) {
-	now := time.Now()
+	now := r.clock.Now()
 	res, err := listServerKeysCmd.Run(context.Background(), r.client, []string{base.AllServers}, now.Unix()).Result()
 	if err != nil {
 		return nil, err
@@ -1584,7 +1584,7 @@ return keys`)
 // ListWorkers returns the list of worker stats.
 func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
 	var op errors.Op = "rdb.ListWorkers"
-	now := time.Now()
+	now := r.clock.Now()
 	res, err := listWorkersCmd.Run(context.Background(), r.client, []string{base.AllWorkers}, now.Unix()).Result()
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, err)
@@ -1619,7 +1619,7 @@ return keys`)
 
 // ListSchedulerEntries returns the list of scheduler entries.
 func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
-	now := time.Now()
+	now := r.clock.Now()
 	res, err := listSchedulerKeysCmd.Run(context.Background(), r.client, []string{base.AllSchedulers}, now.Unix()).Result()
 	if err != nil {
 		return nil, err
@@ -1670,7 +1670,7 @@ func (r *RDB) ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*bas
 // Pause pauses processing of tasks from the given queue.
 func (r *RDB) Pause(qname string) error {
 	key := base.PausedKey(qname)
-	ok, err := r.client.SetNX(context.Background(), key, time.Now().Unix(), 0).Result()
+	ok, err := r.client.SetNX(context.Background(), key, r.clock.Now().Unix(), 0).Result()
 	if err != nil {
 		return err
 	}
