@@ -22,8 +22,10 @@ import (
 //
 // Schedulers are safe for concurrent use by multiple goroutines.
 type Scheduler struct {
-	id         string
-	state      *base.ServerState
+	id string
+
+	state *serverState
+
 	logger     *log.Logger
 	client     *Client
 	rdb        *rdb.RDB
@@ -66,7 +68,7 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 
 	return &Scheduler{
 		id:         generateSchedulerID(),
-		state:      base.NewServerState(),
+		state:      &serverState{value: srvStateNew},
 		logger:     logger,
 		client:     NewClient(r),
 		rdb:        rdb.NewRDB(c),
@@ -193,23 +195,43 @@ func (s *Scheduler) Run() error {
 // Start starts the scheduler.
 // It returns an error if the scheduler is already running or has been shutdown.
 func (s *Scheduler) Start() error {
-	switch s.state.Get() {
-	case base.StateActive:
-		return fmt.Errorf("asynq: the scheduler is already running")
-	case base.StateClosed:
-		return fmt.Errorf("asynq: the scheduler has already been stopped")
+	if err := s.start(); err != nil {
+		return err
 	}
 	s.logger.Info("Scheduler starting")
 	s.logger.Infof("Scheduler timezone is set to %v", s.location)
 	s.cron.Start()
 	s.wg.Add(1)
 	go s.runHeartbeater()
-	s.state.Set(base.StateActive)
+	return nil
+}
+
+// Checks server state and returns an error if pre-condition is not met.
+// Otherwise it sets the server state to active.
+func (s *Scheduler) start() error {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	switch s.state.value {
+	case srvStateActive:
+		return fmt.Errorf("asynq: the scheduler is already running")
+	case srvStateClosed:
+		return fmt.Errorf("asynq: the scheduler has already been stopped")
+	}
+	s.state.value = srvStateActive
 	return nil
 }
 
 // Shutdown stops and shuts down the scheduler.
 func (s *Scheduler) Shutdown() {
+	s.state.mu.Lock()
+	if s.state.value == srvStateNew || s.state.value == srvStateClosed {
+		// scheduler is not running, do nothing and return.
+		s.state.mu.Unlock()
+		return
+	}
+	s.state.value = srvStateClosed
+	s.state.mu.Unlock()
+
 	s.logger.Info("Scheduler shutting down")
 	close(s.done) // signal heartbeater to stop
 	ctx := s.cron.Stop()
@@ -219,7 +241,6 @@ func (s *Scheduler) Shutdown() {
 	s.clearHistory()
 	s.client.Close()
 	s.rdb.Close()
-	s.state.Set(base.StateClosed)
 	s.logger.Info("Scheduler stopped")
 }
 

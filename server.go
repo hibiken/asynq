@@ -38,7 +38,7 @@ type Server struct {
 
 	broker base.Broker
 
-	state *base.ServerState
+	state *serverState
 
 	// wait group to wait for all goroutines to finish.
 	wg            sync.WaitGroup
@@ -50,6 +50,43 @@ type Server struct {
 	recoverer     *recoverer
 	healthchecker *healthchecker
 	janitor       *janitor
+}
+
+type serverState struct {
+	mu    sync.Mutex
+	value serverStateValue
+}
+
+type serverStateValue int
+
+const (
+	// StateNew represents a new server. Server begins in
+	// this state and then transition to StatusActive when
+	// Start or Run is callled.
+	srvStateNew serverStateValue = iota
+
+	// StateActive indicates the server is up and active.
+	srvStateActive
+
+	// StateStopped indicates the server is up but no longer processing new tasks.
+	srvStateStopped
+
+	// StateClosed indicates the server has been shutdown.
+	srvStateClosed
+)
+
+var serverStates = []string{
+	"new",
+	"active",
+	"stopped",
+	"closed",
+}
+
+func (s serverStateValue) String() string {
+	if srvStateNew <= s && s <= srvStateClosed {
+		return serverStates[s]
+	}
+	return "unknown status"
 }
 
 // Config specifies the server's background-task processing behavior.
@@ -351,7 +388,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	starting := make(chan *workerInfo)
 	finished := make(chan *base.TaskMessage)
 	syncCh := make(chan *syncRequest)
-	state := base.NewServerState()
+	srvState := &serverState{value: srvStateNew}
 	cancels := base.NewCancelations()
 
 	syncer := newSyncer(syncerParams{
@@ -366,7 +403,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		concurrency:    n,
 		queues:         queues,
 		strictPriority: cfg.StrictPriority,
-		state:          state,
+		state:          srvState,
 		starting:       starting,
 		finished:       finished,
 	})
@@ -423,7 +460,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	return &Server{
 		logger:        logger,
 		broker:        rdb,
-		state:         state,
+		state:         srvState,
 		forwarder:     forwarder,
 		processor:     processor,
 		syncer:        syncer,
@@ -493,17 +530,11 @@ func (srv *Server) Start(handler Handler) error {
 	if handler == nil {
 		return fmt.Errorf("asynq: server cannot run with nil handler")
 	}
-	switch srv.state.Get() {
-	case base.StateActive:
-		return fmt.Errorf("asynq: the server is already running")
-	case base.StateStopped:
-		return fmt.Errorf("asynq: the server is in the stopped state. Waiting for shutdown.")
-	case base.StateClosed:
-		return ErrServerClosed
-	}
-	srv.state.Set(base.StateActive)
 	srv.processor.handler = handler
 
+	if err := srv.start(); err != nil {
+		return err
+	}
 	srv.logger.Info("Starting processing")
 
 	srv.heartbeater.start(&srv.wg)
@@ -517,16 +548,36 @@ func (srv *Server) Start(handler Handler) error {
 	return nil
 }
 
+// Checks server state and returns an error if pre-condition is not met.
+// Otherwise it sets the server state to active.
+func (srv *Server) start() error {
+	srv.state.mu.Lock()
+	defer srv.state.mu.Unlock()
+	switch srv.state.value {
+	case srvStateActive:
+		return fmt.Errorf("asynq: the server is already running")
+	case srvStateStopped:
+		return fmt.Errorf("asynq: the server is in the stopped state. Waiting for shutdown.")
+	case srvStateClosed:
+		return ErrServerClosed
+	}
+	srv.state.value = srvStateActive
+	return nil
+}
+
 // Shutdown gracefully shuts down the server.
 // It gracefully closes all active workers. The server will wait for
 // active workers to finish processing tasks for duration specified in Config.ShutdownTimeout.
 // If worker didn't finish processing a task during the timeout, the task will be pushed back to Redis.
 func (srv *Server) Shutdown() {
-	switch srv.state.Get() {
-	case base.StateNew, base.StateClosed:
+	srv.state.mu.Lock()
+	if srv.state.value == srvStateNew || srv.state.value == srvStateClosed {
+		srv.state.mu.Unlock()
 		// server is not running, do nothing and return.
 		return
 	}
+	srv.state.value = srvStateClosed
+	srv.state.mu.Unlock()
 
 	srv.logger.Info("Starting graceful shutdown")
 	// Note: The order of shutdown is important.
@@ -541,12 +592,9 @@ func (srv *Server) Shutdown() {
 	srv.janitor.shutdown()
 	srv.healthchecker.shutdown()
 	srv.heartbeater.shutdown()
-
 	srv.wg.Wait()
 
 	srv.broker.Close()
-	srv.state.Set(base.StateClosed)
-
 	srv.logger.Info("Exiting")
 }
 
@@ -556,8 +604,16 @@ func (srv *Server) Shutdown() {
 //
 // Stop does not shutdown the server, make sure to call Shutdown before exit.
 func (srv *Server) Stop() {
+	srv.state.mu.Lock()
+	if srv.state.value != srvStateActive {
+		// Invalid calll to Stop, server can only go from Active state to Stopped state.
+		srv.state.mu.Unlock()
+		return
+	}
+	srv.state.value = srvStateStopped
+	srv.state.mu.Unlock()
+
 	srv.logger.Info("Stopping processor")
 	srv.processor.stop()
-	srv.state.Set(base.StateStopped)
 	srv.logger.Info("Processor stopped")
 }

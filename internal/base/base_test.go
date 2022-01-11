@@ -583,30 +583,6 @@ func TestSchedulerEnqueueEventEncoding(t *testing.T) {
 	}
 }
 
-// Test for status being accessed by multiple goroutines.
-// Run with -race flag to check for data race.
-func TestStatusConcurrentAccess(t *testing.T) {
-	status := NewServerState()
-
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		status.Get()
-		_ = status.String()
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		status.Set(StateClosed)
-		_ = status.String()
-	}()
-
-	wg.Wait()
-}
-
 // Test for cancelations being accessed by multiple goroutines.
 // Run with -race flag to check for data race.
 func TestCancelationsConcurrentAccess(t *testing.T) {
