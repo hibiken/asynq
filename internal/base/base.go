@@ -318,68 +318,6 @@ type Z struct {
 	Score   int64
 }
 
-// ServerState represents state of a server.
-// ServerState methods are concurrency safe.
-type ServerState struct {
-	mu  sync.Mutex
-	val ServerStateValue
-}
-
-// NewServerState returns a new state instance.
-// Initial state is set to StateNew.
-func NewServerState() *ServerState {
-	return &ServerState{val: StateNew}
-}
-
-type ServerStateValue int
-
-const (
-	// StateNew represents a new server. Server begins in
-	// this state and then transition to StatusActive when
-	// Start or Run is callled.
-	StateNew ServerStateValue = iota
-
-	// StateActive indicates the server is up and active.
-	StateActive
-
-	// StateStopped indicates the server is up but no longer processing new tasks.
-	StateStopped
-
-	// StateClosed indicates the server has been shutdown.
-	StateClosed
-)
-
-var serverStates = []string{
-	"new",
-	"active",
-	"stopped",
-	"closed",
-}
-
-func (s *ServerState) String() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if StateNew <= s.val && s.val <= StateClosed {
-		return serverStates[s.val]
-	}
-	return "unknown status"
-}
-
-// Get returns the status value.
-func (s *ServerState) Get() ServerStateValue {
-	s.mu.Lock()
-	v := s.val
-	s.mu.Unlock()
-	return v
-}
-
-// Set sets the status value.
-func (s *ServerState) Set(v ServerStateValue) {
-	s.mu.Lock()
-	s.val = v
-	s.mu.Unlock()
-}
-
 // ServerInfo holds information about a running server.
 type ServerInfo struct {
 	Host              string

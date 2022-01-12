@@ -38,7 +38,7 @@ func TestHeartbeater(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 
-		state := base.NewServerState()
+		srvState := &serverState{}
 		hb := newHeartbeater(heartbeaterParams{
 			logger:         testLogger,
 			broker:         rdbClient,
@@ -46,7 +46,7 @@ func TestHeartbeater(t *testing.T) {
 			concurrency:    tc.concurrency,
 			queues:         tc.queues,
 			strictPriority: false,
-			state:          state,
+			state:          srvState,
 			starting:       make(chan *workerInfo),
 			finished:       make(chan *base.TaskMessage),
 		})
@@ -55,7 +55,10 @@ func TestHeartbeater(t *testing.T) {
 		hb.host = tc.host
 		hb.pid = tc.pid
 
-		state.Set(base.StateActive)
+		srvState.mu.Lock()
+		srvState.value = srvStateActive // simulating Server.Start
+		srvState.mu.Unlock()
+
 		var wg sync.WaitGroup
 		hb.start(&wg)
 
@@ -90,8 +93,10 @@ func TestHeartbeater(t *testing.T) {
 			continue
 		}
 
-		// status change
-		state.Set(base.StateClosed)
+		// server state change; simulating Server.Shutdown
+		srvState.mu.Lock()
+		srvState.value = srvStateClosed
+		srvState.mu.Unlock()
 
 		// allow for heartbeater to write to redis
 		time.Sleep(tc.interval * 2)
@@ -131,8 +136,7 @@ func TestHeartbeaterWithRedisDown(t *testing.T) {
 	r := rdb.NewRDB(setup(t))
 	defer r.Close()
 	testBroker := testbroker.NewTestBroker(r)
-	state := base.NewServerState()
-	state.Set(base.StateActive)
+	state := &serverState{value: srvStateActive}
 	hb := newHeartbeater(heartbeaterParams{
 		logger:         testLogger,
 		broker:         testBroker,
