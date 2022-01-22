@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `PeriodicTaskManager` is added. Prefer using this over `Scheduler` as it has better support for dynamic periodic tasks.
 - The `asynq stats` command now supports a `--json` option, making its output a JSON object
 - Introduced new configuration for `DelayedTaskCheckInterval`. See [godoc](https://godoc.org/github.com/hibiken/asynq) for more details.
 
