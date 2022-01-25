@@ -26,7 +26,8 @@ type processor struct {
 	logger *log.Logger
 	broker base.Broker
 
-	handler Handler
+	handler       Handler
+	baseContextFn asynqcontext.BaseContext
 
 	queueConfig map[string]int
 
@@ -71,6 +72,7 @@ type processor struct {
 type processorParams struct {
 	logger          *log.Logger
 	broker          base.Broker
+	baseCtxFn       asynqcontext.BaseContext
 	retryDelayFunc  RetryDelayFunc
 	isFailureFunc   func(error) bool
 	syncCh          chan<- *syncRequest
@@ -94,6 +96,7 @@ func newProcessor(params processorParams) *processor {
 	return &processor{
 		logger:          params.logger,
 		broker:          params.broker,
+		baseContextFn:   params.baseCtxFn,
 		queueConfig:     queues,
 		orderedQueues:   orderedQueues,
 		retryDelayFunc:  params.retryDelayFunc,
@@ -190,7 +193,7 @@ func (p *processor) exec() {
 				<-p.sema // release token
 			}()
 
-			ctx, cancel := asynqcontext.New(msg, deadline)
+			ctx, cancel := asynqcontext.New(p.baseContextFn(), msg, deadline)
 			p.cancelations.Add(msg.ID, cancel)
 			defer func() {
 				cancel()
