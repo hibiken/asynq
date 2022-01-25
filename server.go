@@ -97,6 +97,14 @@ type Config struct {
 	// to the number of CPUs usable by the current process.
 	Concurrency int
 
+	// BaseContext optionally specifies a function that returns
+	// the base context for invocations on this server.
+	// If BaseContext is nil, the default is context.Background().
+	BaseContext func() context.Context
+
+	// SleepOnEmptyQueue optionally specifies the amount of time to wait before polling again when there are no messages in the queue
+	SleepOnEmptyQueue time.Duration
+
 	// Function to calculate retry delay for a failed task.
 	//
 	// By default, it uses exponential backoff algorithm to calculate the delay.
@@ -341,6 +349,10 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
+	baseCtxFn := cfg.BaseContext
+	if baseCtxFn == nil {
+		baseCtxFn = context.Background
+	}
 	n := cfg.Concurrency
 	if n < 1 {
 		n = runtime.NumCPU()
@@ -426,6 +438,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		logger:          logger,
 		broker:          rdb,
 		retryDelayFunc:  delayFunc,
+		baseCtxFn:       baseCtxFn,
 		isFailureFunc:   isFailureFunc,
 		syncCh:          syncCh,
 		cancelations:    cancels,
