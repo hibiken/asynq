@@ -11,8 +11,6 @@ import (
 	"github.com/hibiken/asynq/internal/base"
 )
 
-type BaseContext func() context.Context
-
 // A taskMetadata holds task scoped data to put in context.
 type taskMetadata struct {
 	id         string
@@ -37,7 +35,7 @@ func New(base context.Context, msg *base.TaskMessage, deadline time.Time) (conte
 		retryCount: msg.Retried,
 		qname:      msg.Queue,
 	}
-	ctx := context.WithValue(context.Background(), metadataCtxKey, metadata)
+	ctx := context.WithValue(base, metadataCtxKey, metadata)
 	return context.WithDeadline(ctx, deadline)
 }
 

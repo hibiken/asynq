@@ -97,10 +97,11 @@ type Config struct {
 	// to the number of CPUs usable by the current process.
 	Concurrency int
 
-	// BaseContext optionally specifies a function that returns
-	// the base context for invocations on this server.
+	// BaseContext optionally specifies a function that returns the base context for Handler invocations on this server.
+	//
 	// If BaseContext is nil, the default is context.Background().
-	BaseContext func() context.Context
+	// If this is defined, then it MUST return a non-nil context
+	BaseContext BaseCtxFn
 
 	// SleepOnEmptyQueue optionally specifies the amount of time to wait before polling again when there are no messages in the queue
 	SleepOnEmptyQueue time.Duration
@@ -210,6 +211,9 @@ type ErrorHandlerFunc func(ctx context.Context, task *Task, err error)
 func (fn ErrorHandlerFunc) HandleError(ctx context.Context, task *Task, err error) {
 	fn(ctx, task, err)
 }
+
+// BaseCtxFn provides the root context from where the execution contexts of tasks are derived
+type BaseCtxFn func() context.Context
 
 // RetryDelayFunc calculates the retry delay duration for a failed task given
 // the retry count, error, and the task.
