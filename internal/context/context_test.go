@@ -28,7 +28,7 @@ func TestCreateContextWithFutureDeadline(t *testing.T) {
 			Payload: nil,
 		}
 
-		ctx, cancel := New(msg, tc.deadline)
+		ctx, cancel := New(context.Background(), msg, tc.deadline)
 		select {
 		case x := <-ctx.Done():
 			t.Errorf("<-ctx.Done() == %v, want nothing (it should block)", x)
@@ -53,6 +53,44 @@ func TestCreateContextWithFutureDeadline(t *testing.T) {
 	}
 }
 
+func TestCreateContextWithBaseContext(t *testing.T) {
+	tests := []struct {
+		deadline time.Time
+	}{
+		{time.Now().Add(-2 * time.Hour)},
+	}
+
+	for _, tc := range tests {
+		msg := &base.TaskMessage{
+			Type:    "something",
+			ID:      uuid.NewString(),
+			Payload: nil,
+		}
+		type ctxKey string
+		type ctxValue string
+		var key ctxKey = "key"
+		var value ctxValue = "value"
+		baseCtx := context.WithValue(context.Background(), key, value)
+
+		ctx, cancel := New(baseCtx, msg, tc.deadline)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+		default:
+			t.Errorf("ctx.Done() blocked, want it to be non-blocking")
+		}
+
+		v, ok := ctx.Value(key).(ctxValue)
+		if !ok {
+			t.Errorf("ctx.Value().(ctxValue) returned false, expected to be true")
+		}
+		if v != value {
+			t.Errorf("ctx.Value().(ctxValue) returned unknown value (%v), expected to be %s", v, value)
+		}
+	}
+}
+
 func TestCreateContextWithPastDeadline(t *testing.T) {
 	tests := []struct {
 		deadline time.Time
@@ -67,7 +105,7 @@ func TestCreateContextWithPastDeadline(t *testing.T) {
 			Payload: nil,
 		}
 
-		ctx, cancel := New(msg, tc.deadline)
+		ctx, cancel := New(context.Background(), msg, tc.deadline)
 		defer cancel()
 
 		select {
@@ -97,7 +135,7 @@ func TestGetTaskMetadataFromContext(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		ctx, cancel := New(tc.msg, time.Now().Add(30*time.Minute))
+		ctx, cancel := New(context.Background(), tc.msg, time.Now().Add(30*time.Minute))
 		defer cancel()
 
 		id, ok := GetTaskID(ctx)
