@@ -22,11 +22,20 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Build
+      - name: Build core module
         run: go build -v ./...
 
-      - name: Test
+      - name: Build x module
+        run: cd x && go build -v ./... && cd ..
+
+      - name: Build tools module
+        run: cd tools && go build -v ./... && cd ..
+
+      - name: Test core module
         run: go test -race -v -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Test x module
+        run: cd x && go test -race -v ./... && cd ..
 
       - name: Benchmark Test
         run: go test -run=^$ -bench=. -loglevel=debug ./...
