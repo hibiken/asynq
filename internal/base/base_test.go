@@ -88,6 +88,23 @@ func TestDeadlinesKey(t *testing.T) {
 	}
 }
 
+func TestLeaseKey(t *testing.T) {
+	tests := []struct {
+		qname string
+		want  string
+	}{
+		{"default", "asynq:{default}:lease"},
+		{"custom", "asynq:{custom}:lease"},
+	}
+
+	for _, tc := range tests {
+		got := LeaseKey(tc.qname)
+		if got != tc.want {
+			t.Errorf("LeaseKey(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
 func TestScheduledKey(t *testing.T) {
 	tests := []struct {
 		qname string

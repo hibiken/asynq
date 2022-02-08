@@ -141,6 +141,11 @@ func DeadlinesKey(qname string) string {
 	return fmt.Sprintf("%sdeadlines", QueueKeyPrefix(qname))
 }
 
+// LeaseKey returns a redis key for the lease.
+func LeaseKey(qname string) string {
+	return fmt.Sprintf("%slease", QueueKeyPrefix(qname))
+}
+
 func CompletedKey(qname string) string {
 	return fmt.Sprintf("%scompleted", QueueKeyPrefix(qname))
 }
