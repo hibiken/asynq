@@ -20,6 +20,8 @@ import (
 
 const statsTTL = 90 * 24 * time.Hour // 90 days
 
+const leaseDuration = 30 * time.Second
+
 // RDB is a client interface to query and mutate task queues.
 type RDB struct {
 	client redis.UniversalClient
@@ -213,20 +215,17 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 // KEYS[1] -> asynq:{<qname>}:pending
 // KEYS[2] -> asynq:{<qname>}:paused
 // KEYS[3] -> asynq:{<qname>}:active
-// KEYS[4] -> asynq:{<qname>}:deadlines
+// KEYS[4] -> asynq:{<qname>}:lease
 // --
-// ARGV[1] -> current time in Unix time
+// ARGV[1] -> initial lease expiration Unix time
 // ARGV[2] -> task key prefix
 //
 // Output:
 // Returns nil if no processable task is found in the given queue.
-// Returns tuple {msg , deadline} if task is found, where `msg` is the encoded
-// TaskMessage, and `deadline` is Unix time in seconds.
+// Returns an encoded TaskMessage.
 //
 // Note: dequeueCmd checks whether a queue is paused first, before
 // calling RPOPLPUSH to pop a task from the queue.
-// It computes the task deadline by inspecting Timout and Deadline fields,
-// and inserts the task to the deadlines zset with the computed deadline.
 var dequeueCmd = redis.NewScript(`
 if redis.call("EXISTS", KEYS[2]) == 0 then
 	local id = redis.call("RPOPLPUSH", KEYS[1], KEYS[3])
@@ -234,70 +233,45 @@ if redis.call("EXISTS", KEYS[2]) == 0 then
 		local key = ARGV[2] .. id
 		redis.call("HSET", key, "state", "active")
 		redis.call("HDEL", key, "pending_since")
-		local data = redis.call("HMGET", key, "msg", "timeout", "deadline")
-		local msg = data[1]	
-		local timeout = tonumber(data[2])
-		local deadline = tonumber(data[3])
-		local score
-		if timeout ~= 0 and deadline ~= 0 then
-			score = math.min(ARGV[1]+timeout, deadline)
-		elseif timeout ~= 0 then
-			score = ARGV[1] + timeout
-		elseif deadline ~= 0 then
-			score = deadline
-		else
-			return redis.error_reply("asynq internal error: both timeout and deadline are not set")
-		end
-		redis.call("ZADD", KEYS[4], score, id)
-		return {msg, score}
+		redis.call("ZADD", KEYS[4], ARGV[1], id)
+		return redis.call("HGET", key, "msg")
 	end
 end
 return nil`)
 
 // Dequeue queries given queues in order and pops a task message
-// off a queue if one exists and returns the message and deadline.
+// off a queue if one exists and returns the message.
 // Dequeue skips a queue if the queue is paused.
 // If all queues are empty, ErrNoProcessableTask error is returned.
-func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, deadline time.Time, err error) {
+func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, err error) {
 	var op errors.Op = "rdb.Dequeue"
 	for _, qname := range qnames {
 		keys := []string{
 			base.PendingKey(qname),
 			base.PausedKey(qname),
 			base.ActiveKey(qname),
-			base.DeadlinesKey(qname),
+			base.LeaseKey(qname),
 		}
 		argv := []interface{}{
-			r.clock.Now().Unix(),
+			r.clock.Now().Add(leaseDuration).Unix(),
 			base.TaskKeyPrefix(qname),
 		}
 		res, err := dequeueCmd.Run(context.Background(), r.client, keys, argv...).Result()
 		if err == redis.Nil {
 			continue
 		} else if err != nil {
-			return nil, time.Time{}, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+			return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
 		}
-		data, err := cast.ToSliceE(res)
+		encoded, err := cast.ToStringE(res)
 		if err != nil {
-			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
-		}
-		if len(data) != 2 {
-			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("Lua script returned %d values; expected 2", len(data)))
-		}
-		encoded, err := cast.ToStringE(data[0])
-		if err != nil {
-			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
-		}
-		d, err := cast.ToInt64E(data[1])
-		if err != nil {
-			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
+			return nil, errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
 		}
 		if msg, err = base.DecodeMessage([]byte(encoded)); err != nil {
-			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cannot decode message: %v", err))
+			return nil, errors.E(op, errors.Internal, fmt.Sprintf("cannot decode message: %v", err))
 		}
-		return msg, time.Unix(d, 0), nil
+		return msg, nil
 	}
-	return nil, time.Time{}, errors.E(op, errors.NotFound, errors.ErrNoProcessableTask)
+	return nil, errors.E(op, errors.NotFound, errors.ErrNoProcessableTask)
 }
 
 // KEYS[1] -> asynq:{<qname>}:active
