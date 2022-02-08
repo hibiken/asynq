@@ -423,6 +423,13 @@ func GetDeadlinesEntries(tb testing.TB, r redis.UniversalClient, qname string) [
 	return getMessagesFromZSetWithScores(tb, r, qname, base.DeadlinesKey, base.TaskStateActive)
 }
 
+// GetLeaseEntries returns all task IDs and its score in the lease set for the given queue.
+// It also asserts the state field of the task.
+func GetLeaseEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
+	tb.Helper()
+	return getMessagesFromZSetWithScores(tb, r, qname, base.LeaseKey, base.TaskStateActive)
+}
+
 // GetCompletedEntries returns all completed messages and its score in the given queue.
 // It also asserts the state field of the task.
 func GetCompletedEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
