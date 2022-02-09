@@ -17,7 +17,9 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq/internal/timeutil"
 )
 
 var taskCmpOpts = []cmp.Option{
@@ -751,6 +753,72 @@ func TestNormalizeQueues(t *testing.T) {
 		if diff := cmp.Diff(tc.want, got); diff != "" {
 			t.Errorf("normalizeQueues(%v) = %v, want %v; (-want, +got):\n%s",
 				tc.input, got, tc.want, diff)
+		}
+	}
+}
+
+func TestProcessorComputeDeadline(t *testing.T) {
+	now := time.Now()
+	p := processor{
+		logger: log.NewLogger(nil),
+		clock:  timeutil.NewSimulatedClock(now),
+	}
+
+	tests := []struct {
+		desc string
+		msg  *base.TaskMessage
+		want time.Time
+	}{
+		{
+			desc: "message with only timeout specified",
+			msg: &base.TaskMessage{
+				Timeout: int64((30 * time.Minute).Seconds()),
+			},
+			want: now.Add(30 * time.Minute),
+		},
+		{
+			desc: "message with only deadline specified",
+			msg: &base.TaskMessage{
+				Deadline: now.Add(24 * time.Hour).Unix(),
+			},
+			want: now.Add(24 * time.Hour),
+		},
+		{
+			desc: "message with both timeout and deadline set (now+timeout < deadline)",
+			msg: &base.TaskMessage{
+				Deadline: now.Add(24 * time.Hour).Unix(),
+				Timeout:  int64((30 * time.Minute).Seconds()),
+			},
+			want: now.Add(30 * time.Minute),
+		},
+		{
+			desc: "message with both timeout and deadline set (now+timeout > deadline)",
+			msg: &base.TaskMessage{
+				Deadline: now.Add(10 * time.Minute).Unix(),
+				Timeout:  int64((30 * time.Minute).Seconds()),
+			},
+			want: now.Add(10 * time.Minute),
+		},
+		{
+			desc: "message with both timeout and deadline set (now+timeout == deadline)",
+			msg: &base.TaskMessage{
+				Deadline: now.Add(30 * time.Minute).Unix(),
+				Timeout:  int64((30 * time.Minute).Seconds()),
+			},
+			want: now.Add(30 * time.Minute),
+		},
+		{
+			desc: "message without timeout and deadline",
+			msg:  &base.TaskMessage{},
+			want: now.Add(defaultTimeout),
+		},
+	}
+
+	for _, tc := range tests {
+		got := p.computeDeadline(tc.msg)
+		// Compare the Unix epoch with seconds granularity
+		if got.Unix() != tc.want.Unix() {
+			t.Errorf("%s: got=%v, want=%v", tc.desc, got.Unix(), tc.want.Unix())
 		}
 	}
 }
