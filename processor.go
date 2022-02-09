@@ -7,6 +7,7 @@ package asynq
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"runtime"
 	"runtime/debug"
@@ -19,12 +20,14 @@ import (
 	asynqcontext "github.com/hibiken/asynq/internal/context"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/log"
+	"github.com/hibiken/asynq/internal/timeutil"
 	"golang.org/x/time/rate"
 )
 
 type processor struct {
 	logger *log.Logger
 	broker base.Broker
+	clock  timeutil.Clock
 
 	handler   Handler
 	baseCtxFn func() context.Context
@@ -97,6 +100,7 @@ func newProcessor(params processorParams) *processor {
 		logger:          params.logger,
 		broker:          params.broker,
 		baseCtxFn:       params.baseCtxFn,
+		clock:           timeutil.NewRealClock(),
 		queueConfig:     queues,
 		orderedQueues:   orderedQueues,
 		retryDelayFunc:  params.retryDelayFunc,
@@ -167,7 +171,7 @@ func (p *processor) exec() {
 		return
 	case p.sema <- struct{}{}: // acquire token
 		qnames := p.queues()
-		msg, deadline, err := p.broker.Dequeue(qnames...)
+		msg, err := p.broker.Dequeue(qnames...)
 		switch {
 		case errors.Is(err, errors.ErrNoProcessableTask):
 			p.logger.Debug("All queues are empty")
@@ -186,6 +190,7 @@ func (p *processor) exec() {
 			return
 		}
 
+		deadline := p.computeDeadline(msg)
 		p.starting <- &workerInfo{msg, time.Now(), deadline}
 		go func() {
 			defer func() {
@@ -485,4 +490,20 @@ func gcd(xs ...int) int {
 		}
 	}
 	return res
+}
+
+// computeDeadline returns the given task's deadline,
+func (p *processor) computeDeadline(msg *base.TaskMessage) time.Time {
+	if msg.Timeout == 0 && msg.Deadline == 0 {
+		p.logger.Errorf("asynq: internal error: both timeout and deadline are not set for the task message: %s", msg.ID)
+		return p.clock.Now().Add(defaultTimeout)
+	}
+	if msg.Timeout != 0 && msg.Deadline != 0 {
+		deadlineUnix := math.Min(float64(p.clock.Now().Unix()+msg.Timeout), float64(msg.Deadline))
+		return time.Unix(int64(deadlineUnix), 0)
+	}
+	if msg.Timeout != 0 {
+		return p.clock.Now().Add(time.Duration(msg.Timeout) * time.Second)
+	}
+	return time.Unix(msg.Deadline, 0)
 }
