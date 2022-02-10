@@ -27,7 +27,7 @@ type processor struct {
 	broker base.Broker
 
 	handler   Handler
-	baseCtxFn BaseCtxFn
+	baseCtxFn func() context.Context
 
 	queueConfig map[string]int
 
@@ -72,7 +72,7 @@ type processor struct {
 type processorParams struct {
 	logger          *log.Logger
 	broker          base.Broker
-	baseCtxFn       BaseCtxFn
+	baseCtxFn       func() context.Context
 	retryDelayFunc  RetryDelayFunc
 	isFailureFunc   func(error) bool
 	syncCh          chan<- *syncRequest

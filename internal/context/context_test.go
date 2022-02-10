@@ -54,10 +54,15 @@ func TestCreateContextWithFutureDeadline(t *testing.T) {
 }
 
 func TestCreateContextWithBaseContext(t *testing.T) {
+	type ctxKey string
+	type ctxValue string
+	var key ctxKey = "key"
+	var value ctxValue = "value"
+
 	tests := []struct {
-		deadline time.Time
+		baseCtx context.Context
 	}{
-		{time.Now().Add(-2 * time.Hour)},
+		{context.WithValue(context.Background(), key, value)},
 	}
 
 	for _, tc := range tests {
@@ -66,13 +71,8 @@ func TestCreateContextWithBaseContext(t *testing.T) {
 			ID:      uuid.NewString(),
 			Payload: nil,
 		}
-		type ctxKey string
-		type ctxValue string
-		var key ctxKey = "key"
-		var value ctxValue = "value"
-		baseCtx := context.WithValue(context.Background(), key, value)
 
-		ctx, cancel := New(baseCtx, msg, tc.deadline)
+		ctx, cancel := New(tc.baseCtx, msg, time.Now().Add(30*time.Minute))
 		defer cancel()
 
 		select {
@@ -82,10 +82,11 @@ func TestCreateContextWithBaseContext(t *testing.T) {
 		}
 
 		v, ok := ctx.Value(key).(ctxValue)
+		original, _ := tc.baseCtx.Value(key).(ctxValue)
 		if !ok {
 			t.Errorf("ctx.Value().(ctxValue) returned false, expected to be true")
 		}
-		if v != value {
+		if v != original {
 			t.Errorf("ctx.Value().(ctxValue) returned unknown value (%v), expected to be %s", v, value)
 		}
 	}

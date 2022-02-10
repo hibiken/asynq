@@ -101,10 +101,7 @@ type Config struct {
 	//
 	// If BaseContext is nil, the default is context.Background().
 	// If this is defined, then it MUST return a non-nil context
-	BaseContext BaseCtxFn
-
-	// SleepOnEmptyQueue optionally specifies the amount of time to wait before polling again when there are no messages in the queue
-	SleepOnEmptyQueue time.Duration
+	BaseContext func() context.Context
 
 	// Function to calculate retry delay for a failed task.
 	//
@@ -211,9 +208,6 @@ type ErrorHandlerFunc func(ctx context.Context, task *Task, err error)
 func (fn ErrorHandlerFunc) HandleError(ctx context.Context, task *Task, err error) {
 	fn(ctx, task, err)
 }
-
-// BaseCtxFn provides the root context from where the execution contexts of tasks are derived
-type BaseCtxFn func() context.Context
 
 // RetryDelayFunc calculates the retry delay duration for a failed task given
 // the retry count, error, and the task.
