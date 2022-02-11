@@ -275,10 +275,11 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, err error) {
 }
 
 // KEYS[1] -> asynq:{<qname>}:active
-// KEYS[2] -> asynq:{<qname>}:deadlines
+// KEYS[2] -> asynq:{<qname>}:lease
 // KEYS[3] -> asynq:{<qname>}:t:<task_id>
 // KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[5] -> asynq:{<qname>}:processed
+// -------
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
 // ARGV[3] -> max int64 value
@@ -306,11 +307,12 @@ return redis.status_reply("OK")
 `)
 
 // KEYS[1] -> asynq:{<qname>}:active
-// KEYS[2] -> asynq:{<qname>}:deadlines
+// KEYS[2] -> asynq:{<qname>}:lease
 // KEYS[3] -> asynq:{<qname>}:t:<task_id>
 // KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[5] -> asynq:{<qname>}:processed
 // KEYS[6] -> unique key
+// -------
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
 // ARGV[3] -> max int64 value
@@ -349,7 +351,7 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 	expireAt := now.Add(statsTTL)
 	keys := []string{
 		base.ActiveKey(msg.Queue),
-		base.DeadlinesKey(msg.Queue),
+		base.LeaseKey(msg.Queue),
 		base.TaskKey(msg.Queue, msg.ID),
 		base.ProcessedKey(msg.Queue, now),
 		base.ProcessedTotalKey(msg.Queue),
@@ -368,7 +370,7 @@ func (r *RDB) Done(msg *base.TaskMessage) error {
 }
 
 // KEYS[1] -> asynq:{<qname>}:active
-// KEYS[2] -> asynq:{<qname>}:deadlines
+// KEYS[2] -> asynq:{<qname>}:lease
 // KEYS[3] -> asynq:{<qname>}:completed
 // KEYS[4] -> asynq:{<qname>}:t:<task_id>
 // KEYS[5] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
@@ -404,7 +406,7 @@ return redis.status_reply("OK")
 `)
 
 // KEYS[1] -> asynq:{<qname>}:active
-// KEYS[2] -> asynq:{<qname>}:deadlines
+// KEYS[2] -> asynq:{<qname>}:lease
 // KEYS[3] -> asynq:{<qname>}:completed
 // KEYS[4] -> asynq:{<qname>}:t:<task_id>
 // KEYS[5] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
@@ -457,7 +459,7 @@ func (r *RDB) MarkAsComplete(msg *base.TaskMessage) error {
 	}
 	keys := []string{
 		base.ActiveKey(msg.Queue),
-		base.DeadlinesKey(msg.Queue),
+		base.LeaseKey(msg.Queue),
 		base.CompletedKey(msg.Queue),
 		base.TaskKey(msg.Queue, msg.ID),
 		base.ProcessedKey(msg.Queue, now),
@@ -479,7 +481,7 @@ func (r *RDB) MarkAsComplete(msg *base.TaskMessage) error {
 }
 
 // KEYS[1] -> asynq:{<qname>}:active
-// KEYS[2] -> asynq:{<qname>}:deadlines
+// KEYS[2] -> asynq:{<qname>}:lease
 // KEYS[3] -> asynq:{<qname>}:pending
 // KEYS[4] -> asynq:{<qname>}:t:<task_id>
 // ARGV[1] -> task ID
@@ -501,7 +503,7 @@ func (r *RDB) Requeue(msg *base.TaskMessage) error {
 	ctx := context.Background()
 	keys := []string{
 		base.ActiveKey(msg.Queue),
-		base.DeadlinesKey(msg.Queue),
+		base.LeaseKey(msg.Queue),
 		base.PendingKey(msg.Queue),
 		base.TaskKey(msg.Queue, msg.ID),
 	}
@@ -634,13 +636,13 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:active
-// KEYS[3] -> asynq:{<qname>}:deadlines
+// KEYS[3] -> asynq:{<qname>}:lease
 // KEYS[4] -> asynq:{<qname>}:retry
 // KEYS[5] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[6] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
 // KEYS[7] -> asynq:{<qname>}:processed
 // KEYS[8] -> asynq:{<qname>}:failed
-//
+// -------
 // ARGV[1] -> task ID
 // ARGV[2] -> updated base.TaskMessage value
 // ARGV[3] -> retry_at UNIX timestamp
@@ -697,7 +699,7 @@ func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string, i
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
 		base.ActiveKey(msg.Queue),
-		base.DeadlinesKey(msg.Queue),
+		base.LeaseKey(msg.Queue),
 		base.RetryKey(msg.Queue),
 		base.ProcessedKey(msg.Queue, now),
 		base.FailedKey(msg.Queue, now),
@@ -722,13 +724,13 @@ const (
 
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:active
-// KEYS[3] -> asynq:{<qname>}:deadlines
+// KEYS[3] -> asynq:{<qname>}:lease
 // KEYS[4] -> asynq:{<qname>}:archived
 // KEYS[5] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[6] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
 // KEYS[7] -> asynq:{<qname>}:processed
 // KEYS[8] -> asynq:{<qname>}:failed
-//
+// -------
 // ARGV[1] -> task ID
 // ARGV[2] -> updated base.TaskMessage value
 // ARGV[3] -> died_at UNIX timestamp
@@ -783,7 +785,7 @@ func (r *RDB) Archive(msg *base.TaskMessage, errMsg string) error {
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
 		base.ActiveKey(msg.Queue),
-		base.DeadlinesKey(msg.Queue),
+		base.LeaseKey(msg.Queue),
 		base.ArchivedKey(msg.Queue),
 		base.ProcessedKey(msg.Queue, now),
 		base.FailedKey(msg.Queue, now),
