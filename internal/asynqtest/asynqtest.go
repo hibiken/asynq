@@ -230,6 +230,13 @@ func SeedDeadlines(tb testing.TB, r redis.UniversalClient, entries []base.Z, qna
 	seedRedisZSet(tb, r, base.DeadlinesKey(qname), entries, base.TaskStateActive)
 }
 
+// SeedLease initializes the lease set with the given entries.
+func SeedLease(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
+	tb.Helper()
+	r.SAdd(context.Background(), base.AllQueues, qname)
+	seedRedisZSet(tb, r, base.LeaseKey(qname), entries, base.TaskStateActive)
+}
+
 // SeedCompletedQueue initializes the completed set witht the given entries.
 func SeedCompletedQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
 	tb.Helper()
@@ -284,6 +291,14 @@ func SeedAllDeadlines(tb testing.TB, r redis.UniversalClient, deadlines map[stri
 	tb.Helper()
 	for q, entries := range deadlines {
 		SeedDeadlines(tb, r, entries, q)
+	}
+}
+
+// SeedAllLease initializes all of the lease sets with the given entries.
+func SeedAllLease(tb testing.TB, r redis.UniversalClient, deadlines map[string][]base.Z) {
+	tb.Helper()
+	for q, entries := range deadlines {
+		SeedLease(tb, r, entries, q)
 	}
 }
 
