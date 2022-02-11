@@ -625,7 +625,7 @@ type Broker interface {
 	Archive(msg *TaskMessage, errMsg string) error
 	ForwardIfReady(qnames ...string) error
 	DeleteExpiredCompletedTasks(qname string) error
-	ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*TaskMessage, error)
+	ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*TaskMessage, error)
 	WriteServerState(info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error
 	ClearServerState(host string, pid int, serverID string) error
 	CancelationPubSub() (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers
