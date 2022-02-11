@@ -918,10 +918,10 @@ func (r *RDB) deleteExpiredCompletedTasks(qname string, batchSize int) (int64, e
 	return n, nil
 }
 
-// KEYS[1] -> asynq:{<qname>}:deadlines
-// ARGV[1] -> deadline in unix time
+// KEYS[1] -> asynq:{<qname>}:lease
+// ARGV[1] -> cutoff in unix time
 // ARGV[2] -> task key prefix
-var listDeadlineExceededCmd = redis.NewScript(`
+var listLeaseExpiredCmd = redis.NewScript(`
 local res = {}
 local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
 for _, id in ipairs(ids) do
@@ -931,14 +931,14 @@ end
 return res
 `)
 
-// ListDeadlineExceeded returns a list of task messages that have exceeded the deadline from the given queues.
-func (r *RDB) ListDeadlineExceeded(deadline time.Time, qnames ...string) ([]*base.TaskMessage, error) {
-	var op errors.Op = "rdb.ListDeadlineExceeded"
+// ListLeaseExpired returns a list of task messages with an expired lease from the given queues.
+func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
+	var op errors.Op = "rdb.ListLeaseExpired"
 	var msgs []*base.TaskMessage
 	for _, qname := range qnames {
-		res, err := listDeadlineExceededCmd.Run(context.Background(), r.client,
-			[]string{base.DeadlinesKey(qname)},
-			deadline.Unix(), base.TaskKeyPrefix(qname)).Result()
+		res, err := listLeaseExpiredCmd.Run(context.Background(), r.client,
+			[]string{base.LeaseKey(qname)},
+			cutoff.Unix(), base.TaskKeyPrefix(qname)).Result()
 		if err != nil {
 			return nil, errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
 		}
