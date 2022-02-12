@@ -1,3 +1,7 @@
+// Copyright 2022 Kentaro Hibino. All rights reserved.
+// Use of this source code is governed by a MIT license
+// that can be found in the LICENSE file.
+
 // Package timeutil exports functions and types related to time and date.
 package timeutil
 
@@ -35,4 +39,4 @@ func (c *SimulatedClock) Now() time.Time { return c.t }
 
 func (c *SimulatedClock) SetTime(t time.Time) { c.t = t }
 
-func (c *SimulatedClock) AdvanceTime(d time.Duration) { c.t.Add(d) }
+func (c *SimulatedClock) AdvanceTime(d time.Duration) { c.t = c.t.Add(d) }

@@ -295,9 +295,9 @@ func SeedAllDeadlines(tb testing.TB, r redis.UniversalClient, deadlines map[stri
 }
 
 // SeedAllLease initializes all of the lease sets with the given entries.
-func SeedAllLease(tb testing.TB, r redis.UniversalClient, deadlines map[string][]base.Z) {
+func SeedAllLease(tb testing.TB, r redis.UniversalClient, lease map[string][]base.Z) {
 	tb.Helper()
-	for q, entries := range deadlines {
+	for q, entries := range lease {
 		SeedLease(tb, r, entries, q)
 	}
 }

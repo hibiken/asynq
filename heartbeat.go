@@ -134,6 +134,7 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 	}()
 }
 
+// beat extends lease for workers and writes server/worker info to redis.
 func (h *heartbeater) beat() {
 	h.state.mu.Lock()
 	srvStatus := h.state.value.String()
@@ -152,6 +153,7 @@ func (h *heartbeater) beat() {
 	}
 
 	var ws []*base.WorkerInfo
+	idsByQueue := make(map[string][]string)
 	for id, w := range h.workers {
 		ws = append(ws, &base.WorkerInfo{
 			Host:     h.host,
@@ -164,11 +166,18 @@ func (h *heartbeater) beat() {
 			Started:  w.started,
 			Deadline: w.deadline,
 		})
+		idsByQueue[w.msg.Queue] = append(idsByQueue[w.msg.Queue], id)
 	}
 
 	// Note: Set TTL to be long enough so that it won't expire before we write again
 	// and short enough to expire quickly once the process is shut down or killed.
 	if err := h.broker.WriteServerState(&info, ws, h.interval*2); err != nil {
 		h.logger.Errorf("could not write server state data: %v", err)
+	}
+
+	for qname, ids := range idsByQueue {
+		if err := h.broker.ExtendLease(qname, ids...); err != nil {
+			h.logger.Errorf("could not extend lease for tasks %v: %v", ids, err)
+		}
 	}
 }
