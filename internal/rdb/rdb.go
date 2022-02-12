@@ -20,7 +20,8 @@ import (
 
 const statsTTL = 90 * 24 * time.Hour // 90 days
 
-const leaseDuration = 30 * time.Second
+// LeaseDuration is the duration used to initially create a lease and to extend it thereafter.
+const LeaseDuration = 30 * time.Second
 
 // RDB is a client interface to query and mutate task queues.
 type RDB struct {
@@ -253,7 +254,7 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, err error) {
 			base.LeaseKey(qname),
 		}
 		argv := []interface{}{
-			r.clock.Now().Add(leaseDuration).Unix(),
+			r.clock.Now().Add(LeaseDuration).Unix(),
 			base.TaskKeyPrefix(qname),
 		}
 		res, err := dequeueCmd.Run(context.Background(), r.client, keys, argv...).Result()
@@ -955,6 +956,17 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 		}
 	}
 	return msgs, nil
+}
+
+// ExtendLease extends the lease for the given tasks by LeaseDuration (30s).
+func (r *RDB) ExtendLease(qname string, ids ...string) error {
+	expireAt := r.clock.Now().Add(LeaseDuration)
+	var zs []redis.Z
+	for _, id := range ids {
+		zs = append(zs, redis.Z{Member: id, Score: float64(expireAt.Unix())})
+	}
+	// Use XX option to only update elements that already exist; Don't add new elements
+	return r.client.ZAddArgs(context.Background(), base.LeaseKey(qname), redis.ZAddArgs{XX: true, GT: true, Members: zs}).Err()
 }
 
 // KEYS[1]  -> asynq:servers:{<host:pid:sid>}
