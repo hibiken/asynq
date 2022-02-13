@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq/internal/timeutil"
 )
 
 func TestTaskKey(t *testing.T) {
@@ -642,5 +643,77 @@ func TestCancelationsConcurrentAccess(t *testing.T) {
 	_, ok = c.Get(key2)
 	if ok {
 		t.Errorf("(*Cancelations).Get(%q) = _, true, want <nil>, false", key2)
+	}
+}
+
+func TestLeaseReset(t *testing.T) {
+	now := time.Now()
+	clock := timeutil.NewSimulatedClock(now)
+
+	l := NewLease(now.Add(30 * time.Second))
+	l.clock = clock
+
+	// Check initial state
+	if !l.IsValid() {
+		t.Errorf("lease should be valid when expiration is set to a future time")
+	}
+	if want := now.Add(30 * time.Second); l.Deadline() != want {
+		t.Errorf("Lease.Deadline() = %v, want %v", l.Deadline(), want)
+	}
+
+	// Test Reset
+	if !l.Reset(now.Add(45 * time.Second)) {
+		t.Fatalf("Lease.Reset returned false when extending")
+	}
+	if want := now.Add(45 * time.Second); l.Deadline() != want {
+		t.Errorf("After Reset: Lease.Deadline() = %v, want %v", l.Deadline(), want)
+	}
+
+	clock.AdvanceTime(1 * time.Minute) // simulate lease expiration
+
+	if l.IsValid() {
+		t.Errorf("lease should be invalid after expiration")
+	}
+
+	// Reset should return false if lease is expired.
+	if l.Reset(time.Now().Add(20 * time.Second)) {
+		t.Errorf("Lease.Reset should return false after expiration")
+	}
+}
+
+func TestLeaseNotifyExpiration(t *testing.T) {
+	now := time.Now()
+	clock := timeutil.NewSimulatedClock(now)
+
+	l := NewLease(now.Add(30 * time.Second))
+	l.clock = clock
+
+	select {
+	case <-l.Done():
+		t.Fatalf("Lease.Done() did not block")
+	default:
+	}
+
+	if l.NotifyExpiration() {
+		t.Fatalf("Lease.NotifyExpiration() should return false when lease is still valid")
+	}
+
+	clock.AdvanceTime(1 * time.Minute) // simulate lease expiration
+
+	if l.IsValid() {
+		t.Errorf("Lease should be invalid after expiration")
+	}
+	if !l.NotifyExpiration() {
+		t.Errorf("Lease.NotifyExpiration() return return true after expiration")
+	}
+	if !l.NotifyExpiration() {
+		t.Errorf("It should be leagal to call Lease.NotifyExpiration multiple times")
+	}
+
+	select {
+	case <-l.Done():
+		// expected
+	default:
+		t.Errorf("Lease.Done() blocked after call to Lease.NotifyExpiration()")
 	}
 }
