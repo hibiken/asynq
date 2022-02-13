@@ -340,19 +340,21 @@ func TestDequeue(t *testing.T) {
 	}
 
 	tests := []struct {
-		pending     map[string][]*base.TaskMessage
-		qnames      []string // list of queues to query
-		wantMsg     *base.TaskMessage
-		wantPending map[string][]*base.TaskMessage
-		wantActive  map[string][]*base.TaskMessage
-		wantLease   map[string][]base.Z
+		pending            map[string][]*base.TaskMessage
+		qnames             []string // list of queues to query
+		wantMsg            *base.TaskMessage
+		wantExpirationTime time.Time
+		wantPending        map[string][]*base.TaskMessage
+		wantActive         map[string][]*base.TaskMessage
+		wantLease          map[string][]base.Z
 	}{
 		{
 			pending: map[string][]*base.TaskMessage{
 				"default": {t1},
 			},
-			qnames:  []string{"default"},
-			wantMsg: t1,
+			qnames:             []string{"default"},
+			wantMsg:            t1,
+			wantExpirationTime: now.Add(LeaseDuration),
 			wantPending: map[string][]*base.TaskMessage{
 				"default": {},
 			},
@@ -369,8 +371,9 @@ func TestDequeue(t *testing.T) {
 				"critical": {t2},
 				"low":      {t3},
 			},
-			qnames:  []string{"critical", "default", "low"},
-			wantMsg: t2,
+			qnames:             []string{"critical", "default", "low"},
+			wantMsg:            t2,
+			wantExpirationTime: now.Add(LeaseDuration),
 			wantPending: map[string][]*base.TaskMessage{
 				"default":  {t1},
 				"critical": {},
@@ -393,8 +396,9 @@ func TestDequeue(t *testing.T) {
 				"critical": {},
 				"low":      {t3},
 			},
-			qnames:  []string{"critical", "default", "low"},
-			wantMsg: t1,
+			qnames:             []string{"critical", "default", "low"},
+			wantMsg:            t1,
+			wantExpirationTime: now.Add(LeaseDuration),
 			wantPending: map[string][]*base.TaskMessage{
 				"default":  {},
 				"critical": {},
@@ -417,7 +421,7 @@ func TestDequeue(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 
-		gotMsg, err := r.Dequeue(tc.qnames...)
+		gotMsg, gotExpirationTime, err := r.Dequeue(tc.qnames...)
 		if err != nil {
 			t.Errorf("(*RDB).Dequeue(%v) returned error %v", tc.qnames, err)
 			continue
@@ -426,6 +430,10 @@ func TestDequeue(t *testing.T) {
 			t.Errorf("(*RDB).Dequeue(%v) returned message %v; want %v",
 				tc.qnames, gotMsg, tc.wantMsg)
 			continue
+		}
+		if gotExpirationTime != tc.wantExpirationTime {
+			t.Errorf("(*RDB).Dequeue(%v) returned expiration time %v, want %v",
+				tc.qnames, gotExpirationTime, tc.wantExpirationTime)
 		}
 
 		for queue, want := range tc.wantPending {
@@ -507,7 +515,7 @@ func TestDequeueError(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 
-		gotMsg, gotErr := r.Dequeue(tc.qnames...)
+		gotMsg, _, gotErr := r.Dequeue(tc.qnames...)
 		if !errors.Is(gotErr, tc.wantErr) {
 			t.Errorf("(*RDB).Dequeue(%v) returned error %v; want %v",
 				tc.qnames, gotErr, tc.wantErr)
@@ -630,7 +638,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 		}
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 
-		got, err := r.Dequeue(tc.qnames...)
+		got, _, err := r.Dequeue(tc.qnames...)
 		if !cmp.Equal(got, tc.wantMsg) || !errors.Is(err, tc.wantErr) {
 			t.Errorf("Dequeue(%v) = %v, %v; want %v, %v",
 				tc.qnames, got, err, tc.wantMsg, tc.wantErr)
@@ -764,7 +772,7 @@ func TestDone(t *testing.T) {
 			}
 		}
 
-		err := r.Done(tc.target)
+		err := r.Done(context.Background(), tc.target)
 		if err != nil {
 			t.Errorf("%s; (*RDB).Done(task) = %v, want nil", tc.desc, err)
 			continue
@@ -833,7 +841,7 @@ func TestDoneWithMaxCounter(t *testing.T) {
 		t.Fatalf("Redis command failed: SET %q %v", processedTotalKey, math.MaxInt64)
 	}
 
-	if err := r.Done(msg); err != nil {
+	if err := r.Done(context.Background(), msg); err != nil {
 		t.Fatalf("RDB.Done failed: %v", err)
 	}
 
@@ -984,7 +992,7 @@ func TestMarkAsComplete(t *testing.T) {
 			}
 		}
 
-		err := r.MarkAsComplete(tc.target)
+		err := r.MarkAsComplete(context.Background(), tc.target)
 		if err != nil {
 			t.Errorf("%s; (*RDB).MarkAsCompleted(task) = %v, want nil", tc.desc, err)
 			continue
@@ -1148,7 +1156,7 @@ func TestRequeue(t *testing.T) {
 		h.SeedAllActiveQueues(t, r.client, tc.active)
 		h.SeedAllLease(t, r.client, tc.lease)
 
-		err := r.Requeue(tc.target)
+		err := r.Requeue(context.Background(), tc.target)
 		if err != nil {
 			t.Errorf("(*RDB).Requeue(task) = %v, want nil", err)
 			continue
@@ -1529,7 +1537,7 @@ func TestRetry(t *testing.T) {
 		h.SeedAllLease(t, r.client, tc.lease)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		err := r.Retry(tc.msg, tc.processAt, tc.errMsg, true /*isFailure*/)
+		err := r.Retry(context.Background(), tc.msg, tc.processAt, tc.errMsg, true /*isFailure*/)
 		if err != nil {
 			t.Errorf("(*RDB).Retry = %v, want nil", err)
 			continue
@@ -1702,7 +1710,7 @@ func TestRetryWithNonFailureError(t *testing.T) {
 		h.SeedAllLease(t, r.client, tc.lease)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		err := r.Retry(tc.msg, tc.processAt, tc.errMsg, false /*isFailure*/)
+		err := r.Retry(context.Background(), tc.msg, tc.processAt, tc.errMsg, false /*isFailure*/)
 		if err != nil {
 			t.Errorf("(*RDB).Retry = %v, want nil", err)
 			continue
@@ -1908,7 +1916,7 @@ func TestArchive(t *testing.T) {
 		h.SeedAllLease(t, r.client, tc.lease)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		err := r.Archive(tc.target, errMsg)
+		err := r.Archive(context.Background(), tc.target, errMsg)
 		if err != nil {
 			t.Errorf("(*RDB).Archive(%v, %v) = %v, want nil", tc.target, errMsg, err)
 			continue
@@ -2304,11 +2312,12 @@ func TestExtendLease(t *testing.T) {
 	t4 := h.NewTaskMessageWithQueue("task4", nil, "default")
 
 	tests := []struct {
-		desc      string
-		lease     map[string][]base.Z
-		qname     string
-		ids       []string
-		wantLease map[string][]base.Z
+		desc               string
+		lease              map[string][]base.Z
+		qname              string
+		ids                []string
+		wantExpirationTime time.Time
+		wantLease          map[string][]base.Z
 	}{
 		{
 			desc: "Should extends lease for a single message in a queue",
@@ -2316,8 +2325,9 @@ func TestExtendLease(t *testing.T) {
 				"default":  {{Message: t1, Score: now.Add(10 * time.Second).Unix()}},
 				"critical": {{Message: t3, Score: now.Add(10 * time.Second).Unix()}},
 			},
-			qname: "default",
-			ids:   []string{t1.ID},
+			qname:              "default",
+			ids:                []string{t1.ID},
+			wantExpirationTime: now.Add(LeaseDuration),
 			wantLease: map[string][]base.Z{
 				"default":  {{Message: t1, Score: now.Add(LeaseDuration).Unix()}},
 				"critical": {{Message: t3, Score: now.Add(10 * time.Second).Unix()}},
@@ -2329,8 +2339,9 @@ func TestExtendLease(t *testing.T) {
 				"default":  {{Message: t1, Score: now.Add(10 * time.Second).Unix()}, {Message: t2, Score: now.Add(10 * time.Second).Unix()}},
 				"critical": {{Message: t3, Score: now.Add(10 * time.Second).Unix()}},
 			},
-			qname: "default",
-			ids:   []string{t1.ID, t2.ID},
+			qname:              "default",
+			ids:                []string{t1.ID, t2.ID},
+			wantExpirationTime: now.Add(LeaseDuration),
 			wantLease: map[string][]base.Z{
 				"default":  {{Message: t1, Score: now.Add(LeaseDuration).Unix()}, {Message: t2, Score: now.Add(LeaseDuration).Unix()}},
 				"critical": {{Message: t3, Score: now.Add(10 * time.Second).Unix()}},
@@ -2346,8 +2357,9 @@ func TestExtendLease(t *testing.T) {
 				},
 				"critical": {{Message: t3, Score: now.Add(10 * time.Second).Unix()}},
 			},
-			qname: "default",
-			ids:   []string{t2.ID, t4.ID},
+			qname:              "default",
+			ids:                []string{t2.ID, t4.ID},
+			wantExpirationTime: now.Add(LeaseDuration),
 			wantLease: map[string][]base.Z{
 				"default": {
 					{Message: t1, Score: now.Add(10 * time.Second).Unix()},
@@ -2364,8 +2376,9 @@ func TestExtendLease(t *testing.T) {
 					{Message: t1, Score: now.Add(10 * time.Second).Unix()},
 				},
 			},
-			qname: "default",
-			ids:   []string{t1.ID, t2.ID},
+			qname:              "default",
+			ids:                []string{t1.ID, t2.ID},
+			wantExpirationTime: now.Add(LeaseDuration),
 			wantLease: map[string][]base.Z{
 				"default": {
 					{Message: t1, Score: now.Add(LeaseDuration).Unix()},
@@ -2379,8 +2392,9 @@ func TestExtendLease(t *testing.T) {
 					{Message: t1, Score: now.Add(LeaseDuration).Add(10 * time.Second).Unix()},
 				},
 			},
-			qname: "default",
-			ids:   []string{t1.ID},
+			qname:              "default",
+			ids:                []string{t1.ID},
+			wantExpirationTime: now.Add(LeaseDuration),
 			wantLease: map[string][]base.Z{
 				"default": {
 					{Message: t1, Score: now.Add(LeaseDuration).Add(10 * time.Second).Unix()},
@@ -2393,8 +2407,12 @@ func TestExtendLease(t *testing.T) {
 		h.FlushDB(t, r.client)
 		h.SeedAllLease(t, r.client, tc.lease)
 
-		if err := r.ExtendLease(tc.qname, tc.ids...); err != nil {
+		gotExpirationTime, err := r.ExtendLease(tc.qname, tc.ids...)
+		if err != nil {
 			t.Fatalf("%s: ExtendLease(%q, %v) returned error: %v", tc.desc, tc.qname, tc.ids, err)
+		}
+		if gotExpirationTime != tc.wantExpirationTime {
+			t.Errorf("%s: ExtendLease(%q, %v) returned expirationTime %v, want %v", tc.desc, tc.qname, tc.ids, gotExpirationTime, tc.wantExpirationTime)
 		}
 
 		for qname, want := range tc.wantLease {

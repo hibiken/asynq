@@ -684,13 +684,13 @@ type Broker interface {
 	Enqueue(ctx context.Context, msg *TaskMessage) error
 	EnqueueUnique(ctx context.Context, msg *TaskMessage, ttl time.Duration) error
 	Dequeue(qnames ...string) (*TaskMessage, time.Time, error)
-	Done(msg *TaskMessage) error
-	MarkAsComplete(msg *TaskMessage) error
-	Requeue(msg *TaskMessage) error
+	Done(ctx context.Context, msg *TaskMessage) error
+	MarkAsComplete(ctx context.Context, msg *TaskMessage) error
+	Requeue(ctx context.Context, msg *TaskMessage) error
 	Schedule(ctx context.Context, msg *TaskMessage, processAt time.Time) error
 	ScheduleUnique(ctx context.Context, msg *TaskMessage, processAt time.Time, ttl time.Duration) error
-	Retry(msg *TaskMessage, processAt time.Time, errMsg string, isFailure bool) error
-	Archive(msg *TaskMessage, errMsg string) error
+	Retry(ctx context.Context, msg *TaskMessage, processAt time.Time, errMsg string, isFailure bool) error
+	Archive(ctx context.Context, msg *TaskMessage, errMsg string) error
 	ForwardIfReady(qnames ...string) error
 	DeleteExpiredCompletedTasks(qname string) error
 	ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*TaskMessage, error)

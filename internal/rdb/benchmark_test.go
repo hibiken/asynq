@@ -113,7 +113,7 @@ func BenchmarkDequeueSingleQueue(b *testing.B) {
 		}
 		b.StartTimer()
 
-		if _, err := r.Dequeue(base.DefaultQueueName); err != nil {
+		if _, _, err := r.Dequeue(base.DefaultQueueName); err != nil {
 			b.Fatalf("Dequeue failed: %v", err)
 		}
 	}
@@ -139,7 +139,7 @@ func BenchmarkDequeueMultipleQueues(b *testing.B) {
 		}
 		b.StartTimer()
 
-		if _, err := r.Dequeue(qnames...); err != nil {
+		if _, _, err := r.Dequeue(qnames...); err != nil {
 			b.Fatalf("Dequeue failed: %v", err)
 		}
 	}
@@ -156,6 +156,7 @@ func BenchmarkDone(b *testing.B) {
 		{Message: m2, Score: time.Now().Add(20 * time.Second).Unix()},
 		{Message: m3, Score: time.Now().Add(30 * time.Second).Unix()},
 	}
+	ctx := context.Background()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -165,7 +166,7 @@ func BenchmarkDone(b *testing.B) {
 		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
-		if err := r.Done(msgs[0]); err != nil {
+		if err := r.Done(ctx, msgs[0]); err != nil {
 			b.Fatalf("Done failed: %v", err)
 		}
 	}
@@ -182,6 +183,7 @@ func BenchmarkRetry(b *testing.B) {
 		{Message: m2, Score: time.Now().Add(20 * time.Second).Unix()},
 		{Message: m3, Score: time.Now().Add(30 * time.Second).Unix()},
 	}
+	ctx := context.Background()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -191,7 +193,7 @@ func BenchmarkRetry(b *testing.B) {
 		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
-		if err := r.Retry(msgs[0], time.Now().Add(1*time.Minute), "error", true /*isFailure*/); err != nil {
+		if err := r.Retry(ctx, msgs[0], time.Now().Add(1*time.Minute), "error", true /*isFailure*/); err != nil {
 			b.Fatalf("Retry failed: %v", err)
 		}
 	}
@@ -208,6 +210,7 @@ func BenchmarkArchive(b *testing.B) {
 		{Message: m2, Score: time.Now().Add(20 * time.Second).Unix()},
 		{Message: m3, Score: time.Now().Add(30 * time.Second).Unix()},
 	}
+	ctx := context.Background()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -217,7 +220,7 @@ func BenchmarkArchive(b *testing.B) {
 		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
-		if err := r.Archive(msgs[0], "error"); err != nil {
+		if err := r.Archive(ctx, msgs[0], "error"); err != nil {
 			b.Fatalf("Archive failed: %v", err)
 		}
 	}
@@ -234,6 +237,7 @@ func BenchmarkRequeue(b *testing.B) {
 		{Message: m2, Score: time.Now().Add(20 * time.Second).Unix()},
 		{Message: m3, Score: time.Now().Add(30 * time.Second).Unix()},
 	}
+	ctx := context.Background()
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -243,7 +247,7 @@ func BenchmarkRequeue(b *testing.B) {
 		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
-		if err := r.Requeue(msgs[0]); err != nil {
+		if err := r.Requeue(ctx, msgs[0]); err != nil {
 			b.Fatalf("Requeue failed: %v", err)
 		}
 	}

@@ -241,10 +241,10 @@ end
 return nil`)
 
 // Dequeue queries given queues in order and pops a task message
-// off a queue if one exists and returns the message.
+// off a queue if one exists and returns the message and its lease expiration time.
 // Dequeue skips a queue if the queue is paused.
 // If all queues are empty, ErrNoProcessableTask error is returned.
-func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, err error) {
+func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, leaseExpirationTime time.Time, err error) {
 	var op errors.Op = "rdb.Dequeue"
 	for _, qname := range qnames {
 		keys := []string{
@@ -253,26 +253,27 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, err error) {
 			base.ActiveKey(qname),
 			base.LeaseKey(qname),
 		}
+		leaseExpirationTime = r.clock.Now().Add(LeaseDuration)
 		argv := []interface{}{
-			r.clock.Now().Add(LeaseDuration).Unix(),
+			leaseExpirationTime.Unix(),
 			base.TaskKeyPrefix(qname),
 		}
 		res, err := dequeueCmd.Run(context.Background(), r.client, keys, argv...).Result()
 		if err == redis.Nil {
 			continue
 		} else if err != nil {
-			return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+			return nil, time.Time{}, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
 		}
 		encoded, err := cast.ToStringE(res)
 		if err != nil {
-			return nil, errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
+			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
 		}
 		if msg, err = base.DecodeMessage([]byte(encoded)); err != nil {
-			return nil, errors.E(op, errors.Internal, fmt.Sprintf("cannot decode message: %v", err))
+			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cannot decode message: %v", err))
 		}
-		return msg, nil
+		return msg, leaseExpirationTime, nil
 	}
-	return nil, errors.E(op, errors.NotFound, errors.ErrNoProcessableTask)
+	return nil, time.Time{}, errors.E(op, errors.NotFound, errors.ErrNoProcessableTask)
 }
 
 // KEYS[1] -> asynq:{<qname>}:active
@@ -345,9 +346,8 @@ return redis.status_reply("OK")
 
 // Done removes the task from active queue and deletes the task.
 // It removes a uniqueness lock acquired by the task, if any.
-func (r *RDB) Done(msg *base.TaskMessage) error {
+func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
 	var op errors.Op = "rdb.Done"
-	ctx := context.Background()
 	now := r.clock.Now()
 	expireAt := now.Add(statsTTL)
 	keys := []string{
@@ -448,9 +448,8 @@ return redis.status_reply("OK")
 
 // MarkAsComplete removes the task from active queue to mark the task as completed.
 // It removes a uniqueness lock acquired by the task, if any.
-func (r *RDB) MarkAsComplete(msg *base.TaskMessage) error {
+func (r *RDB) MarkAsComplete(ctx context.Context, msg *base.TaskMessage) error {
 	var op errors.Op = "rdb.MarkAsComplete"
-	ctx := context.Background()
 	now := r.clock.Now()
 	statsExpireAt := now.Add(statsTTL)
 	msg.CompletedAt = now.Unix()
@@ -499,9 +498,8 @@ redis.call("HSET", KEYS[4], "state", "pending")
 return redis.status_reply("OK")`)
 
 // Requeue moves the task from active queue to the specified queue.
-func (r *RDB) Requeue(msg *base.TaskMessage) error {
+func (r *RDB) Requeue(ctx context.Context, msg *base.TaskMessage) error {
 	var op errors.Op = "rdb.Requeue"
-	ctx := context.Background()
 	keys := []string{
 		base.ActiveKey(msg.Queue),
 		base.LeaseKey(msg.Queue),
@@ -682,9 +680,8 @@ return redis.status_reply("OK")`)
 // Retry moves the task from active to retry queue.
 // It also annotates the message with the given error message and
 // if isFailure is true increments the retried counter.
-func (r *RDB) Retry(msg *base.TaskMessage, processAt time.Time, errMsg string, isFailure bool) error {
+func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.Time, errMsg string, isFailure bool) error {
 	var op errors.Op = "rdb.Retry"
-	ctx := context.Background()
 	now := r.clock.Now()
 	modified := *msg
 	if isFailure {
@@ -770,9 +767,8 @@ return redis.status_reply("OK")`)
 
 // Archive sends the given task to archive, attaching the error message to the task.
 // It also trims the archive by timestamp and set size.
-func (r *RDB) Archive(msg *base.TaskMessage, errMsg string) error {
+func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string) error {
 	var op errors.Op = "rdb.Archive"
-	ctx := context.Background()
 	now := r.clock.Now()
 	modified := *msg
 	modified.ErrorMsg = errMsg
@@ -959,14 +955,19 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 }
 
 // ExtendLease extends the lease for the given tasks by LeaseDuration (30s).
-func (r *RDB) ExtendLease(qname string, ids ...string) error {
+// It returns a new expiration time if the operation was successful.
+func (r *RDB) ExtendLease(qname string, ids ...string) (expirationTime time.Time, err error) {
 	expireAt := r.clock.Now().Add(LeaseDuration)
 	var zs []redis.Z
 	for _, id := range ids {
 		zs = append(zs, redis.Z{Member: id, Score: float64(expireAt.Unix())})
 	}
 	// Use XX option to only update elements that already exist; Don't add new elements
-	return r.client.ZAddArgs(context.Background(), base.LeaseKey(qname), redis.ZAddArgs{XX: true, GT: true, Members: zs}).Err()
+	err = r.client.ZAddArgs(context.Background(), base.LeaseKey(qname), redis.ZAddArgs{XX: true, GT: true, Members: zs}).Err()
+	if err != nil {
+		return time.Time{}, err
+	}
+	return expireAt, nil
 }
 
 // KEYS[1]  -> asynq:servers:{<host:pid:sid>}
