@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -100,13 +101,13 @@ func (r *recoverer) recover() {
 func (r *recoverer) retry(msg *base.TaskMessage, err error) {
 	delay := r.retryDelayFunc(msg.Retried, err, NewTask(msg.Type, msg.Payload))
 	retryAt := time.Now().Add(delay)
-	if err := r.broker.Retry(msg, retryAt, err.Error(), r.isFailureFunc(err)); err != nil {
+	if err := r.broker.Retry(context.Background(), msg, retryAt, err.Error(), r.isFailureFunc(err)); err != nil {
 		r.logger.Warnf("recoverer: could not retry lease expired task: %v", err)
 	}
 }
 
 func (r *recoverer) archive(msg *base.TaskMessage, err error) {
-	if err := r.broker.Archive(msg, err.Error()); err != nil {
+	if err := r.broker.Archive(context.Background(), msg, err.Error()); err != nil {
 		r.logger.Warnf("recoverer: could not move task to archive: %v", err)
 	}
 }

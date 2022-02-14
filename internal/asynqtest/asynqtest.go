@@ -18,6 +18,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/timeutil"
 )
 
 // EquateInt64Approx returns a Comparer option that treats int64 values
@@ -112,6 +113,13 @@ func NewTaskMessageWithQueue(taskType string, payload []byte, qname string) *bas
 		Timeout:  1800, // default timeout of 30 mins
 		Deadline: 0,    // no deadline
 	}
+}
+
+// NewLeaseWithClock returns a new lease with the given expiration time and clock.
+func NewLeaseWithClock(expirationTime time.Time, clock timeutil.Clock) *base.Lease {
+	l := base.NewLease(expirationTime)
+	l.Clock = clock
+	return l
 }
 
 // JSON serializes the given key-value pairs into stream of bytes in JSON.
