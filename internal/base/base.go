@@ -615,7 +615,7 @@ type Lease struct {
 	once sync.Once
 	ch   chan struct{}
 
-	clock timeutil.Clock
+	Clock timeutil.Clock
 
 	mu       sync.Mutex
 	expireAt time.Time // guarded by mu
@@ -625,7 +625,7 @@ func NewLease(expirationTime time.Time) *Lease {
 	return &Lease{
 		ch:       make(chan struct{}),
 		expireAt: expirationTime,
-		clock:    timeutil.NewRealClock(),
+		Clock:    timeutil.NewRealClock(),
 	}
 }
 
@@ -670,7 +670,7 @@ func (l *Lease) Deadline() time.Time {
 // IsValid returns true if the lease's expieration time is in the future or equals to the current time,
 // returns false otherwise.
 func (l *Lease) IsValid() bool {
-	now := l.clock.Now()
+	now := l.Clock.Now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.expireAt.After(now) || l.expireAt.Equal(now)

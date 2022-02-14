@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -41,7 +42,7 @@ func TestSyncer(t *testing.T) {
 		m := msg
 		syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return rdbClient.Done(m)
+				return rdbClient.Done(context.Background(), m)
 			},
 			deadline: time.Now().Add(5 * time.Minute),
 		}

@@ -651,7 +651,7 @@ func TestLeaseReset(t *testing.T) {
 	clock := timeutil.NewSimulatedClock(now)
 
 	l := NewLease(now.Add(30 * time.Second))
-	l.clock = clock
+	l.Clock = clock
 
 	// Check initial state
 	if !l.IsValid() {
@@ -686,7 +686,7 @@ func TestLeaseNotifyExpiration(t *testing.T) {
 	clock := timeutil.NewSimulatedClock(now)
 
 	l := NewLease(now.Add(30 * time.Second))
-	l.clock = clock
+	l.Clock = clock
 
 	select {
 	case <-l.Done():

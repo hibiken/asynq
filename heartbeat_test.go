@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ import (
 
 // Test goes through a few phases.
 //
-// Phase1: Simulate Server startup; Simulate starting tasks listed in startedTasks
+// Phase1: Simulate Server startup; Simulate starting tasks listed in startedWorkers
 // Phase2: Simluate finishing tasks listed in finishedTasks
 // Phase3: Simulate Server shutdown;
 func TestHeartbeater(t *testing.T) {
@@ -29,13 +30,28 @@ func TestHeartbeater(t *testing.T) {
 	rdbClient := rdb.NewRDB(r)
 
 	now := time.Now()
-	const elapsedTime = 42 * time.Second // simulated time elapsed between phase1 and phase2
+	const elapsedTime = 10 * time.Second // simulated time elapsed between phase1 and phase2
+
+	clock := timeutil.NewSimulatedClock(time.Time{}) // time will be set in each test
 
 	t1 := h.NewTaskMessageWithQueue("task1", nil, "default")
 	t2 := h.NewTaskMessageWithQueue("task2", nil, "default")
 	t3 := h.NewTaskMessageWithQueue("task3", nil, "default")
+	t4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
+	t5 := h.NewTaskMessageWithQueue("task5", nil, "custom")
+	t6 := h.NewTaskMessageWithQueue("task6", nil, "default")
+
+	// Note: intentionally set to time less than now.Add(rdb.LeaseDuration) to test lease extention is working.
+	lease1 := h.NewLeaseWithClock(now.Add(10*time.Second), clock)
+	lease2 := h.NewLeaseWithClock(now.Add(10*time.Second), clock)
+	lease3 := h.NewLeaseWithClock(now.Add(10*time.Second), clock)
+	lease4 := h.NewLeaseWithClock(now.Add(10*time.Second), clock)
+	lease5 := h.NewLeaseWithClock(now.Add(10*time.Second), clock)
+	lease6 := h.NewLeaseWithClock(now.Add(10*time.Second), clock)
 
 	tests := []struct {
+		desc string
+
 		// Interval between heartbeats.
 		interval time.Duration
 
@@ -45,21 +61,22 @@ func TestHeartbeater(t *testing.T) {
 		queues      map[string]int
 		concurrency int
 
-		active        map[string][]*base.TaskMessage // initial active set state
-		lease         map[string][]base.Z            // initial lease set state
-		wantLease1    map[string][]base.Z            // expected lease set state after starting all startedTasks
-		wantLease2    map[string][]base.Z            // expected lease set state after finishing all finishedTasks
-		startedTasks  []*base.TaskMessage            // tasks to send via the started channel
-		finishedTasks []*base.TaskMessage            // tasks to send via the finished channel
+		active         map[string][]*base.TaskMessage // initial active set state
+		lease          map[string][]base.Z            // initial lease set state
+		wantLease1     map[string][]base.Z            // expected lease set state after starting all startedWorkers
+		wantLease2     map[string][]base.Z            // expected lease set state after finishing all finishedTasks
+		startedWorkers []*workerInfo                  // workerInfo to send via the started channel
+		finishedTasks  []*base.TaskMessage            // tasks to send via the finished channel
 
 		startTime   time.Time     // simulated start time
 		elapsedTime time.Duration // simulated time elapsed between starting and finishing processing tasks
 	}{
 		{
+			desc:        "With single queue",
 			interval:    2 * time.Second,
 			host:        "localhost",
 			pid:         45678,
-			queues:      map[string]int{"default": 1}, // TODO: Test with multple queues
+			queues:      map[string]int{"default": 1},
 			concurrency: 10,
 			active: map[string][]*base.TaskMessage{
 				"default": {t1, t2, t3},
@@ -71,7 +88,11 @@ func TestHeartbeater(t *testing.T) {
 					{Message: t3, Score: now.Add(10 * time.Second).Unix()},
 				},
 			},
-			startedTasks:  []*base.TaskMessage{t1, t2, t3},
+			startedWorkers: []*workerInfo{
+				{msg: t1, started: now, deadline: now.Add(2 * time.Minute), lease: lease1},
+				{msg: t2, started: now, deadline: now.Add(2 * time.Minute), lease: lease2},
+				{msg: t3, started: now, deadline: now.Add(2 * time.Minute), lease: lease3},
+			},
 			finishedTasks: []*base.TaskMessage{t1, t2},
 			wantLease1: map[string][]base.Z{
 				"default": {
@@ -88,6 +109,50 @@ func TestHeartbeater(t *testing.T) {
 			startTime:   now,
 			elapsedTime: elapsedTime,
 		},
+		{
+			desc:        "With multiple queue",
+			interval:    2 * time.Second,
+			host:        "localhost",
+			pid:         45678,
+			queues:      map[string]int{"default": 1, "custom": 2},
+			concurrency: 10,
+			active: map[string][]*base.TaskMessage{
+				"default": {t6},
+				"custom":  {t4, t5},
+			},
+			lease: map[string][]base.Z{
+				"default": {
+					{Message: t6, Score: now.Add(10 * time.Second).Unix()},
+				},
+				"custom": {
+					{Message: t4, Score: now.Add(10 * time.Second).Unix()},
+					{Message: t5, Score: now.Add(10 * time.Second).Unix()},
+				},
+			},
+			startedWorkers: []*workerInfo{
+				{msg: t6, started: now, deadline: now.Add(2 * time.Minute), lease: lease6},
+				{msg: t4, started: now, deadline: now.Add(2 * time.Minute), lease: lease4},
+				{msg: t5, started: now, deadline: now.Add(2 * time.Minute), lease: lease5},
+			},
+			finishedTasks: []*base.TaskMessage{t6, t5},
+			wantLease1: map[string][]base.Z{
+				"default": {
+					{Message: t6, Score: now.Add(rdb.LeaseDuration).Unix()},
+				},
+				"custom": {
+					{Message: t4, Score: now.Add(rdb.LeaseDuration).Unix()},
+					{Message: t5, Score: now.Add(rdb.LeaseDuration).Unix()},
+				},
+			},
+			wantLease2: map[string][]base.Z{
+				"default": {},
+				"custom": {
+					{Message: t4, Score: now.Add(elapsedTime).Add(rdb.LeaseDuration).Unix()},
+				},
+			},
+			startTime:   now,
+			elapsedTime: elapsedTime,
+		},
 	}
 
 	timeCmpOpt := cmpopts.EquateApproxTime(10 * time.Millisecond)
@@ -98,7 +163,7 @@ func TestHeartbeater(t *testing.T) {
 		h.SeedAllActiveQueues(t, r, tc.active)
 		h.SeedAllLease(t, r, tc.lease)
 
-		clock := timeutil.NewSimulatedClock(tc.startTime)
+		clock.SetTime(tc.startTime)
 		rdbClient.SetClock(clock)
 
 		srvState := &serverState{}
@@ -115,6 +180,7 @@ func TestHeartbeater(t *testing.T) {
 			starting:       startingCh,
 			finished:       finishedCh,
 		})
+		hb.clock = clock
 
 		// Change host and pid fields for testing purpose.
 		hb.host = tc.host
@@ -132,12 +198,8 @@ func TestHeartbeater(t *testing.T) {
 		hb.start(&wg)
 
 		// Simulate processor starting to work on tasks.
-		for _, msg := range tc.startedTasks {
-			startingCh <- &workerInfo{
-				msg:      msg,
-				started:  now,
-				deadline: now.Add(30 * time.Minute),
-			}
+		for _, w := range tc.startedWorkers {
+			startingCh <- w
 		}
 
 		// Wait for heartbeater to write to redis
@@ -145,13 +207,13 @@ func TestHeartbeater(t *testing.T) {
 
 		ss, err := rdbClient.ListServers()
 		if err != nil {
-			t.Errorf("could not read server info from redis: %v", err)
+			t.Errorf("%s: could not read server info from redis: %v", tc.desc, err)
 			hb.shutdown()
 			continue
 		}
 
 		if len(ss) != 1 {
-			t.Errorf("(*RDB).ListServers returned %d server info, want 1", len(ss))
+			t.Errorf("%s: (*RDB).ListServers returned %d server info, want 1", tc.desc, len(ss))
 			hb.shutdown()
 			continue
 		}
@@ -163,10 +225,10 @@ func TestHeartbeater(t *testing.T) {
 			Concurrency:       tc.concurrency,
 			Started:           now,
 			Status:            "active",
-			ActiveWorkerCount: len(tc.startedTasks),
+			ActiveWorkerCount: len(tc.startedWorkers),
 		}
 		if diff := cmp.Diff(wantInfo, ss[0], timeCmpOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
-			t.Errorf("redis stored server status %+v, want %+v; (-want, +got)\n%s", ss[0], wantInfo, diff)
+			t.Errorf("%s: redis stored server status %+v, want %+v; (-want, +got)\n%s", tc.desc, ss[0], wantInfo, diff)
 			hb.shutdown()
 			continue
 		}
@@ -174,7 +236,13 @@ func TestHeartbeater(t *testing.T) {
 		for qname, wantLease := range tc.wantLease1 {
 			gotLease := h.GetLeaseEntries(t, r, qname)
 			if diff := cmp.Diff(wantLease, gotLease, h.SortZSetEntryOpt); diff != "" {
-				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.LeaseKey(qname), diff)
+				t.Errorf("%s: mismatch found in %q: (-want,+got):\n%s", tc.desc, base.LeaseKey(qname), diff)
+			}
+		}
+
+		for _, w := range tc.startedWorkers {
+			if want := now.Add(rdb.LeaseDuration); w.lease.Deadline() != want {
+				t.Errorf("%s: lease deadline for %v is set to %v, want %v", tc.desc, w.msg, w.lease.Deadline(), want)
 			}
 		}
 
@@ -185,7 +253,7 @@ func TestHeartbeater(t *testing.T) {
 		clock.AdvanceTime(tc.elapsedTime)
 		// Simulate processor finished processing tasks.
 		for _, msg := range tc.finishedTasks {
-			if err := rdbClient.Done(msg); err != nil {
+			if err := rdbClient.Done(context.Background(), msg); err != nil {
 				t.Fatalf("RDB.Done failed: %v", err)
 			}
 			finishedCh <- msg
@@ -196,7 +264,7 @@ func TestHeartbeater(t *testing.T) {
 		for qname, wantLease := range tc.wantLease2 {
 			gotLease := h.GetLeaseEntries(t, r, qname)
 			if diff := cmp.Diff(wantLease, gotLease, h.SortZSetEntryOpt); diff != "" {
-				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.LeaseKey(qname), diff)
+				t.Errorf("%s: mismatch found in %q: (-want,+got):\n%s", tc.desc, base.LeaseKey(qname), diff)
 			}
 		}
 
@@ -219,23 +287,23 @@ func TestHeartbeater(t *testing.T) {
 			Concurrency:       tc.concurrency,
 			Started:           now,
 			Status:            "closed",
-			ActiveWorkerCount: len(tc.startedTasks) - len(tc.finishedTasks),
+			ActiveWorkerCount: len(tc.startedWorkers) - len(tc.finishedTasks),
 		}
 		ss, err = rdbClient.ListServers()
 		if err != nil {
-			t.Errorf("could not read server status from redis: %v", err)
+			t.Errorf("%s: could not read server status from redis: %v", tc.desc, err)
 			hb.shutdown()
 			continue
 		}
 
 		if len(ss) != 1 {
-			t.Errorf("(*RDB).ListServers returned %d server info, want 1", len(ss))
+			t.Errorf("%s: (*RDB).ListServers returned %d server info, want 1", tc.desc, len(ss))
 			hb.shutdown()
 			continue
 		}
 
 		if diff := cmp.Diff(wantInfo, ss[0], timeCmpOpt, ignoreOpt, ignoreFieldOpt); diff != "" {
-			t.Errorf("redis stored process status %+v, want %+v; (-want, +got)\n%s", ss[0], wantInfo, diff)
+			t.Errorf("%s: redis stored process status %+v, want %+v; (-want, +got)\n%s", tc.desc, ss[0], wantInfo, diff)
 			hb.shutdown()
 			continue
 		}
