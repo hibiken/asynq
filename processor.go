@@ -171,7 +171,7 @@ func (p *processor) exec() {
 		return
 	case p.sema <- struct{}{}: // acquire token
 		qnames := p.queues()
-		msg, err := p.broker.Dequeue(qnames...)
+		msg, leaseExpirationTime, err := p.broker.Dequeue(qnames...)
 		switch {
 		case errors.Is(err, errors.ErrNoProcessableTask):
 			p.logger.Debug("All queues are empty")
@@ -190,8 +190,9 @@ func (p *processor) exec() {
 			return
 		}
 
+		lease := base.NewLease(leaseExpirationTime)
 		deadline := p.computeDeadline(msg)
-		p.starting <- &workerInfo{msg, time.Now(), deadline}
+		p.starting <- &workerInfo{msg, time.Now(), deadline, lease}
 		go func() {
 			defer func() {
 				p.finished <- msg
@@ -209,7 +210,7 @@ func (p *processor) exec() {
 			select {
 			case <-ctx.Done():
 				// already canceled (e.g. deadline exceeded).
-				p.handleFailedMessage(ctx, msg, ctx.Err())
+				p.handleFailedMessage(ctx, lease, msg, ctx.Err())
 				return
 			default:
 			}
@@ -233,24 +234,33 @@ func (p *processor) exec() {
 			case <-p.abort:
 				// time is up, push the message back to queue and quit this worker goroutine.
 				p.logger.Warnf("Quitting worker. task id=%s", msg.ID)
-				p.requeue(msg)
+				p.requeue(lease, msg)
+				return
+			case <-lease.Done():
+				cancel()
+				p.handleFailedMessage(ctx, lease, msg, ErrLeaseExpired)
 				return
 			case <-ctx.Done():
-				p.handleFailedMessage(ctx, msg, ctx.Err())
+				p.handleFailedMessage(ctx, lease, msg, ctx.Err())
 				return
 			case resErr := <-resCh:
 				if resErr != nil {
-					p.handleFailedMessage(ctx, msg, resErr)
+					p.handleFailedMessage(ctx, lease, msg, resErr)
 					return
 				}
-				p.handleSucceededMessage(ctx, msg)
+				p.handleSucceededMessage(lease, msg)
 			}
 		}()
 	}
 }
 
-func (p *processor) requeue(msg *base.TaskMessage) {
-	err := p.broker.Requeue(msg)
+func (p *processor) requeue(l *base.Lease, msg *base.TaskMessage) {
+	if !l.IsValid() {
+		// If lease is not valid, do not write to redis; Let recoverer take care of it.
+		return
+	}
+	ctx, _ := context.WithDeadline(context.Background(), l.Deadline())
+	err := p.broker.Requeue(ctx, msg)
 	if err != nil {
 		p.logger.Errorf("Could not push task id=%s back to queue: %v", msg.ID, err)
 	} else {
@@ -258,49 +268,51 @@ func (p *processor) requeue(msg *base.TaskMessage) {
 	}
 }
 
-func (p *processor) handleSucceededMessage(ctx context.Context, msg *base.TaskMessage) {
+func (p *processor) handleSucceededMessage(l *base.Lease, msg *base.TaskMessage) {
 	if msg.Retention > 0 {
-		p.markAsComplete(ctx, msg)
+		p.markAsComplete(l, msg)
 	} else {
-		p.markAsDone(ctx, msg)
+		p.markAsDone(l, msg)
 	}
 }
 
-func (p *processor) markAsComplete(ctx context.Context, msg *base.TaskMessage) {
-	err := p.broker.MarkAsComplete(msg)
+func (p *processor) markAsComplete(l *base.Lease, msg *base.TaskMessage) {
+	if !l.IsValid() {
+		// If lease is not valid, do not write to redis; Let recoverer take care of it.
+		return
+	}
+	ctx, _ := context.WithDeadline(context.Background(), l.Deadline())
+	err := p.broker.MarkAsComplete(ctx, msg)
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s type=%q from %q to %q:  %+v",
 			msg.ID, msg.Type, base.ActiveKey(msg.Queue), base.CompletedKey(msg.Queue), err)
-		deadline, ok := ctx.Deadline()
-		if !ok {
-			panic("asynq: internal error: missing deadline in context")
-		}
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.MarkAsComplete(msg)
+				return p.broker.MarkAsComplete(ctx, msg)
 			},
 			errMsg:   errMsg,
-			deadline: deadline,
+			deadline: l.Deadline(),
 		}
 	}
 }
 
-func (p *processor) markAsDone(ctx context.Context, msg *base.TaskMessage) {
-	err := p.broker.Done(msg)
+func (p *processor) markAsDone(l *base.Lease, msg *base.TaskMessage) {
+	if !l.IsValid() {
+		// If lease is not valid, do not write to redis; Let recoverer take care of it.
+		return
+	}
+	ctx, _ := context.WithDeadline(context.Background(), l.Deadline())
+	err := p.broker.Done(ctx, msg)
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not remove task id=%s type=%q from %q err: %+v", msg.ID, msg.Type, base.ActiveKey(msg.Queue), err)
-		deadline, ok := ctx.Deadline()
-		if !ok {
-			panic("asynq: internal error: missing deadline in context")
-		}
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.Done(msg)
+				return p.broker.Done(ctx, msg)
 			},
 			errMsg:   errMsg,
-			deadline: deadline,
+			deadline: l.Deadline(),
 		}
 	}
 }
@@ -309,59 +321,61 @@ func (p *processor) markAsDone(ctx context.Context, msg *base.TaskMessage) {
 // the task should not be retried and should be archived instead.
 var SkipRetry = errors.New("skip retry for the task")
 
-func (p *processor) handleFailedMessage(ctx context.Context, msg *base.TaskMessage, err error) {
+func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg *base.TaskMessage, err error) {
 	if p.errHandler != nil {
 		p.errHandler.HandleError(ctx, NewTask(msg.Type, msg.Payload), err)
 	}
 	if !p.isFailureFunc(err) {
 		// retry the task without marking it as failed
-		p.retry(ctx, msg, err, false /*isFailure*/)
+		p.retry(l, msg, err, false /*isFailure*/)
 		return
 	}
 	if msg.Retried >= msg.Retry || errors.Is(err, SkipRetry) {
 		p.logger.Warnf("Retry exhausted for task id=%s", msg.ID)
-		p.archive(ctx, msg, err)
+		p.archive(l, msg, err)
 	} else {
-		p.retry(ctx, msg, err, true /*isFailure*/)
+		p.retry(l, msg, err, true /*isFailure*/)
 	}
 }
 
-func (p *processor) retry(ctx context.Context, msg *base.TaskMessage, e error, isFailure bool) {
+func (p *processor) retry(l *base.Lease, msg *base.TaskMessage, e error, isFailure bool) {
+	if !l.IsValid() {
+		// If lease is not valid, do not write to redis; Let recoverer take care of it.
+		return
+	}
+	ctx, _ := context.WithDeadline(context.Background(), l.Deadline())
 	d := p.retryDelayFunc(msg.Retried, e, NewTask(msg.Type, msg.Payload))
 	retryAt := time.Now().Add(d)
-	err := p.broker.Retry(msg, retryAt, e.Error(), isFailure)
+	err := p.broker.Retry(ctx, msg, retryAt, e.Error(), isFailure)
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.ActiveKey(msg.Queue), base.RetryKey(msg.Queue))
-		deadline, ok := ctx.Deadline()
-		if !ok {
-			panic("asynq: internal error: missing deadline in context")
-		}
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.Retry(msg, retryAt, e.Error(), isFailure)
+				return p.broker.Retry(ctx, msg, retryAt, e.Error(), isFailure)
 			},
 			errMsg:   errMsg,
-			deadline: deadline,
+			deadline: l.Deadline(),
 		}
 	}
 }
 
-func (p *processor) archive(ctx context.Context, msg *base.TaskMessage, e error) {
-	err := p.broker.Archive(msg, e.Error())
+func (p *processor) archive(l *base.Lease, msg *base.TaskMessage, e error) {
+	if !l.IsValid() {
+		// If lease is not valid, do not write to redis; Let recoverer take care of it.
+		return
+	}
+	ctx, _ := context.WithDeadline(context.Background(), l.Deadline())
+	err := p.broker.Archive(ctx, msg, e.Error())
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.ActiveKey(msg.Queue), base.ArchivedKey(msg.Queue))
-		deadline, ok := ctx.Deadline()
-		if !ok {
-			panic("asynq: internal error: missing deadline in context")
-		}
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.Archive(msg, e.Error())
+				return p.broker.Archive(ctx, msg, e.Error())
 			},
 			errMsg:   errMsg,
-			deadline: deadline,
+			deadline: l.Deadline(),
 		}
 	}
 }

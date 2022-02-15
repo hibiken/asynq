@@ -17,6 +17,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/hibiken/asynq/internal/timeutil"
@@ -478,6 +479,103 @@ func TestProcessorMarkAsComplete(t *testing.T) {
 			gotCompleted := h.GetCompletedEntries(t, r, qname)
 			if diff := cmp.Diff(want, gotCompleted, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("diff found in %q completed set; want=%v, got=%v\n%s", qname, want, gotCompleted, diff)
+			}
+		}
+	}
+}
+
+// Test a scenario where the worker server cannot communicate with redis due to a network failure
+// and the lease expires
+func TestProcessorWithExpiredLease(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	rdbClient := rdb.NewRDB(r)
+
+	m1 := h.NewTaskMessage("task1", nil)
+
+	tests := []struct {
+		pending      []*base.TaskMessage
+		handler      Handler
+		wantErrCount int
+	}{
+		{
+			pending: []*base.TaskMessage{m1},
+			handler: HandlerFunc(func(ctx context.Context, task *Task) error {
+				// make sure the task processing time exceeds lease duration
+				// to test expired lease.
+				time.Sleep(rdb.LeaseDuration + 10*time.Second)
+				return nil
+			}),
+			wantErrCount: 1, // ErrorHandler should still be called with ErrLeaseExpired
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		h.SeedPendingQueue(t, r, tc.pending, base.DefaultQueueName)
+
+		starting := make(chan *workerInfo)
+		finished := make(chan *base.TaskMessage)
+		syncCh := make(chan *syncRequest)
+		done := make(chan struct{})
+		t.Cleanup(func() { close(done) })
+		// fake heartbeater which notifies lease expiration
+		go func() {
+			for {
+				select {
+				case w := <-starting:
+					// simulate expiration by resetting to some time in the past
+					w.lease.Reset(time.Now().Add(-5 * time.Second))
+					if !w.lease.NotifyExpiration() {
+						panic("Failed to notifiy lease expiration")
+					}
+				case <-finished:
+					// do nothing
+				case <-done:
+					return
+				}
+			}
+		}()
+		go fakeSyncer(syncCh, done)
+		p := newProcessor(processorParams{
+			logger:          testLogger,
+			broker:          rdbClient,
+			retryDelayFunc:  DefaultRetryDelayFunc,
+			isFailureFunc:   defaultIsFailureFunc,
+			syncCh:          syncCh,
+			cancelations:    base.NewCancelations(),
+			concurrency:     10,
+			queues:          defaultQueueConfig,
+			strictPriority:  false,
+			errHandler:      nil,
+			shutdownTimeout: defaultShutdownTimeout,
+			starting:        starting,
+			finished:        finished,
+		})
+		p.handler = tc.handler
+		var (
+			mu   sync.Mutex // guards n and errs
+			n    int        // number of times error handler is called
+			errs []error    // error passed to error handler
+		)
+		p.errHandler = ErrorHandlerFunc(func(ctx context.Context, t *Task, err error) {
+			mu.Lock()
+			defer mu.Unlock()
+			n++
+			errs = append(errs, err)
+		})
+
+		p.start(&sync.WaitGroup{})
+		time.Sleep(4 * time.Second)
+		p.shutdown()
+
+		if n != tc.wantErrCount {
+			t.Errorf("Unexpected number of error count: got %d, want %d", n, tc.wantErrCount)
+			continue
+		}
+		for i := 0; i < tc.wantErrCount; i++ {
+			if !errors.Is(errs[i], ErrLeaseExpired) {
+				t.Errorf("Unexpected error was passed to ErrorHandler: got %v want %v", errs[i], ErrLeaseExpired)
 			}
 		}
 	}
