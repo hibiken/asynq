@@ -1387,7 +1387,7 @@ func (r *RDB) DeleteAllPendingTasks(qname string) (int64, error) {
 // KEYS[3] -> asynq:{<qname>}:scheduled
 // KEYS[4] -> asynq:{<qname>}:retry
 // KEYS[5] -> asynq:{<qname>}:archived
-// KEYS[6] -> asynq:{<qname>}:deadlines
+// KEYS[6] -> asynq:{<qname>}:lease
 // --
 // ARGV[1] -> task key prefix
 //
@@ -1447,7 +1447,7 @@ return 1`)
 // KEYS[3] -> asynq:{<qname>}:scheduled
 // KEYS[4] -> asynq:{<qname>}:retry
 // KEYS[5] -> asynq:{<qname>}:archived
-// KEYS[6] -> asynq:{<qname>}:deadlines
+// KEYS[6] -> asynq:{<qname>}:lease
 // --
 // ARGV[1] -> task key prefix
 //
@@ -1516,7 +1516,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 		base.ScheduledKey(qname),
 		base.RetryKey(qname),
 		base.ArchivedKey(qname),
-		base.DeadlinesKey(qname),
+		base.LeaseKey(qname),
 	}
 	res, err := script.Run(context.Background(), r.client, keys, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {

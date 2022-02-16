@@ -231,13 +231,6 @@ func SeedArchivedQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z,
 	seedRedisZSet(tb, r, base.ArchivedKey(qname), entries, base.TaskStateArchived)
 }
 
-// SeedDeadlines initializes the deadlines set with the given entries.
-func SeedDeadlines(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
-	tb.Helper()
-	r.SAdd(context.Background(), base.AllQueues, qname)
-	seedRedisZSet(tb, r, base.DeadlinesKey(qname), entries, base.TaskStateActive)
-}
-
 // SeedLease initializes the lease set with the given entries.
 func SeedLease(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
 	tb.Helper()
@@ -294,14 +287,6 @@ func SeedAllArchivedQueues(tb testing.TB, r redis.UniversalClient, archived map[
 	}
 }
 
-// SeedAllDeadlines initializes all of the deadlines with the given entries.
-func SeedAllDeadlines(tb testing.TB, r redis.UniversalClient, deadlines map[string][]base.Z) {
-	tb.Helper()
-	for q, entries := range deadlines {
-		SeedDeadlines(tb, r, entries, q)
-	}
-}
-
 // SeedAllLease initializes all of the lease sets with the given entries.
 func SeedAllLease(tb testing.TB, r redis.UniversalClient, lease map[string][]base.Z) {
 	tb.Helper()
@@ -330,8 +315,6 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string,
 		data := map[string]interface{}{
 			"msg":        encoded,
 			"state":      state.String(),
-			"timeout":    msg.Timeout,
-			"deadline":   msg.Deadline,
 			"unique_key": msg.UniqueKey,
 		}
 		if err := c.HSet(context.Background(), key, data).Err(); err != nil {
@@ -360,8 +343,6 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string,
 		data := map[string]interface{}{
 			"msg":        encoded,
 			"state":      state.String(),
-			"timeout":    msg.Timeout,
-			"deadline":   msg.Deadline,
 			"unique_key": msg.UniqueKey,
 		}
 		if err := c.HSet(context.Background(), key, data).Err(); err != nil {
@@ -437,13 +418,6 @@ func GetRetryEntries(tb testing.TB, r redis.UniversalClient, qname string) []bas
 func GetArchivedEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
 	tb.Helper()
 	return getMessagesFromZSetWithScores(tb, r, qname, base.ArchivedKey, base.TaskStateArchived)
-}
-
-// GetDeadlinesEntries returns all task messages and its score in the deadlines set for the given queue.
-// It also asserts the state field of the task.
-func GetDeadlinesEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
-	tb.Helper()
-	return getMessagesFromZSetWithScores(tb, r, qname, base.DeadlinesKey, base.TaskStateActive)
 }
 
 // GetLeaseEntries returns all task IDs and its score in the lease set for the given queue.

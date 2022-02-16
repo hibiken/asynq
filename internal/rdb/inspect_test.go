@@ -4036,7 +4036,7 @@ func TestRemoveQueue(t *testing.T) {
 		keys := []string{
 			base.PendingKey(tc.qname),
 			base.ActiveKey(tc.qname),
-			base.DeadlinesKey(tc.qname),
+			base.LeaseKey(tc.qname),
 			base.ScheduledKey(tc.qname),
 			base.RetryKey(tc.qname),
 			base.ArchivedKey(tc.qname),
