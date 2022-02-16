@@ -163,7 +163,7 @@ func BenchmarkDone(b *testing.B) {
 		b.StopTimer()
 		asynqtest.FlushDB(b, r.client)
 		asynqtest.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
-		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
+		asynqtest.SeedLease(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.Done(ctx, msgs[0]); err != nil {
@@ -190,7 +190,7 @@ func BenchmarkRetry(b *testing.B) {
 		b.StopTimer()
 		asynqtest.FlushDB(b, r.client)
 		asynqtest.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
-		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
+		asynqtest.SeedLease(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.Retry(ctx, msgs[0], time.Now().Add(1*time.Minute), "error", true /*isFailure*/); err != nil {
@@ -217,7 +217,7 @@ func BenchmarkArchive(b *testing.B) {
 		b.StopTimer()
 		asynqtest.FlushDB(b, r.client)
 		asynqtest.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
-		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
+		asynqtest.SeedLease(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.Archive(ctx, msgs[0], "error"); err != nil {
@@ -244,7 +244,7 @@ func BenchmarkRequeue(b *testing.B) {
 		b.StopTimer()
 		asynqtest.FlushDB(b, r.client)
 		asynqtest.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
-		asynqtest.SeedDeadlines(b, r.client, zs, base.DefaultQueueName)
+		asynqtest.SeedLease(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.Requeue(ctx, msgs[0]); err != nil {

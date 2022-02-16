@@ -72,23 +72,6 @@ func TestActiveKey(t *testing.T) {
 	}
 }
 
-func TestDeadlinesKey(t *testing.T) {
-	tests := []struct {
-		qname string
-		want  string
-	}{
-		{"default", "asynq:{default}:deadlines"},
-		{"custom", "asynq:{custom}:deadlines"},
-	}
-
-	for _, tc := range tests {
-		got := DeadlinesKey(tc.qname)
-		if got != tc.want {
-			t.Errorf("DeadlinesKey(%q) = %q, want %q", tc.qname, got, tc.want)
-		}
-	}
-}
-
 func TestLeaseKey(t *testing.T) {
 	tests := []struct {
 		qname string
