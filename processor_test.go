@@ -61,6 +61,7 @@ func newProcessorForTest(t *testing.T, r *rdb.RDB, h Handler) *processor {
 	p := newProcessor(processorParams{
 		logger:          testLogger,
 		broker:          r,
+		baseCtxFn:       context.Background,
 		retryDelayFunc:  DefaultRetryDelayFunc,
 		isFailureFunc:   defaultIsFailureFunc,
 		syncCh:          syncCh,
@@ -592,6 +593,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
+			baseCtxFn:       context.Background,
 			retryDelayFunc:  DefaultRetryDelayFunc,
 			isFailureFunc:   defaultIsFailureFunc,
 			syncCh:          syncCh,

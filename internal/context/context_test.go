@@ -6,6 +6,7 @@ package context
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -60,9 +61,22 @@ func TestCreateContextWithBaseContext(t *testing.T) {
 	var value ctxValue = "value"
 
 	tests := []struct {
-		baseCtx context.Context
+		baseCtx  context.Context
+		validate func(ctx context.Context, t *testing.T) error
 	}{
-		{context.WithValue(context.Background(), key, value)},
+		{
+			baseCtx: context.WithValue(context.Background(), key, value),
+			validate: func(ctx context.Context, t *testing.T) error {
+				got, ok := ctx.Value(key).(ctxValue)
+				if !ok {
+					return fmt.Errorf("ctx.Value().(ctxValue) returned false, expected to be true")
+				}
+				if want := value; got != want {
+					return fmt.Errorf("ctx.Value().(ctxValue) returned unknown value (%v), expected to be %s", got, value)
+				}
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -76,18 +90,13 @@ func TestCreateContextWithBaseContext(t *testing.T) {
 		defer cancel()
 
 		select {
-		case <-ctx.Done():
+		case x := <-ctx.Done():
+			t.Errorf("<-ctx.Done() == %v, want nothing (it should block)", x)
 		default:
-			t.Errorf("ctx.Done() blocked, want it to be non-blocking")
 		}
 
-		v, ok := ctx.Value(key).(ctxValue)
-		original, _ := tc.baseCtx.Value(key).(ctxValue)
-		if !ok {
-			t.Errorf("ctx.Value().(ctxValue) returned false, expected to be true")
-		}
-		if v != original {
-			t.Errorf("ctx.Value().(ctxValue) returned unknown value (%v), expected to be %s", v, value)
+		if err := tc.validate(ctx, t); err != nil {
+			t.Errorf("%v", err)
 		}
 	}
 }
