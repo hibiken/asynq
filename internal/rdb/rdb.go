@@ -87,9 +87,7 @@ func (r *RDB) runScriptWithErrorCode(ctx context.Context, op errors.Op, script *
 // --
 // ARGV[1] -> task message data
 // ARGV[2] -> task ID
-// ARGV[3] -> task timeout in seconds (0 if not timeout)
-// ARGV[4] -> task deadline in unix time (0 if no deadline)
-// ARGV[5] -> current unix time in nsec
+// ARGV[3] -> current unix time in nsec
 //
 // Output:
 // Returns 1 if successfully enqueued
@@ -101,9 +99,7 @@ end
 redis.call("HSET", KEYS[1],
            "msg", ARGV[1],
            "state", "pending",
-           "timeout", ARGV[3],
-           "deadline", ARGV[4],
-           "pending_since", ARGV[5])
+           "pending_since", ARGV[3])
 redis.call("LPUSH", KEYS[2], ARGV[2])
 return 1
 `)
@@ -125,8 +121,6 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 	argv := []interface{}{
 		encoded,
 		msg.ID,
-		msg.Timeout,
-		msg.Deadline,
 		r.clock.Now().UnixNano(),
 	}
 	n, err := r.runScriptWithErrorCode(ctx, op, enqueueCmd, keys, argv...)
@@ -148,9 +142,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 // ARGV[1] -> task ID
 // ARGV[2] -> uniqueness lock TTL
 // ARGV[3] -> task message data
-// ARGV[4] -> task timeout in seconds (0 if not timeout)
-// ARGV[5] -> task deadline in unix time (0 if no deadline)
-// ARGV[6] -> current unix time in nsec
+// ARGV[4] -> current unix time in nsec
 //
 // Output:
 // Returns 1 if successfully enqueued
@@ -167,9 +159,7 @@ end
 redis.call("HSET", KEYS[2],
            "msg", ARGV[3],
            "state", "pending",
-           "timeout", ARGV[4],
-           "deadline", ARGV[5],
-           "pending_since", ARGV[6],
+           "pending_since", ARGV[4],
            "unique_key", KEYS[1])
 redis.call("LPUSH", KEYS[3], ARGV[1])
 return 1
@@ -195,8 +185,6 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 		msg.ID,
 		int(ttl.Seconds()),
 		encoded,
-		msg.Timeout,
-		msg.Deadline,
 		r.clock.Now().UnixNano(),
 	}
 	n, err := r.runScriptWithErrorCode(ctx, op, enqueueUniqueCmd, keys, argv...)
@@ -511,11 +499,10 @@ func (r *RDB) Requeue(ctx context.Context, msg *base.TaskMessage) error {
 
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:scheduled
+// -------
 // ARGV[1] -> task message data
 // ARGV[2] -> process_at time in Unix time
 // ARGV[3] -> task ID
-// ARGV[4] -> task timeout in seconds (0 if not timeout)
-// ARGV[5] -> task deadline in unix time (0 if no deadline)
 //
 // Output:
 // Returns 1 if successfully enqueued
@@ -526,9 +513,7 @@ if redis.call("EXISTS", KEYS[1]) == 1 then
 end
 redis.call("HSET", KEYS[1],
            "msg", ARGV[1],
-           "state", "scheduled",
-           "timeout", ARGV[4],
-           "deadline", ARGV[5])
+           "state", "scheduled")
 redis.call("ZADD", KEYS[2], ARGV[2], ARGV[3])
 return 1
 `)
@@ -551,8 +536,6 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 		encoded,
 		processAt.Unix(),
 		msg.ID,
-		msg.Timeout,
-		msg.Deadline,
 	}
 	n, err := r.runScriptWithErrorCode(ctx, op, scheduleCmd, keys, argv...)
 	if err != nil {
@@ -567,12 +550,11 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 // KEYS[1] -> unique key
 // KEYS[2] -> asynq:{<qname>}:t:<task_id>
 // KEYS[3] -> asynq:{<qname>}:scheduled
+// -------
 // ARGV[1] -> task ID
 // ARGV[2] -> uniqueness lock TTL
 // ARGV[3] -> score (process_at timestamp)
 // ARGV[4] -> task message
-// ARGV[5] -> task timeout in seconds (0 if not timeout)
-// ARGV[6] -> task deadline in unix time (0 if no deadline)
 //
 // Output:
 // Returns 1 if successfully scheduled
@@ -589,8 +571,6 @@ end
 redis.call("HSET", KEYS[2],
            "msg", ARGV[4],
            "state", "scheduled",
-           "timeout", ARGV[5],
-           "deadline", ARGV[6],
            "unique_key", KEYS[1])
 redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1])
 return 1
@@ -617,8 +597,6 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 		int(ttl.Seconds()),
 		processAt.Unix(),
 		encoded,
-		msg.Timeout,
-		msg.Deadline,
 	}
 	n, err := r.runScriptWithErrorCode(ctx, op, scheduleUniqueCmd, keys, argv...)
 	if err != nil {

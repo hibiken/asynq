@@ -112,14 +112,6 @@ func TestEnqueue(t *testing.T) {
 		if state != "pending" {
 			t.Errorf("state field under task-key is set to %q, want %q", state, "pending")
 		}
-		timeout := r.client.HGet(context.Background(), taskKey, "timeout").Val() // "timeout" field
-		if want := strconv.Itoa(int(tc.msg.Timeout)); timeout != want {
-			t.Errorf("timeout field under task-key is set to %v, want %v", timeout, want)
-		}
-		deadline := r.client.HGet(context.Background(), taskKey, "deadline").Val() // "deadline" field
-		if want := strconv.Itoa(int(tc.msg.Deadline)); deadline != want {
-			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
-		}
 		pendingSince := r.client.HGet(context.Background(), taskKey, "pending_since").Val() // "pending_since" field
 		if want := strconv.Itoa(int(enqueueTime.UnixNano())); pendingSince != want {
 			t.Errorf("pending_since field under task-key is set to %v, want %v", pendingSince, want)
@@ -233,14 +225,6 @@ func TestEnqueueUnique(t *testing.T) {
 		state := r.client.HGet(context.Background(), taskKey, "state").Val() // "state" field
 		if state != "pending" {
 			t.Errorf("state field under task-key is set to %q, want %q", state, "pending")
-		}
-		timeout := r.client.HGet(context.Background(), taskKey, "timeout").Val() // "timeout" field
-		if want := strconv.Itoa(int(tc.msg.Timeout)); timeout != want {
-			t.Errorf("timeout field under task-key is set to %v, want %v", timeout, want)
-		}
-		deadline := r.client.HGet(context.Background(), taskKey, "deadline").Val() // "deadline" field
-		if want := strconv.Itoa(int(tc.msg.Deadline)); deadline != want {
-			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
 		}
 		pendingSince := r.client.HGet(context.Background(), taskKey, "pending_since").Val() // "pending_since" field
 		if want := strconv.Itoa(int(enqueueTime.UnixNano())); pendingSince != want {
@@ -1236,14 +1220,6 @@ func TestSchedule(t *testing.T) {
 			t.Errorf("state field under task-key is set to %q, want %q",
 				state, want)
 		}
-		timeout := r.client.HGet(context.Background(), taskKey, "timeout").Val() // "timeout" field
-		if want := strconv.Itoa(int(tc.msg.Timeout)); timeout != want {
-			t.Errorf("timeout field under task-key is set to %v, want %v", timeout, want)
-		}
-		deadline := r.client.HGet(context.Background(), taskKey, "deadline").Val() // "deadline" field
-		if want := strconv.Itoa(int(tc.msg.Deadline)); deadline != want {
-			t.Errorf("deadline field under task-ke is set to %v, want %v", deadline, want)
-		}
 
 		// Check queue is in the AllQueues set.
 		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
@@ -1351,14 +1327,6 @@ func TestScheduleUnique(t *testing.T) {
 		if want := "scheduled"; state != want {
 			t.Errorf("state field under task-key is set to %q, want %q",
 				state, want)
-		}
-		timeout := r.client.HGet(context.Background(), taskKey, "timeout").Val() // "timeout" field
-		if want := strconv.Itoa(int(tc.msg.Timeout)); timeout != want {
-			t.Errorf("timeout field under task-key is set to %v, want %v", timeout, want)
-		}
-		deadline := r.client.HGet(context.Background(), taskKey, "deadline").Val() // "deadline" field
-		if want := strconv.Itoa(int(tc.msg.Deadline)); deadline != want {
-			t.Errorf("deadline field under task-key is set to %v, want %v", deadline, want)
 		}
 		uniqueKey := r.client.HGet(context.Background(), taskKey, "unique_key").Val() // "unique_key" field
 		if uniqueKey != tc.msg.UniqueKey {
