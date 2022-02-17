@@ -74,7 +74,7 @@ func (j *janitor) start(wg *sync.WaitGroup) {
 func (j *janitor) exec() {
 	for _, qname := range j.queues {
 		if err := j.broker.DeleteExpiredCompletedTasks(qname); err != nil {
-			j.logger.Errorf("Could not delete expired completed tasks from queue %q: %v",
+			j.logger.Errorf("Failed to delete expired completed tasks from queue %q: %v",
 				qname, err)
 		}
 	}
