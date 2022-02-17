@@ -540,6 +540,7 @@ func TestProcessorWithExpiredLease(t *testing.T) {
 		p := newProcessor(processorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
+			baseCtxFn:       context.Background,
 			retryDelayFunc:  DefaultRetryDelayFunc,
 			isFailureFunc:   defaultIsFailureFunc,
 			syncCh:          syncCh,
