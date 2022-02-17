@@ -5,7 +5,10 @@
 // Package timeutil exports functions and types related to time and date.
 package timeutil
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // A Clock is an object that can tell you the current time.
 //
@@ -27,16 +30,30 @@ func (_ *realTimeClock) Now() time.Time { return time.Now() }
 
 // A SimulatedClock is a concrete Clock implementation that doesn't "tick" on its own.
 // Time is advanced by explicit call to the AdvanceTime() or SetTime() functions.
+// This object is concurrency safe.
 type SimulatedClock struct {
-	t time.Time
+	mu sync.Mutex
+	t  time.Time // guarded by mu
 }
 
 func NewSimulatedClock(t time.Time) *SimulatedClock {
-	return &SimulatedClock{t}
+	return &SimulatedClock{t: t}
 }
 
-func (c *SimulatedClock) Now() time.Time { return c.t }
+func (c *SimulatedClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
 
-func (c *SimulatedClock) SetTime(t time.Time) { c.t = t }
+func (c *SimulatedClock) SetTime(t time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.t = t
+}
 
-func (c *SimulatedClock) AdvanceTime(d time.Duration) { c.t = c.t.Add(d) }
+func (c *SimulatedClock) AdvanceTime(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.t = c.t.Add(d)
+}
