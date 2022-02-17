@@ -182,13 +182,13 @@ func (h *heartbeater) beat() {
 	// Note: Set TTL to be long enough so that it won't expire before we write again
 	// and short enough to expire quickly once the process is shut down or killed.
 	if err := h.broker.WriteServerState(&info, ws, h.interval*2); err != nil {
-		h.logger.Errorf("could not write server state data: %v", err)
+		h.logger.Errorf("Failed to write server state data: %v", err)
 	}
 
 	for qname, ids := range idsByQueue {
 		expirationTime, err := h.broker.ExtendLease(qname, ids...)
 		if err != nil {
-			h.logger.Errorf("could not extend lease for tasks %v: %v", ids, err)
+			h.logger.Errorf("Failed to extend lease for tasks %v: %v", ids, err)
 			continue
 		}
 		for _, id := range ids {
