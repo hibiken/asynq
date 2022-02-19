@@ -1,6 +1,6 @@
 module github.com/hibiken/asynq
 
-go 1.13
+go 1.14
 
 require (
 	github.com/go-redis/redis/v8 v8.11.2
