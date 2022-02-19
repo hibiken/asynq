@@ -101,6 +101,14 @@ type TaskInfo struct {
 	// zero if not applicable.
 	NextProcessAt time.Time
 
+	// IsOrphaned describes whether the task is left in active state with no worker processing it.
+	// An orphaned task indicates that the worker has crashed or experienced network failures and was not able to
+	// extend its lease on the task.
+	//
+	// This task will be recovered by running a server against the queue the task is in.
+	// This field is only applicable to tasks with TaskStateActive.
+	IsOrphaned bool
+
 	// Retention is duration of the retention period after the task is successfully processed.
 	Retention time.Duration
 
