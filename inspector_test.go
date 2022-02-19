@@ -745,6 +745,12 @@ func TestInspectorListPendingTasks(t *testing.T) {
 	}
 }
 
+func newOrphanedTaskInfo(msg *base.TaskMessage) *TaskInfo {
+	info := newTaskInfo(msg, base.TaskStateActive, time.Time{}, nil)
+	info.IsOrphaned = true
+	return info
+}
+
 func TestInspectorListActiveTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -754,10 +760,12 @@ func TestInspectorListActiveTasks(t *testing.T) {
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 
 	inspector := NewInspector(getRedisConnOpt(t))
+	now := time.Now()
 
 	tests := []struct {
 		desc   string
 		active map[string][]*base.TaskMessage
+		lease  map[string][]base.Z
 		qname  string
 		want   []*TaskInfo
 	}{
@@ -767,10 +775,42 @@ func TestInspectorListActiveTasks(t *testing.T) {
 				"default": {m1, m2},
 				"custom":  {m3, m4},
 			},
+			lease: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: now.Add(20 * time.Second).Unix()},
+					{Message: m2, Score: now.Add(20 * time.Second).Unix()},
+				},
+				"custom": {
+					{Message: m3, Score: now.Add(20 * time.Second).Unix()},
+					{Message: m4, Score: now.Add(20 * time.Second).Unix()},
+				},
+			},
+			qname: "custom",
+			want: []*TaskInfo{
+				newTaskInfo(m3, base.TaskStateActive, time.Time{}, nil),
+				newTaskInfo(m4, base.TaskStateActive, time.Time{}, nil),
+			},
+		},
+		{
+			desc: "with an orphaned task",
+			active: map[string][]*base.TaskMessage{
+				"default": {m1, m2},
+				"custom":  {m3, m4},
+			},
+			lease: map[string][]base.Z{
+				"default": {
+					{Message: m1, Score: now.Add(20 * time.Second).Unix()},
+					{Message: m2, Score: now.Add(-10 * time.Second).Unix()}, // orphaned task
+				},
+				"custom": {
+					{Message: m3, Score: now.Add(20 * time.Second).Unix()},
+					{Message: m4, Score: now.Add(20 * time.Second).Unix()},
+				},
+			},
 			qname: "default",
 			want: []*TaskInfo{
 				newTaskInfo(m1, base.TaskStateActive, time.Time{}, nil),
-				newTaskInfo(m2, base.TaskStateActive, time.Time{}, nil),
+				newOrphanedTaskInfo(m2),
 			},
 		},
 	}
@@ -778,6 +818,7 @@ func TestInspectorListActiveTasks(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 		h.SeedAllActiveQueues(t, r, tc.active)
+		h.SeedAllLease(t, r, tc.lease)
 
 		got, err := inspector.ListActiveTasks(tc.qname)
 		if err != nil {

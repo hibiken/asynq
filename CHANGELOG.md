@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `BaseContext` is introduced in `Config` to specify callback hook to provide a base `context` from which `Handler` `context` is derived
+- `IsOrphaned` field is added to `TaskInfo` to describe a task left in active state with no worker processing it.
 
 ### Changed
 

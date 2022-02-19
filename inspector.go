@@ -308,16 +308,28 @@ func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*TaskIn
 	case err != nil:
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
+	expired, err := i.rdb.ListLeaseExpired(time.Now(), qname)
+	if err != nil {
+		return nil, fmt.Errorf("asynq: %v", err)
+	}
+	expiredSet := make(map[string]struct{}) // set of expired message IDs
+	for _, msg := range expired {
+		expiredSet[msg.ID] = struct{}{}
+	}
 	var tasks []*TaskInfo
 	for _, i := range infos {
-		tasks = append(tasks, newTaskInfo(
+		t := newTaskInfo(
 			i.Message,
 			i.State,
 			i.NextProcessAt,
 			i.Result,
-		))
+		)
+		if _, ok := expiredSet[i.Message.ID]; ok {
+			t.IsOrphaned = true
+		}
+		tasks = append(tasks, t)
 	}
-	return tasks, err
+	return tasks, nil
 }
 
 // ListScheduledTasks retrieves scheduled tasks from the specified queue.
