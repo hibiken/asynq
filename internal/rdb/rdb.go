@@ -936,12 +936,13 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 // It returns a new expiration time if the operation was successful.
 func (r *RDB) ExtendLease(qname string, ids ...string) (expirationTime time.Time, err error) {
 	expireAt := r.clock.Now().Add(LeaseDuration)
-	var zs []redis.Z
+	var zs []*redis.Z
 	for _, id := range ids {
-		zs = append(zs, redis.Z{Member: id, Score: float64(expireAt.Unix())})
+		zs = append(zs, &redis.Z{Member: id, Score: float64(expireAt.Unix())})
 	}
 	// Use XX option to only update elements that already exist; Don't add new elements
-	err = r.client.ZAddArgs(context.Background(), base.LeaseKey(qname), redis.ZAddArgs{XX: true, GT: true, Members: zs}).Err()
+	// TODO: Consider adding GT option to ensure we only "extend" the lease. Ceveat is that GT is supported from redis v6.2.0 or above.
+	err = r.client.ZAddXX(context.Background(), base.LeaseKey(qname), zs...).Err()
 	if err != nil {
 		return time.Time{}, err
 	}
