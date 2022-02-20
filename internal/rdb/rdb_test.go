@@ -2353,22 +2353,6 @@ func TestExtendLease(t *testing.T) {
 				},
 			},
 		},
-		{
-			desc: "Should not add shorten the lease expiration time",
-			lease: map[string][]base.Z{
-				"default": {
-					{Message: t1, Score: now.Add(LeaseDuration).Add(10 * time.Second).Unix()},
-				},
-			},
-			qname:              "default",
-			ids:                []string{t1.ID},
-			wantExpirationTime: now.Add(LeaseDuration),
-			wantLease: map[string][]base.Z{
-				"default": {
-					{Message: t1, Score: now.Add(LeaseDuration).Add(10 * time.Second).Unix()},
-				},
-			},
-		},
 	}
 
 	for _, tc := range tests {
