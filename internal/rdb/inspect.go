@@ -7,6 +7,7 @@ package rdb
 import (
 	"context"
 	"fmt"
+	"go.easyops.local/slog"
 	"strings"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/spf13/cast"
 )
+
+var logging slog.Logger
 
 // AllQueues returns a list of all queue names.
 func (r *RDB) AllQueues() ([]string, error) {
@@ -1622,21 +1625,25 @@ func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
 	now := r.clock.Now()
 	res, err := listSchedulerKeysCmd.Run(context.Background(), r.client, []string{base.AllSchedulers}, now.Unix()).Result()
 	if err != nil {
+		logging.Errorf("listSchedulerKeysCmd err:%s", err.Error())
 		return nil, err
 	}
 	keys, err := cast.ToStringSliceE(res)
 	if err != nil {
+		logging.Errorf("ToStringSliceE err:%s", err.Error())
 		return nil, err
 	}
 	var entries []*base.SchedulerEntry
 	for _, key := range keys {
 		data, err := r.client.LRange(context.Background(), key, 0, -1).Result()
 		if err != nil {
+			logging.Errorf("LRange err:%s", err.Error())
 			continue // skip bad data
 		}
 		for _, s := range data {
 			e, err := base.DecodeSchedulerEntry([]byte(s))
 			if err != nil {
+				logging.Errorf("DecodeSchedulerEntry err:%s", err.Error())
 				continue // skip bad data
 			}
 			entries = append(entries, e)

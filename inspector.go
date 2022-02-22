@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"go.easyops.local/slog"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
@@ -21,6 +23,8 @@ import (
 type Inspector struct {
 	rdb *rdb.RDB
 }
+
+var logging slog.Logger
 
 // New returns a new instance of Inspector.
 func NewInspector(r RedisConnOpt) *Inspector {
@@ -797,6 +801,7 @@ func (i *Inspector) SchedulerEntries() ([]*SchedulerEntry, error) {
 	var entries []*SchedulerEntry
 	res, err := i.rdb.ListSchedulerEntries()
 	if err != nil {
+		logging.Errorf("ListSchedulerEntries err:%s", err.Error())
 		return nil, err
 	}
 	for _, e := range res {
