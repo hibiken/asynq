@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -430,7 +431,7 @@ func ParseRedisURI(uri string) (RedisConnOpt, error) {
 		return nil, fmt.Errorf("asynq: could not parse redis uri: %v", err)
 	}
 	switch u.Scheme {
-	case "redis":
+	case "redis", "rediss":
 		return parseRedisURI(u)
 	case "redis-socket":
 		return parseRedisSocketURI(u)
@@ -444,6 +445,8 @@ func ParseRedisURI(uri string) (RedisConnOpt, error) {
 func parseRedisURI(u *url.URL) (RedisConnOpt, error) {
 	var db int
 	var err error
+	var redisConnOpt RedisClientOpt
+
 	if len(u.Path) > 0 {
 		xs := strings.Split(strings.Trim(u.Path, "/"), "/")
 		db, err = strconv.Atoi(xs[0])
@@ -455,7 +458,20 @@ func parseRedisURI(u *url.URL) (RedisConnOpt, error) {
 	if v, ok := u.User.Password(); ok {
 		password = v
 	}
-	return RedisClientOpt{Addr: u.Host, DB: db, Password: password}, nil
+
+	if u.Scheme == "rediss" {
+		h, _, err := net.SplitHostPort(u.Host)
+		if err != nil {
+			h = u.Host
+		}
+		redisConnOpt.TLSConfig = &tls.Config{ServerName: h}
+	}
+
+	redisConnOpt.Addr = u.Host
+	redisConnOpt.Password = password
+	redisConnOpt.DB = db
+
+	return redisConnOpt, nil
 }
 
 func parseRedisSocketURI(u *url.URL) (RedisConnOpt, error) {

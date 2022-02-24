@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"crypto/tls"
 	"flag"
 	"sort"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/log"
 )
@@ -100,6 +102,10 @@ func TestParseRedisURI(t *testing.T) {
 			RedisClientOpt{Addr: "localhost:6379"},
 		},
 		{
+			"rediss://localhost:6379",
+			RedisClientOpt{Addr: "localhost:6379", TLSConfig: &tls.Config{ServerName: "localhost"}},
+		},
+		{
 			"redis://localhost:6379/3",
 			RedisClientOpt{Addr: "localhost:6379", DB: 3},
 		},
@@ -151,7 +157,7 @@ func TestParseRedisURI(t *testing.T) {
 			continue
 		}
 
-		if diff := cmp.Diff(tc.want, got); diff != "" {
+		if diff := cmp.Diff(tc.want, got, cmpopts.IgnoreUnexported(tls.Config{})); diff != "" {
 			t.Errorf("ParseRedisURI(%q) = %+v, want %+v\n(-want,+got)\n%s", tc.uri, got, tc.want, diff)
 		}
 	}
