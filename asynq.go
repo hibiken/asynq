@@ -420,9 +420,10 @@ func (opt RedisClusterClientOpt) MakeRedisClient() interface{} {
 // ParseRedisURI parses redis uri string and returns RedisConnOpt if uri is valid.
 // It returns a non-nil error if uri cannot be parsed.
 //
-// Three URI schemes are supported, which are redis:, redis-socket:, and redis-sentinel:.
+// Three URI schemes are supported, which are redis:, rediss:, redis-socket:, and redis-sentinel:.
 // Supported formats are:
 //     redis://[:password@]host[:port][/dbnumber]
+//     rediss://[:password@]host[:port][/dbnumber]
 //     redis-socket://[:password@]path[?db=dbnumber]
 //     redis-sentinel://[:password@]host1[:port][,host2:[:port]][,hostN:[:port]][?master=masterName]
 func ParseRedisURI(uri string) (RedisConnOpt, error) {
