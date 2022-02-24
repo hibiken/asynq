@@ -297,3 +297,28 @@ func (s *Scheduler) clearHistory() {
 		}
 	}
 }
+
+func (s *Scheduler) GetEntries() ([]*SchedulerEntry, error) {
+	var entries []*SchedulerEntry
+
+	for _, entry := range s.cron.Entries() {
+		job := entry.Job.(*enqueueJob)
+		var opts []Option
+		opt := stringifyOptions(job.opts)
+		for _, s := range opt {
+			if o, err := parseOption(s); err == nil {
+				// ignore bad data
+				opts = append(opts, o)
+			}
+		}
+		entries = append(entries, &SchedulerEntry{
+			ID:   job.id.String(),
+			Spec: job.cronspec,
+			Task: job.task,
+			Opts: opts,
+			Next: entry.Next,
+			Prev: entry.Prev,
+		})
+	}
+	return entries, nil
+}
