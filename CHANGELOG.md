@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Enable rediss url parsing support
+
 ## [0.22.1] - 2022-02-20
 
 ### Fixed
@@ -264,9 +268,9 @@ Use `ProcessIn` or `ProcessAt` option to schedule a task instead of `EnqueueIn` 
 
 #### `Inspector`
 
-All Inspector methods are scoped to a queue, and the methods take `qname (string)` as the first argument.  
-`EnqueuedTask` is renamed to `PendingTask` and its corresponding methods.  
-`InProgressTask` is renamed to `ActiveTask` and its corresponding methods.  
+All Inspector methods are scoped to a queue, and the methods take `qname (string)` as the first argument.
+`EnqueuedTask` is renamed to `PendingTask` and its corresponding methods.
+`InProgressTask` is renamed to `ActiveTask` and its corresponding methods.
 Command "Enqueue" is replaced by the verb "Run" (e.g. `EnqueueAllScheduledTasks` --> `RunAllScheduledTasks`)
 
 #### `CLI`
