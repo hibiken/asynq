@@ -44,6 +44,7 @@ const (
 	TimeoutOpt
 	DeadlineOpt
 	UniqueOpt
+	UniqueKeyOpt
 	ProcessAtOpt
 	ProcessInOpt
 	TaskIDOpt
@@ -70,6 +71,7 @@ type (
 	timeoutOption   time.Duration
 	deadlineOption  time.Time
 	uniqueOption    time.Duration
+	uniqueKeyOption string
 	processAtOption time.Time
 	processInOption time.Duration
 	retentionOption time.Duration
@@ -158,6 +160,15 @@ func (ttl uniqueOption) String() string     { return fmt.Sprintf("Unique(%v)", t
 func (ttl uniqueOption) Type() OptionType   { return UniqueOpt }
 func (ttl uniqueOption) Value() interface{} { return time.Duration(ttl) }
 
+// UniqueKey returns an option to set the unique key of the task, instead of the default Unique behavior.
+func UniqueKey(key string) Option {
+	return uniqueKeyOption(key)
+}
+
+func (key uniqueKeyOption) String() string     { return fmt.Sprintf("UniqueKey(%q)", string(key)) }
+func (key uniqueKeyOption) Type() OptionType   { return UniqueKeyOpt }
+func (key uniqueKeyOption) Value() interface{} { return key }
+
 // ProcessAt returns an option to specify when to process the given task.
 //
 // If there's a conflicting ProcessIn option, the last option passed to Enqueue overrides the others.
@@ -210,6 +221,7 @@ type option struct {
 	timeout   time.Duration
 	deadline  time.Time
 	uniqueTTL time.Duration
+	uniqueKey string
 	processAt time.Time
 	retention time.Duration
 }
@@ -253,6 +265,8 @@ func composeOptions(opts ...Option) (option, error) {
 				return option{}, errors.New("Unique TTL cannot be less than 1s")
 			}
 			res.uniqueTTL = ttl
+		case uniqueKeyOption:
+			res.uniqueKey = string(opt)
 		case processAtOption:
 			res.processAt = time.Time(opt)
 		case processInOption:
@@ -345,7 +359,11 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 	}
 	var uniqueKey string
 	if opt.uniqueTTL > 0 {
-		uniqueKey = base.UniqueKey(opt.queue, task.Type(), task.Payload())
+		if opt.uniqueKey != "" {
+			uniqueKey = opt.uniqueKey
+		} else {
+			uniqueKey = base.UniqueKey(opt.queue, task.Type(), task.Payload())
+		}
 	}
 	msg := &base.TaskMessage{
 		ID:        opt.taskID,
