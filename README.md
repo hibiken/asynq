@@ -165,7 +165,18 @@ import (
 const redisAddr = "127.0.0.1:6379"
 
 func main() {
-    client := asynq.NewClient(asynq.RedisClientOpt{Addr: redisAddr})
+    client := asynq.NewClient(
+        asynq.RedisClientOpt{Addr: redisAddr},
+        asynq.ClientOpts{
+            // Optionally specify the number of retry per tasks if the task fails.
+            // default is 25
+            MaxRetry: 5,
+            // Optionally specify how long a task may run.
+            // default is 30 minutes
+            Timeout: 10 * time.Minute,
+            // See the godoc for other configuration options
+        },
+    )
     defer client.Close()
 
     // ------------------------------------------------------
