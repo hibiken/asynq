@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Enable rediss url parsing support
+- Add options for the client to set default timeout and max retries
 
 ## [0.22.1] - 2022-02-20
 
