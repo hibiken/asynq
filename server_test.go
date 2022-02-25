@@ -23,7 +23,7 @@ func TestServer(t *testing.T) {
 	defer goleak.VerifyNoLeaks(t, ignoreOpt)
 
 	redisConnOpt := getRedisConnOpt(t)
-	c := NewClient(redisConnOpt)
+	c := NewClient(redisConnOpt, nil)
 	defer c.Close()
 	srv := NewServer(redisConnOpt, Config{
 		Concurrency: 10,
@@ -166,7 +166,7 @@ func TestServerWithFlakyBroker(t *testing.T) {
 	srv.processor.broker = testBroker
 	srv.subscriber.broker = testBroker
 
-	c := NewClient(redisConnOpt)
+	c := NewClient(redisConnOpt, nil)
 
 	h := func(ctx context.Context, task *Task) error {
 		// force task retry.

@@ -25,15 +25,49 @@ import (
 // Clients are safe for concurrent use by multiple goroutines.
 type Client struct {
 	rdb *rdb.RDB
+
+	defaultTimeout  time.Duration
+	defaultMaxRetry int
+}
+
+// ClientOpts specify the client options
+type ClientOpts struct {
+	// MaxRetry specifies the max number of times the task will be retried.
+	// Negative retry count is treated as zero retry.
+	//
+	// if unset, the default max retry (25) will be used.
+	MaxRetry int
+
+	// Timeout specifies how long a task may run.
+	//
+	// if unset, the default timeout (30m) will be used.
+	Timeout time.Duration
 }
 
 // NewClient returns a new Client instance given a redis connection option.
-func NewClient(r RedisConnOpt) *Client {
+func NewClient(r RedisConnOpt, opts *ClientOpts) *Client {
 	c, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
-	return &Client{rdb: rdb.NewRDB(c)}
+	if opts == nil {
+		opts = &ClientOpts{}
+	}
+
+	if opts.Timeout == 0 {
+		opts.Timeout = defaultTimeout
+	}
+	if opts.MaxRetry == 0 {
+		opts.MaxRetry = defaultMaxRetry
+	} else if opts.MaxRetry < 0 {
+		opts.MaxRetry = 0
+	}
+
+	return &Client{
+		rdb:             rdb.NewRDB(c),
+		defaultTimeout:  opts.Timeout,
+		defaultMaxRetry: opts.MaxRetry,
+	}
 }
 
 type OptionType int
@@ -218,12 +252,12 @@ type option struct {
 // and returns the composed option.
 // It also validates the user provided options and returns an error if any of
 // the user provided options fail the validations.
-func composeOptions(opts ...Option) (option, error) {
+func (c *Client) composeOptions(opts ...Option) (option, error) {
 	res := option{
-		retry:     defaultMaxRetry,
+		retry:     c.defaultMaxRetry,
 		queue:     base.DefaultQueueName,
 		taskID:    uuid.NewString(),
-		timeout:   0, // do not set to deafultTimeout here
+		timeout:   0, // do not set to defaultTimeout here
 		deadline:  time.Time{},
 		processAt: time.Now(),
 	}
@@ -327,7 +361,7 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 	}
 	// merge task options with the options provided at enqueue time.
 	opts = append(task.opts, opts...)
-	opt, err := composeOptions(opts...)
+	opt, err := c.composeOptions(opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +375,7 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 	}
 	if deadline.Equal(noDeadline) && timeout == noTimeout {
 		// If neither deadline nor timeout are set, use default timeout.
-		timeout = defaultTimeout
+		timeout = c.defaultTimeout
 	}
 	var uniqueKey string
 	if opt.uniqueTTL > 0 {

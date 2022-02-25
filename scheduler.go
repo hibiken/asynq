@@ -70,7 +70,7 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 		id:         generateSchedulerID(),
 		state:      &serverState{value: srvStateNew},
 		logger:     logger,
-		client:     NewClient(r),
+		client:     NewClient(r, nil),
 		rdb:        rdb.NewRDB(c),
 		cron:       cron.New(cron.WithLocation(loc)),
 		location:   loc,

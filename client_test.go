@@ -18,7 +18,7 @@ import (
 
 func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 	r := setup(t)
-	client := NewClient(getRedisConnOpt(t))
+	client := NewClient(getRedisConnOpt(t), nil)
 	defer client.Close()
 
 	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
@@ -145,7 +145,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 
 func TestClientEnqueue(t *testing.T) {
 	r := setup(t)
-	client := NewClient(getRedisConnOpt(t))
+	client := NewClient(getRedisConnOpt(t), nil)
 	defer client.Close()
 
 	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
@@ -480,7 +480,7 @@ func TestClientEnqueue(t *testing.T) {
 
 func TestClientEnqueueWithTaskIDOption(t *testing.T) {
 	r := setup(t)
-	client := NewClient(getRedisConnOpt(t))
+	client := NewClient(getRedisConnOpt(t), nil)
 	defer client.Close()
 
 	task := NewTask("send_email", nil)
@@ -557,7 +557,7 @@ func TestClientEnqueueWithTaskIDOption(t *testing.T) {
 
 func TestClientEnqueueWithConflictingTaskID(t *testing.T) {
 	setup(t)
-	client := NewClient(getRedisConnOpt(t))
+	client := NewClient(getRedisConnOpt(t), nil)
 	defer client.Close()
 
 	const taskID = "custom_id"
@@ -574,7 +574,7 @@ func TestClientEnqueueWithConflictingTaskID(t *testing.T) {
 
 func TestClientEnqueueWithProcessInOption(t *testing.T) {
 	r := setup(t)
-	client := NewClient(getRedisConnOpt(t))
+	client := NewClient(getRedisConnOpt(t), nil)
 	defer client.Close()
 
 	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
@@ -697,7 +697,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 
 func TestClientEnqueueError(t *testing.T) {
 	r := setup(t)
-	client := NewClient(getRedisConnOpt(t))
+	client := NewClient(getRedisConnOpt(t), nil)
 	defer client.Close()
 
 	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
@@ -761,6 +761,7 @@ func TestClientWithDefaultOptions(t *testing.T) {
 		defaultOpts []Option // options set at task initialization time
 		opts        []Option // options used at enqueue time.
 		tasktype    string
+		clientOpts  *ClientOpts
 		payload     []byte
 		wantInfo    *TaskInfo
 		queue       string // queue that the message should go into.
@@ -790,6 +791,66 @@ func TestClientWithDefaultOptions(t *testing.T) {
 				Type:     "feed:import",
 				Payload:  nil,
 				Retry:    defaultMaxRetry,
+				Queue:    "feed",
+				Timeout:  int64(defaultTimeout.Seconds()),
+				Deadline: noDeadline.Unix(),
+			},
+		},
+		{
+			desc:        "With custom timeout",
+			defaultOpts: []Option{Queue("feed")},
+			opts:        []Option{},
+			tasktype:    "feed:import",
+			payload:     nil,
+			clientOpts:  &ClientOpts{Timeout: time.Minute},
+			wantInfo: &TaskInfo{
+				Queue:         "feed",
+				Type:          "feed:import",
+				Payload:       nil,
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       time.Minute,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
+			},
+			queue: "feed",
+			want: &base.TaskMessage{
+				Type:     "feed:import",
+				Payload:  nil,
+				Retry:    defaultMaxRetry,
+				Queue:    "feed",
+				Timeout:  int64(time.Minute.Seconds()),
+				Deadline: noDeadline.Unix(),
+			},
+		},
+		{
+			desc:        "With custom maxRetry",
+			defaultOpts: []Option{Queue("feed")},
+			opts:        []Option{},
+			tasktype:    "feed:import",
+			payload:     nil,
+			clientOpts:  &ClientOpts{MaxRetry: 1},
+			wantInfo: &TaskInfo{
+				Queue:         "feed",
+				Type:          "feed:import",
+				Payload:       nil,
+				State:         TaskStatePending,
+				MaxRetry:      1,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
+			},
+			queue: "feed",
+			want: &base.TaskMessage{
+				Type:     "feed:import",
+				Payload:  nil,
+				Retry:    1,
 				Queue:    "feed",
 				Timeout:  int64(defaultTimeout.Seconds()),
 				Deadline: noDeadline.Unix(),
@@ -856,7 +917,7 @@ func TestClientWithDefaultOptions(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r)
-		c := NewClient(getRedisConnOpt(t))
+		c := NewClient(getRedisConnOpt(t), tc.clientOpts)
 		defer c.Close()
 		task := NewTask(tc.tasktype, tc.payload, tc.defaultOpts...)
 		gotInfo, err := c.Enqueue(task, tc.opts...)
@@ -887,7 +948,7 @@ func TestClientWithDefaultOptions(t *testing.T) {
 
 func TestClientEnqueueUnique(t *testing.T) {
 	r := setup(t)
-	c := NewClient(getRedisConnOpt(t))
+	c := NewClient(getRedisConnOpt(t), nil)
 	defer c.Close()
 
 	tests := []struct {
@@ -930,7 +991,7 @@ func TestClientEnqueueUnique(t *testing.T) {
 
 func TestClientEnqueueUniqueWithProcessInOption(t *testing.T) {
 	r := setup(t)
-	c := NewClient(getRedisConnOpt(t))
+	c := NewClient(getRedisConnOpt(t), nil)
 	defer c.Close()
 
 	tests := []struct {
@@ -976,7 +1037,7 @@ func TestClientEnqueueUniqueWithProcessInOption(t *testing.T) {
 
 func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 	r := setup(t)
-	c := NewClient(getRedisConnOpt(t))
+	c := NewClient(getRedisConnOpt(t), nil)
 	defer c.Close()
 
 	tests := []struct {

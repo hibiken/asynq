@@ -31,7 +31,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 		b.StopTimer() // begin setup
 		setup(b)
 		redis := getRedisConnOpt(b)
-		client := NewClient(redis)
+		client := NewClient(redis, nil)
 		srv := NewServer(redis, Config{
 			Concurrency: 10,
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
@@ -71,7 +71,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 		b.StopTimer() // begin setup
 		setup(b)
 		redis := getRedisConnOpt(b)
-		client := NewClient(redis)
+		client := NewClient(redis, nil)
 		srv := NewServer(redis, Config{
 			Concurrency: 10,
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
@@ -138,7 +138,7 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 		b.StopTimer() // begin setup
 		setup(b)
 		redis := getRedisConnOpt(b)
-		client := NewClient(redis)
+		client := NewClient(redis, nil)
 		srv := NewServer(redis, Config{
 			Concurrency: 10,
 			Queues: map[string]int{
@@ -191,7 +191,7 @@ func BenchmarkClientWhileServerRunning(b *testing.B) {
 		b.StopTimer() // begin setup
 		setup(b)
 		redis := getRedisConnOpt(b)
-		client := NewClient(redis)
+		client := NewClient(redis, nil)
 		srv := NewServer(redis, Config{
 			Concurrency: 10,
 			RetryDelayFunc: func(n int, err error, t *Task) time.Duration {
