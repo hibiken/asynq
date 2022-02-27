@@ -276,7 +276,7 @@ func (s *Scheduler) beat() {
 		entries = append(entries, e)
 	}
 	s.logger.Debugf("Writing entries %v", entries)
-	if err := s.rdb.WriteSchedulerEntries(s.id, entries, 5*time.Second); err != nil {
+	if err := s.rdb.WriteSchedulerEntries(s.id, entries, 60*time.Second); err != nil {
 		s.logger.Warnf("Scheduler could not write heartbeat data: %v", err)
 	}
 }
@@ -296,29 +296,4 @@ func (s *Scheduler) clearHistory() {
 			s.logger.Warnf("Could not clear scheduler history for entry %q: %v", job.id.String(), err)
 		}
 	}
-}
-
-func (s *Scheduler) GetEntries() ([]*SchedulerEntry, error) {
-	var entries []*SchedulerEntry
-
-	for _, entry := range s.cron.Entries() {
-		job := entry.Job.(*enqueueJob)
-		var opts []Option
-		opt := stringifyOptions(job.opts)
-		for _, s := range opt {
-			if o, err := parseOption(s); err == nil {
-				// ignore bad data
-				opts = append(opts, o)
-			}
-		}
-		entries = append(entries, &SchedulerEntry{
-			ID:   job.id.String(),
-			Spec: job.cronspec,
-			Task: job.task,
-			Opts: opts,
-			Next: entry.Next,
-			Prev: entry.Prev,
-		})
-	}
-	return entries, nil
 }
