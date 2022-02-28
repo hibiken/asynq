@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"fmt"
+
 	"strconv"
 	"strings"
 	"time"
@@ -799,6 +800,7 @@ func (i *Inspector) SchedulerEntries() ([]*SchedulerEntry, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	for _, e := range res {
 		task := NewTask(e.Type, e.Payload)
 		var opts []Option
@@ -817,6 +819,7 @@ func (i *Inspector) SchedulerEntries() ([]*SchedulerEntry, error) {
 			Prev: e.Prev,
 		})
 	}
+
 	return entries, nil
 }
 
