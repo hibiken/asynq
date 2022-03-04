@@ -193,6 +193,31 @@ type Config struct {
 	//
 	// If unset or zero, the interval is set to 5 seconds.
 	DelayedTaskCheckInterval time.Duration
+
+	// GroupGracePeriod specifies the amount of time the server will wait for an incoming task before aggregating
+	// the tasks in a group. If an incoming task is received within this period, the server will wait for another
+	// period of the same length, up to GroupMaxDelay.
+	//
+	// TODO: Document the default value used if not specified
+	GroupGracePeriod time.Duration
+
+	// GroupMaxDelay specifies the maximum amount of time the server will wait for incoming tasks before aggregating
+	// the tasks in a group.
+	//
+	// TODO: Document the default value used if not specified
+	GroupMaxDelay time.Duration
+
+	// GroupMaxSize specifies the maximum number of tasks that can be aggregated into a single task within a group.
+	// If GroupMaxSize is reached, the server will aggregate the tasks into one immediately.
+	//
+	// TODO: Document the default behavior if not specified.
+	GroupMaxSize int
+
+	// GroupAggregateFunc specifies the aggregation function used to aggregate multiple tasks in a group into
+	// one task which will be passed to the Handler.
+	//
+	// TODO: Docuent the default behavior if not specified.
+	GroupAggregateFunc func(groupKey string, tasks []*Task) *Task
 }
 
 // An ErrorHandler handles an error occured during task processing.
