@@ -395,6 +395,78 @@ func TestUniqueKey(t *testing.T) {
 	}
 }
 
+func TestGroupKey(t *testing.T) {
+	tests := []struct {
+		qname string
+		gkey  string
+		want  string
+	}{
+		{
+			qname: "default",
+			gkey:  "mygroup",
+			want:  "asynq:{default}:g:mygroup",
+		},
+		{
+			qname: "custom",
+			gkey:  "foo",
+			want:  "asynq:{custom}:g:foo",
+		},
+	}
+
+	for _, tc := range tests {
+		got := GroupKey(tc.qname, tc.gkey)
+		if got != tc.want {
+			t.Errorf("GroupKey(%q, %q) = %q, want %q", tc.qname, tc.gkey, got, tc.want)
+		}
+	}
+}
+
+func TestAllGroups(t *testing.T) {
+	tests := []struct {
+		qname string
+		want  string
+	}{
+		{
+			qname: "default",
+			want:  "asynq:{default}:groups",
+		},
+		{
+			qname: "custom",
+			want:  "asynq:{custom}:groups",
+		},
+	}
+
+	for _, tc := range tests {
+		got := AllGroups(tc.qname)
+		if got != tc.want {
+			t.Errorf("AllGroups(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
+func TestAllStagedGroups(t *testing.T) {
+	tests := []struct {
+		qname string
+		want  string
+	}{
+		{
+			qname: "default",
+			want:  "asynq:{default}:staged_groups",
+		},
+		{
+			qname: "custom",
+			want:  "asynq:{custom}:staged_groups",
+		},
+	}
+
+	for _, tc := range tests {
+		got := AllStagedGroups(tc.qname)
+		if got != tc.want {
+			t.Errorf("AllStagedGroups(%q) = %q, want %q", tc.qname, got, tc.want)
+		}
+	}
+}
+
 func TestMessageEncoding(t *testing.T) {
 	id := uuid.NewString()
 	tests := []struct {

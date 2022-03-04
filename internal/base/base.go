@@ -200,6 +200,21 @@ func UniqueKey(qname, tasktype string, payload []byte) string {
 	return fmt.Sprintf("%sunique:%s:%s", QueueKeyPrefix(qname), tasktype, hex.EncodeToString(checksum[:]))
 }
 
+// GroupKey returns a redis key used to group tasks belong in the same group.
+func GroupKey(qname, gkey string) string {
+	return fmt.Sprintf("%sg:%s", QueueKeyPrefix(qname), gkey)
+}
+
+// AllGroups return a redis key used to store all group keys used in a given queue.
+func AllGroups(qname string) string {
+	return fmt.Sprintf("%sgroups", QueueKeyPrefix(qname))
+}
+
+// AllStagedGroups returns a redis key used to store all groups staged to be aggregated in a given queue.
+func AllStagedGroups(qname string) string {
+	return fmt.Sprintf("%sstaged_groups", QueueKeyPrefix(qname))
+}
+
 // TaskMessage is the internal representation of a task with additional metadata fields.
 // Serialized data of this type gets written to redis.
 type TaskMessage struct {
