@@ -48,6 +48,7 @@ const (
 	ProcessInOpt
 	TaskIDOpt
 	RetentionOpt
+	GroupOpt
 )
 
 // Option specifies the task processing behavior.
@@ -73,6 +74,7 @@ type (
 	processAtOption time.Time
 	processInOption time.Duration
 	retentionOption time.Duration
+	groupOption     string
 )
 
 // MaxRetry returns an option to specify the max number of times
@@ -142,7 +144,8 @@ func (t deadlineOption) Value() interface{} { return time.Time(t) }
 
 // Unique returns an option to enqueue a task only if the given task is unique.
 // Task enqueued with this option is guaranteed to be unique within the given ttl.
-// Once the task gets processed successfully or once the TTL has expired, another task with the same uniqueness may be enqueued.
+// Once the task gets processed successfully or once the TTL has expired,
+// another task with the same uniqueness may be enqueued.
 // ErrDuplicateTask error is returned when enqueueing a duplicate task.
 // TTL duration must be greater than or equal to 1 second.
 //
@@ -192,6 +195,18 @@ func Retention(d time.Duration) Option {
 func (ttl retentionOption) String() string     { return fmt.Sprintf("Retention(%v)", time.Duration(ttl)) }
 func (ttl retentionOption) Type() OptionType   { return RetentionOpt }
 func (ttl retentionOption) Value() interface{} { return time.Duration(ttl) }
+
+// Group returns an option to specify the group key used for the task.
+// Tasks in a given queue with the same group key will be aggregated into one task before passed to Handler.
+//
+// To customize the aggregation and grouping policy, specify the Group* fields in Config.
+func Group(key string) Option {
+	return groupOption(key)
+}
+
+func (key groupOption) String() string     { return fmt.Sprintf("Group(%q)", string(key)) }
+func (key groupOption) Type() OptionType   { return GroupOpt }
+func (key groupOption) Value() interface{} { return string(key) }
 
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
