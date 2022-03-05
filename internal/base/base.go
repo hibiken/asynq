@@ -50,6 +50,7 @@ const (
 	TaskStateRetry
 	TaskStateArchived
 	TaskStateCompleted
+	TaskStateAggregating // describes a state where task is waiting in a group to be aggregated
 )
 
 func (s TaskState) String() string {
@@ -66,6 +67,8 @@ func (s TaskState) String() string {
 		return "archived"
 	case TaskStateCompleted:
 		return "completed"
+	case TaskStateAggregating:
+		return "aggregating"
 	}
 	panic(fmt.Sprintf("internal error: unknown task state %d", s))
 }
@@ -84,6 +87,8 @@ func TaskStateFromString(s string) (TaskState, error) {
 		return TaskStateArchived, nil
 	case "completed":
 		return TaskStateCompleted, nil
+	case "aggregating":
+		return TaskStateAggregating, nil
 	}
 	return 0, errors.E(errors.FailedPrecondition, fmt.Sprintf("%q is not supported task state", s))
 }

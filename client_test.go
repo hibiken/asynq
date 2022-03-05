@@ -478,6 +478,154 @@ func TestClientEnqueue(t *testing.T) {
 	}
 }
 
+func TestClientEnqueueWithGroupOption(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	task := NewTask("mytask", []byte("foo"))
+	now := time.Now()
+
+	tests := []struct {
+		desc          string
+		task          *Task
+		opts          []Option
+		wantInfo      *TaskInfo
+		wantPending   map[string][]*base.TaskMessage
+		wantGroups    map[string]map[string][]base.Z // map queue name to a set of groups
+		wantScheduled map[string][]base.Z
+	}{
+		{
+			desc: "With only Group option",
+			task: task,
+			opts: []Option{
+				Group("mygroup"),
+			},
+			wantInfo: &TaskInfo{
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStateAggregating,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: time.Time{},
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {}, // should not be pending
+			},
+			wantGroups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {
+						{
+							Message: &base.TaskMessage{
+								Type:     task.Type(),
+								Payload:  task.Payload(),
+								Retry:    defaultMaxRetry,
+								Queue:    "default",
+								Timeout:  int64(defaultTimeout.Seconds()),
+								Deadline: noDeadline.Unix(),
+							},
+							Score: now.Unix(),
+						},
+					},
+				},
+			},
+			wantScheduled: map[string][]base.Z{
+				"default": {},
+			},
+		},
+		{
+			desc: "With Group and ProcessIn options",
+			task: task,
+			opts: []Option{
+				Group("mygroup"),
+				ProcessIn(30 * time.Minute),
+			},
+			wantInfo: &TaskInfo{
+				Queue:         "default",
+				Type:          task.Type(),
+				Payload:       task.Payload(),
+				State:         TaskStateScheduled,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now.Add(30 * time.Minute),
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {}, // should not be pending
+			},
+			wantGroups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {}, // should not be added to the group yet
+				},
+			},
+			wantScheduled: map[string][]base.Z{
+				"default": {
+					{
+						Message: &base.TaskMessage{
+							Type:     task.Type(),
+							Payload:  task.Payload(),
+							Retry:    defaultMaxRetry,
+							Queue:    "default",
+							Timeout:  int64(defaultTimeout.Seconds()),
+							Deadline: noDeadline.Unix(),
+						},
+						Score: now.Add(30 * time.Minute).Unix(),
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r) // clean up db before each test case.
+
+		gotInfo, err := client.Enqueue(tc.task, tc.opts...)
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+		cmpOptions := []cmp.Option{
+			cmpopts.IgnoreFields(TaskInfo{}, "ID"),
+			cmpopts.EquateApproxTime(500 * time.Millisecond),
+		}
+		if diff := cmp.Diff(tc.wantInfo, gotInfo, cmpOptions...); diff != "" {
+			t.Errorf("%s;\nEnqueue(task) returned %v, want %v; (-want,+got)\n%s",
+				tc.desc, gotInfo, tc.wantInfo, diff)
+		}
+
+		for qname, want := range tc.wantPending {
+			got := h.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, got, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.PendingKey(qname), diff)
+			}
+		}
+
+		for qname, groups := range tc.wantGroups {
+			for groupKey, want := range groups {
+				got := h.GetGroupEntries(t, r, qname, groupKey)
+				if diff := cmp.Diff(want, got, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
+					t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.GroupKey(qname, groupKey), diff)
+				}
+			}
+		}
+
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := h.GetScheduledEntries(t, r, qname)
+			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledKey(qname), diff)
+			}
+		}
+	}
+}
+
 func TestClientEnqueueWithTaskIDOption(t *testing.T) {
 	r := setup(t)
 	client := NewClient(getRedisConnOpt(t))

@@ -162,6 +162,8 @@ func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time
 		info.State = TaskStateArchived
 	case base.TaskStateCompleted:
 		info.State = TaskStateCompleted
+	case base.TaskStateAggregating:
+		info.State = TaskStateAggregating
 	default:
 		panic(fmt.Sprintf("internal error: unknown state: %d", state))
 	}
@@ -189,6 +191,9 @@ const (
 
 	// Indicates that the task is processed successfully and retained until the retention TTL expires.
 	TaskStateCompleted
+
+	// Indicates that the task is waiting in a group to be aggreated into one task.
+	TaskStateAggregating
 )
 
 func (s TaskState) String() string {
@@ -205,6 +210,8 @@ func (s TaskState) String() string {
 		return "archived"
 	case TaskStateCompleted:
 		return "completed"
+	case TaskStateAggregating:
+		return "aggregating"
 	}
 	panic("asynq: unknown task state")
 }
