@@ -498,6 +498,126 @@ func (r *RDB) Requeue(ctx context.Context, msg *base.TaskMessage) error {
 }
 
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
+// KEYS[2] -> asynq:{<qname>}:g:<group_key>
+// KEYS[3] -> asynq:{<qname>}:groups
+// -------
+// ARGV[1] -> task message data
+// ARGV[2] -> task ID
+// ARGV[3] -> current time in Unix time
+// ARGV[4] -> group key
+//
+// Output:
+// Returns 1 if successfully added
+// Returns 0 if task ID already exists
+var addToGroupCmd = redis.NewScript(`
+if redis.call("EXISTS", KEYS[1]) == 1 then
+	return 0
+end
+redis.call("HSET", KEYS[1],
+           "msg", ARGV[1],
+           "state", "aggregating")
+redis.call("ZADD", KEYS[2], ARGV[3], ARGV[2])
+redis.call("SADD", KEYS[3], ARGV[4])
+return 1
+`)
+
+func (r *RDB) AddToGroup(ctx context.Context, msg *base.TaskMessage, groupKey string) error {
+	var op errors.Op = "rdb.AddToGroup"
+	encoded, err := base.EncodeMessage(msg)
+	if err != nil {
+		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
+	}
+	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	}
+	keys := []string{
+		base.TaskKey(msg.Queue, msg.ID),
+		base.GroupKey(msg.Queue, groupKey),
+		base.AllGroups(msg.Queue),
+	}
+	argv := []interface{}{
+		encoded,
+		msg.ID,
+		r.clock.Now().Unix(),
+		groupKey,
+	}
+	n, err := r.runScriptWithErrorCode(ctx, op, addToGroupCmd, keys, argv...)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
+	}
+	return nil
+}
+
+// KEYS[1] -> asynq:{<qname>}:t:<task_id>
+// KEYS[2] -> asynq:{<qname>}:g:<group_key>
+// KEYS[3] -> asynq:{<qname>}:groups
+// KEYS[4] -> unique key
+// -------
+// ARGV[1] -> task message data
+// ARGV[2] -> task ID
+// ARGV[3] -> current time in Unix time
+// ARGV[4] -> group key
+// ARGV[5] -> uniqueness lock TTL
+//
+// Output:
+// Returns 1 if successfully added
+// Returns 0 if task ID already exists
+// Returns -1 if task unique key already exists
+var addToGroupUniqueCmd = redis.NewScript(`
+local ok = redis.call("SET", KEYS[4], ARGV[2], "NX", "EX", ARGV[5])
+if not ok then
+  return -1
+end
+if redis.call("EXISTS", KEYS[1]) == 1 then
+	return 0
+end
+redis.call("HSET", KEYS[1],
+           "msg", ARGV[1],
+           "state", "aggregating")
+redis.call("ZADD", KEYS[2], ARGV[3], ARGV[2])
+redis.call("SADD", KEYS[3], ARGV[4])
+return 1
+`)
+
+func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, groupKey string, ttl time.Duration) error {
+	var op errors.Op = "rdb.AddToGroupUnique"
+	encoded, err := base.EncodeMessage(msg)
+	if err != nil {
+		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
+	}
+	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	}
+	keys := []string{
+		base.TaskKey(msg.Queue, msg.ID),
+		base.GroupKey(msg.Queue, groupKey),
+		base.AllGroups(msg.Queue),
+		base.UniqueKey(msg.Queue, msg.Type, msg.Payload),
+	}
+	argv := []interface{}{
+		encoded,
+		msg.ID,
+		r.clock.Now().Unix(),
+		groupKey,
+		int(ttl.Seconds()),
+	}
+	n, err := r.runScriptWithErrorCode(ctx, op, addToGroupUniqueCmd, keys, argv...)
+	if err != nil {
+		return err
+	}
+	if n == -1 {
+		return errors.E(op, errors.AlreadyExists, errors.ErrDuplicateTask)
+	}
+	if n == 0 {
+		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
+	}
+	return nil
+}
+
+// KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:scheduled
 // -------
 // ARGV[1] -> task message data
