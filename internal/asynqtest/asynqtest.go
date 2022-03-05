@@ -434,6 +434,14 @@ func GetCompletedEntries(tb testing.TB, r redis.UniversalClient, qname string) [
 	return getMessagesFromZSetWithScores(tb, r, qname, base.CompletedKey, base.TaskStateCompleted)
 }
 
+// GetGroupEntries returns all scheduled messages and its score in the given queue.
+// It also asserts the state field of the task.
+func GetGroupEntries(tb testing.TB, r redis.UniversalClient, qname, groupKey string) []base.Z {
+	tb.Helper()
+	return getMessagesFromZSetWithScores(tb, r, qname,
+		func(qname string) string { return base.GroupKey(qname, groupKey) }, base.TaskStateAggregating)
+}
+
 // Retrieves all messages stored under `keyFn(qname)` key in redis list.
 func getMessagesFromList(tb testing.TB, r redis.UniversalClient, qname string,
 	keyFn func(qname string) string, state base.TaskState) []*base.TaskMessage {
