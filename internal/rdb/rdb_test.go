@@ -1222,6 +1222,10 @@ func TestAddToGroup(t *testing.T) {
 		if want := "aggregating"; state != want {
 			t.Errorf("state field under task-key is set to %q, want %q", state, want)
 		}
+		group := r.client.HGet(ctx, taskKey, "group").Val() // "group" field
+		if want := tc.groupKey; group != want {
+			t.Errorf("group field under task-key is set to %q, want %q", group, want)
+		}
 
 		// Check queue is in the AllQueues set.
 		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
@@ -1328,6 +1332,10 @@ func TestAddToGroupUnique(t *testing.T) {
 		state := r.client.HGet(ctx, taskKey, "state").Val() // "state" field
 		if want := "aggregating"; state != want {
 			t.Errorf("state field under task-key is set to %q, want %q", state, want)
+		}
+		group := r.client.HGet(ctx, taskKey, "group").Val() // "group" field
+		if want := tc.groupKey; group != want {
+			t.Errorf("group field under task-key is set to %q, want %q", group, want)
 		}
 
 		// Check queue is in the AllQueues set.
@@ -2166,6 +2174,149 @@ func TestArchive(t *testing.T) {
 	}
 }
 
+func TestForwardIfReadyWithGroup(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+	ctx := context.Background()
+	t1 := h.NewTaskMessage("send_email", nil)
+	t2 := h.NewTaskMessage("generate_csv", nil)
+	t3 := h.NewTaskMessage("gen_thumbnail", nil)
+	t4 := h.NewTaskMessageWithQueue("important_task", nil, "critical")
+	t5 := h.NewTaskMessageWithQueue("minor_task", nil, "low")
+	secondAgo := now.Add(-time.Second)
+
+	tests := []struct {
+		scheduled     map[string][]base.Z
+		retry         map[string][]base.Z
+		qnames        []string
+		wantPending   map[string][]*base.TaskMessage
+		wantScheduled map[string][]*base.TaskMessage
+		wantRetry     map[string][]*base.TaskMessage
+		wantGroup     map[string]map[string][]base.Z
+	}{
+		{
+			scheduled: map[string][]base.Z{
+				"default": {
+					{Message: t1, Score: secondAgo.Unix()},
+					{Message: t2, Score: secondAgo.Unix()},
+				},
+			},
+			retry: map[string][]base.Z{
+				"default": {{Message: t3, Score: secondAgo.Unix()}},
+			},
+			qnames: []string{"default"},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {t3},
+			},
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantRetry: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantGroup: map[string]map[string][]base.Z{
+				"default": {
+					"notifications": {{Message: t1, Score: now.Unix()}},
+					"csv":           {{Message: t2, Score: now.Unix()}},
+				},
+			},
+		},
+		{
+			scheduled: map[string][]base.Z{
+				"default":  {{Message: t1, Score: secondAgo.Unix()}},
+				"critical": {{Message: t4, Score: secondAgo.Unix()}},
+				"low":      {},
+			},
+			retry: map[string][]base.Z{
+				"default":  {},
+				"critical": {},
+				"low":      {{Message: t5, Score: secondAgo.Unix()}},
+			},
+			qnames: []string{"default", "critical", "low"},
+			wantPending: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
+			wantRetry: map[string][]*base.TaskMessage{
+				"default":  {},
+				"critical": {},
+				"low":      {},
+			},
+			wantGroup: map[string]map[string][]base.Z{
+				"default": {
+					"notifications": {{Message: t1, Score: now.Unix()}},
+				},
+				"critical": {
+					"critical_task_group": {{Message: t4, Score: now.Unix()}},
+				},
+				"low": {
+					"minor_task_group": {{Message: t5, Score: now.Unix()}},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		h.SeedAllRetryQueues(t, r.client, tc.retry)
+		// Set "group" field under the task key.
+		r.client.HSet(ctx, base.TaskKey(t1.Queue, t1.ID), "group", "notifications")
+		r.client.HSet(ctx, base.TaskKey(t2.Queue, t2.ID), "group", "csv")
+		r.client.HSet(ctx, base.TaskKey(t4.Queue, t4.ID), "group", "critical_task_group")
+		r.client.HSet(ctx, base.TaskKey(t5.Queue, t5.ID), "group", "minor_task_group")
+
+		err := r.ForwardIfReady(tc.qnames...)
+		if err != nil {
+			t.Errorf("(*RDB).ForwardIfReady(%v) = %v, want nil", tc.qnames, err)
+			continue
+		}
+
+		for qname, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
+			}
+			// Make sure "pending_since" field is set
+			for _, msg := range gotPending {
+				pendingSince := r.client.HGet(ctx, base.TaskKey(msg.Queue, msg.ID), "pending_since").Val()
+				if want := strconv.Itoa(int(now.UnixNano())); pendingSince != want {
+					t.Error("pending_since field is not set for newly pending message")
+				}
+			}
+		}
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := h.GetScheduledMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotScheduled, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledKey(qname), diff)
+			}
+		}
+		for qname, want := range tc.wantRetry {
+			gotRetry := h.GetRetryMessages(t, r.client, qname)
+			if diff := cmp.Diff(want, gotRetry, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryKey(qname), diff)
+			}
+		}
+		for qname, groups := range tc.wantGroup {
+			for groupKey, wantGroup := range groups {
+				gotGroup := h.GetGroupEntries(t, r.client, qname, groupKey)
+				if diff := cmp.Diff(wantGroup, gotGroup, h.SortZSetEntryOpt); diff != "" {
+					t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.GroupKey(qname, groupKey), diff)
+				}
+			}
+		}
+	}
+}
+
 func TestForwardIfReady(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -2288,7 +2439,7 @@ func TestForwardIfReady(t *testing.T) {
 
 		err := r.ForwardIfReady(tc.qnames...)
 		if err != nil {
-			t.Errorf("(*RDB).CheckScheduled(%v) = %v, want nil", tc.qnames, err)
+			t.Errorf("(*RDB).ForwardIfReady(%v) = %v, want nil", tc.qnames, err)
 			continue
 		}
 

@@ -205,9 +205,14 @@ func UniqueKey(qname, tasktype string, payload []byte) string {
 	return fmt.Sprintf("%sunique:%s:%s", QueueKeyPrefix(qname), tasktype, hex.EncodeToString(checksum[:]))
 }
 
+// GroupKeyPrefix returns a prefix for group key.
+func GroupKeyPrefix(qname string) string {
+	return fmt.Sprintf("%sg:", QueueKeyPrefix(qname))
+}
+
 // GroupKey returns a redis key used to group tasks belong in the same group.
 func GroupKey(qname, gkey string) string {
-	return fmt.Sprintf("%sg:%s", QueueKeyPrefix(qname), gkey)
+	return fmt.Sprintf("%s%s", GroupKeyPrefix(qname), gkey)
 }
 
 // AllGroups return a redis key used to store all group keys used in a given queue.
