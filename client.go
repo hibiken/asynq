@@ -375,6 +375,7 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 		Deadline:  deadline.Unix(),
 		Timeout:   int64(timeout.Seconds()),
 		UniqueKey: uniqueKey,
+		GroupKey:  opt.groupKey,
 		Retention: int64(opt.retention.Seconds()),
 	}
 	now := time.Now()
