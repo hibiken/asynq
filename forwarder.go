@@ -56,13 +56,15 @@ func (f *forwarder) start(wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		timer := time.NewTimer(f.avgInterval)
 		for {
 			select {
 			case <-f.done:
 				f.logger.Debug("Forwarder done")
 				return
-			case <-time.After(f.avgInterval):
+			case <-timer.C:
 				f.exec()
+				timer.Reset(f.avgInterval)
 			}
 		}
 	}()
