@@ -316,6 +316,7 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string,
 			"msg":        encoded,
 			"state":      state.String(),
 			"unique_key": msg.UniqueKey,
+			"group":      msg.GroupKey,
 		}
 		if err := c.HSet(context.Background(), key, data).Err(); err != nil {
 			tb.Fatal(err)
@@ -344,6 +345,7 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string,
 			"msg":        encoded,
 			"state":      state.String(),
 			"unique_key": msg.UniqueKey,
+			"group":      msg.GroupKey,
 		}
 		if err := c.HSet(context.Background(), key, data).Err(); err != nil {
 			tb.Fatal(err)
