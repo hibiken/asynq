@@ -275,6 +275,11 @@ type TaskMessage struct {
 	// Empty string indicates that no uniqueness lock was used.
 	UniqueKey string
 
+	// GroupKey holds the group key used for task aggregation.
+	//
+	// Empty string indicates no aggregation is used for this task.
+	GroupKey string
+
 	// Retention specifies the number of seconds the task should be retained after completion.
 	Retention int64
 
@@ -302,6 +307,7 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 		Timeout:      msg.Timeout,
 		Deadline:     msg.Deadline,
 		UniqueKey:    msg.UniqueKey,
+		GroupKey:     msg.GroupKey,
 		Retention:    msg.Retention,
 		CompletedAt:  msg.CompletedAt,
 	})
@@ -325,6 +331,7 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 		Timeout:      pbmsg.GetTimeout(),
 		Deadline:     pbmsg.GetDeadline(),
 		UniqueKey:    pbmsg.GetUniqueKey(),
+		GroupKey:     pbmsg.GetGroupKey(),
 		Retention:    pbmsg.GetRetention(),
 		CompletedAt:  pbmsg.GetCompletedAt(),
 	}, nil

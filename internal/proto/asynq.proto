@@ -11,6 +11,7 @@ option go_package = "github.com/hibiken/asynq/internal/proto";
 
 // TaskMessage is the internal representation of a task with additional
 // metadata fields.
+// Next ID: 15
 message TaskMessage {
 	// Type indicates the kind of the task to be performed.
   string type = 1;
@@ -50,6 +51,10 @@ message TaskMessage {
 	// UniqueKey holds the redis key used for uniqueness lock for this task.
 	// Empty string indicates that no uniqueness lock was used.
   string unique_key = 10;
+
+  // GroupKey is a name of the group used for task aggregation.
+  // This field is optional and empty value means no aggregation for the task.
+  string group_key = 14;
 
   // Retention period specified in a number of seconds.
   // The task will be stored in redis as a completed task until the TTL
