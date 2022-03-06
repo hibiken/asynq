@@ -2180,12 +2180,18 @@ func TestForwardIfReadyWithGroup(t *testing.T) {
 
 	now := time.Now()
 	r.SetClock(timeutil.NewSimulatedClock(now))
-	ctx := context.Background()
 	t1 := h.NewTaskMessage("send_email", nil)
 	t2 := h.NewTaskMessage("generate_csv", nil)
 	t3 := h.NewTaskMessage("gen_thumbnail", nil)
 	t4 := h.NewTaskMessageWithQueue("important_task", nil, "critical")
 	t5 := h.NewTaskMessageWithQueue("minor_task", nil, "low")
+	// Set group keys for the tasks.
+	t1.GroupKey = "notifications"
+	t2.GroupKey = "csv"
+	t4.GroupKey = "critical_task_group"
+	t5.GroupKey = "minor_task_group"
+
+	ctx := context.Background()
 	secondAgo := now.Add(-time.Second)
 
 	tests := []struct {
@@ -2269,11 +2275,6 @@ func TestForwardIfReadyWithGroup(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
-		// Set "group" field under the task key.
-		r.client.HSet(ctx, base.TaskKey(t1.Queue, t1.ID), "group", "notifications")
-		r.client.HSet(ctx, base.TaskKey(t2.Queue, t2.ID), "group", "csv")
-		r.client.HSet(ctx, base.TaskKey(t4.Queue, t4.ID), "group", "critical_task_group")
-		r.client.HSet(ctx, base.TaskKey(t5.Queue, t5.ID), "group", "minor_task_group")
 
 		err := r.ForwardIfReady(tc.qnames...)
 		if err != nil {

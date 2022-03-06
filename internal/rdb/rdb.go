@@ -925,7 +925,7 @@ local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, 10
 for _, id in ipairs(ids) do
 	local taskKey = ARGV[2] .. id
 	local group = redis.call("HGET", taskKey, "group")
-	if group then
+	if group and group ~= '' then
 	    redis.call("ZADD", ARGV[4] .. group, ARGV[1], id)
 		redis.call("ZREM", KEYS[1], id)
 		redis.call("HSET", taskKey,
