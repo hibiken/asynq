@@ -99,7 +99,7 @@ func (r *recoverer) recover() {
 }
 
 func (r *recoverer) retry(msg *base.TaskMessage, err error) {
-	delay := r.retryDelayFunc(msg.Retried, err, NewTask(msg.Type, msg.Payload))
+	delay := r.retryDelayFunc(msg.Retried, err, NewTask(msg.Type, "", msg.Payload))
 	retryAt := time.Now().Add(delay)
 	if err := r.broker.Retry(context.Background(), msg, retryAt, err.Error(), r.isFailureFunc(err)); err != nil {
 		r.logger.Warnf("recoverer: could not retry lease expired task: %v", err)

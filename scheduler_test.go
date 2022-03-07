@@ -25,7 +25,7 @@ func TestSchedulerRegister(t *testing.T) {
 	}{
 		{
 			cronspec: "@every 3s",
-			task:     NewTask("task1", nil),
+			task:     NewTask("task1", "", nil),
 			opts:     []Option{MaxRetry(10)},
 			wait:     10 * time.Second,
 			queue:    "default",
@@ -93,7 +93,7 @@ func TestSchedulerWhenRedisDown(t *testing.T) {
 		&SchedulerOpts{EnqueueErrorHandler: errorHandler},
 	)
 
-	task := NewTask("test", nil)
+	task := NewTask("test", "", nil)
 
 	if _, err := scheduler.Register("@every 3s", task); err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestSchedulerUnregister(t *testing.T) {
 	}{
 		{
 			cronspec: "@every 3s",
-			task:     NewTask("task1", nil),
+			task:     NewTask("task1", "", nil),
 			opts:     []Option{MaxRetry(10)},
 			wait:     10 * time.Second,
 			queue:    "default",

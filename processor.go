@@ -323,7 +323,7 @@ var SkipRetry = errors.New("skip retry for the task")
 
 func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg *base.TaskMessage, err error) {
 	if p.errHandler != nil {
-		p.errHandler.HandleError(ctx, NewTask(msg.Type, msg.Payload), err)
+		p.errHandler.HandleError(ctx, NewTask(msg.Type, "", msg.Payload), err)
 	}
 	if !p.isFailureFunc(err) {
 		// retry the task without marking it as failed
@@ -344,7 +344,7 @@ func (p *processor) retry(l *base.Lease, msg *base.TaskMessage, e error, isFailu
 		return
 	}
 	ctx, _ := context.WithDeadline(context.Background(), l.Deadline())
-	d := p.retryDelayFunc(msg.Retried, e, NewTask(msg.Type, msg.Payload))
+	d := p.retryDelayFunc(msg.Retried, e, NewTask(msg.Type, "", msg.Payload))
 	retryAt := time.Now().Add(d)
 	err := p.broker.Retry(ctx, msg, retryAt, e.Error(), isFailure)
 	if err != nil {

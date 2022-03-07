@@ -21,7 +21,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
+	task := NewTask("send_email", "", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 
 	var (
 		now          = time.Now()
@@ -148,7 +148,7 @@ func TestClientEnqueue(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
+	task := NewTask("send_email", "", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 	now := time.Now()
 
 	tests := []struct {
@@ -483,7 +483,7 @@ func TestClientEnqueueWithTaskIDOption(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", nil)
+	task := NewTask("send_email", "", nil)
 	now := time.Now()
 
 	tests := []struct {
@@ -561,7 +561,7 @@ func TestClientEnqueueWithConflictingTaskID(t *testing.T) {
 	defer client.Close()
 
 	const taskID = "custom_id"
-	task := NewTask("foo", nil)
+	task := NewTask("foo", "taskId", nil)
 
 	if _, err := client.Enqueue(task, TaskID(taskID)); err != nil {
 		t.Fatalf("First task: Enqueue failed: %v", err)
@@ -577,7 +577,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
+	task := NewTask("send_email", "", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 	now := time.Now()
 
 	tests := []struct {
@@ -700,7 +700,7 @@ func TestClientEnqueueError(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
+	task := NewTask("send_email", "", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 
 	tests := []struct {
 		desc string
@@ -716,27 +716,27 @@ func TestClientEnqueueError(t *testing.T) {
 		},
 		{
 			desc: "With empty task typename",
-			task: NewTask("", h.JSON(map[string]interface{}{})),
+			task: NewTask("", "", h.JSON(map[string]interface{}{})),
 			opts: []Option{},
 		},
 		{
 			desc: "With blank task typename",
-			task: NewTask("    ", h.JSON(map[string]interface{}{})),
+			task: NewTask("    ", "", h.JSON(map[string]interface{}{})),
 			opts: []Option{},
 		},
 		{
 			desc: "With empty task ID",
-			task: NewTask("foo", nil),
+			task: NewTask("foo", "", nil),
 			opts: []Option{TaskID("")},
 		},
 		{
 			desc: "With blank task ID",
-			task: NewTask("foo", nil),
+			task: NewTask("foo", "", nil),
 			opts: []Option{TaskID("  ")},
 		},
 		{
 			desc: "With unique option less than 1s",
-			task: NewTask("foo", nil),
+			task: NewTask("foo", "", nil),
 			opts: []Option{Unique(300 * time.Millisecond)},
 		},
 	}
@@ -858,7 +858,7 @@ func TestClientWithDefaultOptions(t *testing.T) {
 		h.FlushDB(t, r)
 		c := NewClient(getRedisConnOpt(t))
 		defer c.Close()
-		task := NewTask(tc.tasktype, tc.payload, tc.defaultOpts...)
+		task := NewTask(tc.tasktype, "", tc.payload, tc.defaultOpts...)
 		gotInfo, err := c.Enqueue(task, tc.opts...)
 		if err != nil {
 			t.Fatal(err)
@@ -895,7 +895,7 @@ func TestClientEnqueueUnique(t *testing.T) {
 		ttl  time.Duration
 	}{
 		{
-			NewTask("email", h.JSON(map[string]interface{}{"user_id": 123})),
+			NewTask("email", "", h.JSON(map[string]interface{}{"user_id": 123})),
 			time.Hour,
 		},
 	}
@@ -939,7 +939,7 @@ func TestClientEnqueueUniqueWithProcessInOption(t *testing.T) {
 		ttl  time.Duration
 	}{
 		{
-			NewTask("reindex", nil),
+			NewTask("reindex", "", nil),
 			time.Hour,
 			10 * time.Minute,
 		},
@@ -985,7 +985,7 @@ func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 		ttl  time.Duration
 	}{
 		{
-			NewTask("reindex", nil),
+			NewTask("reindex", "", nil),
 			time.Now().Add(time.Hour),
 			10 * time.Minute,
 		},

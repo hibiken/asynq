@@ -33,8 +33,8 @@ func (p *FakeConfigProvider) GetConfigs() ([]*PeriodicTaskConfig, error) {
 
 func TestNewPeriodicTaskManager(t *testing.T) {
 	cfgs := []*PeriodicTaskConfig{
-		{Cronspec: "* * * * *", Task: NewTask("foo", nil)},
-		{Cronspec: "* * * * *", Task: NewTask("bar", nil)},
+		{Cronspec: "* * * * *", Task: NewTask("foo", "", nil)},
+		{Cronspec: "* * * * *", Task: NewTask("bar", "", nil)},
 	}
 	tests := []struct {
 		desc string
@@ -78,8 +78,8 @@ func TestNewPeriodicTaskManager(t *testing.T) {
 
 func TestNewPeriodicTaskManagerError(t *testing.T) {
 	cfgs := []*PeriodicTaskConfig{
-		{Cronspec: "* * * * *", Task: NewTask("foo", nil)},
-		{Cronspec: "* * * * *", Task: NewTask("bar", nil)},
+		{Cronspec: "* * * * *", Task: NewTask("foo", "", nil)},
+		{Cronspec: "* * * * *", Task: NewTask("bar", "", nil)},
 	}
 	tests := []struct {
 		desc string
@@ -118,11 +118,11 @@ func TestPeriodicTaskConfigHash(t *testing.T) {
 			desc: "basic identity test",
 			a: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 			},
 			b: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 			},
 			isSame: true,
 		},
@@ -130,12 +130,12 @@ func TestPeriodicTaskConfigHash(t *testing.T) {
 			desc: "with a option",
 			a: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 				Opts:     []Option{Queue("myqueue")},
 			},
 			b: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 				Opts:     []Option{Queue("myqueue")},
 			},
 			isSame: true,
@@ -144,12 +144,12 @@ func TestPeriodicTaskConfigHash(t *testing.T) {
 			desc: "with multiple options (different order)",
 			a: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 				Opts:     []Option{Unique(5 * time.Minute), Queue("myqueue")},
 			},
 			b: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 				Opts:     []Option{Queue("myqueue"), Unique(5 * time.Minute)},
 			},
 			isSame: true,
@@ -158,12 +158,12 @@ func TestPeriodicTaskConfigHash(t *testing.T) {
 			desc: "with payload",
 			a: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", []byte("hello world!")),
+				Task:     NewTask("foo", "", []byte("hello world!")),
 				Opts:     []Option{Queue("myqueue")},
 			},
 			b: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", []byte("hello world!")),
+				Task:     NewTask("foo", "", []byte("hello world!")),
 				Opts:     []Option{Queue("myqueue")},
 			},
 			isSame: true,
@@ -172,11 +172,11 @@ func TestPeriodicTaskConfigHash(t *testing.T) {
 			desc: "with different cronspecs",
 			a: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 			},
 			b: &PeriodicTaskConfig{
 				Cronspec: "5 * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 			},
 			isSame: false,
 		},
@@ -184,11 +184,11 @@ func TestPeriodicTaskConfigHash(t *testing.T) {
 			desc: "with different task type",
 			a: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 			},
 			b: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("bar", nil),
+				Task:     NewTask("bar", "", nil),
 			},
 			isSame: false,
 		},
@@ -196,12 +196,12 @@ func TestPeriodicTaskConfigHash(t *testing.T) {
 			desc: "with different options",
 			a: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 				Opts:     []Option{Queue("myqueue")},
 			},
 			b: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 				Opts:     []Option{Unique(10 * time.Minute)},
 			},
 			isSame: false,
@@ -210,12 +210,12 @@ func TestPeriodicTaskConfigHash(t *testing.T) {
 			desc: "with different options (one is subset of the other)",
 			a: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 				Opts:     []Option{Queue("myqueue")},
 			},
 			b: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", nil),
+				Task:     NewTask("foo", "", nil),
 				Opts:     []Option{Queue("myqueue"), Unique(10 * time.Minute)},
 			},
 			isSame: false,
@@ -224,12 +224,12 @@ func TestPeriodicTaskConfigHash(t *testing.T) {
 			desc: "with different payload",
 			a: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", []byte("hello!")),
+				Task:     NewTask("foo", "", []byte("hello!")),
 				Opts:     []Option{Queue("myqueue")},
 			},
 			b: &PeriodicTaskConfig{
 				Cronspec: "* * * * *",
-				Task:     NewTask("foo", []byte("HELLO!")),
+				Task:     NewTask("foo", "", []byte("HELLO!")),
 				Opts:     []Option{Queue("myqueue"), Unique(10 * time.Minute)},
 			},
 			isSame: false,
@@ -255,8 +255,8 @@ func TestPeriodicTaskConfigHash(t *testing.T) {
 func TestPeriodicTaskManager(t *testing.T) {
 	// Note: In this test, we'll use task type as an ID for each config.
 	cfgs := []*PeriodicTaskConfig{
-		{Task: NewTask("task1", nil), Cronspec: "* * * * 1"},
-		{Task: NewTask("task2", nil), Cronspec: "* * * * 2"},
+		{Task: NewTask("task1", "", nil), Cronspec: "* * * * 1"},
+		{Task: NewTask("task2", "", nil), Cronspec: "* * * * 2"},
 	}
 	const syncInterval = 3 * time.Second
 	provider := &FakeConfigProvider{cfgs: cfgs}
@@ -287,8 +287,8 @@ func TestPeriodicTaskManager(t *testing.T) {
 	// - task2 removed
 	// - task3 added
 	provider.SetConfigs([]*PeriodicTaskConfig{
-		{Task: NewTask("task1", nil), Cronspec: "* * * * 1"},
-		{Task: NewTask("task3", nil), Cronspec: "* * * * 3"},
+		{Task: NewTask("task1", "", nil), Cronspec: "* * * * 1"},
+		{Task: NewTask("task3", "", nil), Cronspec: "* * * * 3"},
 	})
 
 	// Wait for the next sync

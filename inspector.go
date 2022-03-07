@@ -802,7 +802,7 @@ func (i *Inspector) SchedulerEntries() ([]*SchedulerEntry, error) {
 	}
 
 	for _, e := range res {
-		task := NewTask(e.Type, e.Payload)
+		task := NewTask(e.Type, "", e.Payload)
 		var opts []Option
 		for _, s := range e.Opts {
 			if o, err := parseOption(s); err == nil {

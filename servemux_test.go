@@ -62,7 +62,7 @@ func TestServeMux(t *testing.T) {
 	for _, tc := range serveMuxTests {
 		called = "" // reset to zero value
 
-		task := NewTask(tc.typename, nil)
+		task := NewTask(tc.typename, "", nil)
 		if err := mux.ProcessTask(context.Background(), task); err != nil {
 			t.Fatal(err)
 		}
@@ -121,7 +121,7 @@ func TestServeMuxNotFound(t *testing.T) {
 	}
 
 	for _, tc := range notFoundTests {
-		task := NewTask(tc.typename, nil)
+		task := NewTask(tc.typename, "", nil)
 		err := mux.ProcessTask(context.Background(), task)
 		if err == nil {
 			t.Errorf("ProcessTask did not return error for task %q, should return 'not found' error", task.Type())
@@ -154,7 +154,7 @@ func TestServeMuxMiddlewares(t *testing.T) {
 		invoked = []string{} // reset to empty slice
 		called = ""          // reset to zero value
 
-		task := NewTask(tc.typename, nil)
+		task := NewTask(tc.typename, "", nil)
 		if err := mux.ProcessTask(context.Background(), task); err != nil {
 			t.Fatal(err)
 		}
