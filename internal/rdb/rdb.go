@@ -982,6 +982,32 @@ func (r *RDB) forwardAll(qname string) (err error) {
 	return nil
 }
 
+// ListGroups returns a list of all known groups in the given queue.
+func (r *RDB) ListGroups(qname string) ([]string, error) {
+	// TODO: Implement this with TDD
+	return nil, nil
+}
+
+// AggregationCheck checks the group identified by the given queue and group name to see if the tasks in the
+// group are ready to be aggregated. If so, it moves the tasks to be aggregated to a aggregation set and returns
+// set ID. If not, it returns an empty string for the set ID.
+func (r *RDB) AggregationCheck(qname, gname string) (string, error) {
+	// TODO: Implement this with TDD
+	return "", nil
+}
+
+// ReadAggregationSet retrieves memebers of an aggregation set and returns list of tasks and
+// the deadline for aggregating those tasks.
+func (r *RDB) ReadAggregationSet(qname, gname, setID string) ([]*base.TaskMessage, time.Time, error) {
+	// TODO: Implement this with TDD
+	return nil, time.Time{}, nil
+}
+
+// DeleteAggregationSet deletes the aggregation set identified by the parameters.
+func (r *RDB) DeleteAggregationSet(ctx context.Context, qname, gname, setID string) error {
+	return nil
+}
+
 // KEYS[1] -> asynq:{<qname>}:completed
 // ARGV[1] -> current time in unix time
 // ARGV[2] -> task key prefix

@@ -215,14 +215,20 @@ func GroupKey(qname, gkey string) string {
 	return fmt.Sprintf("%s%s", GroupKeyPrefix(qname), gkey)
 }
 
+// AggregationSetKey returns a redis key used for an aggregation set.
+func AggregationSetKey(qname, gname, setID string) string {
+	return fmt.Sprintf("%s:%s", GroupKey(qname, gname), setID)
+}
+
 // AllGroups return a redis key used to store all group keys used in a given queue.
 func AllGroups(qname string) string {
 	return fmt.Sprintf("%sgroups", QueueKeyPrefix(qname))
 }
 
-// AllStagedGroups returns a redis key used to store all groups staged to be aggregated in a given queue.
-func AllStagedGroups(qname string) string {
-	return fmt.Sprintf("%sstaged_groups", QueueKeyPrefix(qname))
+// AllAggregationSets returns a redis key used to store all aggregation sets (set of tasks staged to be aggregated)
+// in a given queue.
+func AllAggregationSets(qname string) string {
+	return fmt.Sprintf("%saggregation_sets", QueueKeyPrefix(qname))
 }
 
 // TaskMessage is the internal representation of a task with additional metadata fields.
@@ -708,6 +714,7 @@ func (l *Lease) IsValid() bool {
 // See rdb.RDB as a reference implementation.
 type Broker interface {
 	Ping() error
+	Close() error
 	Enqueue(ctx context.Context, msg *TaskMessage) error
 	EnqueueUnique(ctx context.Context, msg *TaskMessage, ttl time.Duration) error
 	Dequeue(qnames ...string) (*TaskMessage, time.Time, error)
@@ -719,13 +726,29 @@ type Broker interface {
 	Retry(ctx context.Context, msg *TaskMessage, processAt time.Time, errMsg string, isFailure bool) error
 	Archive(ctx context.Context, msg *TaskMessage, errMsg string) error
 	ForwardIfReady(qnames ...string) error
+
+	// Group aggregation related methods
+	AddToGroup(ctx context.Context, msg *TaskMessage, gname string) error
+	AddToGroupUnique(ctx context.Context, msg *TaskMessage, groupKey string, ttl time.Duration) error
+	ListGroups(qname string) ([]string, error)
+	AggregationCheck(qname, gname string) (aggregationSetID string, err error)
+	ReadAggregationSet(qname, gname, aggregationSetID string) ([]*TaskMessage, time.Time, error)
+	DeleteAggregationSet(ctx context.Context, qname, gname, aggregationSetID string) error
+
+	// Task retention related method
 	DeleteExpiredCompletedTasks(qname string) error
+
+	// Lease related methods
 	ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*TaskMessage, error)
 	ExtendLease(qname string, ids ...string) (time.Time, error)
+
+	// State snapshot related methods
 	WriteServerState(info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error
 	ClearServerState(host string, pid int, serverID string) error
+
+	// Cancelation related methods
 	CancelationPubSub() (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers
 	PublishCancelation(id string) error
+
 	WriteResult(qname, id string, data []byte) (n int, err error)
-	Close() error
 }
