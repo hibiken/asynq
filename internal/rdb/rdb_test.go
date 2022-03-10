@@ -3331,3 +3331,64 @@ func TestDeleteAggregationSet(t *testing.T) {
 		}
 	}
 }
+
+func TestListGroups(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	now := time.Now()
+	m1 := h.NewTaskMessageBuilder().SetQueue("default").SetGroup("foo").Build()
+	m2 := h.NewTaskMessageBuilder().SetQueue("default").SetGroup("bar").Build()
+	m3 := h.NewTaskMessageBuilder().SetQueue("custom").SetGroup("baz").Build()
+	m4 := h.NewTaskMessageBuilder().SetQueue("custom").SetGroup("qux").Build()
+
+	tests := []struct {
+		groups map[string]map[string][]base.Z
+		qname  string
+		want   []string
+	}{
+		{
+			groups: map[string]map[string][]base.Z{
+				"default": {
+					"foo": {{Message: m1, Score: now.Add(-10 * time.Second).Unix()}},
+					"bar": {{Message: m2, Score: now.Add(-10 * time.Second).Unix()}},
+				},
+				"custom": {
+					"baz": {{Message: m3, Score: now.Add(-10 * time.Second).Unix()}},
+					"qux": {{Message: m4, Score: now.Add(-10 * time.Second).Unix()}},
+				},
+			},
+			qname: "default",
+			want:  []string{"foo", "bar"},
+		},
+		{
+			groups: map[string]map[string][]base.Z{
+				"default": {
+					"foo": {{Message: m1, Score: now.Add(-10 * time.Second).Unix()}},
+					"bar": {{Message: m2, Score: now.Add(-10 * time.Second).Unix()}},
+				},
+				"custom": {
+					"baz": {{Message: m3, Score: now.Add(-10 * time.Second).Unix()}},
+					"qux": {{Message: m4, Score: now.Add(-10 * time.Second).Unix()}},
+				},
+			},
+			qname: "custom",
+			want:  []string{"baz", "qux"},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedAllGroups(t, r.client, tc.groups)
+
+		got, err := r.ListGroups(tc.qname)
+		if err != nil {
+			t.Errorf("ListGroups returned error: %v", err)
+			continue
+		}
+
+		if diff := cmp.Diff(tc.want, got, h.SortStringSliceOpt); diff != "" {
+			t.Errorf("ListGroups=%v, want=%v; (-want,+got)\n%s", got, tc.want, diff)
+		}
+	}
+}

@@ -248,7 +248,9 @@ func SeedCompletedQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z
 // SeedGroup initializes the group with the given entries.
 func SeedGroup(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname, gname string) {
 	tb.Helper()
-	r.SAdd(context.Background(), base.AllQueues, qname)
+	ctx := context.Background()
+	r.SAdd(ctx, base.AllQueues, qname)
+	r.SAdd(ctx, base.AllGroups(qname), gname)
 	seedRedisZSet(tb, r, base.GroupKey(qname, gname), entries, base.TaskStateAggregating)
 }
 
