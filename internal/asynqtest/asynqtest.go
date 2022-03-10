@@ -252,6 +252,12 @@ func SeedGroup(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname, 
 	seedRedisZSet(tb, r, base.GroupKey(qname, gname), entries, base.TaskStateAggregating)
 }
 
+func SeedAggregationSet(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname, gname, setID string) {
+	tb.Helper()
+	r.SAdd(context.Background(), base.AllQueues, qname)
+	seedRedisSet(tb, r, base.AggregationSetKey(qname, gname, setID), msgs, base.TaskStateAggregating)
+}
+
 // SeedAllPendingQueues initializes all of the specified queues with the given messages.
 //
 // pending maps a queue name to a list of messages.
@@ -330,14 +336,14 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string,
 		if err := c.LPush(context.Background(), key, msg.ID).Err(); err != nil {
 			tb.Fatal(err)
 		}
-		key := base.TaskKey(msg.Queue, msg.ID)
+		taskKey := base.TaskKey(msg.Queue, msg.ID)
 		data := map[string]interface{}{
 			"msg":        encoded,
 			"state":      state.String(),
 			"unique_key": msg.UniqueKey,
 			"group":      msg.GroupKey,
 		}
-		if err := c.HSet(context.Background(), key, data).Err(); err != nil {
+		if err := c.HSet(context.Background(), taskKey, data).Err(); err != nil {
 			tb.Fatal(err)
 		}
 		if len(msg.UniqueKey) > 0 {
@@ -359,14 +365,41 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string,
 		if err := c.ZAdd(context.Background(), key, z).Err(); err != nil {
 			tb.Fatal(err)
 		}
-		key := base.TaskKey(msg.Queue, msg.ID)
+		taskKey := base.TaskKey(msg.Queue, msg.ID)
 		data := map[string]interface{}{
 			"msg":        encoded,
 			"state":      state.String(),
 			"unique_key": msg.UniqueKey,
 			"group":      msg.GroupKey,
 		}
-		if err := c.HSet(context.Background(), key, data).Err(); err != nil {
+		if err := c.HSet(context.Background(), taskKey, data).Err(); err != nil {
+			tb.Fatal(err)
+		}
+		if len(msg.UniqueKey) > 0 {
+			err := c.SetNX(context.Background(), msg.UniqueKey, msg.ID, 1*time.Minute).Err()
+			if err != nil {
+				tb.Fatalf("Failed to set unique lock in redis: %v", err)
+			}
+		}
+	}
+}
+
+func seedRedisSet(tb testing.TB, c redis.UniversalClient, key string,
+	msgs []*base.TaskMessage, state base.TaskState) {
+	tb.Helper()
+	for _, msg := range msgs {
+		encoded := MustMarshal(tb, msg)
+		if err := c.SAdd(context.Background(), key, msg.ID).Err(); err != nil {
+			tb.Fatal(err)
+		}
+		taskKey := base.TaskKey(msg.Queue, msg.ID)
+		data := map[string]interface{}{
+			"msg":        encoded,
+			"state":      state.String(),
+			"unique_key": msg.UniqueKey,
+			"group":      msg.GroupKey,
+		}
+		if err := c.HSet(context.Background(), taskKey, data).Err(); err != nil {
 			tb.Fatal(err)
 		}
 		if len(msg.UniqueKey) > 0 {

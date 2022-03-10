@@ -3284,3 +3284,50 @@ func TestAggregationCheck(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteAggregationSet(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	ctx := context.Background()
+	setID := uuid.NewString()
+	msg1 := h.NewTaskMessageBuilder().SetType("foo").SetQueue("default").SetGroup("mygroup").Build()
+	msg2 := h.NewTaskMessageBuilder().SetType("bar").SetQueue("default").SetGroup("mygroup").Build()
+	msg3 := h.NewTaskMessageBuilder().SetType("baz").SetQueue("default").SetGroup("mygroup").Build()
+
+	tests := []struct {
+		aggregationSet []*base.TaskMessage
+		qname          string
+		gname          string
+		setID          string
+	}{
+		{
+			aggregationSet: []*base.TaskMessage{msg1, msg2, msg3},
+			qname:          "default",
+			gname:          "mygroup",
+			setID:          setID,
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedAggregationSet(t, r.client, tc.aggregationSet, tc.qname, tc.gname, tc.setID)
+
+		if err := r.DeleteAggregationSet(ctx, tc.qname, tc.gname, tc.setID); err != nil {
+			t.Fatalf("DeleteAggregationSet returned error: %v", err)
+		}
+		key := base.AggregationSetKey(tc.qname, tc.gname, tc.setID)
+		// Check if the set is deleted.
+		if r.client.Exists(ctx, key).Val() != 0 {
+			t.Errorf("aggregation set key %q still exists", key)
+		}
+
+		// Check all tasks in the set are deleted.
+		for _, m := range tc.aggregationSet {
+			taskKey := base.TaskKey(m.Queue, m.ID)
+			if r.client.Exists(ctx, taskKey).Val() != 0 {
+				t.Errorf("task key %q still exists", taskKey)
+			}
+		}
+	}
+}
