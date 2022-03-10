@@ -858,6 +858,11 @@ func TestClientEnqueueError(t *testing.T) {
 		opts []Option
 	}{
 		{
+			desc: "With nil task",
+			task: nil,
+			opts: []Option{},
+		},
+		{
 			desc: "With empty queue name",
 			task: task,
 			opts: []Option{
