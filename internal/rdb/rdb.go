@@ -1009,6 +1009,9 @@ func (r *RDB) ListGroups(qname string) ([]string, error) {
 // Returns 1 if an aggregation set was created
 var aggregationCheckCmd = redis.NewScript(`
 local size = redis.call("ZCARD", KEYS[1])
+if size == 0 then
+	return 0
+end
 local maxSize = tonumber(ARGV[1])
 if size >= maxSize then
 	local msgs = redis.call("ZRANGE", KEYS[1], 0, maxSize-1)

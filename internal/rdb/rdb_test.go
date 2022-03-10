@@ -3130,6 +3130,26 @@ func TestAggregationCheck(t *testing.T) {
 		wantGroups         map[string]map[string][]base.Z
 	}{
 		{
+			desc: "with an empty group",
+			groups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {},
+				},
+			},
+			qname:              "default",
+			gname:              "mygroup",
+			gracePeriod:        1 * time.Minute,
+			maxDelay:           10 * time.Minute,
+			maxSize:            5,
+			shouldCreateSet:    false,
+			wantAggregationSet: nil,
+			wantGroups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {},
+				},
+			},
+		},
+		{
 			desc: "with a group size reaching the max size",
 			groups: map[string]map[string][]base.Z{
 				"default": {
