@@ -985,8 +985,12 @@ func (r *RDB) forwardAll(qname string) (err error) {
 
 // ListGroups returns a list of all known groups in the given queue.
 func (r *RDB) ListGroups(qname string) ([]string, error) {
-	// TODO: Implement this with TDD
-	return nil, nil
+	var op errors.Op = "RDB.ListGroups"
+	groups, err := r.client.SMembers(context.Background(), base.AllGroups(qname)).Result()
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "smembers", Err: err})
+	}
+	return groups, nil
 }
 
 // TODO: Add comment describing what the script does.
