@@ -26,6 +26,10 @@ type TaskMessageBuilder struct {
 	msg *base.TaskMessage
 }
 
+func NewTaskMessageBuilder() *TaskMessageBuilder {
+	return &TaskMessageBuilder{}
+}
+
 func (b *TaskMessageBuilder) lazyInit() {
 	if b.msg == nil {
 		b.msg = makeDefaultTaskMessage()
