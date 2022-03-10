@@ -82,12 +82,18 @@ func newAggregator(params aggregatorParams) *aggregator {
 }
 
 func (a *aggregator) shutdown() {
+	if a.aggregateFunc == nil {
+		return
+	}
 	a.logger.Debug("Aggregator shutting down...")
 	// Signal the aggregator goroutine to stop.
 	a.done <- struct{}{}
 }
 
 func (a *aggregator) start(wg *sync.WaitGroup) {
+	if a.aggregateFunc == nil {
+		return
+	}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
