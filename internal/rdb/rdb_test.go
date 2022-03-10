@@ -3103,3 +3103,184 @@ func TestWriteResult(t *testing.T) {
 		}
 	}
 }
+
+func TestAggregationCheck(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	msg1 := h.NewTaskMessageBuilder().SetType("task1").SetGroup("mygroup").Build()
+	msg2 := h.NewTaskMessageBuilder().SetType("task2").SetGroup("mygroup").Build()
+	msg3 := h.NewTaskMessageBuilder().SetType("task3").SetGroup("mygroup").Build()
+	msg4 := h.NewTaskMessageBuilder().SetType("task4").SetGroup("mygroup").Build()
+	msg5 := h.NewTaskMessageBuilder().SetType("task5").SetGroup("mygroup").Build()
+
+	tests := []struct {
+		desc               string
+		groups             map[string]map[string][]base.Z
+		qname              string
+		gname              string
+		gracePeriod        time.Duration
+		maxDelay           time.Duration
+		maxSize            int
+		shouldCreateSet    bool // whether the check should create a new aggregation set
+		wantAggregationSet []*base.TaskMessage
+		wantGroups         map[string]map[string][]base.Z
+	}{
+		{
+			desc: "with a group size reaching the max size",
+			groups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {
+						{Message: msg1, Score: now.Add(-5 * time.Minute).Unix()},
+						{Message: msg2, Score: now.Add(-3 * time.Minute).Unix()},
+						{Message: msg3, Score: now.Add(-2 * time.Minute).Unix()},
+						{Message: msg4, Score: now.Add(-1 * time.Minute).Unix()},
+						{Message: msg5, Score: now.Add(-10 * time.Second).Unix()},
+					},
+				},
+			},
+			qname:              "default",
+			gname:              "mygroup",
+			gracePeriod:        1 * time.Minute,
+			maxDelay:           10 * time.Minute,
+			maxSize:            5,
+			shouldCreateSet:    true,
+			wantAggregationSet: []*base.TaskMessage{msg1, msg2, msg3, msg4, msg5},
+			wantGroups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {},
+				},
+			},
+		},
+		{
+			desc: "with group size greater than max size",
+			groups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {
+						{Message: msg1, Score: now.Add(-5 * time.Minute).Unix()},
+						{Message: msg2, Score: now.Add(-3 * time.Minute).Unix()},
+						{Message: msg3, Score: now.Add(-2 * time.Minute).Unix()},
+						{Message: msg4, Score: now.Add(-1 * time.Minute).Unix()},
+						{Message: msg5, Score: now.Add(-10 * time.Second).Unix()},
+					},
+				},
+			},
+			qname:              "default",
+			gname:              "mygroup",
+			gracePeriod:        2 * time.Minute,
+			maxDelay:           10 * time.Minute,
+			maxSize:            3,
+			shouldCreateSet:    true,
+			wantAggregationSet: []*base.TaskMessage{msg1, msg2, msg3},
+			wantGroups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {
+						{Message: msg4, Score: now.Add(-1 * time.Minute).Unix()},
+						{Message: msg5, Score: now.Add(-10 * time.Second).Unix()},
+					},
+				},
+			},
+		},
+		{
+			desc: "with the most recent task older than grace period",
+			groups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {
+						{Message: msg1, Score: now.Add(-5 * time.Minute).Unix()},
+						{Message: msg2, Score: now.Add(-3 * time.Minute).Unix()},
+						{Message: msg3, Score: now.Add(-2 * time.Minute).Unix()},
+					},
+				},
+			},
+			qname:              "default",
+			gname:              "mygroup",
+			gracePeriod:        1 * time.Minute,
+			maxDelay:           10 * time.Minute,
+			maxSize:            5,
+			shouldCreateSet:    true,
+			wantAggregationSet: []*base.TaskMessage{msg1, msg2, msg3},
+			wantGroups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {},
+				},
+			},
+		},
+		{
+			desc: "with the oldest task older than max delay",
+			groups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {
+						{Message: msg1, Score: now.Add(-15 * time.Minute).Unix()},
+						{Message: msg2, Score: now.Add(-3 * time.Minute).Unix()},
+						{Message: msg3, Score: now.Add(-2 * time.Minute).Unix()},
+						{Message: msg4, Score: now.Add(-1 * time.Minute).Unix()},
+						{Message: msg5, Score: now.Add(-10 * time.Second).Unix()},
+					},
+				},
+			},
+			qname:              "default",
+			gname:              "mygroup",
+			gracePeriod:        2 * time.Minute,
+			maxDelay:           10 * time.Minute,
+			maxSize:            30,
+			shouldCreateSet:    true,
+			wantAggregationSet: []*base.TaskMessage{msg1, msg2, msg3, msg4, msg5},
+			wantGroups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedAllGroups(t, r.client, tc.groups)
+
+		gracePeriodStartTime := now.Add(-tc.gracePeriod)
+		maxDelayTime := now.Add(-tc.maxDelay)
+		aggregationSetID, err := r.AggregationCheck(tc.qname, tc.gname, gracePeriodStartTime, maxDelayTime, tc.maxSize)
+		if err != nil {
+			t.Errorf("%s: AggregationCheck returned error: %v", tc.desc, err)
+			continue
+		}
+
+		if !tc.shouldCreateSet && aggregationSetID != "" {
+			t.Errorf("%s: AggregationCheck returned non empty set ID. want empty ID", tc.desc)
+			continue
+		}
+		if tc.shouldCreateSet && aggregationSetID == "" {
+			t.Errorf("%s: AggregationCheck returned empty set ID. want non empty ID", tc.desc)
+			continue
+		}
+
+		if !tc.shouldCreateSet {
+			continue // below checks are intended for aggregation set
+		}
+
+		msgs, deadline, err := r.ReadAggregationSet(tc.qname, tc.gname, aggregationSetID)
+		if err != nil {
+			t.Fatalf("%s: Failed to read aggregation set %q: %v", tc.desc, aggregationSetID, err)
+		}
+		if diff := cmp.Diff(tc.wantAggregationSet, msgs, h.SortMsgOpt); diff != "" {
+			t.Errorf("%s: Mismatch found in aggregation set: (-want,+got)\n%s", tc.desc, diff)
+		}
+
+		if wantDeadline := now.Add(aggregationTimeout); deadline.Unix() != wantDeadline.Unix() {
+			t.Errorf("%s: ReadAggregationSet returned deadline=%v, want=%v", tc.desc, deadline, wantDeadline)
+		}
+
+		for qname, groups := range tc.wantGroups {
+			for gname, want := range groups {
+				gotGroup := h.GetGroupEntries(t, r.client, qname, gname)
+				if diff := cmp.Diff(want, gotGroup, h.SortZSetEntryOpt); diff != "" {
+					t.Errorf("%s: Mismatch found in group zset: %q: (-want,+got)\n%s",
+						tc.desc, base.GroupKey(qname, gname), diff)
+				}
+			}
+		}
+	}
+}

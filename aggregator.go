@@ -103,17 +103,17 @@ func (a *aggregator) start(wg *sync.WaitGroup) {
 				a.logger.Debug("Aggregator done")
 				ticker.Stop()
 				return
-			case <-ticker.C:
-				a.exec()
+			case t := <-ticker.C:
+				a.exec(t)
 			}
 		}
 	}()
 }
 
-func (a *aggregator) exec() {
+func (a *aggregator) exec(t time.Time) {
 	select {
 	case a.sema <- struct{}{}: // acquire token
-		go a.aggregate()
+		go a.aggregate(t)
 	default:
 		// If the semaphore blocks, then we are currently running max number of
 		// aggregation checks. Skip this round and log warning.
@@ -121,7 +121,7 @@ func (a *aggregator) exec() {
 	}
 }
 
-func (a *aggregator) aggregate() {
+func (a *aggregator) aggregate(t time.Time) {
 	defer func() { <-a.sema /* release token */ }()
 	for _, qname := range a.queues {
 		groups, err := a.broker.ListGroups(qname)
@@ -130,7 +130,8 @@ func (a *aggregator) aggregate() {
 			continue
 		}
 		for _, gname := range groups {
-			aggregationSetID, err := a.broker.AggregationCheck(qname, gname, a.gracePeriod, a.maxDelay, a.maxSize)
+			aggregationSetID, err := a.broker.AggregationCheck(
+				qname, gname, t.Add(-a.gracePeriod), t.Add(-a.maxDelay), a.maxSize)
 			if err != nil {
 				a.logger.Errorf("Failed to run aggregation check: queue=%q group=%q", qname, gname)
 				continue

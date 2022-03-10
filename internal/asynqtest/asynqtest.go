@@ -245,6 +245,13 @@ func SeedCompletedQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z
 	seedRedisZSet(tb, r, base.CompletedKey(qname), entries, base.TaskStateCompleted)
 }
 
+// SeedGroup initializes the group with the given entries.
+func SeedGroup(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname, gname string) {
+	tb.Helper()
+	r.SAdd(context.Background(), base.AllQueues, qname)
+	seedRedisZSet(tb, r, base.GroupKey(qname, gname), entries, base.TaskStateAggregating)
+}
+
 // SeedAllPendingQueues initializes all of the specified queues with the given messages.
 //
 // pending maps a queue name to a list of messages.
@@ -300,6 +307,18 @@ func SeedAllCompletedQueues(tb testing.TB, r redis.UniversalClient, completed ma
 	tb.Helper()
 	for q, entries := range completed {
 		SeedCompletedQueue(tb, r, entries, q)
+	}
+}
+
+// SeedAllGroups initializes all groups in all queues.
+// The map maps queue names to group names which maps to a list of task messages and the time it was
+// added to the group.
+func SeedAllGroups(tb testing.TB, r redis.UniversalClient, groups map[string]map[string][]base.Z) {
+	tb.Helper()
+	for qname, g := range groups {
+		for gname, entries := range g {
+			SeedGroup(tb, r, entries, qname, gname)
+		}
 	}
 }
 
