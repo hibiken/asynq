@@ -137,7 +137,7 @@ func (a *aggregator) aggregate(t time.Time) {
 		}
 		for _, gname := range groups {
 			aggregationSetID, err := a.broker.AggregationCheck(
-				qname, gname, t.Add(-a.gracePeriod), t.Add(-a.maxDelay), a.maxSize)
+				qname, gname, t, a.gracePeriod, a.maxDelay, a.maxSize)
 			if err != nil {
 				a.logger.Errorf("Failed to run aggregation check: queue=%q group=%q", qname, gname)
 				continue

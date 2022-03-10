@@ -1003,6 +1003,7 @@ func (r *RDB) ListGroups(qname string) ([]string, error) {
 // ARGV[3] -> start time of the grace period
 // ARGV[4] -> aggregation set ID
 // ARGV[5] -> aggregation set expire time
+// ARGV[6] -> current time in unix time
 //
 // Output:
 // Returns 0 if no aggregation set was created
@@ -1013,7 +1014,7 @@ if size == 0 then
 	return 0
 end
 local maxSize = tonumber(ARGV[1])
-if size >= maxSize then
+if maxSize ~= 0 and size >= maxSize then
 	local msgs = redis.call("ZRANGE", KEYS[1], 0, maxSize-1)
 	for _, msg in ipairs(msgs) do
 		redis.call("SADD", KEYS[2], msg)
@@ -1022,21 +1023,25 @@ if size >= maxSize then
 	redis.call("ZADD", KEYS[3], ARGV[5], ARGV[4])
 	return 1
 end
-local oldestEntry = redis.call("ZRANGE", KEYS[1], 0, 0, "WITHSCORES")
-local oldestEntryScore = tonumber(oldestEntry[2])
-local maxDelayTime = tonumber(ARGV[2])
-if oldestEntryScore <= maxDelayTime then
-	local msgs = redis.call("ZRANGE", KEYS[1], 0, maxSize-1)
-	for _, msg in ipairs(msgs) do
-		redis.call("SADD", KEYS[2], msg)
+local maxDelay = tonumber(ARGV[2])
+local currentTime = tonumber(ARGV[6])
+if maxDelay ~= 0 then
+	local oldestEntry = redis.call("ZRANGE", KEYS[1], 0, 0, "WITHSCORES")
+	local oldestEntryScore = tonumber(oldestEntry[2])
+	local maxDelayTime = currentTime - maxDelay
+	if oldestEntryScore <= maxDelayTime then
+		local msgs = redis.call("ZRANGE", KEYS[1], 0, maxSize-1)
+		for _, msg in ipairs(msgs) do
+			redis.call("SADD", KEYS[2], msg)
+		end
+		redis.call("ZREMRANGEBYRANK", KEYS[1], 0, maxSize-1)
+		redis.call("ZADD", KEYS[3], ARGV[5], ARGV[4])
+		return 1
 	end
-	redis.call("ZREMRANGEBYRANK", KEYS[1], 0, maxSize-1)
-	redis.call("ZADD", KEYS[3], ARGV[5], ARGV[4])
-	return 1
 end
 local latestEntry = redis.call("ZREVRANGE", KEYS[1], 0, 0, "WITHSCORES")
 local latestEntryScore = tonumber(latestEntry[2])
-local gracePeriodStartTime = tonumber(ARGV[3])
+local gracePeriodStartTime = currentTime - tonumber(ARGV[3])
 if latestEntryScore <= gracePeriodStartTime then
 	local msgs = redis.call("ZRANGE", KEYS[1], 0, maxSize-1)
 	for _, msg in ipairs(msgs) do
@@ -1055,11 +1060,12 @@ const aggregationTimeout = 2 * time.Minute
 
 // AggregationCheck checks the group identified by the given queue and group name to see if the tasks in the
 // group are ready to be aggregated. If so, it moves the tasks to be aggregated to a aggregation set and returns
-// set ID. If not, it returns an empty string for the set ID.
+// the set ID. If not, it returns an empty string for the set ID.
+// The time for gracePeriod and maxDelay is computed relative to the time t.
 //
 // Note: It assumes that this function is called at frequency less than or equal to the gracePeriod. In other words,
 // the function only checks the most recently added task aganist the given gracePeriod.
-func (r *RDB) AggregationCheck(qname, gname string, gracePeriodStartTime, maxDelayTime time.Time, maxSize int) (string, error) {
+func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int) (string, error) {
 	var op errors.Op = "RDB.AggregationCheck"
 	aggregationSetID := uuid.NewString()
 	expireTime := r.clock.Now().Add(aggregationTimeout)
@@ -1070,10 +1076,11 @@ func (r *RDB) AggregationCheck(qname, gname string, gracePeriodStartTime, maxDel
 	}
 	argv := []interface{}{
 		maxSize,
-		maxDelayTime.Unix(),
-		gracePeriodStartTime.Unix(),
+		int64(maxDelay.Seconds()),
+		int64(gracePeriod.Seconds()),
 		aggregationSetID,
 		expireTime.Unix(),
+		t.Unix(),
 	}
 	n, err := r.runScriptWithErrorCode(context.Background(), op, aggregationCheckCmd, keys, argv...)
 	if err != nil {

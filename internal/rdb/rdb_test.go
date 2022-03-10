@@ -3254,15 +3254,65 @@ func TestAggregationCheck(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "with unlimited size",
+			groups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {
+						{Message: msg1, Score: now.Add(-15 * time.Minute).Unix()},
+						{Message: msg2, Score: now.Add(-3 * time.Minute).Unix()},
+						{Message: msg3, Score: now.Add(-2 * time.Minute).Unix()},
+						{Message: msg4, Score: now.Add(-1 * time.Minute).Unix()},
+						{Message: msg5, Score: now.Add(-10 * time.Second).Unix()},
+					},
+				},
+			},
+			qname:              "default",
+			gname:              "mygroup",
+			gracePeriod:        1 * time.Minute,
+			maxDelay:           30 * time.Minute,
+			maxSize:            0, // maxSize=0 indicates no size limit
+			shouldCreateSet:    false,
+			wantAggregationSet: nil,
+			wantGroups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {},
+				},
+			},
+		},
+		{
+			desc: "with unlimited delay",
+			groups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {
+						{Message: msg1, Score: now.Add(-15 * time.Minute).Unix()},
+						{Message: msg2, Score: now.Add(-3 * time.Minute).Unix()},
+						{Message: msg3, Score: now.Add(-2 * time.Minute).Unix()},
+						{Message: msg4, Score: now.Add(-1 * time.Minute).Unix()},
+						{Message: msg5, Score: now.Add(-10 * time.Second).Unix()},
+					},
+				},
+			},
+			qname:              "default",
+			gname:              "mygroup",
+			gracePeriod:        1 * time.Minute,
+			maxDelay:           0, // maxDelay=0 indicates no limit
+			maxSize:            10,
+			shouldCreateSet:    false,
+			wantAggregationSet: nil,
+			wantGroups: map[string]map[string][]base.Z{
+				"default": {
+					"mygroup": {},
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		h.SeedAllGroups(t, r.client, tc.groups)
 
-		gracePeriodStartTime := now.Add(-tc.gracePeriod)
-		maxDelayTime := now.Add(-tc.maxDelay)
-		aggregationSetID, err := r.AggregationCheck(tc.qname, tc.gname, gracePeriodStartTime, maxDelayTime, tc.maxSize)
+		aggregationSetID, err := r.AggregationCheck(tc.qname, tc.gname, now, tc.gracePeriod, tc.maxDelay, tc.maxSize)
 		if err != nil {
 			t.Errorf("%s: AggregationCheck returned error: %v", tc.desc, err)
 			continue

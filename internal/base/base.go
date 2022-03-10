@@ -731,7 +731,7 @@ type Broker interface {
 	AddToGroup(ctx context.Context, msg *TaskMessage, gname string) error
 	AddToGroupUnique(ctx context.Context, msg *TaskMessage, groupKey string, ttl time.Duration) error
 	ListGroups(qname string) ([]string, error)
-	AggregationCheck(qname, gname string, gracePeriodStartTime, maxDelayTime time.Time, maxSize int) (aggregationSetID string, err error)
+	AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int) (aggregationSetID string, err error)
 	ReadAggregationSet(qname, gname, aggregationSetID string) ([]*TaskMessage, time.Time, error)
 	DeleteAggregationSet(ctx context.Context, qname, gname, aggregationSetID string) error
 
