@@ -341,6 +341,9 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 //
 // The first argument context applies to the enqueue operation. To specify task timeout and deadline, use Timeout and Deadline option instead.
 func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option) (*TaskInfo, error) {
+	if task == nil {
+		return nil, fmt.Errorf("task cannot be nil")
+	}
 	if strings.TrimSpace(task.Type()) == "" {
 		return nil, fmt.Errorf("task typename cannot be empty")
 	}

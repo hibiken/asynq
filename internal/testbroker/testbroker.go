@@ -234,3 +234,57 @@ func (tb *TestBroker) Close() error {
 	}
 	return tb.real.Close()
 }
+
+func (tb *TestBroker) AddToGroup(ctx context.Context, msg *base.TaskMessage, gname string) error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.AddToGroup(ctx, msg, gname)
+}
+
+func (tb *TestBroker) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, gname string, ttl time.Duration) error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.AddToGroupUnique(ctx, msg, gname, ttl)
+}
+
+func (tb *TestBroker) ListGroups(qname string) ([]string, error) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return nil, errRedisDown
+	}
+	return tb.real.ListGroups(qname)
+}
+
+func (tb *TestBroker) AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int) (aggregationSetID string, err error) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return "", errRedisDown
+	}
+	return tb.real.AggregationCheck(qname, gname, t, gracePeriod, maxDelay, maxSize)
+}
+
+func (tb *TestBroker) ReadAggregationSet(qname, gname, aggregationSetID string) ([]*base.TaskMessage, time.Time, error) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return nil, time.Time{}, errRedisDown
+	}
+	return tb.real.ReadAggregationSet(qname, gname, aggregationSetID)
+}
+
+func (tb *TestBroker) DeleteAggregationSet(ctx context.Context, qname, gname, aggregationSetID string) error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.DeleteAggregationSet(ctx, qname, gname, aggregationSetID)
+}
