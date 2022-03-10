@@ -197,7 +197,7 @@ type Config struct {
 
 	// GroupGracePeriod specifies the amount of time the server will wait for an incoming task before aggregating
 	// the tasks in a group. If an incoming task is received within this period, the server will wait for another
-	// period of the same length, up to GroupMaxDelay.
+	// period of the same length, up to GroupMaxDelay if specified.
 	//
 	// If unset or zero, the grace period is set to 1 minute.
 	// Minimum duration for GroupGracePeriod is 1 second. If value specified is less than a second, the call to
@@ -207,13 +207,13 @@ type Config struct {
 	// GroupMaxDelay specifies the maximum amount of time the server will wait for incoming tasks before aggregating
 	// the tasks in a group.
 	//
-	// If unset or zero, the max delay is set to 10 minutes.
+	// If unset or zero, no delay limit is used.
 	GroupMaxDelay time.Duration
 
 	// GroupMaxSize specifies the maximum number of tasks that can be aggregated into a single task within a group.
 	// If GroupMaxSize is reached, the server will aggregate the tasks into one immediately.
 	//
-	// If unset or zero, the max size is set to 100.
+	// If unset or zero, no size limit is used.
 	GroupMaxSize int
 
 	// GroupAggregateFunc specifies the aggregation function used to aggregate multiple tasks in a group into one task.
@@ -367,10 +367,6 @@ const (
 	defaultDelayedTaskCheckInterval = 5 * time.Second
 
 	defaultGroupGracePeriod = 1 * time.Minute
-
-	defaultGroupMaxDelay = 10 * time.Minute
-
-	defaultGroupMaxSize = 100
 )
 
 // NewServer returns a new Server given a redis connection option
@@ -427,14 +423,6 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	}
 	if groupGracePeriod < time.Second {
 		panic("GroupGracePeriod cannot be less than a second")
-	}
-	groupMaxDelay := cfg.GroupMaxDelay
-	if groupMaxDelay == 0 {
-		groupMaxDelay = defaultGroupMaxDelay
-	}
-	groupMaxSize := cfg.GroupMaxSize
-	if groupMaxSize == 0 {
-		groupMaxSize = defaultGroupMaxSize
 	}
 	logger := log.NewLogger(cfg.Logger)
 	loglevel := cfg.LogLevel
@@ -522,8 +510,8 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		broker:        rdb,
 		queues:        qnames,
 		gracePeriod:   groupGracePeriod,
-		maxDelay:      groupMaxDelay,
-		maxSize:       groupMaxSize,
+		maxDelay:      cfg.GroupMaxDelay,
+		maxSize:       cfg.GroupMaxSize,
 		aggregateFunc: cfg.GroupAggregateFunc,
 	})
 	return &Server{
