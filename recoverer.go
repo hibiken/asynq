@@ -82,11 +82,16 @@ func (r *recoverer) start(wg *sync.WaitGroup) {
 var ErrLeaseExpired = errors.New("asynq: task lease expired")
 
 func (r *recoverer) recover() {
+	r.recoverLeaseExpiredTasks()
+	r.recoverStaleAggregationSets()
+}
+
+func (r *recoverer) recoverLeaseExpiredTasks() {
 	// Get all tasks which have expired 30 seconds ago or earlier to accomodate certain amount of clock skew.
 	cutoff := time.Now().Add(-30 * time.Second)
 	msgs, err := r.broker.ListLeaseExpired(cutoff, r.queues...)
 	if err != nil {
-		r.logger.Warn("recoverer: could not list lease expired tasks")
+		r.logger.Warnf("recoverer: could not list lease expired tasks: %v", err)
 		return
 	}
 	for _, msg := range msgs {
@@ -94,6 +99,14 @@ func (r *recoverer) recover() {
 			r.archive(msg, ErrLeaseExpired)
 		} else {
 			r.retry(msg, ErrLeaseExpired)
+		}
+	}
+}
+
+func (r *recoverer) recoverStaleAggregationSets() {
+	for _, qname := range r.queues {
+		if err := r.broker.ReclaimStaleAggregationSets(qname); err != nil {
+			r.logger.Warnf("recoverer: could not reclaim stale aggregation sets in queue %q: %v", qname, err)
 		}
 	}
 }

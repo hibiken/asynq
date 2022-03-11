@@ -1156,6 +1156,12 @@ func (r *RDB) DeleteAggregationSet(ctx context.Context, qname, gname, setID stri
 	return r.runScript(ctx, op, deleteAggregationSetCmd, []string{base.AggregationSetKey(qname, gname, setID)}, base.TaskKeyPrefix(qname))
 }
 
+// ReclaimStateAggregationSets checks for any stale aggregation sets in the given queue, and
+// reclaim tasks in the stale aggregation set by putting them back in the group.
+func (r *RDB) ReclaimStaleAggregationSets(qname string) error {
+	return nil
+}
+
 // KEYS[1] -> asynq:{<qname>}:completed
 // ARGV[1] -> current time in unix time
 // ARGV[2] -> task key prefix

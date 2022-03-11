@@ -734,6 +734,7 @@ type Broker interface {
 	AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int) (aggregationSetID string, err error)
 	ReadAggregationSet(qname, gname, aggregationSetID string) ([]*TaskMessage, time.Time, error)
 	DeleteAggregationSet(ctx context.Context, qname, gname, aggregationSetID string) error
+	ReclaimStaleAggregationSets(qname string) error
 
 	// Task retention related method
 	DeleteExpiredCompletedTasks(qname string) error
