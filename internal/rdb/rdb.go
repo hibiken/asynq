@@ -1138,6 +1138,7 @@ func (r *RDB) ReadAggregationSet(qname, gname, setID string) ([]*base.TaskMessag
 }
 
 // KEYS[1] -> asynq:{<qname>}:g:<gname>:<aggregation_set_id>
+// KEYS[2] -> asynq:{<qname>}:aggregation_sets
 // -------
 // ARGV[1] -> task key prefix
 var deleteAggregationSetCmd = redis.NewScript(`
@@ -1146,13 +1147,18 @@ for _, id in ipairs(ids)  do
 	redis.call("DEL", ARGV[1] .. id)
 end
 redis.call("DEL", KEYS[1])
+redis.call("ZREM", KEYS[2], KEYS[1])
 return redis.status_reply("OK")
 `)
 
 // DeleteAggregationSet deletes the aggregation set and its members identified by the parameters.
 func (r *RDB) DeleteAggregationSet(ctx context.Context, qname, gname, setID string) error {
 	var op errors.Op = "RDB.DeleteAggregationSet"
-	return r.runScript(ctx, op, deleteAggregationSetCmd, []string{base.AggregationSetKey(qname, gname, setID)}, base.TaskKeyPrefix(qname))
+	keys := []string{
+		base.AggregationSetKey(qname, gname, setID),
+		base.AllAggregationSets(qname),
+	}
+	return r.runScript(ctx, op, deleteAggregationSetCmd, keys, base.TaskKeyPrefix(qname))
 }
 
 // KEYS[1] -> asynq:{<qname>}:aggregation_sets

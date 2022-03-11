@@ -3356,6 +3356,7 @@ func TestAggregationCheck(t *testing.T) {
 	}
 }
 
+// TODO: Rewrite this test with the new pattern of using redis key-value as data.
 func TestDeleteAggregationSet(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -3388,11 +3389,16 @@ func TestDeleteAggregationSet(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		h.SeedAggregationSet(t, r.client, tc.aggregationSet, tc.qname, tc.gname, tc.setID)
+		key := base.AggregationSetKey(tc.qname, tc.gname, tc.setID)
+		if err := r.client.ZAdd(context.Background(),
+			base.AllAggregationSets(tc.qname),
+			&redis.Z{Member: key, Score: float64(now.Add(aggregationTimeout).Unix())}).Err(); err != nil {
+			t.Fatal(err)
+		}
 
 		if err := r.DeleteAggregationSet(ctx, tc.qname, tc.gname, tc.setID); err != nil {
 			t.Fatalf("DeleteAggregationSet returned error: %v", err)
 		}
-		key := base.AggregationSetKey(tc.qname, tc.gname, tc.setID)
 		// Check if the set is deleted.
 		if r.client.Exists(ctx, key).Val() != 0 {
 			t.Errorf("aggregation set key %q still exists", key)
@@ -3404,6 +3410,10 @@ func TestDeleteAggregationSet(t *testing.T) {
 			if r.client.Exists(ctx, taskKey).Val() != 0 {
 				t.Errorf("task key %q still exists", taskKey)
 			}
+		}
+
+		if _, err := r.client.ZScore(ctx, base.AllAggregationSets(tc.qname), key).Result(); err != redis.Nil {
+			t.Errorf("aggregation_set key %q is still in key %q", key, base.AllAggregationSets(tc.qname))
 		}
 	}
 }
