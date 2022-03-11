@@ -1155,15 +1155,30 @@ func (r *RDB) DeleteAggregationSet(ctx context.Context, qname, gname, setID stri
 	return r.runScript(ctx, op, deleteAggregationSetCmd, []string{base.AggregationSetKey(qname, gname, setID)}, base.TaskKeyPrefix(qname))
 }
 
+// KEYS[1] -> asynq:{<qname>}:aggregation_sets
+// -------
+// ARGV[1] -> current time in unix time
 var reclaimStateAggregationSetsCmd = redis.NewScript(`
-
+local staleSetKeys = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+for _, key in ipairs(staleSetKeys) do
+	local idx = string.find(key, ":[^:]*$")
+	local groupKey = string.sub(key, 1, idx-1)
+	local res = redis.call("ZRANGE", key, 0, -1, "WITHSCORES")
+	for i=1, table.getn(res)-1, 2 do
+		redis.call("ZADD", groupKey, tonumber(res[i+1]), res[i])
+	end
+	redis.call("DEL", key)
+end
+redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+return redis.status_reply("OK")
 `)
 
 // ReclaimStateAggregationSets checks for any stale aggregation sets in the given queue, and
 // reclaim tasks in the stale aggregation set by putting them back in the group.
 func (r *RDB) ReclaimStaleAggregationSets(qname string) error {
-	//now := r.clock.Now()
-	return nil
+	var op errors.Op = "RDB.ReclaimStaleAggregationSets"
+	return r.runScript(context.Background(), op, reclaimStateAggregationSetsCmd,
+		[]string{base.AllAggregationSets(qname)}, r.clock.Now().Unix())
 }
 
 // KEYS[1] -> asynq:{<qname>}:completed
