@@ -1015,9 +1015,9 @@ if size == 0 then
 end
 local maxSize = tonumber(ARGV[1])
 if maxSize ~= 0 and size >= maxSize then
-	local msgs = redis.call("ZRANGE", KEYS[1], 0, maxSize-1)
-	for _, msg in ipairs(msgs) do
-		redis.call("SADD", KEYS[2], msg)
+	local res = redis.call("ZRANGE", KEYS[1], 0, maxSize-1, "WITHSCORES")
+	for i=1, table.getn(res)-1, 2 do
+		redis.call("ZADD", KEYS[2], tonumber(res[i+1]), res[i])
 	end
 	redis.call("ZREMRANGEBYRANK", KEYS[1], 0, maxSize-1)
 	redis.call("ZADD", KEYS[3], ARGV[5], ARGV[4])
@@ -1030,9 +1030,9 @@ if maxDelay ~= 0 then
 	local oldestEntryScore = tonumber(oldestEntry[2])
 	local maxDelayTime = currentTime - maxDelay
 	if oldestEntryScore <= maxDelayTime then
-		local msgs = redis.call("ZRANGE", KEYS[1], 0, maxSize-1)
-		for _, msg in ipairs(msgs) do
-			redis.call("SADD", KEYS[2], msg)
+		local res = redis.call("ZRANGE", KEYS[1], 0, maxSize-1, "WITHSCORES")
+		for i=1, table.getn(res)-1, 2 do
+			redis.call("ZADD", KEYS[2], tonumber(res[i+1]), res[i])
 		end
 		redis.call("ZREMRANGEBYRANK", KEYS[1], 0, maxSize-1)
 		redis.call("ZADD", KEYS[3], ARGV[5], ARGV[4])
@@ -1043,9 +1043,9 @@ local latestEntry = redis.call("ZREVRANGE", KEYS[1], 0, 0, "WITHSCORES")
 local latestEntryScore = tonumber(latestEntry[2])
 local gracePeriodStartTime = currentTime - tonumber(ARGV[3])
 if latestEntryScore <= gracePeriodStartTime then
-	local msgs = redis.call("ZRANGE", KEYS[1], 0, maxSize-1)
-	for _, msg in ipairs(msgs) do
-		redis.call("SADD", KEYS[2], msg)
+	local res = redis.call("ZRANGE", KEYS[1], 0, maxSize-1, "WITHSCORES")
+	for i=1, table.getn(res)-1, 2 do
+		redis.call("ZADD", KEYS[2], tonumber(res[i+1]), res[i])
 	end
 	redis.call("ZREMRANGEBYRANK", KEYS[1], 0, maxSize-1)
 	redis.call("ZADD", KEYS[3], ARGV[5], ARGV[4])
@@ -1101,7 +1101,7 @@ func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, ma
 // ARGV[1] -> task key prefix
 var readAggregationSetCmd = redis.NewScript(`
 local msgs = {}
-local ids = redis.call("SMEMBERS", KEYS[1])
+local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	local key = ARGV[1] .. id
 	table.insert(msgs, redis.call("HGET", key, "msg"))
@@ -1142,7 +1142,7 @@ func (r *RDB) ReadAggregationSet(qname, gname, setID string) ([]*base.TaskMessag
 // -------
 // ARGV[1] -> task key prefix
 var deleteAggregationSetCmd = redis.NewScript(`
-local ids = redis.call("SMEMBERS", KEYS[1])
+local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids)  do
 	redis.call("DEL", ARGV[1] .. id)
 end

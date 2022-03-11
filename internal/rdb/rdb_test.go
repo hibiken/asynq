@@ -3359,6 +3359,7 @@ func TestDeleteAggregationSet(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 
+	now := time.Now()
 	ctx := context.Background()
 	setID := uuid.NewString()
 	msg1 := h.NewTaskMessageBuilder().SetType("foo").SetQueue("default").SetGroup("mygroup").Build()
@@ -3366,16 +3367,20 @@ func TestDeleteAggregationSet(t *testing.T) {
 	msg3 := h.NewTaskMessageBuilder().SetType("baz").SetQueue("default").SetGroup("mygroup").Build()
 
 	tests := []struct {
-		aggregationSet []*base.TaskMessage
+		aggregationSet []base.Z
 		qname          string
 		gname          string
 		setID          string
 	}{
 		{
-			aggregationSet: []*base.TaskMessage{msg1, msg2, msg3},
-			qname:          "default",
-			gname:          "mygroup",
-			setID:          setID,
+			aggregationSet: []base.Z{
+				{msg1, now.Add(-3 * time.Minute).Unix()},
+				{msg2, now.Add(-2 * time.Minute).Unix()},
+				{msg3, now.Add(-1 * time.Minute).Unix()},
+			},
+			qname: "default",
+			gname: "mygroup",
+			setID: setID,
 		},
 	}
 
@@ -3393,8 +3398,8 @@ func TestDeleteAggregationSet(t *testing.T) {
 		}
 
 		// Check all tasks in the set are deleted.
-		for _, m := range tc.aggregationSet {
-			taskKey := base.TaskKey(m.Queue, m.ID)
+		for _, z := range tc.aggregationSet {
+			taskKey := base.TaskKey(z.Message.Queue, z.Message.ID)
 			if r.client.Exists(ctx, taskKey).Val() != 0 {
 				t.Errorf("task key %q still exists", taskKey)
 			}
