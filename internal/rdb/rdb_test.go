@@ -3402,6 +3402,118 @@ func TestDeleteAggregationSet(t *testing.T) {
 	}
 }
 
+func TestReclaimStaleAggregationSets(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	m1 := h.NewTaskMessageBuilder().SetQueue("default").SetGroup("foo").Build()
+	m2 := h.NewTaskMessageBuilder().SetQueue("default").SetGroup("foo").Build()
+	m3 := h.NewTaskMessageBuilder().SetQueue("default").SetGroup("bar").Build()
+	m4 := h.NewTaskMessageBuilder().SetQueue("default").SetGroup("qux").Build()
+
+	// Note: In this test, we're trying out a new way to test RDB by exactly describing how
+	// keys and values are represented in Redis.
+	tests := []struct {
+		groups                 map[string][]*redis.Z // map redis-key to redis-zset
+		aggregationSets        map[string][]*redis.Z
+		allAggregationSets     map[string][]*redis.Z
+		qname                  string
+		wantGroups             map[string][]redis.Z
+		wantAggregationSets    map[string][]redis.Z
+		wantAllAggregationSets map[string][]redis.Z
+	}{
+		{
+			groups: map[string][]*redis.Z{
+				base.GroupKey("default", "foo"): {},
+				base.GroupKey("default", "bar"): {},
+				base.GroupKey("default", "qux"): {
+					{Member: m4.ID, Score: float64(now.Add(-10 * time.Second).Unix())},
+				},
+			},
+			aggregationSets: map[string][]*redis.Z{
+				base.AggregationSetKey("default", "foo", "set1"): {
+					{Member: m1.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
+					{Member: m2.ID, Score: float64(now.Add(-4 * time.Minute).Unix())},
+				},
+				base.AggregationSetKey("default", "bar", "set2"): {
+					{Member: m3.ID, Score: float64(now.Add(-1 * time.Minute).Unix())},
+				},
+			},
+			allAggregationSets: map[string][]*redis.Z{
+				base.AllAggregationSets("default"): {
+					{Member: base.AggregationSetKey("default", "foo", "set1"), Score: float64(now.Add(-10 * time.Second).Unix())}, // set1 is expired
+					{Member: base.AggregationSetKey("default", "bar", "set2"), Score: float64(now.Add(40 * time.Second).Unix())},  // set2 is not expired
+				},
+			},
+			qname: "default",
+			wantGroups: map[string][]redis.Z{
+				base.GroupKey("default", "foo"): {
+					{Member: m1.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
+					{Member: m2.ID, Score: float64(now.Add(-4 * time.Minute).Unix())},
+				},
+				base.GroupKey("default", "bar"): {},
+				base.GroupKey("default", "qux"): {
+					{Member: m4.ID, Score: float64(now.Add(-10 * time.Second).Unix())},
+				},
+			},
+			wantAggregationSets: map[string][]redis.Z{
+				base.AggregationSetKey("default", "bar", "set2"): {
+					{Member: m3.ID, Score: float64(now.Add(-1 * time.Minute).Unix())},
+				},
+			},
+			wantAllAggregationSets: map[string][]redis.Z{
+				base.AllAggregationSets("default"): {
+					{Member: base.AggregationSetKey("default", "bar", "set2"), Score: float64(now.Add(40 * time.Second).Unix())},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		SeedZSets(t, r.client, tc.groups)
+		SeedZSets(t, r.client, tc.aggregationSets)
+		SeedZSets(t, r.client, tc.allAggregationSets)
+
+		if err := r.ReclaimStaleAggregationSets(tc.qname); err != nil {
+			t.Errorf("ReclaimStaleAggregationSets returned error: %v", err)
+			continue
+		}
+
+		AssertZSets(t, r.client, tc.wantGroups)
+		AssertZSets(t, r.client, tc.wantAggregationSets)
+		AssertZSets(t, r.client, tc.wantAllAggregationSets)
+	}
+}
+
+// TODO: move this helper somewhere more canonical
+func SeedZSets(tb testing.TB, r redis.UniversalClient, zsets map[string][]*redis.Z) {
+	for key, zs := range zsets {
+		// FIXME: How come we can't simply do ZAdd(ctx, key, zs...) here?
+		for _, z := range zs {
+			if err := r.ZAdd(context.Background(), key, z).Err(); err != nil {
+				tb.Fatalf("Failed to seed zset (key=%q): %v", key, err)
+			}
+		}
+	}
+}
+
+// TODO: move this helper somewhere more canonical
+func AssertZSets(t *testing.T, r redis.UniversalClient, wantZSets map[string][]redis.Z) {
+	for key, want := range wantZSets {
+		got, err := r.ZRangeWithScores(context.Background(), key, 0, -1).Result()
+		if err != nil {
+			t.Fatalf("Failed to read zset (key=%q): %v", key, err)
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("mismatch found in zset (key=%q): (-want,+got)\n%s", key, diff)
+		}
+	}
+}
+
 func TestListGroups(t *testing.T) {
 	r := setup(t)
 	defer r.Close()

@@ -288,3 +288,12 @@ func (tb *TestBroker) DeleteAggregationSet(ctx context.Context, qname, gname, ag
 	}
 	return tb.real.DeleteAggregationSet(ctx, qname, gname, aggregationSetID)
 }
+
+func (tb *TestBroker) ReclaimStaleAggregationSets(qname string) error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.ReclaimStaleAggregationSets(qname)
+}
