@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"flag"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -3513,11 +3514,25 @@ func AssertZSets(t *testing.T, r redis.UniversalClient, wantZSets map[string][]r
 		if err != nil {
 			t.Fatalf("Failed to read zset (key=%q): %v", key, err)
 		}
-		if diff := cmp.Diff(want, got); diff != "" {
+		if diff := cmp.Diff(want, got, SortZSetEntryOpt); diff != "" {
 			t.Errorf("mismatch found in zset (key=%q): (-want,+got)\n%s", key, diff)
 		}
 	}
 }
+
+var SortZSetEntryOpt = cmp.Transformer("SortZSetEntries", func(in []redis.Z) []redis.Z {
+	out := append([]redis.Z(nil), in...) // Copy input to avoid mutating it
+	sort.Slice(out, func(i, j int) bool {
+		// TODO: If member is a comparable type (int, string, etc) compare by the member
+		// Use generic comparable type here once update to go1.18
+		if _, ok := out[i].Member.(string); ok {
+			// If member is a string, compare the member
+			return out[i].Member.(string) < out[j].Member.(string)
+		}
+		return out[i].Score < out[j].Score
+	})
+	return out
+})
 
 func TestListGroups(t *testing.T) {
 	r := setup(t)
