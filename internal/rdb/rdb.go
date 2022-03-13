@@ -993,16 +993,26 @@ func (r *RDB) ListGroups(qname string) ([]string, error) {
 	return groups, nil
 }
 
-// TODO: Add comment describing what the script does.
+// aggregationCheckCmd checks the given group for whether to create an aggregation set.
+// An aggregation set is created if one of the aggregation criteria is met:
+// 1) group has reached or exceeded its max size
+// 2) group's oldest task has reached or exceeded its max delay
+// 3) group's latest task has reached or exceeded its grace period
+// if aggreation criteria is met, the command moves those tasks from the group
+// and put them in an aggregation set. Additionally, if the creation of aggregation set
+// empties the group, it will clear the group name from the all groups set.
+//
 // KEYS[1] -> asynq:{<qname>}:g:<gname>
 // KEYS[2] -> asynq:{<qname>}:g:<gname>:<aggregation_set_id>
 // KEYS[3] -> asynq:{<qname>}:aggregation_sets
+// KEYS[4] -> asynq:{<qname>}:groups
 // -------
 // ARGV[1] -> max group size
 // ARGV[2] -> max group delay in unix time
 // ARGV[3] -> start time of the grace period
 // ARGV[4] -> aggregation set expire time
 // ARGV[5] -> current time in unix time
+// ARGV[6] -> group name
 //
 // Output:
 // Returns 0 if no aggregation set was created
@@ -1020,6 +1030,9 @@ if maxSize ~= 0 and size >= maxSize then
 	end
 	redis.call("ZREMRANGEBYRANK", KEYS[1], 0, maxSize-1)
 	redis.call("ZADD", KEYS[3], ARGV[4], KEYS[2])
+	if size == maxSize then
+		redis.call("SREM", KEYS[4], ARGV[6])
+	end
 	return 1
 end
 local maxDelay = tonumber(ARGV[2])
@@ -1035,6 +1048,9 @@ if maxDelay ~= 0 then
 		end
 		redis.call("ZREMRANGEBYRANK", KEYS[1], 0, maxSize-1)
 		redis.call("ZADD", KEYS[3], ARGV[4], KEYS[2])
+		if size <= maxSize then
+			redis.call("SREM", KEYS[4], ARGV[6])
+		end
 		return 1
 	end
 end
@@ -1048,6 +1064,9 @@ if latestEntryScore <= gracePeriodStartTime then
 	end
 	redis.call("ZREMRANGEBYRANK", KEYS[1], 0, maxSize-1)
 	redis.call("ZADD", KEYS[3], ARGV[4], KEYS[2])
+	if size <= maxSize then
+		redis.call("SREM", KEYS[4], ARGV[6])
+	end
 	return 1
 end
 return 0
@@ -1072,6 +1091,7 @@ func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, ma
 		base.GroupKey(qname, gname),
 		base.AggregationSetKey(qname, gname, aggregationSetID),
 		base.AllAggregationSets(qname),
+		base.AllGroups(qname),
 	}
 	argv := []interface{}{
 		maxSize,
@@ -1079,6 +1099,7 @@ func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, ma
 		int64(gracePeriod.Seconds()),
 		expireTime.Unix(),
 		t.Unix(),
+		gname,
 	}
 	n, err := r.runScriptWithErrorCode(context.Background(), op, aggregationCheckCmd, keys, argv...)
 	if err != nil {
