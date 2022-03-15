@@ -3776,9 +3776,23 @@ func SeedZSets(tb testing.TB, r redis.UniversalClient, zsets map[string][]*redis
 
 func SeedSets(tb testing.TB, r redis.UniversalClient, sets map[string][]string) {
 	for key, set := range sets {
-		for _, mem := range set {
-			if err := r.SAdd(context.Background(), key, mem).Err(); err != nil {
-				tb.Fatalf("Failed to seed set (key=%q): %v", key, err)
+		SeedSet(tb, r, key, set)
+	}
+}
+
+func SeedSet(tb testing.TB, r redis.UniversalClient, key string, members []string) {
+	for _, mem := range members {
+		if err := r.SAdd(context.Background(), key, mem).Err(); err != nil {
+			tb.Fatalf("Failed to seed set (key=%q): %v", key, err)
+		}
+	}
+}
+
+func SeedLists(tb testing.TB, r redis.UniversalClient, lists map[string][]string) {
+	for key, vals := range lists {
+		for _, v := range vals {
+			if err := r.LPush(context.Background(), key, v).Err(); err != nil {
+				tb.Fatalf("Failed to seed list (key=%q): %v", key, err)
 			}
 		}
 	}

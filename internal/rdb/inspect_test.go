@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
@@ -54,22 +55,28 @@ func TestAllQueues(t *testing.T) {
 func TestCurrentStats(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	m1 := h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"subject": "hello"}))
-	m2 := h.NewTaskMessage("reindex", nil)
-	m3 := h.NewTaskMessage("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/path/to/img"}))
-	m4 := h.NewTaskMessage("sync", nil)
-	m5 := h.NewTaskMessageWithQueue("important_notification", nil, "critical")
-	m6 := h.NewTaskMessageWithQueue("minor_notification", nil, "low")
+
+	m1 := h.NewTaskMessageBuilder().SetType("send_email").Build()
+	m2 := h.NewTaskMessageBuilder().SetType("reindex").Build()
+	m3 := h.NewTaskMessageBuilder().SetType("gen_thumbnail").Build()
+	m4 := h.NewTaskMessageBuilder().SetType("sync").Build()
+	m5 := h.NewTaskMessageBuilder().SetType("important_notification").SetQueue("critical").Build()
+	m6 := h.NewTaskMessageBuilder().SetType("minor_notification").SetQueue("low").Build()
+	m7 := h.NewTaskMessageBuilder().SetType("send_sms").Build()
 	now := time.Now()
 	r.SetClock(timeutil.NewSimulatedClock(now))
 
 	tests := []struct {
-		pending                         map[string][]*base.TaskMessage
-		active                          map[string][]*base.TaskMessage
-		scheduled                       map[string][]base.Z
-		retry                           map[string][]base.Z
-		archived                        map[string][]base.Z
-		completed                       map[string][]base.Z
+		tasks                           []*taskData
+		allQueues                       []string
+		allGroups                       map[string][]string
+		pending                         map[string][]string
+		active                          map[string][]string
+		scheduled                       map[string][]*redis.Z
+		retry                           map[string][]*redis.Z
+		archived                        map[string][]*redis.Z
+		completed                       map[string][]*redis.Z
+		groups                          map[string][]*redis.Z
 		processed                       map[string]int
 		failed                          map[string]int
 		processedTotal                  map[string]int
@@ -80,38 +87,56 @@ func TestCurrentStats(t *testing.T) {
 		want                            *Stats
 	}{
 		{
-			pending: map[string][]*base.TaskMessage{
-				"default":  {m1},
-				"critical": {m5},
-				"low":      {m6},
+			tasks: []*taskData{
+				{msg: m1, state: base.TaskStatePending},
+				{msg: m2, state: base.TaskStateActive},
+				{msg: m3, state: base.TaskStateScheduled},
+				{msg: m4, state: base.TaskStateScheduled},
+				{msg: m5, state: base.TaskStatePending},
+				{msg: m6, state: base.TaskStatePending},
+				{msg: m7, state: base.TaskStateAggregating},
 			},
-			active: map[string][]*base.TaskMessage{
-				"default":  {m2},
-				"critical": {},
-				"low":      {},
+			allQueues: []string{"default", "critical", "low"},
+			allGroups: map[string][]string{
+				base.AllGroups("default"): {"sms:user1"},
 			},
-			scheduled: map[string][]base.Z{
-				"default": {
-					{Message: m3, Score: now.Add(time.Hour).Unix()},
-					{Message: m4, Score: now.Unix()},
+			pending: map[string][]string{
+				base.PendingKey("default"):  {m1.ID},
+				base.PendingKey("critical"): {m5.ID},
+				base.PendingKey("low"):      {m6.ID},
+			},
+			active: map[string][]string{
+				base.ActiveKey("default"):  {m2.ID},
+				base.ActiveKey("critical"): {},
+				base.ActiveKey("low"):      {},
+			},
+			scheduled: map[string][]*redis.Z{
+				base.ScheduledKey("default"): {
+					{Member: m3.ID, Score: float64(now.Add(time.Hour).Unix())},
+					{Member: m4.ID, Score: float64(now.Unix())},
 				},
-				"critical": {},
-				"low":      {},
+				base.ScheduledKey("critical"): {},
+				base.ScheduledKey("low"):      {},
 			},
-			retry: map[string][]base.Z{
-				"default":  {},
-				"critical": {},
-				"low":      {},
+			retry: map[string][]*redis.Z{
+				base.RetryKey("default"):  {},
+				base.RetryKey("critical"): {},
+				base.RetryKey("low"):      {},
 			},
-			archived: map[string][]base.Z{
-				"default":  {},
-				"critical": {},
-				"low":      {},
+			archived: map[string][]*redis.Z{
+				base.ArchivedKey("default"):  {},
+				base.ArchivedKey("critical"): {},
+				base.ArchivedKey("low"):      {},
 			},
-			completed: map[string][]base.Z{
-				"default":  {},
-				"critical": {},
-				"low":      {},
+			completed: map[string][]*redis.Z{
+				base.CompletedKey("default"):  {},
+				base.CompletedKey("critical"): {},
+				base.CompletedKey("low"):      {},
+			},
+			groups: map[string][]*redis.Z{
+				base.GroupKey("default", "sms:user1"): {
+					{Member: m7.ID, Score: float64(now.Add(-3 * time.Second).Unix())},
+				},
 			},
 			processed: map[string]int{
 				"default":  120,
@@ -144,12 +169,14 @@ func TestCurrentStats(t *testing.T) {
 				Queue:          "default",
 				Paused:         false,
 				Size:           4,
+				Groups:         1,
 				Pending:        1,
 				Active:         1,
 				Scheduled:      2,
 				Retry:          0,
 				Archived:       0,
 				Completed:      0,
+				Aggregating:    1,
 				Processed:      120,
 				Failed:         2,
 				ProcessedTotal: 11111,
@@ -159,38 +186,46 @@ func TestCurrentStats(t *testing.T) {
 			},
 		},
 		{
-			pending: map[string][]*base.TaskMessage{
-				"default":  {m1},
-				"critical": {},
-				"low":      {m6},
+			tasks: []*taskData{
+				{msg: m1, state: base.TaskStatePending},
+				{msg: m2, state: base.TaskStateActive},
+				{msg: m3, state: base.TaskStateScheduled},
+				{msg: m4, state: base.TaskStateScheduled},
+				{msg: m6, state: base.TaskStatePending},
 			},
-			active: map[string][]*base.TaskMessage{
-				"default":  {m2},
-				"critical": {},
-				"low":      {},
+			allQueues: []string{"default", "critical", "low"},
+			pending: map[string][]string{
+				base.PendingKey("default"):  {m1.ID},
+				base.PendingKey("critical"): {},
+				base.PendingKey("low"):      {m6.ID},
 			},
-			scheduled: map[string][]base.Z{
-				"default": {
-					{Message: m3, Score: now.Add(time.Hour).Unix()},
-					{Message: m4, Score: now.Unix()},
+			active: map[string][]string{
+				base.ActiveKey("default"):  {m2.ID},
+				base.ActiveKey("critical"): {},
+				base.ActiveKey("low"):      {},
+			},
+			scheduled: map[string][]*redis.Z{
+				base.ScheduledKey("default"): {
+					{Member: m3.ID, Score: float64(now.Add(time.Hour).Unix())},
+					{Member: m4.ID, Score: float64(now.Unix())},
 				},
-				"critical": {},
-				"low":      {},
+				base.ScheduledKey("critical"): {},
+				base.ScheduledKey("low"):      {},
 			},
-			retry: map[string][]base.Z{
-				"default":  {},
-				"critical": {},
-				"low":      {},
+			retry: map[string][]*redis.Z{
+				base.RetryKey("default"):  {},
+				base.RetryKey("critical"): {},
+				base.RetryKey("low"):      {},
 			},
-			archived: map[string][]base.Z{
-				"default":  {},
-				"critical": {},
-				"low":      {},
+			archived: map[string][]*redis.Z{
+				base.ArchivedKey("default"):  {},
+				base.ArchivedKey("critical"): {},
+				base.ArchivedKey("low"):      {},
 			},
-			completed: map[string][]base.Z{
-				"default":  {},
-				"critical": {},
-				"low":      {},
+			completed: map[string][]*redis.Z{
+				base.CompletedKey("default"):  {},
+				base.CompletedKey("critical"): {},
+				base.CompletedKey("low"):      {},
 			},
 			processed: map[string]int{
 				"default":  120,
@@ -223,12 +258,14 @@ func TestCurrentStats(t *testing.T) {
 				Queue:          "critical",
 				Paused:         true,
 				Size:           0,
+				Groups:         0,
 				Pending:        0,
 				Active:         0,
 				Scheduled:      0,
 				Retry:          0,
 				Archived:       0,
 				Completed:      0,
+				Aggregating:    0,
 				Processed:      100,
 				Failed:         0,
 				ProcessedTotal: 22222,
@@ -246,12 +283,16 @@ func TestCurrentStats(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllActiveQueues(t, r.client, tc.active)
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
-		h.SeedAllRetryQueues(t, r.client, tc.retry)
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
-		h.SeedAllCompletedQueues(t, r.client, tc.completed)
+		SeedSet(t, r.client, base.AllQueues, tc.allQueues)
+		SeedSets(t, r.client, tc.allGroups)
+		SeedTasks(t, r.client, tc.tasks)
+		SeedLists(t, r.client, tc.pending)
+		SeedLists(t, r.client, tc.active)
+		SeedZSets(t, r.client, tc.scheduled)
+		SeedZSets(t, r.client, tc.retry)
+		SeedZSets(t, r.client, tc.archived)
+		SeedZSets(t, r.client, tc.completed)
+		SeedZSets(t, r.client, tc.groups)
 		ctx := context.Background()
 		for qname, n := range tc.processed {
 			r.client.Set(ctx, base.ProcessedKey(qname, now), n, 0)
