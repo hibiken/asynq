@@ -56,8 +56,11 @@ type QueueInfo struct {
 	Latency time.Duration
 
 	// Size is the total number of tasks in the queue.
-	// The value is the sum of Pending, Active, Scheduled, Retry, and Archived.
+	// The value is the sum of Pending, Active, Scheduled, Retry, Aggregating and Archived.
 	Size int
+
+	// Groups is the total number of groups in the queue.
+	Groups int
 
 	// Number of pending tasks.
 	Pending int
@@ -71,6 +74,8 @@ type QueueInfo struct {
 	Archived int
 	// Number of stored completed tasks.
 	Completed int
+	// Number of aggregating tasks.
+	Aggregating int
 
 	// Total number of tasks being processed within the given date (counter resets daily).
 	// The number includes both succeeded and failed tasks.
@@ -105,12 +110,14 @@ func (i *Inspector) GetQueueInfo(qname string) (*QueueInfo, error) {
 		MemoryUsage:    stats.MemoryUsage,
 		Latency:        stats.Latency,
 		Size:           stats.Size,
+		Groups:         stats.Groups,
 		Pending:        stats.Pending,
 		Active:         stats.Active,
 		Scheduled:      stats.Scheduled,
 		Retry:          stats.Retry,
 		Archived:       stats.Archived,
 		Completed:      stats.Completed,
+		Aggregating:    stats.Aggregating,
 		Processed:      stats.Processed,
 		Failed:         stats.Failed,
 		ProcessedTotal: stats.ProcessedTotal,
