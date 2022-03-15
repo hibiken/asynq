@@ -245,9 +245,12 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 // KEYS[4] -> asynq:{qname}:retry
 // KEYS[5] -> asynq:{qname}:archived
 // KEYS[6] -> asynq:{qname}:completed
-//
-// ARGV[1] -> asynq:{qname}:t:
-// ARGV[2] -> sample_size (e.g 20)
+// KEYS[7] -> asynq:{qname}:groups
+// -------
+// ARGV[1] -> asynq:{qname}:t: (task key prefix)
+// ARGV[2] -> task sample size per redis list/zset (e.g 20)
+// ARGV[3] -> group sample size
+// ARGV[4] -> asynq:{qname}:g: (group key prefix)
 var memoryUsageCmd = redis.NewScript(`
 local sample_size = tonumber(ARGV[2])
 if sample_size <= 0 then
@@ -288,12 +291,39 @@ for i=3,6 do
         memusg = memusg + m
     end
 end
+local group_names = redis.call("SRANDMEMBER", KEYS[7], tonumber(ARGV[3]))
+local group_sample_total = 0
+for _, gname in ipairs(group_names) do
+	local group_key = ARGV[4] .. gname
+    local ids = redis.call("ZRANGE", group_key, 0, sample_size - 1)
+    local sample_total = 0
+    if (table.getn(ids) > 0) then
+        for _, id in ipairs(ids) do
+            local bytes = redis.call("MEMORY", "USAGE", ARGV[1] .. id)
+            sample_total = sample_total + bytes
+        end
+        local n = redis.call("ZCARD", group_key)
+        local avg = sample_total / table.getn(ids)
+        group_sample_total = group_sample_total + (avg * n)
+    end
+    local m = redis.call("MEMORY", "USAGE", group_key)
+    if (m) then
+        group_sample_total = group_sample_total + m
+    end
+end
+local group_size = redis.call("SCARD", KEYS[7])
+local group_memusg_avg = group_sample_total / table.getn(group_names)
+memusg = memusg + (group_memusg_avg * group_size)
 return memusg
 `)
 
 func (r *RDB) memoryUsage(qname string) (int64, error) {
 	var op errors.Op = "rdb.memoryUsage"
-	const sampleSize = 20
+	const (
+		taskSampleSize  = 20
+		groupSampleSize = 5
+	)
+
 	keys := []string{
 		base.ActiveKey(qname),
 		base.PendingKey(qname),
@@ -301,10 +331,13 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 		base.RetryKey(qname),
 		base.ArchivedKey(qname),
 		base.CompletedKey(qname),
+		base.AllGroups(qname),
 	}
 	argv := []interface{}{
 		base.TaskKeyPrefix(qname),
-		sampleSize,
+		taskSampleSize,
+		groupSampleSize,
+		base.GroupKeyPrefix(qname),
 	}
 	res, err := memoryUsageCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
