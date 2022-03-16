@@ -168,7 +168,7 @@ func TestCurrentStats(t *testing.T) {
 			want: &Stats{
 				Queue:          "default",
 				Paused:         false,
-				Size:           4,
+				Size:           5,
 				Groups:         1,
 				Pending:        1,
 				Active:         1,
