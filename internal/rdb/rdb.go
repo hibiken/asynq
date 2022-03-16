@@ -1048,7 +1048,7 @@ if maxDelay ~= 0 then
 		end
 		redis.call("ZREMRANGEBYRANK", KEYS[1], 0, maxSize-1)
 		redis.call("ZADD", KEYS[3], ARGV[4], KEYS[2])
-		if size <= maxSize then
+		if size <= maxSize or maxSize == 0 then
 			redis.call("SREM", KEYS[4], ARGV[6])
 		end
 		return 1
@@ -1064,7 +1064,7 @@ if latestEntryScore <= gracePeriodStartTime then
 	end
 	redis.call("ZREMRANGEBYRANK", KEYS[1], 0, maxSize-1)
 	redis.call("ZADD", KEYS[3], ARGV[4], KEYS[2])
-	if size <= maxSize then
+	if size <= maxSize or maxSize == 0 then
 		redis.call("SREM", KEYS[4], ARGV[6])
 	end
 	return 1
