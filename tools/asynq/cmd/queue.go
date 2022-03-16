@@ -145,12 +145,13 @@ func printQueueInfo(info *asynq.QueueInfo) {
 	bold.Println("Queue Info")
 	fmt.Printf("Name:   %s\n", info.Queue)
 	fmt.Printf("Size:   %d\n", info.Size)
+	fmt.Printf("Groups: %d\n", info.Groups)
 	fmt.Printf("Paused: %t\n\n", info.Paused)
 	bold.Println("Task Count by State")
 	printTable(
-		[]string{"active", "pending", "scheduled", "retry", "archived", "completed"},
+		[]string{"active", "pending", "aggregating", "scheduled", "retry", "archived", "completed"},
 		func(w io.Writer, tmpl string) {
-			fmt.Fprintf(w, tmpl, info.Active, info.Pending, info.Scheduled, info.Retry, info.Archived, info.Completed)
+			fmt.Fprintf(w, tmpl, info.Active, info.Pending, info.Aggregating, info.Scheduled, info.Retry, info.Archived, info.Completed)
 		},
 	)
 	fmt.Println()
