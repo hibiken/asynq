@@ -224,6 +224,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 			stats.Groups = val
 		case "aggregating_count":
 			stats.Aggregating = val
+			size += val
 		}
 	}
 	stats.Size = size
