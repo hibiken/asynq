@@ -503,6 +503,7 @@ func TestClientEnqueueWithGroupOption(t *testing.T) {
 			},
 			wantInfo: &TaskInfo{
 				Queue:         "default",
+				Group:         "mygroup",
 				Type:          task.Type(),
 				Payload:       task.Payload(),
 				State:         TaskStateAggregating,
@@ -548,6 +549,7 @@ func TestClientEnqueueWithGroupOption(t *testing.T) {
 			},
 			wantInfo: &TaskInfo{
 				Queue:         "default",
+				Group:         "mygroup",
 				Type:          task.Type(),
 				Payload:       task.Payload(),
 				State:         TaskStateScheduled,

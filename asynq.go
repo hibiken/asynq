@@ -98,6 +98,14 @@ type TaskInfo struct {
 	// Deadline is the deadline for the task, zero value if not specified.
 	Deadline time.Time
 
+	// Group is the name of the group in which the task belongs.
+	//
+	// Tasks in the same queue can be grouped together by Group name and will be aggregated into one task
+	// by a Server processing the queue.
+	//
+	// Empty string (default) indicates task does not belong to any groups, and no aggregation will be applied to the task.
+	Group string
+
 	// NextProcessAt is the time the task is scheduled to be processed,
 	// zero if not applicable.
 	NextProcessAt time.Time
@@ -140,6 +148,7 @@ func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time
 		MaxRetry:      msg.Retry,
 		Retried:       msg.Retried,
 		LastErr:       msg.ErrorMsg,
+		Group:         msg.GroupKey,
 		Timeout:       time.Duration(msg.Timeout) * time.Second,
 		Deadline:      fromUnixTimeOrZero(msg.Deadline),
 		Retention:     time.Duration(msg.Retention) * time.Second,
