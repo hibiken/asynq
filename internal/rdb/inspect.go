@@ -550,6 +550,56 @@ func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 	}, nil
 }
 
+type GroupStat struct {
+	// Name of the group.
+	Group string
+
+	// Size of the group.
+	Size int
+}
+
+// KEYS[1] -> asynq:{<qname>}:groups
+// -------
+// ARGV[1] -> group key prefix
+//
+// Output:
+// list of group name and size (e.g. group1 size1 group2 size2 ...)
+//
+// Time Complexity:
+// O(N) where N being the number of groups in the given queue.
+var groupStatsCmd = redis.NewScript(`
+local res = {}
+local group_names = redis.call("SMEMBERS", KEYS[1])
+for _, gname in ipairs(group_names) do
+	local size = redis.call("ZCARD", ARGV[1] .. gname) 
+	table.insert(res, gname)
+	table.insert(res, size)
+end
+return res
+`)
+
+func (r *RDB) GroupStats(qname string) ([]*GroupStat, error) {
+	var op errors.Op = "RDB.GroupStats"
+	keys := []string{base.AllGroups(qname)}
+	argv := []interface{}{base.GroupKeyPrefix(qname)}
+	res, err := groupStatsCmd.Run(context.Background(), r.client, keys, argv...).Result()
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, err)
+	}
+	data, err := cast.ToSliceE(res)
+	if err != nil {
+		return nil, errors.E(op, errors.Internal, "cast error: unexpected return value from Lua script")
+	}
+	var stats []*GroupStat
+	for i := 0; i < len(data); i += 2 {
+		stats = append(stats, &GroupStat{
+			Group: data[i].(string),
+			Size:  int(data[i+1].(int64)),
+		})
+	}
+	return stats, nil
+}
+
 // Pagination specifies the page size and page number
 // for the list operation.
 type Pagination struct {

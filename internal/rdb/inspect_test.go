@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -417,6 +418,102 @@ func TestRedisInfo(t *testing.T) {
 			t.Errorf("RDB.RedisInfo() = %v is missing entry for %q", info, key)
 		}
 	}
+}
+
+func TestGroupStats(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	m1 := h.NewTaskMessageBuilder().SetGroup("group1").Build()
+	m2 := h.NewTaskMessageBuilder().SetGroup("group1").Build()
+	m3 := h.NewTaskMessageBuilder().SetGroup("group1").Build()
+	m4 := h.NewTaskMessageBuilder().SetGroup("group2").Build()
+	m5 := h.NewTaskMessageBuilder().SetQueue("custom").SetGroup("group1").Build()
+	m6 := h.NewTaskMessageBuilder().SetQueue("custom").SetGroup("group1").Build()
+
+	now := time.Now()
+
+	fixtures := struct {
+		tasks     []*taskData
+		allGroups map[string][]string
+		groups    map[string][]*redis.Z
+	}{
+		tasks: []*taskData{
+			{msg: m1, state: base.TaskStateAggregating},
+			{msg: m2, state: base.TaskStateAggregating},
+			{msg: m3, state: base.TaskStateAggregating},
+			{msg: m4, state: base.TaskStateAggregating},
+			{msg: m5, state: base.TaskStateAggregating},
+		},
+		allGroups: map[string][]string{
+			base.AllGroups("default"): {"group1", "group2"},
+			base.AllGroups("custom"):  {"group1"},
+		},
+		groups: map[string][]*redis.Z{
+			base.GroupKey("default", "group1"): {
+				{Member: m1.ID, Score: float64(now.Add(-10 * time.Second).Unix())},
+				{Member: m2.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+				{Member: m3.ID, Score: float64(now.Add(-30 * time.Second).Unix())},
+			},
+			base.GroupKey("default", "group2"): {
+				{Member: m4.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+			},
+			base.GroupKey("custom", "group1"): {
+				{Member: m5.ID, Score: float64(now.Add(-10 * time.Second).Unix())},
+				{Member: m6.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+			},
+		},
+	}
+
+	tests := []struct {
+		desc  string
+		qname string
+		want  []*GroupStat
+	}{
+		{
+			desc:  "default queue groups",
+			qname: "default",
+			want: []*GroupStat{
+				{Group: "group1", Size: 3},
+				{Group: "group2", Size: 1},
+			},
+		},
+		{
+			desc:  "custom queue groups",
+			qname: "custom",
+			want: []*GroupStat{
+				{Group: "group1", Size: 2},
+			},
+		},
+	}
+
+	var sortGroupStatsOpt = cmp.Transformer(
+		"SortGroupStats",
+		func(in []*GroupStat) []*GroupStat {
+			out := append([]*GroupStat(nil), in...)
+			sort.Slice(out, func(i, j int) bool {
+				return out[i].Group < out[j].Group
+			})
+			return out
+		})
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		SeedTasks(t, r.client, fixtures.tasks)
+		SeedSets(t, r.client, fixtures.allGroups)
+		SeedZSets(t, r.client, fixtures.groups)
+
+		t.Run(tc.desc, func(t *testing.T) {
+			got, err := r.GroupStats(tc.qname)
+			if err != nil {
+				t.Fatalf("GroupStats returned error: %v", err)
+			}
+			if diff := cmp.Diff(tc.want, got, sortGroupStatsOpt); diff != "" {
+				t.Errorf("GroupStats = %v, want %v; (-want,+got)\n%s", got, tc.want, diff)
+			}
+		})
+	}
+
 }
 
 func TestGetTaskInfo(t *testing.T) {
