@@ -43,7 +43,32 @@ func (i *Inspector) Queues() ([]string, error) {
 	return i.rdb.AllQueues()
 }
 
-// QueueInfo represents a state of queues at a certain time.
+// Groups returns a list of all groups within the given queue.
+func (i *Inspector) Groups(qname string) ([]*GroupInfo, error) {
+	stats, err := i.rdb.GroupStats(qname)
+	if err != nil {
+		return nil, err
+	}
+	var res []*GroupInfo
+	for _, s := range stats {
+		res = append(res, &GroupInfo{
+			Group: s.Group,
+			Size:  s.Size,
+		})
+	}
+	return res, nil
+}
+
+// GroupInfo represents a state of a group at a cerntain time.
+type GroupInfo struct {
+	// Name of the group.
+	Group string
+
+	// Size is the total number of tasks in the group.
+	Size int
+}
+
+// QueueInfo represents a state of a queue at a certain time.
 type QueueInfo struct {
 	// Name of the queue.
 	Queue string
@@ -339,6 +364,12 @@ func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*TaskIn
 	return tasks, nil
 }
 
+// TODO: comment
+func (i *Inspector) ListAggregatingTasks(qname, gname string, opts ...ListOption) ([]*TaskInfo, error) {
+	// TODO: Implement this with TDD
+	return nil, nil
+}
+
 // ListScheduledTasks retrieves scheduled tasks from the specified queue.
 // Tasks are sorted by NextProcessAt in ascending order.
 //
@@ -505,6 +536,12 @@ func (i *Inspector) DeleteAllCompletedTasks(qname string) (int, error) {
 	return int(n), err
 }
 
+// TODO: comment
+func (i *Inspector) DeleteAllAggregatingTasks(qname, gname string) (int, error) {
+	// TODO: implement this
+	return 0, nil
+}
+
 // DeleteTask deletes a task with the given id from the given queue.
 // The task needs to be in pending, scheduled, retry, or archived state,
 // otherwise DeleteTask will return an error.
@@ -610,6 +647,12 @@ func (i *Inspector) ArchiveAllRetryTasks(qname string) (int, error) {
 	}
 	n, err := i.rdb.ArchiveAllRetryTasks(qname)
 	return int(n), err
+}
+
+// TODO: comment
+func (i *Inspector) ArchiveAllAggregatingTasks(qname, gname string) (int, error) {
+	// TODO: implement this
+	return 0, nil
 }
 
 // ArchiveTask archives a task with the given id in the given queue.

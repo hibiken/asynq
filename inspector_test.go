@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
@@ -3319,6 +3320,102 @@ func TestParseOption(t *testing.T) {
 				}
 			default:
 				t.Fatalf("returned Option with unexpected type: %v", got.Type())
+			}
+		})
+	}
+}
+
+func TestInspectorGroups(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	inspector := NewInspector(getRedisConnOpt(t))
+
+	m1 := h.NewTaskMessageBuilder().SetGroup("group1").Build()
+	m2 := h.NewTaskMessageBuilder().SetGroup("group1").Build()
+	m3 := h.NewTaskMessageBuilder().SetGroup("group1").Build()
+	m4 := h.NewTaskMessageBuilder().SetGroup("group2").Build()
+	m5 := h.NewTaskMessageBuilder().SetQueue("custom").SetGroup("group1").Build()
+	m6 := h.NewTaskMessageBuilder().SetQueue("custom").SetGroup("group1").Build()
+
+	now := time.Now()
+
+	fixtures := struct {
+		tasks     []*h.TaskSeedData
+		allGroups map[string][]string
+		groups    map[string][]*redis.Z
+	}{
+		tasks: []*h.TaskSeedData{
+			{Msg: m1, State: base.TaskStateAggregating},
+			{Msg: m2, State: base.TaskStateAggregating},
+			{Msg: m3, State: base.TaskStateAggregating},
+			{Msg: m4, State: base.TaskStateAggregating},
+			{Msg: m5, State: base.TaskStateAggregating},
+		},
+		allGroups: map[string][]string{
+			base.AllGroups("default"): {"group1", "group2"},
+			base.AllGroups("custom"):  {"group1"},
+		},
+		groups: map[string][]*redis.Z{
+			base.GroupKey("default", "group1"): {
+				{Member: m1.ID, Score: float64(now.Add(-10 * time.Second).Unix())},
+				{Member: m2.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+				{Member: m3.ID, Score: float64(now.Add(-30 * time.Second).Unix())},
+			},
+			base.GroupKey("default", "group2"): {
+				{Member: m4.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+			},
+			base.GroupKey("custom", "group1"): {
+				{Member: m5.ID, Score: float64(now.Add(-10 * time.Second).Unix())},
+				{Member: m6.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+			},
+		},
+	}
+
+	tests := []struct {
+		desc  string
+		qname string
+		want  []*GroupInfo
+	}{
+		{
+			desc:  "default queue groups",
+			qname: "default",
+			want: []*GroupInfo{
+				{Group: "group1", Size: 3},
+				{Group: "group2", Size: 1},
+			},
+		},
+		{
+			desc:  "custom queue groups",
+			qname: "custom",
+			want: []*GroupInfo{
+				{Group: "group1", Size: 2},
+			},
+		},
+	}
+
+	var sortGroupInfosOpt = cmp.Transformer(
+		"SortGroupInfos",
+		func(in []*GroupInfo) []*GroupInfo {
+			out := append([]*GroupInfo(nil), in...)
+			sort.Slice(out, func(i, j int) bool {
+				return out[i].Group < out[j].Group
+			})
+			return out
+		})
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		h.SeedTasks(t, r, fixtures.tasks)
+		h.SeedRedisSets(t, r, fixtures.allGroups)
+		h.SeedRedisZSets(t, r, fixtures.groups)
+
+		t.Run(tc.desc, func(t *testing.T) {
+			got, err := inspector.Groups(tc.qname)
+			if err != nil {
+				t.Fatalf("Groups returned error: %v", err)
+			}
+			if diff := cmp.Diff(tc.want, got, sortGroupInfosOpt); diff != "" {
+				t.Errorf("Groups = %v, want %v; (-want,+got)\n%s", got, tc.want, diff)
 			}
 		})
 	}
