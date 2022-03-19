@@ -93,6 +93,20 @@ var SortStringSliceOpt = cmp.Transformer("SortStringSlice", func(in []string) []
 	return out
 })
 
+var SortRedisZSetEntryOpt = cmp.Transformer("SortZSetEntries", func(in []redis.Z) []redis.Z {
+	out := append([]redis.Z(nil), in...) // Copy input to avoid mutating it
+	sort.Slice(out, func(i, j int) bool {
+		// TODO: If member is a comparable type (int, string, etc) compare by the member
+		// Use generic comparable type here once update to go1.18
+		if _, ok := out[i].Member.(string); ok {
+			// If member is a string, compare the member
+			return out[i].Member.(string) < out[j].Member.(string)
+		}
+		return out[i].Score < out[j].Score
+	})
+	return out
+})
+
 // IgnoreIDOpt is an cmp.Option to ignore ID field in task messages when comparing.
 var IgnoreIDOpt = cmpopts.IgnoreFields(base.TaskMessage{}, "ID")
 
@@ -521,4 +535,84 @@ func getMessagesFromZSetWithScores(tb testing.TB, r redis.UniversalClient,
 		}
 	}
 	return res
+}
+
+// TaskSeedData holds the data required to seed tasks under the task key in test.
+type TaskSeedData struct {
+	Msg          *base.TaskMessage
+	State        base.TaskState
+	PendingSince time.Time
+}
+
+func SeedTasks(tb testing.TB, r redis.UniversalClient, taskData []*TaskSeedData) {
+	for _, data := range taskData {
+		msg := data.Msg
+		ctx := context.Background()
+		key := base.TaskKey(msg.Queue, msg.ID)
+		v := map[string]interface{}{
+			"msg":        MustMarshal(tb, msg),
+			"state":      data.State.String(),
+			"unique_key": msg.UniqueKey,
+			"group":      msg.GroupKey,
+		}
+		if !data.PendingSince.IsZero() {
+			v["pending_since"] = data.PendingSince.Unix()
+		}
+		if err := r.HSet(ctx, key, v).Err(); err != nil {
+			tb.Fatalf("Failed to write task data in redis: %v", err)
+		}
+		if len(msg.UniqueKey) > 0 {
+			err := r.SetNX(ctx, msg.UniqueKey, msg.ID, 1*time.Minute).Err()
+			if err != nil {
+				tb.Fatalf("Failed to set unique lock in redis: %v", err)
+			}
+		}
+	}
+}
+
+func SeedRedisZSets(tb testing.TB, r redis.UniversalClient, zsets map[string][]*redis.Z) {
+	for key, zs := range zsets {
+		// FIXME: How come we can't simply do ZAdd(ctx, key, zs...) here?
+		for _, z := range zs {
+			if err := r.ZAdd(context.Background(), key, z).Err(); err != nil {
+				tb.Fatalf("Failed to seed zset (key=%q): %v", key, err)
+			}
+		}
+	}
+}
+
+func SeedRedisSets(tb testing.TB, r redis.UniversalClient, sets map[string][]string) {
+	for key, set := range sets {
+		SeedRedisSet(tb, r, key, set)
+	}
+}
+
+func SeedRedisSet(tb testing.TB, r redis.UniversalClient, key string, members []string) {
+	for _, mem := range members {
+		if err := r.SAdd(context.Background(), key, mem).Err(); err != nil {
+			tb.Fatalf("Failed to seed set (key=%q): %v", key, err)
+		}
+	}
+}
+
+func SeedRedisLists(tb testing.TB, r redis.UniversalClient, lists map[string][]string) {
+	for key, vals := range lists {
+		for _, v := range vals {
+			if err := r.LPush(context.Background(), key, v).Err(); err != nil {
+				tb.Fatalf("Failed to seed list (key=%q): %v", key, err)
+			}
+		}
+	}
+}
+
+func AssertRedisZSets(t *testing.T, r redis.UniversalClient, wantZSets map[string][]redis.Z) {
+	for key, want := range wantZSets {
+		got, err := r.ZRangeWithScores(context.Background(), key, 0, -1).Result()
+		if err != nil {
+			t.Fatalf("Failed to read zset (key=%q): %v", key, err)
+		}
+		if diff := cmp.Diff(want, got, SortRedisZSetEntryOpt); diff != "" {
+			t.Errorf("mismatch found in zset (key=%q): (-want,+got)\n%s", key, diff)
+		}
+	}
 }
