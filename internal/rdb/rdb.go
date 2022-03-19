@@ -1017,6 +1017,10 @@ func (r *RDB) ListGroups(qname string) ([]string, error) {
 // Output:
 // Returns 0 if no aggregation set was created
 // Returns 1 if an aggregation set was created
+//
+// Time Complexity:
+// O(log(N) + M) with N being the number tasks in the group zset
+// and M being the max size.
 var aggregationCheckCmd = redis.NewScript(`
 local size = redis.call("ZCARD", KEYS[1])
 if size == 0 then
@@ -1118,6 +1122,12 @@ func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, ma
 // KEYS[1] -> asynq:{<qname>}:g:<gname>:<aggregation_set_id>
 // ------
 // ARGV[1] -> task key prefix
+//
+// Output:
+// Array of encoded task messages
+//
+// Time Complexity:
+// O(N) with N being the number of tasks in the aggregation set.
 var readAggregationSetCmd = redis.NewScript(`
 local msgs = {}
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
@@ -1162,6 +1172,13 @@ func (r *RDB) ReadAggregationSet(qname, gname, setID string) ([]*base.TaskMessag
 // KEYS[2] -> asynq:{<qname>}:aggregation_sets
 // -------
 // ARGV[1] -> task key prefix
+//
+// Output:
+// Redis status reply
+//
+// Time Complexity:
+// max(O(N), O(log(M))) with N being the number of tasks in the aggregation set
+// and M being the number of elements in the all-aggregation-sets list.
 var deleteAggregationSetCmd = redis.NewScript(`
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids)  do

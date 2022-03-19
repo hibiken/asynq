@@ -68,7 +68,7 @@ func TestCurrentStats(t *testing.T) {
 	r.SetClock(timeutil.NewSimulatedClock(now))
 
 	tests := []struct {
-		tasks                           []*taskData
+		tasks                           []*h.TaskSeedData
 		allQueues                       []string
 		allGroups                       map[string][]string
 		pending                         map[string][]string
@@ -88,14 +88,14 @@ func TestCurrentStats(t *testing.T) {
 		want                            *Stats
 	}{
 		{
-			tasks: []*taskData{
-				{msg: m1, state: base.TaskStatePending},
-				{msg: m2, state: base.TaskStateActive},
-				{msg: m3, state: base.TaskStateScheduled},
-				{msg: m4, state: base.TaskStateScheduled},
-				{msg: m5, state: base.TaskStatePending},
-				{msg: m6, state: base.TaskStatePending},
-				{msg: m7, state: base.TaskStateAggregating},
+			tasks: []*h.TaskSeedData{
+				{Msg: m1, State: base.TaskStatePending},
+				{Msg: m2, State: base.TaskStateActive},
+				{Msg: m3, State: base.TaskStateScheduled},
+				{Msg: m4, State: base.TaskStateScheduled},
+				{Msg: m5, State: base.TaskStatePending},
+				{Msg: m6, State: base.TaskStatePending},
+				{Msg: m7, State: base.TaskStateAggregating},
 			},
 			allQueues: []string{"default", "critical", "low"},
 			allGroups: map[string][]string{
@@ -187,12 +187,12 @@ func TestCurrentStats(t *testing.T) {
 			},
 		},
 		{
-			tasks: []*taskData{
-				{msg: m1, state: base.TaskStatePending},
-				{msg: m2, state: base.TaskStateActive},
-				{msg: m3, state: base.TaskStateScheduled},
-				{msg: m4, state: base.TaskStateScheduled},
-				{msg: m6, state: base.TaskStatePending},
+			tasks: []*h.TaskSeedData{
+				{Msg: m1, State: base.TaskStatePending},
+				{Msg: m2, State: base.TaskStateActive},
+				{Msg: m3, State: base.TaskStateScheduled},
+				{Msg: m4, State: base.TaskStateScheduled},
+				{Msg: m6, State: base.TaskStatePending},
 			},
 			allQueues: []string{"default", "critical", "low"},
 			pending: map[string][]string{
@@ -284,16 +284,16 @@ func TestCurrentStats(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		SeedSet(t, r.client, base.AllQueues, tc.allQueues)
-		SeedSets(t, r.client, tc.allGroups)
-		SeedTasks(t, r.client, tc.tasks)
-		SeedLists(t, r.client, tc.pending)
-		SeedLists(t, r.client, tc.active)
-		SeedZSets(t, r.client, tc.scheduled)
-		SeedZSets(t, r.client, tc.retry)
-		SeedZSets(t, r.client, tc.archived)
-		SeedZSets(t, r.client, tc.completed)
-		SeedZSets(t, r.client, tc.groups)
+		h.SeedRedisSet(t, r.client, base.AllQueues, tc.allQueues)
+		h.SeedRedisSets(t, r.client, tc.allGroups)
+		h.SeedTasks(t, r.client, tc.tasks)
+		h.SeedRedisLists(t, r.client, tc.pending)
+		h.SeedRedisLists(t, r.client, tc.active)
+		h.SeedRedisZSets(t, r.client, tc.scheduled)
+		h.SeedRedisZSets(t, r.client, tc.retry)
+		h.SeedRedisZSets(t, r.client, tc.archived)
+		h.SeedRedisZSets(t, r.client, tc.completed)
+		h.SeedRedisZSets(t, r.client, tc.groups)
 		ctx := context.Background()
 		for qname, n := range tc.processed {
 			r.client.Set(ctx, base.ProcessedKey(qname, now), n, 0)
@@ -434,16 +434,16 @@ func TestGroupStats(t *testing.T) {
 	now := time.Now()
 
 	fixtures := struct {
-		tasks     []*taskData
+		tasks     []*h.TaskSeedData
 		allGroups map[string][]string
 		groups    map[string][]*redis.Z
 	}{
-		tasks: []*taskData{
-			{msg: m1, state: base.TaskStateAggregating},
-			{msg: m2, state: base.TaskStateAggregating},
-			{msg: m3, state: base.TaskStateAggregating},
-			{msg: m4, state: base.TaskStateAggregating},
-			{msg: m5, state: base.TaskStateAggregating},
+		tasks: []*h.TaskSeedData{
+			{Msg: m1, State: base.TaskStateAggregating},
+			{Msg: m2, State: base.TaskStateAggregating},
+			{Msg: m3, State: base.TaskStateAggregating},
+			{Msg: m4, State: base.TaskStateAggregating},
+			{Msg: m5, State: base.TaskStateAggregating},
 		},
 		allGroups: map[string][]string{
 			base.AllGroups("default"): {"group1", "group2"},
@@ -499,9 +499,9 @@ func TestGroupStats(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		SeedTasks(t, r.client, fixtures.tasks)
-		SeedSets(t, r.client, fixtures.allGroups)
-		SeedZSets(t, r.client, fixtures.groups)
+		h.SeedTasks(t, r.client, fixtures.tasks)
+		h.SeedRedisSets(t, r.client, fixtures.allGroups)
+		h.SeedRedisZSets(t, r.client, fixtures.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
 			got, err := r.GroupStats(tc.qname)
