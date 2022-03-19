@@ -2,7 +2,7 @@
 // Use of this source code is governed by a MIT license
 // that can be found in the LICENSE file.
 
-package asynqtest
+package testutil
 
 import (
 	"testing"
