@@ -513,7 +513,6 @@ func TestGroupStats(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestGetTaskInfo(t *testing.T) {
