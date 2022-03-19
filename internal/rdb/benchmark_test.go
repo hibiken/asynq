@@ -10,19 +10,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/testutil"
 )
 
 func BenchmarkEnqueue(b *testing.B) {
 	r := setup(b)
 	ctx := context.Background()
-	msg := asynqtest.NewTaskMessage("task1", nil)
+	msg := testutil.NewTaskMessage("task1", nil)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		asynqtest.FlushDB(b, r.client)
+		testutil.FlushDB(b, r.client)
 		b.StartTimer()
 
 		if err := r.Enqueue(ctx, msg); err != nil {
@@ -45,7 +45,7 @@ func BenchmarkEnqueueUnique(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		asynqtest.FlushDB(b, r.client)
+		testutil.FlushDB(b, r.client)
 		b.StartTimer()
 
 		if err := r.EnqueueUnique(ctx, msg, uniqueTTL); err != nil {
@@ -57,13 +57,13 @@ func BenchmarkEnqueueUnique(b *testing.B) {
 func BenchmarkSchedule(b *testing.B) {
 	r := setup(b)
 	ctx := context.Background()
-	msg := asynqtest.NewTaskMessage("task1", nil)
+	msg := testutil.NewTaskMessage("task1", nil)
 	processAt := time.Now().Add(3 * time.Minute)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		asynqtest.FlushDB(b, r.client)
+		testutil.FlushDB(b, r.client)
 		b.StartTimer()
 
 		if err := r.Schedule(ctx, msg, processAt); err != nil {
@@ -87,7 +87,7 @@ func BenchmarkScheduleUnique(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		asynqtest.FlushDB(b, r.client)
+		testutil.FlushDB(b, r.client)
 		b.StartTimer()
 
 		if err := r.ScheduleUnique(ctx, msg, processAt, uniqueTTL); err != nil {
@@ -103,9 +103,9 @@ func BenchmarkDequeueSingleQueue(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		asynqtest.FlushDB(b, r.client)
+		testutil.FlushDB(b, r.client)
 		for i := 0; i < 10; i++ {
-			m := asynqtest.NewTaskMessageWithQueue(
+			m := testutil.NewTaskMessageWithQueue(
 				fmt.Sprintf("task%d", i), nil, base.DefaultQueueName)
 			if err := r.Enqueue(ctx, m); err != nil {
 				b.Fatalf("Enqueue failed: %v", err)
@@ -127,10 +127,10 @@ func BenchmarkDequeueMultipleQueues(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		asynqtest.FlushDB(b, r.client)
+		testutil.FlushDB(b, r.client)
 		for i := 0; i < 10; i++ {
 			for _, qname := range qnames {
-				m := asynqtest.NewTaskMessageWithQueue(
+				m := testutil.NewTaskMessageWithQueue(
 					fmt.Sprintf("%s_task%d", qname, i), nil, qname)
 				if err := r.Enqueue(ctx, m); err != nil {
 					b.Fatalf("Enqueue failed: %v", err)
@@ -147,9 +147,9 @@ func BenchmarkDequeueMultipleQueues(b *testing.B) {
 
 func BenchmarkDone(b *testing.B) {
 	r := setup(b)
-	m1 := asynqtest.NewTaskMessage("task1", nil)
-	m2 := asynqtest.NewTaskMessage("task2", nil)
-	m3 := asynqtest.NewTaskMessage("task3", nil)
+	m1 := testutil.NewTaskMessage("task1", nil)
+	m2 := testutil.NewTaskMessage("task2", nil)
+	m3 := testutil.NewTaskMessage("task3", nil)
 	msgs := []*base.TaskMessage{m1, m2, m3}
 	zs := []base.Z{
 		{Message: m1, Score: time.Now().Add(10 * time.Second).Unix()},
@@ -161,9 +161,9 @@ func BenchmarkDone(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		asynqtest.FlushDB(b, r.client)
-		asynqtest.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
-		asynqtest.SeedLease(b, r.client, zs, base.DefaultQueueName)
+		testutil.FlushDB(b, r.client)
+		testutil.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
+		testutil.SeedLease(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.Done(ctx, msgs[0]); err != nil {
@@ -174,9 +174,9 @@ func BenchmarkDone(b *testing.B) {
 
 func BenchmarkRetry(b *testing.B) {
 	r := setup(b)
-	m1 := asynqtest.NewTaskMessage("task1", nil)
-	m2 := asynqtest.NewTaskMessage("task2", nil)
-	m3 := asynqtest.NewTaskMessage("task3", nil)
+	m1 := testutil.NewTaskMessage("task1", nil)
+	m2 := testutil.NewTaskMessage("task2", nil)
+	m3 := testutil.NewTaskMessage("task3", nil)
 	msgs := []*base.TaskMessage{m1, m2, m3}
 	zs := []base.Z{
 		{Message: m1, Score: time.Now().Add(10 * time.Second).Unix()},
@@ -188,9 +188,9 @@ func BenchmarkRetry(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		asynqtest.FlushDB(b, r.client)
-		asynqtest.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
-		asynqtest.SeedLease(b, r.client, zs, base.DefaultQueueName)
+		testutil.FlushDB(b, r.client)
+		testutil.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
+		testutil.SeedLease(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.Retry(ctx, msgs[0], time.Now().Add(1*time.Minute), "error", true /*isFailure*/); err != nil {
@@ -201,9 +201,9 @@ func BenchmarkRetry(b *testing.B) {
 
 func BenchmarkArchive(b *testing.B) {
 	r := setup(b)
-	m1 := asynqtest.NewTaskMessage("task1", nil)
-	m2 := asynqtest.NewTaskMessage("task2", nil)
-	m3 := asynqtest.NewTaskMessage("task3", nil)
+	m1 := testutil.NewTaskMessage("task1", nil)
+	m2 := testutil.NewTaskMessage("task2", nil)
+	m3 := testutil.NewTaskMessage("task3", nil)
 	msgs := []*base.TaskMessage{m1, m2, m3}
 	zs := []base.Z{
 		{Message: m1, Score: time.Now().Add(10 * time.Second).Unix()},
@@ -215,9 +215,9 @@ func BenchmarkArchive(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		asynqtest.FlushDB(b, r.client)
-		asynqtest.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
-		asynqtest.SeedLease(b, r.client, zs, base.DefaultQueueName)
+		testutil.FlushDB(b, r.client)
+		testutil.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
+		testutil.SeedLease(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.Archive(ctx, msgs[0], "error"); err != nil {
@@ -228,9 +228,9 @@ func BenchmarkArchive(b *testing.B) {
 
 func BenchmarkRequeue(b *testing.B) {
 	r := setup(b)
-	m1 := asynqtest.NewTaskMessage("task1", nil)
-	m2 := asynqtest.NewTaskMessage("task2", nil)
-	m3 := asynqtest.NewTaskMessage("task3", nil)
+	m1 := testutil.NewTaskMessage("task1", nil)
+	m2 := testutil.NewTaskMessage("task2", nil)
+	m3 := testutil.NewTaskMessage("task3", nil)
 	msgs := []*base.TaskMessage{m1, m2, m3}
 	zs := []base.Z{
 		{Message: m1, Score: time.Now().Add(10 * time.Second).Unix()},
@@ -242,9 +242,9 @@ func BenchmarkRequeue(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		asynqtest.FlushDB(b, r.client)
-		asynqtest.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
-		asynqtest.SeedLease(b, r.client, zs, base.DefaultQueueName)
+		testutil.FlushDB(b, r.client)
+		testutil.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
+		testutil.SeedLease(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.Requeue(ctx, msgs[0]); err != nil {
@@ -258,7 +258,7 @@ func BenchmarkCheckAndEnqueue(b *testing.B) {
 	now := time.Now()
 	var zs []base.Z
 	for i := -100; i < 100; i++ {
-		msg := asynqtest.NewTaskMessage(fmt.Sprintf("task%d", i), nil)
+		msg := testutil.NewTaskMessage(fmt.Sprintf("task%d", i), nil)
 		score := now.Add(time.Duration(i) * time.Second).Unix()
 		zs = append(zs, base.Z{Message: msg, Score: score})
 	}
@@ -266,8 +266,8 @@ func BenchmarkCheckAndEnqueue(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		asynqtest.FlushDB(b, r.client)
-		asynqtest.SeedScheduledQueue(b, r.client, zs, base.DefaultQueueName)
+		testutil.FlushDB(b, r.client)
+		testutil.SeedScheduledQueue(b, r.client, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.ForwardIfReady(base.DefaultQueueName); err != nil {

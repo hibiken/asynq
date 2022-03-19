@@ -2,8 +2,8 @@
 // Use of this source code is governed by a MIT license
 // that can be found in the LICENSE file.
 
-// Package asynqtest defines test helpers for asynq and its internal packages.
-package asynqtest
+// Package testutil defines test helpers for asynq and its internal packages.
+package testutil
 
 import (
 	"context"

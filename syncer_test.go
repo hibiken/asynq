@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	h "github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
+	h "github.com/hibiken/asynq/internal/testutil"
 )
 
 func TestSyncer(t *testing.T) {

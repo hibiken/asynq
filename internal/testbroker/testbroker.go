@@ -15,7 +15,7 @@ import (
 	"github.com/hibiken/asynq/internal/base"
 )
 
-var errRedisDown = errors.New("asynqtest: redis is down")
+var errRedisDown = errors.New("testutil: redis is down")
 
 // TestBroker is a broker implementation which enables
 // to simulate Redis failure in tests.

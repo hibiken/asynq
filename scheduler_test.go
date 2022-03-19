@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/hibiken/asynq/internal/asynqtest"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/testutil"
 )
 
 func TestSchedulerRegister(t *testing.T) {
@@ -69,8 +69,8 @@ func TestSchedulerRegister(t *testing.T) {
 		time.Sleep(tc.wait)
 		scheduler.Shutdown()
 
-		got := asynqtest.GetPendingMessages(t, r, tc.queue)
-		if diff := cmp.Diff(tc.want, got, asynqtest.IgnoreIDOpt); diff != "" {
+		got := testutil.GetPendingMessages(t, r, tc.queue)
+		if diff := cmp.Diff(tc.want, got, testutil.IgnoreIDOpt); diff != "" {
 			t.Errorf("mismatch found in queue %q: (-want,+got)\n%s", tc.queue, diff)
 		}
 	}
@@ -148,7 +148,7 @@ func TestSchedulerUnregister(t *testing.T) {
 		time.Sleep(tc.wait)
 		scheduler.Shutdown()
 
-		got := asynqtest.GetPendingMessages(t, r, tc.queue)
+		got := testutil.GetPendingMessages(t, r, tc.queue)
 		if len(got) != 0 {
 			t.Errorf("%d tasks were enqueued, want zero", len(got))
 		}
