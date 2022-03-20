@@ -1571,6 +1571,220 @@ func TestListCompletedPagination(t *testing.T) {
 	}
 }
 
+func TestListAggregating(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	now := time.Now()
+	m1 := h.NewTaskMessageBuilder().SetType("task1").SetQueue("default").SetGroup("group1").Build()
+	m2 := h.NewTaskMessageBuilder().SetType("task2").SetQueue("default").SetGroup("group1").Build()
+	m3 := h.NewTaskMessageBuilder().SetType("task3").SetQueue("default").SetGroup("group2").Build()
+	m4 := h.NewTaskMessageBuilder().SetType("task4").SetQueue("custom").SetGroup("group3").Build()
+
+	fxt := struct {
+		tasks     []*h.TaskSeedData
+		allQueues []string
+		allGroups map[string][]string
+		groups    map[string][]*redis.Z
+	}{
+		tasks: []*h.TaskSeedData{
+			{Msg: m1, State: base.TaskStateAggregating},
+			{Msg: m2, State: base.TaskStateAggregating},
+			{Msg: m3, State: base.TaskStateAggregating},
+			{Msg: m4, State: base.TaskStateAggregating},
+		},
+		allQueues: []string{"default", "custom"},
+		allGroups: map[string][]string{
+			base.AllGroups("default"): {"group1", "group2"},
+			base.AllGroups("custom"):  {"group3"},
+		},
+		groups: map[string][]*redis.Z{
+			base.GroupKey("default", "group1"): {
+				{Member: m1.ID, Score: float64(now.Add(-30 * time.Second).Unix())},
+				{Member: m2.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+			},
+			base.GroupKey("default", "group2"): {
+				{Member: m3.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+			},
+			base.GroupKey("custom", "group3"): {
+				{Member: m4.ID, Score: float64(now.Add(-40 * time.Second).Unix())},
+			},
+		},
+	}
+
+	tests := []struct {
+		desc  string
+		qname string
+		gname string
+		want  []*base.TaskInfo
+	}{
+		{
+			desc:  "with group1 in default queue",
+			qname: "default",
+			gname: "group1",
+			want: []*base.TaskInfo{
+				{Message: m1, State: base.TaskStateAggregating, NextProcessAt: time.Time{}, Result: nil},
+				{Message: m2, State: base.TaskStateAggregating, NextProcessAt: time.Time{}, Result: nil},
+			},
+		},
+		{
+			desc:  "with group3 in custom queue",
+			qname: "custom",
+			gname: "group3",
+			want: []*base.TaskInfo{
+				{Message: m4, State: base.TaskStateAggregating, NextProcessAt: time.Time{}, Result: nil},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.client, fxt.allGroups)
+		h.SeedTasks(t, r.client, fxt.tasks)
+		h.SeedRedisZSets(t, r.client, fxt.groups)
+
+		t.Run(tc.desc, func(t *testing.T) {
+			got, err := r.ListAggregating(tc.qname, tc.gname, Pagination{})
+			if err != nil {
+				t.Fatalf("ListAggregating returned error: %v", err)
+			}
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("ListAggregating = %v, want %v; (-want,+got)\n%s", got, tc.want, diff)
+			}
+		})
+	}
+}
+
+func TestListAggregatingPagination(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	groupkey := base.GroupKey("default", "mygroup")
+	fxt := struct {
+		tasks     []*h.TaskSeedData
+		allQueues []string
+		allGroups map[string][]string
+		groups    map[string][]*redis.Z
+	}{
+		tasks:     []*h.TaskSeedData{}, // will be populated below
+		allQueues: []string{"default"},
+		allGroups: map[string][]string{
+			base.AllGroups("default"): {"mygroup"},
+		},
+		groups: map[string][]*redis.Z{
+			groupkey: {}, // will be populated below
+		},
+	}
+
+	now := time.Now()
+	for i := 0; i < 100; i++ {
+		msg := h.NewTaskMessageBuilder().SetType(fmt.Sprintf("task%d", i)).SetGroup("mygroup").Build()
+		fxt.tasks = append(fxt.tasks, &h.TaskSeedData{
+			Msg: msg, State: base.TaskStateAggregating,
+		})
+		fxt.groups[groupkey] = append(fxt.groups[groupkey], &redis.Z{
+			Member: msg.ID,
+			Score:  float64(now.Add(-time.Duration(100-i) * time.Second).Unix()),
+		})
+	}
+
+	tests := []struct {
+		desc      string
+		qname     string
+		gname     string
+		page      int
+		size      int
+		wantSize  int
+		wantFirst string
+		wantLast  string
+	}{
+		{
+			desc:      "first page",
+			qname:     "default",
+			gname:     "mygroup",
+			page:      0,
+			size:      20,
+			wantSize:  20,
+			wantFirst: "task0",
+			wantLast:  "task19",
+		},
+		{
+			desc:      "second page",
+			qname:     "default",
+			gname:     "mygroup",
+			page:      1,
+			size:      20,
+			wantSize:  20,
+			wantFirst: "task20",
+			wantLast:  "task39",
+		},
+		{
+			desc:      "with different page size",
+			qname:     "default",
+			gname:     "mygroup",
+			page:      2,
+			size:      30,
+			wantSize:  30,
+			wantFirst: "task60",
+			wantLast:  "task89",
+		},
+		{
+			desc:      "last page",
+			qname:     "default",
+			gname:     "mygroup",
+			page:      3,
+			size:      30,
+			wantSize:  10,
+			wantFirst: "task90",
+			wantLast:  "task99",
+		},
+		{
+			desc:      "out of range",
+			qname:     "default",
+			gname:     "mygroup",
+			page:      4,
+			size:      30,
+			wantSize:  0,
+			wantFirst: "",
+			wantLast:  "",
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.client, fxt.allGroups)
+		h.SeedTasks(t, r.client, fxt.tasks)
+		h.SeedRedisZSets(t, r.client, fxt.groups)
+
+		t.Run(tc.desc, func(t *testing.T) {
+			got, err := r.ListAggregating(tc.qname, tc.gname, Pagination{Page: tc.page, Size: tc.size})
+			if err != nil {
+				t.Fatalf("ListAggregating returned error: %v", err)
+			}
+
+			if len(got) != tc.wantSize {
+				t.Errorf("got %d results, want %d", len(got), tc.wantSize)
+			}
+
+			if len(got) == 0 {
+				return
+			}
+
+			first := got[0].Message
+			if first.Type != tc.wantFirst {
+				t.Errorf("First message %q, want %q", first.Type, tc.wantFirst)
+			}
+
+			last := got[len(got)-1].Message
+			if last.Type != tc.wantLast {
+				t.Errorf("Last message %q, want %q", last.Type, tc.wantLast)
+			}
+		})
+	}
+}
+
 func TestListTasksError(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
