@@ -364,10 +364,32 @@ func (i *Inspector) ListActiveTasks(qname string, opts ...ListOption) ([]*TaskIn
 	return tasks, nil
 }
 
-// TODO: comment
+// ListAggregatingTasks retrieves scheduled tasks from the specified group.
+//
+// By default, it retrieves the first 30 tasks.
 func (i *Inspector) ListAggregatingTasks(qname, gname string, opts ...ListOption) ([]*TaskInfo, error) {
-	// TODO: Implement this with TDD
-	return nil, nil
+	if err := base.ValidateQueueName(qname); err != nil {
+		return nil, fmt.Errorf("asynq: %v", err)
+	}
+	opt := composeListOptions(opts...)
+	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
+	infos, err := i.rdb.ListAggregating(qname, gname, pgn)
+	switch {
+	case errors.IsQueueNotFound(err):
+		return nil, fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case err != nil:
+		return nil, fmt.Errorf("asynq: %v", err)
+	}
+	var tasks []*TaskInfo
+	for _, i := range infos {
+		tasks = append(tasks, newTaskInfo(
+			i.Message,
+			i.State,
+			i.NextProcessAt,
+			i.Result,
+		))
+	}
+	return tasks, nil
 }
 
 // ListScheduledTasks retrieves scheduled tasks from the specified queue.
