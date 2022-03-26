@@ -292,30 +292,25 @@ for i=3,6 do
         memusg = memusg + m
     end
 end
-local group_names = redis.call("SRANDMEMBER", KEYS[7], tonumber(ARGV[3]))
-if (table.getn(group_names) > 0) then
-    local group_sample_total = 0
-    for _, gname in ipairs(group_names) do
-        local group_key = ARGV[4] .. gname
-        local ids = redis.call("ZRANGE", group_key, 0, sample_size - 1)
-        local sample_total = 0
-        if (table.getn(ids) > 0) then
-            for _, id in ipairs(ids) do
-                local bytes = redis.call("MEMORY", "USAGE", ARGV[1] .. id)
-                sample_total = sample_total + bytes
-            end
-            local n = redis.call("ZCARD", group_key)
-            local avg = sample_total / table.getn(ids)
-            group_sample_total = group_sample_total + (avg * n)
-        end
-        local m = redis.call("MEMORY", "USAGE", group_key)
-        if (m) then
-            group_sample_total = group_sample_total + m
-        end
-    end
-    local group_size = redis.call("SCARD", KEYS[7])
-    local group_memusg_avg = group_sample_total / table.getn(group_names)
-    memusg = memusg + (group_memusg_avg * group_size)
+local groups = redis.call("SMEMBERS", KEYS[7])
+if table.getn(groups) > 0 then
+	local agg_task_count = 0
+	local agg_task_sample_total = 0
+	local agg_task_sample_size = 0
+	for i, gname in ipairs(groups) do
+		local group_key = ARGV[4] .. gname
+		agg_task_count = agg_task_count + redis.call("ZCARD", group_key)
+		if i <= tonumber(ARGV[3]) then
+			local ids = redis.call("ZRANGE", group_key, 0, sample_size - 1)
+			for _, id in ipairs(ids) do
+				local bytes = redis.call("MEMORY", "USAGE", ARGV[1] .. id)
+				agg_task_sample_total = agg_task_sample_total + bytes
+				agg_task_sample_size = agg_task_sample_size + 1
+			end
+		end
+	end
+	local avg = agg_task_sample_total / agg_task_sample_size
+	memusg = memusg + (avg * agg_task_count)
 end
 return memusg
 `)
