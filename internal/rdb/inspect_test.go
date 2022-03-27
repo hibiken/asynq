@@ -4210,6 +4210,105 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 	}
 }
 
+func TestDeleteAllAggregatingTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	m1 := h.NewTaskMessageBuilder().SetQueue("default").SetType("task1").SetGroup("group1").Build()
+	m2 := h.NewTaskMessageBuilder().SetQueue("default").SetType("task2").SetGroup("group1").Build()
+	m3 := h.NewTaskMessageBuilder().SetQueue("custom").SetType("task3").SetGroup("group1").Build()
+
+	fxt := struct {
+		tasks     []*h.TaskSeedData
+		allQueues []string
+		allGroups map[string][]string
+		groups    map[string][]*redis.Z
+	}{
+		tasks: []*h.TaskSeedData{
+			{Msg: m1, State: base.TaskStateAggregating},
+			{Msg: m2, State: base.TaskStateAggregating},
+			{Msg: m3, State: base.TaskStateAggregating},
+		},
+		allQueues: []string{"default", "custom"},
+		allGroups: map[string][]string{
+			base.AllGroups("default"): {"group1"},
+			base.AllGroups("custom"):  {"group1"},
+		},
+		groups: map[string][]*redis.Z{
+			base.GroupKey("default", "group1"): {
+				{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+				{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
+			},
+			base.GroupKey("custom", "group1"): {
+				{Member: m3.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+			},
+		},
+	}
+
+	tests := []struct {
+		desc          string
+		qname         string
+		gname         string
+		want          int64
+		wantAllGroups map[string][]string
+		wantGroups    map[string][]redis.Z
+	}{
+		{
+			desc:  "default queue group1",
+			qname: "default",
+			gname: "group1",
+			want:  2,
+			wantAllGroups: map[string][]string{
+				base.AllGroups("default"): {},
+				base.AllGroups("custom"):  {"group1"},
+			},
+			wantGroups: map[string][]redis.Z{
+				base.GroupKey("default", "group1"): nil,
+				base.GroupKey("custom", "group1"): {
+					{Member: m3.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+				},
+			},
+		},
+		{
+			desc:  "custom queue group1",
+			qname: "custom",
+			gname: "group1",
+			want:  1,
+			wantAllGroups: map[string][]string{
+				base.AllGroups("default"): {"group1"},
+				base.AllGroups("custom"):  {},
+			},
+			wantGroups: map[string][]redis.Z{
+				base.GroupKey("default", "group1"): {
+					{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
+				},
+				base.GroupKey("custom", "group1"): nil,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedTasks(t, r.client, fxt.tasks)
+		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.client, fxt.allGroups)
+		h.SeedRedisZSets(t, r.client, fxt.groups)
+
+		t.Run(tc.desc, func(t *testing.T) {
+			got, err := r.DeleteAllAggregatingTasks(tc.qname, tc.gname)
+			if err != nil {
+				t.Fatalf("DeleteAllAggregatingTasks returned error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("DeleteAllAggregatingTasks = %d, want %d", got, tc.want)
+			}
+			h.AssertRedisSets(t, r.client, tc.wantAllGroups)
+			h.AssertRedisZSets(t, r.client, tc.wantGroups)
+		})
+	}
+}
+
 func TestDeleteAllPendingTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()

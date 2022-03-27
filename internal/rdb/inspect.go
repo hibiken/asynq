@@ -1447,6 +1447,50 @@ func (r *RDB) deleteAll(key, qname string) (int64, error) {
 	return n, nil
 }
 
+// deleteAllAggregatingCmd deletes all tasks from the given group.
+//
+// Input:
+// KEYS[1] -> asynq:{<qname>}:g:<gname>
+// KEYS[2] -> asynq:{<qname>}:groups
+// -------
+// ARGV[1] -> task key prefix
+// ARGV[2] -> group name
+var deleteAllAggregatingCmd = redis.NewScript(`
+local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
+for _, id in ipairs(ids) do
+	redis.call("DEL", ARGV[1] .. id)
+end
+redis.call("SREM", KEYS[2], ARGV[2])
+redis.call("DEL", KEYS[1])
+return table.getn(ids)
+`)
+
+// DeleteAllAggregatingTasks deletes all aggregating tasks from the given group
+// and returns the number of tasks deleted.
+func (r *RDB) DeleteAllAggregatingTasks(qname, gname string) (int64, error) {
+	var op errors.Op = "rdb.DeleteAllAggregatingTasks"
+	if err := r.checkQueueExists(qname); err != nil {
+		return 0, errors.E(op, errors.CanonicalCode(err), err)
+	}
+	keys := []string{
+		base.GroupKey(qname, gname),
+		base.AllGroups(qname),
+	}
+	argv := []interface{}{
+		base.TaskKeyPrefix(qname),
+		gname,
+	}
+	res, err := deleteAllAggregatingCmd.Run(context.Background(), r.client, keys, argv...).Result()
+	if err != nil {
+		return 0, errors.E(op, errors.Unknown, err)
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, errors.E(op, errors.Internal, "command error: unexpected return value %v", res)
+	}
+	return n, nil
+}
+
 // deleteAllPendingCmd deletes all pending tasks from the given queue.
 //
 // Input:
