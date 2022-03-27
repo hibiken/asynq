@@ -1279,9 +1279,11 @@ func (r *RDB) archiveAll(src, dst, qname string) (int64, error) {
 
 // Input:
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
+// KEYS[2] -> asynq:{<qname>}:groups
 // --
 // ARGV[1] -> task ID
 // ARGV[2] -> queue key prefix
+// ARGV[3] -> group key prefix
 //
 // Output:
 // Numeric code indicating the status:
@@ -1292,17 +1294,24 @@ var deleteTaskCmd = redis.NewScript(`
 if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
 end
-local state = redis.call("HGET", KEYS[1], "state")
+local state, group = unpack(redis.call("HMGET", KEYS[1], "state", "group"))
 if state == "active" then
 	return -1
 end
 if state == "pending" then
 	if redis.call("LREM", ARGV[2] .. state, 0, ARGV[1]) == 0 then
-		return redis.error_reply("task is not found in list: " .. tostring(state))
+		return redis.error_reply("task is not found in list: " .. tostring(ARGV[2] .. state))
+	end
+elseif state == "aggregating" then
+	if redis.call("ZREM", ARGV[3] .. group, ARGV[1]) == 0 then
+		return redis.error_reply("task is not found in zset: " .. tostring(ARGV[3] .. group))
+	end
+	if redis.call("ZCARD", ARGV[3] .. group) == 0 then
+		redis.call("SREM", KEYS[2], group)
 	end
 else
 	if redis.call("ZREM", ARGV[2] .. state, ARGV[1]) == 0 then
-		return redis.error_reply("task is not found in zset: " .. tostring(state))
+		return redis.error_reply("task is not found in zset: " .. tostring(ARGV[2] .. state))
 	end
 end
 local unique_key = redis.call("HGET", KEYS[1], "unique_key")
@@ -1325,10 +1334,12 @@ func (r *RDB) DeleteTask(qname, id string) error {
 	}
 	keys := []string{
 		base.TaskKey(qname, id),
+		base.AllGroups(qname),
 	}
 	argv := []interface{}{
 		id,
 		base.QueueKeyPrefix(qname),
+		base.GroupKeyPrefix(qname),
 	}
 	res, err := deleteTaskCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
