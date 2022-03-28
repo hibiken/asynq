@@ -2771,6 +2771,115 @@ func TestArchiveScheduledTask(t *testing.T) {
 	}
 }
 
+func TestArchiveAggregatingTask(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+	m1 := h.NewTaskMessageBuilder().SetQueue("default").SetType("task1").SetGroup("group1").Build()
+	m2 := h.NewTaskMessageBuilder().SetQueue("default").SetType("task2").SetGroup("group1").Build()
+	m3 := h.NewTaskMessageBuilder().SetQueue("custom").SetType("task3").SetGroup("group1").Build()
+
+	fxt := struct {
+		tasks     []*h.TaskSeedData
+		allQueues []string
+		allGroups map[string][]string
+		groups    map[string][]*redis.Z
+	}{
+		tasks: []*h.TaskSeedData{
+			{Msg: m1, State: base.TaskStateAggregating},
+			{Msg: m2, State: base.TaskStateAggregating},
+			{Msg: m3, State: base.TaskStateAggregating},
+		},
+		allQueues: []string{"default", "custom"},
+		allGroups: map[string][]string{
+			base.AllGroups("default"): {"group1"},
+			base.AllGroups("custom"):  {"group1"},
+		},
+		groups: map[string][]*redis.Z{
+			base.GroupKey("default", "group1"): {
+				{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+				{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
+			},
+			base.GroupKey("custom", "group1"): {
+				{Member: m3.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+			},
+		},
+	}
+
+	tests := []struct {
+		desc          string
+		qname         string
+		id            string
+		wantArchived  map[string][]redis.Z
+		wantAllGroups map[string][]string
+		wantGroups    map[string][]redis.Z
+	}{
+		{
+			desc:  "archive task from a group with multiple tasks",
+			qname: "default",
+			id:    m1.ID,
+			wantArchived: map[string][]redis.Z{
+				base.ArchivedKey("default"): {
+					{Member: m1.ID, Score: float64(now.Unix())},
+				},
+			},
+			wantAllGroups: map[string][]string{
+				base.AllGroups("default"): {"group1"},
+				base.AllGroups("custom"):  {"group1"},
+			},
+			wantGroups: map[string][]redis.Z{
+				base.GroupKey("default", "group1"): {
+					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
+				},
+				base.GroupKey("custom", "group1"): {
+					{Member: m3.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+				},
+			},
+		},
+		{
+			desc:  "archive task from a group with a single task",
+			qname: "custom",
+			id:    m3.ID,
+			wantArchived: map[string][]redis.Z{
+				base.ArchivedKey("custom"): {
+					{Member: m3.ID, Score: float64(now.Unix())},
+				},
+			},
+			wantAllGroups: map[string][]string{
+				base.AllGroups("default"): {"group1"},
+				base.AllGroups("custom"):  {},
+			},
+			wantGroups: map[string][]redis.Z{
+				base.GroupKey("default", "group1"): {
+					{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
+				},
+				base.GroupKey("custom", "group1"): {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedTasks(t, r.client, fxt.tasks)
+		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.client, fxt.allGroups)
+		h.SeedRedisZSets(t, r.client, fxt.groups)
+
+		t.Run(tc.desc, func(t *testing.T) {
+			err := r.ArchiveTask(tc.qname, tc.id)
+			if err != nil {
+				t.Fatalf("ArchiveTask returned error: %v", err)
+			}
+
+			h.AssertRedisZSets(t, r.client, tc.wantArchived)
+			h.AssertRedisZSets(t, r.client, tc.wantGroups)
+			h.AssertRedisSets(t, r.client, tc.wantAllGroups)
+		})
+	}
+}
+
 func TestArchivePendingTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()

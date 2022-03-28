@@ -1193,12 +1193,14 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 // Input:
 // KEYS[1] -> task key (asynq:{<qname>}:t:<task_id>)
 // KEYS[2] -> archived key (asynq:{<qname>}:archived)
+// KEYS[3] -> all groups key (asynq:{<qname>}:groups)
 // --
 // ARGV[1] -> id of the task to archive
 // ARGV[2] -> current timestamp
 // ARGV[3] -> cutoff timestamp (e.g., 90 days ago)
 // ARGV[4] -> max number of tasks in archived state (e.g., 100)
 // ARGV[5] -> queue key prefix (asynq:{<qname>}:)
+// ARGV[6] -> group key prefix (asynq:{<qname>}:g:)
 //
 // Output:
 // Numeric code indicating the status:
@@ -1211,7 +1213,7 @@ var archiveTaskCmd = redis.NewScript(`
 if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
 end
-local state = redis.call("HGET", KEYS[1], "state")
+local state, group = unpack(redis.call("HMGET", KEYS[1], "state", "group"))
 if state == "active" then
 	return -2
 end
@@ -1220,11 +1222,18 @@ if state == "archived" then
 end
 if state == "pending" then
 	if redis.call("LREM", ARGV[5] .. state, 1, ARGV[1]) == 0 then
-		return redis.error_reply("task id not found in list " .. tostring(state))
+		return redis.error_reply("task id not found in list " .. tostring(ARGV[5] .. state))
+	end
+elseif state == "aggregating" then
+	if redis.call("ZREM", ARGV[6] .. group, ARGV[1]) == 0 then
+		return redis.error_reply("task id not found in zset " .. tostring(ARGV[6] .. group))
+	end
+	if redis.call("ZCARD", ARGV[6] .. group) == 0 then
+		redis.call("SREM", KEYS[3], group)
 	end
 else 
 	if redis.call("ZREM", ARGV[5] .. state, ARGV[1]) == 0 then
-		return redis.error_reply("task id not found in zset " .. tostring(state))
+		return redis.error_reply("task id not found in zset " .. tostring(ARGV[5] .. state))
 	end
 end
 redis.call("ZADD", KEYS[2], ARGV[2], ARGV[1])
@@ -1249,6 +1258,7 @@ func (r *RDB) ArchiveTask(qname, id string) error {
 	keys := []string{
 		base.TaskKey(qname, id),
 		base.ArchivedKey(qname),
+		base.AllGroups(qname),
 	}
 	now := r.clock.Now()
 	argv := []interface{}{
@@ -1257,6 +1267,7 @@ func (r *RDB) ArchiveTask(qname, id string) error {
 		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
 		maxArchiveSize,
 		base.QueueKeyPrefix(qname),
+		base.GroupKeyPrefix(qname),
 	}
 	res, err := archiveTaskCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
