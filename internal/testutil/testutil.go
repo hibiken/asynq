@@ -605,6 +605,18 @@ func SeedRedisLists(tb testing.TB, r redis.UniversalClient, lists map[string][]s
 	}
 }
 
+func AssertRedisLists(t *testing.T, r redis.UniversalClient, wantLists map[string][]string) {
+	for key, want := range wantLists {
+		got, err := r.LRange(context.Background(), key, 0, -1).Result()
+		if err != nil {
+			t.Fatalf("Failed to read list (key=%q): %v", key, err)
+		}
+		if diff := cmp.Diff(want, got, SortStringSliceOpt); diff != "" {
+			t.Errorf("mismatch found in list (key=%q): (-want,+got)\n%s", key, diff)
+		}
+	}
+}
+
 func AssertRedisSets(t *testing.T, r redis.UniversalClient, wantSets map[string][]string) {
 	for key, want := range wantSets {
 		got, err := r.SMembers(context.Background(), key).Result()
