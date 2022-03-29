@@ -2566,6 +2566,118 @@ func TestRunAllTasksError(t *testing.T) {
 		if _, got := r.RunAllArchivedTasks(tc.qname); !tc.match(got) {
 			t.Errorf("%s: RunAllArchivedTasks returned %v", tc.desc, got)
 		}
+		if _, got := r.RunAllAggregatingTasks(tc.qname, "mygroup"); !tc.match(got) {
+			t.Errorf("%s: RunAllAggregatingTasks returned %v", tc.desc, got)
+		}
+	}
+}
+
+func TestRunAllAggregatingTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	m1 := h.NewTaskMessageBuilder().SetQueue("default").SetType("task1").SetGroup("group1").Build()
+	m2 := h.NewTaskMessageBuilder().SetQueue("default").SetType("task2").SetGroup("group1").Build()
+	m3 := h.NewTaskMessageBuilder().SetQueue("custom").SetType("task3").SetGroup("group2").Build()
+
+	fxt := struct {
+		tasks     []*h.TaskSeedData
+		allQueues []string
+		allGroups map[string][]string
+		groups    map[string][]*redis.Z
+	}{
+		tasks: []*h.TaskSeedData{
+			{Msg: m1, State: base.TaskStateAggregating},
+			{Msg: m2, State: base.TaskStateAggregating},
+			{Msg: m3, State: base.TaskStateAggregating},
+		},
+		allQueues: []string{"default", "custom"},
+		allGroups: map[string][]string{
+			base.AllGroups("default"): {"group1"},
+			base.AllGroups("custom"):  {"group2"},
+		},
+		groups: map[string][]*redis.Z{
+			base.GroupKey("default", "group1"): {
+				{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+				{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
+			},
+			base.GroupKey("custom", "group2"): {
+				{Member: m3.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+			},
+		},
+	}
+
+	tests := []struct {
+		desc          string
+		qname         string
+		gname         string
+		want          int64
+		wantPending   map[string][]string
+		wantGroups    map[string][]redis.Z
+		wantAllGroups map[string][]string
+	}{
+		{
+			desc:  "schedules tasks in a group with multiple tasks",
+			qname: "default",
+			gname: "group1",
+			want:  2,
+			wantPending: map[string][]string{
+				base.PendingKey("default"): {m1.ID, m2.ID},
+			},
+			wantGroups: map[string][]redis.Z{
+				base.GroupKey("default", "group1"): {},
+				base.GroupKey("custom", "group2"): {
+					{Member: m3.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+				},
+			},
+			wantAllGroups: map[string][]string{
+				base.AllGroups("default"): {},
+				base.AllGroups("custom"):  {"group2"},
+			},
+		},
+		{
+			desc:  "schedules tasks in a group with a single task",
+			qname: "custom",
+			gname: "group2",
+			want:  1,
+			wantPending: map[string][]string{
+				base.PendingKey("custom"): {m3.ID},
+			},
+			wantGroups: map[string][]redis.Z{
+				base.GroupKey("default", "group1"): {
+					{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
+					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
+				},
+				base.GroupKey("custom", "group2"): {},
+			},
+			wantAllGroups: map[string][]string{
+				base.AllGroups("default"): {"group1"},
+				base.AllGroups("custom"):  {},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+		h.SeedTasks(t, r.client, fxt.tasks)
+		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.client, fxt.allGroups)
+		h.SeedRedisZSets(t, r.client, fxt.groups)
+
+		t.Run(tc.desc, func(t *testing.T) {
+			got, err := r.RunAllAggregatingTasks(tc.qname, tc.gname)
+			if err != nil {
+				t.Fatalf("RunAllAggregatingTasks returned error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("RunAllAggregatingTasks = %d, want %d", got, tc.want)
+			}
+			h.AssertRedisLists(t, r.client, tc.wantPending)
+			h.AssertRedisZSets(t, r.client, tc.wantGroups)
+			h.AssertRedisSets(t, r.client, tc.wantAllGroups)
+		})
 	}
 }
 

@@ -922,6 +922,57 @@ func (r *RDB) RunAllArchivedTasks(qname string) (int64, error) {
 	return n, nil
 }
 
+// runAllAggregatingCmd schedules all tasks in the group to run individually.
+//
+// Input:
+// KEYS[1] -> asynq:{<qname>}:g:<gname>
+// KEYS[2] -> asynq:{<qname>}:pending
+// KEYS[3] -> asynq:{<qname>}:groups
+// -------
+// ARGV[1] -> task key prefix
+// ARGV[2] -> group name
+//
+// Output:
+// integer: number of tasks scheduled to run
+var runAllAggregatingCmd = redis.NewScript(`
+local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
+for _, id in ipairs(ids) do
+	redis.call("LPUSH", KEYS[2], id)
+	redis.call("HSET", ARGV[1] .. id, "state", "pending")
+end
+redis.call("DEL", KEYS[1])
+redis.call("SREM", KEYS[3], ARGV[2])
+return table.getn(ids)
+`)
+
+// RunAllAggregatingTasks schedules all tasks from the given queue to run
+// and returns the number of tasks scheduled to run.
+// If a queue with the given name doesn't exist, it returns QueueNotFoundError.
+func (r *RDB) RunAllAggregatingTasks(qname, gname string) (int64, error) {
+	var op errors.Op = "rdb.RunAllAggregatingTasks"
+	if err := r.checkQueueExists(qname); err != nil {
+		return 0, errors.E(op, errors.CanonicalCode(err), err)
+	}
+	keys := []string{
+		base.GroupKey(qname, gname),
+		base.PendingKey(qname),
+		base.AllGroups(qname),
+	}
+	argv := []interface{}{
+		base.TaskKeyPrefix(qname),
+		gname,
+	}
+	res, err := runAllAggregatingCmd.Run(context.Background(), r.client, keys, argv...).Result()
+	if err != nil {
+		return 0, errors.E(op, errors.Internal, err)
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, errors.E(op, errors.Internal, fmt.Sprintf("unexpected return value from script %v", res))
+	}
+	return n, nil
+}
+
 // runTaskCmd is a Lua script that updates the given task to pending state.
 //
 // Input:
