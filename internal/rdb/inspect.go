@@ -978,9 +978,11 @@ func (r *RDB) RunAllAggregatingTasks(qname, gname string) (int64, error) {
 // Input:
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:pending
+// KEYS[3] -> asynq:{<qname>}:groups
 // --
 // ARGV[1] -> task ID
 // ARGV[2] -> queue key prefix; asynq:{<qname>}:
+// ARGV[3] -> group key prefix
 //
 // Output:
 // Numeric code indicating the status:
@@ -993,15 +995,24 @@ var runTaskCmd = redis.NewScript(`
 if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
 end
-local state = redis.call("HGET", KEYS[1], "state")
+local state, group = unpack(redis.call("HMGET", KEYS[1], "state", "group"))
 if state == "active" then
 	return -1
 elseif state == "pending" then
 	return -2
-end
-local n = redis.call("ZREM", ARGV[2] .. state, ARGV[1])
-if n == 0 then
-	return redis.error_reply("internal error: task id not found in zset " .. tostring(state))
+elseif state == "aggregating" then
+	local n = redis.call("ZREM", ARGV[3] .. group, ARGV[1])
+	if n == 0 then
+		return redis.error_reply("internal error: task id not found in zset " .. tostring(ARGV[3] .. group))
+	end
+	if redis.call("ZCARD", ARGV[3] .. group) == 0 then
+		redis.call("SREM", KEYS[3], group)
+	end
+else
+	local n = redis.call("ZREM", ARGV[2] .. state, ARGV[1])
+	if n == 0 then
+		return redis.error_reply("internal error: task id not found in zset " .. tostring(ARGV[2] .. state))
+	end
 end
 redis.call("LPUSH", KEYS[2], ARGV[1])
 redis.call("HSET", KEYS[1], "state", "pending")
@@ -1022,10 +1033,12 @@ func (r *RDB) RunTask(qname, id string) error {
 	keys := []string{
 		base.TaskKey(qname, id),
 		base.PendingKey(qname),
+		base.AllGroups(qname),
 	}
 	argv := []interface{}{
 		id,
 		base.QueueKeyPrefix(qname),
+		base.GroupKeyPrefix(qname),
 	}
 	res, err := runTaskCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
