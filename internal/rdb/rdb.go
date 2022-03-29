@@ -348,7 +348,7 @@ func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
 	argv := []interface{}{
 		msg.ID,
 		expireAt.Unix(),
-		math.MaxInt64,
+		int64(math.MaxInt64),
 	}
 	// Note: We cannot pass empty unique key when running this script in redis-cluster.
 	if len(msg.UniqueKey) > 0 {
@@ -458,7 +458,7 @@ func (r *RDB) MarkAsComplete(ctx context.Context, msg *base.TaskMessage) error {
 		statsExpireAt.Unix(),
 		now.Unix() + msg.Retention,
 		encoded,
-		math.MaxInt64,
+		int64(math.MaxInt64),
 	}
 	// Note: We cannot pass empty unique key when running this script in redis-cluster.
 	if len(msg.UniqueKey) > 0 {
@@ -688,7 +688,7 @@ func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.T
 		processAt.Unix(),
 		expireAt.Unix(),
 		isFailure,
-		math.MaxInt64,
+		int64(math.MaxInt64),
 	}
 	return r.runScript(ctx, op, retryCmd, keys, argv...)
 }
@@ -774,7 +774,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 		cutoff.Unix(),
 		maxArchiveSize,
 		expireAt.Unix(),
-		math.MaxInt64,
+		int64(math.MaxInt64),
 	}
 	return r.runScript(ctx, op, archiveCmd, keys, argv...)
 }
