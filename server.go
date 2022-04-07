@@ -216,10 +216,26 @@ type Config struct {
 	// If unset or zero, no size limit is used.
 	GroupMaxSize int
 
-	// GroupAggregateFunc specifies the aggregation function used to aggregate multiple tasks in a group into one task.
+	// GroupAggregator specifies the aggregation function used to aggregate multiple tasks in a group into one task.
 	//
 	// If unset or nil, the group aggregation feature will be disabled on the server.
-	GroupAggregateFunc func(groupKey string, tasks []*Task) *Task
+	GroupAggregator GroupAggregator
+}
+
+// GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
+type GroupAggregator interface {
+	// Aggregate aggregates the given tasks which belong to a same group
+	// and returns a new task which is the aggregation of those tasks.
+	Aggregate(groupKey string, tasks []*Task) *Task
+}
+
+// The GroupAggregatorFunc type is an adapter to allow the use of  ordinary functions as a GroupAggregator.
+// If f is a function with the appropriate signature, GroupAggregatorFunc(f) is a GroupAggregator that calls f.
+type GroupAggregatorFunc func(groupKey string, tasks []*Task) *Task
+
+// Aggregate calls fn(groupKey, tasks)
+func (fn GroupAggregatorFunc) Aggregate(groupKey string, tasks []*Task) *Task {
+	return fn(groupKey, tasks)
 }
 
 // An ErrorHandler handles an error occured during task processing.
@@ -506,13 +522,13 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		interval: 8 * time.Second,
 	})
 	aggregator := newAggregator(aggregatorParams{
-		logger:        logger,
-		broker:        rdb,
-		queues:        qnames,
-		gracePeriod:   groupGracePeriod,
-		maxDelay:      cfg.GroupMaxDelay,
-		maxSize:       cfg.GroupMaxSize,
-		aggregateFunc: cfg.GroupAggregateFunc,
+		logger:          logger,
+		broker:          rdb,
+		queues:          qnames,
+		gracePeriod:     groupGracePeriod,
+		maxDelay:        cfg.GroupMaxDelay,
+		maxSize:         cfg.GroupMaxSize,
+		groupAggregator: cfg.GroupAggregator,
 	})
 	return &Server{
 		logger:        logger,
