@@ -160,7 +160,7 @@ func (a *aggregator) aggregate(t time.Time) {
 			}
 			aggregatedTask := a.ga.Aggregate(gname, tasks)
 			ctx, cancel := context.WithDeadline(context.Background(), deadline)
-			if _, err := a.client.EnqueueContext(ctx, aggregatedTask); err != nil {
+			if _, err := a.client.EnqueueContext(ctx, aggregatedTask, Queue(qname)); err != nil {
 				a.logger.Errorf("Failed to enqueue aggregated task (queue=%q, group=%q, setID=%q): %v",
 					qname, gname, aggregationSetID, err)
 				cancel()

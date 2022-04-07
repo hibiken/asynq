@@ -224,8 +224,12 @@ type Config struct {
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
 type GroupAggregator interface {
-	// Aggregate aggregates the given tasks which belong to a same group
+	// Aggregate aggregates the given tasks which belong to a same group with the given groupKey
 	// and returns a new task which is the aggregation of those tasks.
+	//
+	// Use NewTask(typename, payload, opts...) to set any options for the aggregated task.
+	// Queue option will be ignored and the aggregated task will always be enqueued to the same queue
+	// the group belonged.
 	Aggregate(groupKey string, tasks []*Task) *Task
 }
 
