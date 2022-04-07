@@ -120,13 +120,13 @@ func TestAggregator(t *testing.T) {
 		h.FlushDB(t, r)
 
 		aggregator := newAggregator(aggregatorParams{
-			logger:        testLogger,
-			broker:        rdbClient,
-			queues:        []string{"default"},
-			gracePeriod:   tc.gracePeriod,
-			maxDelay:      tc.maxDelay,
-			maxSize:       tc.maxSize,
-			aggregateFunc: tc.aggregateFunc,
+			logger:          testLogger,
+			broker:          rdbClient,
+			queues:          []string{"default"},
+			gracePeriod:     tc.gracePeriod,
+			maxDelay:        tc.maxDelay,
+			maxSize:         tc.maxSize,
+			groupAggregator: GroupAggregatorFunc(tc.aggregateFunc),
 		})
 
 		var wg sync.WaitGroup
