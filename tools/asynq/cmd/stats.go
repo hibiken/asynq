@@ -59,15 +59,16 @@ func init() {
 }
 
 type AggregateStats struct {
-	Active    int       `json:"active"`
-	Pending   int       `json:"pending"`
-	Scheduled int       `json:"scheduled"`
-	Retry     int       `json:"retry"`
-	Archived  int       `json:"archived"`
-	Completed int       `json:"completed"`
-	Processed int       `json:"processed"`
-	Failed    int       `json:"failed"`
-	Timestamp time.Time `json:"timestamp"`
+	Active      int       `json:"active"`
+	Pending     int       `json:"pending"`
+	Aggregating int       `json:"aggregating"`
+	Scheduled   int       `json:"scheduled"`
+	Retry       int       `json:"retry"`
+	Archived    int       `json:"archived"`
+	Completed   int       `json:"completed"`
+	Processed   int       `json:"processed"`
+	Failed      int       `json:"failed"`
+	Timestamp   time.Time `json:"timestamp"`
 }
 
 type FullStats struct {
@@ -95,6 +96,7 @@ func stats(cmd *cobra.Command, args []string) {
 		}
 		aggStats.Active += s.Active
 		aggStats.Pending += s.Pending
+		aggStats.Aggregating += s.Aggregating
 		aggStats.Scheduled += s.Scheduled
 		aggStats.Retry += s.Retry
 		aggStats.Archived += s.Archived
@@ -155,13 +157,13 @@ func stats(cmd *cobra.Command, args []string) {
 }
 
 func printStatsByState(s *AggregateStats) {
-	format := strings.Repeat("%v\t", 6) + "\n"
+	format := strings.Repeat("%v\t", 7) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	fmt.Fprintf(tw, format, "active", "pending", "scheduled", "retry", "archived", "completed")
-	width := maxInt(9 /* defaultWidth */, maxWidthOf(s.Active, s.Pending, s.Scheduled, s.Retry, s.Archived, s.Completed)) // length of widest column
+	fmt.Fprintf(tw, format, "active", "pending", "aggregating", "scheduled", "retry", "archived", "completed")
+	width := maxInt(9 /* defaultWidth */, maxWidthOf(s.Active, s.Pending, s.Aggregating, s.Scheduled, s.Retry, s.Archived, s.Completed)) // length of widest column
 	sep := strings.Repeat("-", width)
-	fmt.Fprintf(tw, format, sep, sep, sep, sep, sep, sep)
-	fmt.Fprintf(tw, format, s.Active, s.Pending, s.Scheduled, s.Retry, s.Archived, s.Completed)
+	fmt.Fprintf(tw, format, sep, sep, sep, sep, sep, sep, sep)
+	fmt.Fprintf(tw, format, s.Active, s.Pending, s.Aggregating, s.Scheduled, s.Retry, s.Archived, s.Completed)
 	tw.Flush()
 }
 
