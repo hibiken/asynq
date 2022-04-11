@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2022-03-11
+
 ### Added
 
 - `Group` option is introduced to enqueue task in a group.
