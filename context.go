@@ -36,7 +36,7 @@ func GetMaxRetry(ctx context.Context) (n int, ok bool) {
 
 // GetQueueName extracts queue name from a context, if any.
 //
-// Return value qname indicates which queue the task was pulled from.
-func GetQueueName(ctx context.Context) (qname string, ok bool) {
+// Return value queue indicates which queue the task was pulled from.
+func GetQueueName(ctx context.Context) (queue string, ok bool) {
 	return asynqcontext.GetQueueName(ctx)
 }

@@ -224,22 +224,22 @@ type Config struct {
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
 type GroupAggregator interface {
-	// Aggregate aggregates the given tasks which belong to a same group with the given groupKey
+	// Aggregate aggregates the given tasks in a group with the given group name,
 	// and returns a new task which is the aggregation of those tasks.
 	//
 	// Use NewTask(typename, payload, opts...) to set any options for the aggregated task.
-	// Queue option will be ignored and the aggregated task will always be enqueued to the same queue
-	// the group belonged.
-	Aggregate(groupKey string, tasks []*Task) *Task
+	// The Queue option, if provided, will be ignored and the aggregated task will always be enqueued
+	// to the same queue the group belonged.
+	Aggregate(group string, tasks []*Task) *Task
 }
 
 // The GroupAggregatorFunc type is an adapter to allow the use of  ordinary functions as a GroupAggregator.
 // If f is a function with the appropriate signature, GroupAggregatorFunc(f) is a GroupAggregator that calls f.
-type GroupAggregatorFunc func(groupKey string, tasks []*Task) *Task
+type GroupAggregatorFunc func(group string, tasks []*Task) *Task
 
-// Aggregate calls fn(groupKey, tasks)
-func (fn GroupAggregatorFunc) Aggregate(groupKey string, tasks []*Task) *Task {
-	return fn(groupKey, tasks)
+// Aggregate calls fn(group, tasks)
+func (fn GroupAggregatorFunc) Aggregate(group string, tasks []*Task) *Task {
+	return fn(group, tasks)
 }
 
 // An ErrorHandler handles an error occured during task processing.
