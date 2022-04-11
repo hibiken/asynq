@@ -9,7 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Group` option is introduced to enqueue task in a group.
+- `GroupAggregator` and related types are introduced for task aggregation feature.
+- `GroupGracePeriod`, `GroupMaxSize`, `GroupMaxDelay`, and `GroupAggregator` fields are added to `Config`.
+- `Inspector` has new methods related to "aggregating tasks".
+- `Group` field is added to `TaskInfo`.
+- (CLI): `group ls` command is added
+- (CLI): `task ls` supports listing aggregating tasks via `--state=aggregating --group=<GROUP>` flags
 - Enable rediss url parsing support
+
+### Fixed
+
+- Fixed overflow issue with 32-bit systems (For details, see https://github.com/hibiken/asynq/pull/426)
 
 ## [0.22.1] - 2022-02-20
 
