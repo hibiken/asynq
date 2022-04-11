@@ -93,13 +93,13 @@ func (n retryOption) Type() OptionType   { return MaxRetryOpt }
 func (n retryOption) Value() interface{} { return int(n) }
 
 // Queue returns an option to specify the queue to enqueue the task into.
-func Queue(qname string) Option {
-	return queueOption(qname)
+func Queue(name string) Option {
+	return queueOption(name)
 }
 
-func (qname queueOption) String() string     { return fmt.Sprintf("Queue(%q)", string(qname)) }
-func (qname queueOption) Type() OptionType   { return QueueOpt }
-func (qname queueOption) Value() interface{} { return string(qname) }
+func (name queueOption) String() string     { return fmt.Sprintf("Queue(%q)", string(name)) }
+func (name queueOption) Type() OptionType   { return QueueOpt }
+func (name queueOption) Value() interface{} { return string(name) }
 
 // TaskID returns an option to specify the task ID.
 func TaskID(id string) Option {
@@ -196,17 +196,15 @@ func (ttl retentionOption) String() string     { return fmt.Sprintf("Retention(%
 func (ttl retentionOption) Type() OptionType   { return RetentionOpt }
 func (ttl retentionOption) Value() interface{} { return time.Duration(ttl) }
 
-// Group returns an option to specify the group key used for the task.
-// Tasks in a given queue with the same group key will be aggregated into one task before passed to Handler.
-//
-// To customize the aggregation and grouping policy, specify the Group* fields in Config.
-func Group(key string) Option {
-	return groupOption(key)
+// Group returns an option to specify the group used for the task.
+// Tasks in a given queue with the same group will be aggregated into one task before passed to Handler.
+func Group(name string) Option {
+	return groupOption(name)
 }
 
-func (key groupOption) String() string     { return fmt.Sprintf("Group(%q)", string(key)) }
-func (key groupOption) Type() OptionType   { return GroupOpt }
-func (key groupOption) Value() interface{} { return string(key) }
+func (name groupOption) String() string     { return fmt.Sprintf("Group(%q)", string(name)) }
+func (name groupOption) Type() OptionType   { return GroupOpt }
+func (name groupOption) Value() interface{} { return string(name) }
 
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
@@ -227,7 +225,7 @@ type option struct {
 	uniqueTTL time.Duration
 	processAt time.Time
 	retention time.Duration
-	groupKey  string
+	group     string
 }
 
 // composeOptions merges user provided options into the default options
@@ -280,7 +278,7 @@ func composeOptions(opts ...Option) (option, error) {
 			if isBlank(key) {
 				return option{}, errors.New("group key cannot be empty")
 			}
-			res.groupKey = key
+			res.group = key
 		default:
 			// ignore unexpected option
 		}
@@ -378,7 +376,7 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 		Deadline:  deadline.Unix(),
 		Timeout:   int64(timeout.Seconds()),
 		UniqueKey: uniqueKey,
-		GroupKey:  opt.groupKey,
+		GroupKey:  opt.group,
 		Retention: int64(opt.retention.Seconds()),
 	}
 	now := time.Now()
@@ -386,10 +384,10 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 	if opt.processAt.After(now) {
 		err = c.schedule(ctx, msg, opt.processAt, opt.uniqueTTL)
 		state = base.TaskStateScheduled
-	} else if opt.groupKey != "" {
+	} else if opt.group != "" {
 		// Use zero value for processAt since we don't know when the task will be aggregated and processed.
 		opt.processAt = time.Time{}
-		err = c.addToGroup(ctx, msg, opt.groupKey, opt.uniqueTTL)
+		err = c.addToGroup(ctx, msg, opt.group, opt.uniqueTTL)
 		state = base.TaskStateAggregating
 	} else {
 		opt.processAt = now
@@ -422,9 +420,9 @@ func (c *Client) schedule(ctx context.Context, msg *base.TaskMessage, t time.Tim
 	return c.broker.Schedule(ctx, msg, t)
 }
 
-func (c *Client) addToGroup(ctx context.Context, msg *base.TaskMessage, groupKey string, uniqueTTL time.Duration) error {
+func (c *Client) addToGroup(ctx context.Context, msg *base.TaskMessage, group string, uniqueTTL time.Duration) error {
 	if uniqueTTL > 0 {
-		return c.broker.AddToGroupUnique(ctx, msg, groupKey, uniqueTTL)
+		return c.broker.AddToGroupUnique(ctx, msg, group, uniqueTTL)
 	}
-	return c.broker.AddToGroup(ctx, msg, groupKey)
+	return c.broker.AddToGroup(ctx, msg, group)
 }
