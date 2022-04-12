@@ -33,6 +33,7 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 - Low latency to add a task since writes are fast in Redis
 - De-duplication of tasks using [unique option](https://github.com/hibiken/asynq/wiki/Unique-Tasks)
 - Allow [timeout and deadline per task](https://github.com/hibiken/asynq/wiki/Task-Timeout-and-Cancelation)
+- Allow [aggregating group of tasks](https://github.com/hibiken/asynq/wiki/Task-aggregation) to batch multiple successive operations
 - [Flexible handler interface with support for middlewares](https://github.com/hibiken/asynq/wiki/Handler-Deep-Dive)
 - [Ability to pause queue](/tools/asynq/README.md#pause) to stop processing tasks from the queue
 - [Periodic Tasks](https://github.com/hibiken/asynq/wiki/Periodic-Tasks)
