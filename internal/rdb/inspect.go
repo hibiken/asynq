@@ -109,7 +109,7 @@ table.insert(res, KEYS[6])
 table.insert(res, redis.call("ZCARD", KEYS[6]))
 for i=7,10 do
     local count = 0
-	local n = redis.call("GET", KEYS[i])	
+	local n = redis.call("GET", KEYS[i])
 	if n then
 	    count = tonumber(n)
 	end
@@ -568,7 +568,7 @@ var groupStatsCmd = redis.NewScript(`
 local res = {}
 local group_names = redis.call("SMEMBERS", KEYS[1])
 for _, gname in ipairs(group_names) do
-	local size = redis.call("ZCARD", ARGV[1] .. gname) 
+	local size = redis.call("ZCARD", ARGV[1] .. gname)
 	table.insert(res, gname)
 	table.insert(res, size)
 end
@@ -1295,7 +1295,7 @@ elseif state == "aggregating" then
 	if redis.call("ZCARD", ARGV[6] .. group) == 0 then
 		redis.call("SREM", KEYS[3], group)
 	end
-else 
+else
 	if redis.call("ZREM", ARGV[5] .. state, ARGV[1]) == 0 then
 		return redis.error_reply("task id not found in zset " .. tostring(ARGV[5] .. state))
 	end
@@ -1349,7 +1349,7 @@ func (r *RDB) ArchiveTask(qname, id string) error {
 	case -1:
 		return errors.E(op, errors.FailedPrecondition, &errors.TaskAlreadyArchivedError{Queue: qname, ID: id})
 	case -2:
-		return errors.E(op, errors.FailedPrecondition, "cannot archive task in active state. use CancelTask instead.")
+		return errors.E(op, errors.FailedPrecondition, "cannot archive task in active state. use CancelProcessing instead.")
 	case -3:
 		return errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	default:
@@ -1490,7 +1490,7 @@ func (r *RDB) DeleteTask(qname, id string) error {
 	case 0:
 		return errors.E(op, errors.NotFound, &errors.TaskNotFoundError{Queue: qname, ID: id})
 	case -1:
-		return errors.E(op, errors.FailedPrecondition, "cannot delete task in active state. use CancelTask instead.")
+		return errors.E(op, errors.FailedPrecondition, "cannot delete task in active state. use CancelProcessing instead.")
 	default:
 		return errors.E(op, errors.Internal, fmt.Sprintf("unexpected return value from deleteTaskCmd script: %d", n))
 	}
