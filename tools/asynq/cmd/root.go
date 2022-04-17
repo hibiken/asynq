@@ -14,11 +14,14 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/MakeNowJust/heredoc/v2"
+	"github.com/fatih/color"
 	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
@@ -39,10 +42,22 @@ var (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:     "asynq",
-	Short:   "A monitoring tool for asynq queues",
-	Long:    `Asynq is a montoring CLI to inspect tasks and queues managed by asynq.`,
+	Use:     "asynq <command> <subcommand> [flags]",
+	Short:   "Asynq CLI",
+	Long:    `Command line tool to inspect tasks and queues managed by Asynq`,
 	Version: base.Version,
+
+	SilenceUsage:  true,
+	SilenceErrors: true,
+
+	Example: heredoc.Doc(`
+		$ asynq stats
+		$ asynq queue pause myqueue
+		$ asynq task ls --queue=myqueue --state=archived`),
+	Annotations: map[string]string{
+		"help:feedback": heredoc.Doc(`
+			Open an issue at https://github.com/hibiken/asynq/issues/new/choose`),
+	},
 }
 
 var versionOutput = fmt.Sprintf("asynq version %s\n", base.Version)
@@ -64,8 +79,211 @@ func Execute() {
 	}
 }
 
+func isRootCmd(cmd *cobra.Command) bool {
+	return cmd != nil && !cmd.HasParent()
+}
+
+// computes padding used when displaying both subcommands and flags
+func computePaddingForCommandsAndFlags(cmd *cobra.Command) int {
+	max := 0
+	for _, c := range cmd.Commands() {
+		if n := utf8.RuneCountInString(c.Name() + ":"); n > max {
+			max = n
+		}
+	}
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		if n := utf8.RuneCountInString("--" + f.Name); n > max {
+			max = n
+		}
+	})
+	cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
+		if n := utf8.RuneCountInString("--" + f.Name); n > max {
+			max = n
+		}
+	})
+	return max
+}
+
+// computes padding used when displaying local flags only
+func computePaddingForLocalFlagsOnly(cmd *cobra.Command) int {
+	max := 0
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		if n := utf8.RuneCountInString("--" + f.Name); n > max {
+			max = n
+		}
+	})
+	return max
+}
+
+func rootHelpFunc(cmd *cobra.Command, args []string) {
+	// Display helpful error message when user mistypes a subcommand (e.g. 'asynq queue lst').
+	if isRootCmd(cmd.Parent()) && len(args) >= 2 && args[1] != "--help" && args[1] != "-h" {
+		printSubcommandSuggestions(cmd, args[1])
+		return
+	}
+
+	padding := computePaddingForCommandsAndFlags(cmd)
+
+	var (
+		coreCmds       []string
+		additionalCmds []string
+	)
+	for _, c := range cmd.Commands() {
+		if c.Hidden || c.Short == "" {
+			continue
+		}
+		s := rpad(c.Name()+":", padding) + c.Short
+		if _, ok := c.Annotations["IsCore"]; ok {
+			coreCmds = append(coreCmds, s)
+		} else {
+			additionalCmds = append(additionalCmds, s)
+		}
+	}
+
+	type helpEntry struct {
+		Title string
+		Body  string
+	}
+	var helpEntries []*helpEntry
+	desc := cmd.Long
+	if desc == "" {
+		desc = cmd.Short
+	}
+	if desc != "" {
+		helpEntries = append(helpEntries, &helpEntry{"", desc})
+	}
+	helpEntries = append(helpEntries, &helpEntry{"USAGE", cmd.UseLine()})
+	if len(coreCmds) > 0 {
+		helpEntries = append(helpEntries, &helpEntry{"CORE COMMANDS", strings.Join(coreCmds, "\n")})
+	}
+	if len(additionalCmds) > 0 {
+		helpEntries = append(helpEntries, &helpEntry{"ADDITIONAL COMMANDS", strings.Join(additionalCmds, "\n")})
+	}
+	if cmd.LocalFlags().HasFlags() {
+		helpEntries = append(helpEntries, &helpEntry{"FLAGS", strings.Join(flagUsages(cmd.LocalFlags(), padding), "\n")})
+	}
+	if cmd.InheritedFlags().HasFlags() {
+		helpEntries = append(helpEntries, &helpEntry{"INHERITED FLAGS", strings.Join(flagUsages(cmd.InheritedFlags(), padding), "\n")})
+	}
+	if cmd.Example != "" {
+		helpEntries = append(helpEntries, &helpEntry{"EXAMPLES", cmd.Example})
+	}
+	helpEntries = append(helpEntries, &helpEntry{"LEARN MORE", heredoc.Doc(`
+		Use 'asynq <command> <subcommand> --help' for more information about a command.
+		Read a manual at https://github.com/hibiken/asynq/wiki/cli.
+		Follow a tutorial at https://github.com/hibiken/asynq/wiki/cli-tutor`)})
+	if s, ok := cmd.Annotations["help:feedback"]; ok {
+		helpEntries = append(helpEntries, &helpEntry{"FEEDBACK", s})
+	}
+
+	out := cmd.OutOrStdout()
+	bold := color.New(color.Bold)
+	for _, e := range helpEntries {
+		if e.Title != "" {
+			// If there is a title, add indentation to each line in the body
+			bold.Fprintln(out, e.Title)
+			fmt.Fprintln(out, indent(e.Body, 2 /* spaces */))
+		} else {
+			// If there is no title, print the body as is
+			fmt.Fprintln(out, e.Body)
+		}
+		fmt.Fprintln(out)
+	}
+}
+
+func rootUsageFunc(cmd *cobra.Command) error {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "Usage: %s", cmd.UseLine())
+	if subcmds := cmd.Commands(); len(subcmds) > 0 {
+		fmt.Fprint(out, "\n\nAvailable commands:\n")
+		for _, c := range subcmds {
+			if c.Hidden {
+				continue
+			}
+			fmt.Fprintf(out, "  %s\n", c.Name())
+		}
+	}
+
+	padding := computePaddingForLocalFlagsOnly(cmd)
+	if cmd.LocalFlags().HasFlags() {
+		fmt.Fprint(out, "\n\nFlags:\n")
+		for _, usg := range flagUsages(cmd.LocalFlags(), padding) {
+			fmt.Fprintf(out, "  %s\n", usg)
+		}
+	}
+	return nil
+}
+
+func printSubcommandSuggestions(cmd *cobra.Command, arg string) {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "unknown command %q for %q\n", arg, cmd.CommandPath())
+	if cmd.SuggestionsMinimumDistance <= 0 {
+		cmd.SuggestionsMinimumDistance = 2
+	}
+	candidates := cmd.SuggestionsFor(arg)
+	if len(candidates) > 0 {
+		fmt.Fprint(out, "\nDid you mean this?\n")
+		for _, c := range candidates {
+			fmt.Fprintf(out, "\t%s\n", c)
+		}
+	}
+	fmt.Fprintln(out)
+	rootUsageFunc(cmd)
+}
+
+// flagUsages returns a list of flag usage strings in the given FlagSet.
+func flagUsages(flagset *pflag.FlagSet, padding int) []string {
+	var usgs []string
+	// IDEA: Should we show the short-flag too?
+	flagset.VisitAll(func(f *pflag.Flag) {
+		s := rpad("--"+f.Name, padding) + f.Usage
+		usgs = append(usgs, s)
+	})
+	return usgs
+}
+
+// rpad adds padding to the right of a string.
+func rpad(s string, padding int) string {
+	tmpl := fmt.Sprintf("%%-%ds ", padding)
+	return fmt.Sprintf(tmpl, s)
+
+}
+
+// indent indents the given text by given spaces.
+func indent(text string, space int) string {
+	if len(text) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	indentation := strings.Repeat(" ", space)
+	lastRune := '\n'
+	for _, r := range text {
+		if lastRune == '\n' {
+			b.WriteString(indentation)
+		}
+		b.WriteRune(r)
+		lastRune = r
+	}
+	return b.String()
+}
+
+// dedent removes any indentation from the given text.
+func dedent(text string) string {
+	lines := strings.Split(text, "\n")
+	var b strings.Builder
+	for _, l := range lines {
+		b.WriteString(strings.TrimLeftFunc(l, unicode.IsSpace))
+		b.WriteRune('\n')
+	}
+	return b.String()
+}
+
 func init() {
 	cobra.OnInitialize(initConfig)
+
+	// TODO: Update help command
+	rootCmd.SetHelpFunc(rootHelpFunc)
+	rootCmd.SetUsageFunc(rootUsageFunc)
 
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.SetVersionTemplate(versionOutput)

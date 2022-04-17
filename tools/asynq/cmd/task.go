@@ -72,8 +72,11 @@ func init() {
 }
 
 var taskCmd = &cobra.Command{
-	Use:   "task",
+	Use:   "task <command> [flags]",
 	Short: "Manage tasks",
+	Annotations: map[string]string{
+		"IsCore": "true",
+	},
 }
 
 var taskListCmd = &cobra.Command{
