@@ -20,7 +20,7 @@ func (srv *Server) waitForSignals() {
 
 	signal.Notify(srv.sigs, os.Interrupt, unix.SIGTERM, unix.SIGINT, unix.SIGTSTP)
 	for {
-		sig := <-sigs
+		sig := <-srv.sigs
 		if sig == unix.SIGTSTP {
 			srv.Stop()
 			continue
