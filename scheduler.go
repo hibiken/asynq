@@ -41,6 +41,7 @@ type Scheduler struct {
 	// to avoid using cron.EntryID as the public API of
 	// the Scheduler.
 	idmap map[string]cron.EntryID
+	sigs  chan os.Signal
 }
 
 // NewScheduler returns a new Scheduler instance given the redis connection option.
@@ -77,6 +78,7 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 		done:       make(chan struct{}),
 		errHandler: opts.EnqueueErrorHandler,
 		idmap:      make(map[string]cron.EntryID),
+		sigs:       make(chan os.Signal, 1),
 	}
 }
 

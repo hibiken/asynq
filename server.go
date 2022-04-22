@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -51,6 +52,7 @@ type Server struct {
 	healthchecker *healthchecker
 	janitor       *janitor
 	aggregator    *aggregator
+	sigs          chan os.Signal
 }
 
 type serverState struct {
@@ -547,6 +549,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		healthchecker: healthchecker,
 		janitor:       janitor,
 		aggregator:    aggregator,
+		sigs:          make(chan os.Signal, 1),
 	}
 }
 

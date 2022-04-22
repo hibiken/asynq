@@ -1,3 +1,4 @@
+//go:build linux || bsd || darwin
 // +build linux bsd darwin
 
 package asynq
@@ -17,8 +18,7 @@ func (srv *Server) waitForSignals() {
 	srv.logger.Info("Send signal TSTP to stop processing new tasks")
 	srv.logger.Info("Send signal TERM or INT to terminate the process")
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, unix.SIGTERM, unix.SIGINT, unix.SIGTSTP)
+	signal.Notify(srv.sigs, os.Interrupt, unix.SIGTERM, unix.SIGINT, unix.SIGTSTP)
 	for {
 		sig := <-sigs
 		if sig == unix.SIGTSTP {
@@ -29,9 +29,18 @@ func (srv *Server) waitForSignals() {
 	}
 }
 
+// SignalShutdown stops and shuts down the server.
+func (srv *Server) SignalShutdown() {
+	srv.sigs <- os.Interrupt
+}
+
 func (s *Scheduler) waitForSignals() {
 	s.logger.Info("Send signal TERM or INT to stop the scheduler")
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, unix.SIGTERM, unix.SIGINT)
-	<-sigs
+	signal.Notify(s.sigs, os.Interrupt, unix.SIGTERM, unix.SIGINT)
+	<-s.sigs
+}
+
+// SignalShutdown stops and shuts down the scheduler.
+func (s *Scheduler) SignalShutdown() {
+	s.sigs <- os.Interrupt
 }
