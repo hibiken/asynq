@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/fatih/color"
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/errors"
@@ -33,6 +34,10 @@ func init() {
 var queueCmd = &cobra.Command{
 	Use:   "queue <command> [flags]",
 	Short: "Manage queues",
+	Example: heredoc.Doc(`
+	  $ asynq queue ls
+	  $ asynq queue inspect myqueue
+	  $ asynq queue pause myqueue`),
 }
 
 var queueListCmd = &cobra.Command{

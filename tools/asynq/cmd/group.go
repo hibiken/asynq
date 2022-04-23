@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -21,6 +22,8 @@ func init() {
 var groupCmd = &cobra.Command{
 	Use:   "group <command> [flags]",
 	Short: "Manage groups",
+	Example: heredoc.Doc(`
+		$ asynq group ls --queue=myqueue`),
 }
 
 var groupListCmd = &cobra.Command{

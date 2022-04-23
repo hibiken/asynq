@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -23,6 +24,8 @@ func init() {
 var serverCmd = &cobra.Command{
 	Use:   "server <command> [flags]",
 	Short: "Manage servers",
+	Example: heredoc.Doc(`
+		$ asynq server ls`),
 }
 
 var serverListCmd = &cobra.Command{

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 )
@@ -26,6 +27,9 @@ func init() {
 var cronCmd = &cobra.Command{
 	Use:   "cron <command> [flags]",
 	Short: "Manage cron",
+	Example: heredoc.Doc(`
+		$ asynq cron ls
+		$ asynq cron history 7837f142-6337-4217-9276-8f27281b67d1`),
 }
 
 var cronListCmd = &cobra.Command{
