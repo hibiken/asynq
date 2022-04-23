@@ -33,9 +33,6 @@ func init() {
 var queueCmd = &cobra.Command{
 	Use:   "queue <command> [flags]",
 	Short: "Manage queues",
-	Annotations: map[string]string{
-		"IsCore": "true",
-	},
 }
 
 var queueListCmd = &cobra.Command{

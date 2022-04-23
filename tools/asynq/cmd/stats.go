@@ -36,9 +36,6 @@ var statsCmd = &cobra.Command{
 	    * Basic information about the running redis instance`),
 	Args: cobra.NoArgs,
 	Run:  stats,
-	Annotations: map[string]string{
-		"IsCore": "true",
-	},
 }
 
 var jsonFlag bool

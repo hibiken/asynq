@@ -21,9 +21,6 @@ func init() {
 var groupCmd = &cobra.Command{
 	Use:   "group <command> [flags]",
 	Short: "Manage groups",
-	Annotations: map[string]string{
-		"IsCore": "true",
-	},
 }
 
 var groupListCmd = &cobra.Command{

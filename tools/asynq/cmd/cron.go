@@ -26,9 +26,6 @@ func init() {
 var cronCmd = &cobra.Command{
 	Use:   "cron <command> [flags]",
 	Short: "Manage cron",
-	Annotations: map[string]string{
-		"IsCore": "true",
-	},
 }
 
 var cronListCmd = &cobra.Command{

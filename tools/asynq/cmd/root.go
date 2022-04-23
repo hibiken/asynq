@@ -83,36 +83,26 @@ func isRootCmd(cmd *cobra.Command) bool {
 	return cmd != nil && !cmd.HasParent()
 }
 
-// computes padding used when displaying both subcommands and flags
-func computePaddingForCommandsAndFlags(cmd *cobra.Command) int {
-	max := 0
-	for _, c := range cmd.Commands() {
-		if n := utf8.RuneCountInString(c.Name() + ":"); n > max {
-			max = n
-		}
-	}
-	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
-		if n := utf8.RuneCountInString("--" + f.Name); n > max {
-			max = n
-		}
-	})
-	cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
-		if n := utf8.RuneCountInString("--" + f.Name); n > max {
-			max = n
-		}
-	})
-	return max
+// displayLine represents a line displayed in the output as '<name> <desc>',
+// where pad is used to pad the name from desc.
+type displayLine struct {
+	name string
+	desc string
+	pad  int // number of rpad
 }
 
-// computes padding used when displaying local flags only
-func computePaddingForLocalFlagsOnly(cmd *cobra.Command) int {
-	max := 0
-	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
-		if n := utf8.RuneCountInString("--" + f.Name); n > max {
-			max = n
-		}
-	})
-	return max
+func (l *displayLine) String() string {
+	return rpad(l.name, l.pad) + l.desc
+}
+
+type displayLines []*displayLine
+
+func (dls displayLines) String() string {
+	var lines []string
+	for _, dl := range dls {
+		lines = append(lines, dl.String())
+	}
+	return strings.Join(lines, "\n")
 }
 
 func rootHelpFunc(cmd *cobra.Command, args []string) {
@@ -122,23 +112,29 @@ func rootHelpFunc(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	padding := computePaddingForCommandsAndFlags(cmd)
-
-	var (
-		coreCmds       []string
-		additionalCmds []string
-	)
+	var lines []*displayLine
+	var commands []*displayLine
 	for _, c := range cmd.Commands() {
 		if c.Hidden || c.Short == "" {
 			continue
 		}
-		s := rpad(c.Name()+":", padding) + c.Short
-		if _, ok := c.Annotations["IsCore"]; ok {
-			coreCmds = append(coreCmds, s)
-		} else {
-			additionalCmds = append(additionalCmds, s)
-		}
+		l := &displayLine{name: c.Name() + ":", desc: c.Short}
+		commands = append(commands, l)
+		lines = append(lines, l)
 	}
+	var localFlags []*displayLine
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		l := &displayLine{name: "--" + f.Name, desc: f.Usage}
+		localFlags = append(localFlags, l)
+		lines = append(lines, l)
+	})
+	var inheritedFlags []*displayLine
+	cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
+		l := &displayLine{name: "--" + f.Name, desc: f.Usage}
+		inheritedFlags = append(inheritedFlags, l)
+		lines = append(lines, l)
+	})
+	adjustPadding(lines...)
 
 	type helpEntry struct {
 		Title string
@@ -153,17 +149,14 @@ func rootHelpFunc(cmd *cobra.Command, args []string) {
 		helpEntries = append(helpEntries, &helpEntry{"", desc})
 	}
 	helpEntries = append(helpEntries, &helpEntry{"USAGE", cmd.UseLine()})
-	if len(coreCmds) > 0 {
-		helpEntries = append(helpEntries, &helpEntry{"CORE COMMANDS", strings.Join(coreCmds, "\n")})
-	}
-	if len(additionalCmds) > 0 {
-		helpEntries = append(helpEntries, &helpEntry{"ADDITIONAL COMMANDS", strings.Join(additionalCmds, "\n")})
+	if len(commands) > 0 {
+		helpEntries = append(helpEntries, &helpEntry{"COMMANDS", displayLines(commands).String()})
 	}
 	if cmd.LocalFlags().HasFlags() {
-		helpEntries = append(helpEntries, &helpEntry{"FLAGS", strings.Join(flagUsages(cmd.LocalFlags(), padding), "\n")})
+		helpEntries = append(helpEntries, &helpEntry{"FLAGS", displayLines(localFlags).String()})
 	}
 	if cmd.InheritedFlags().HasFlags() {
-		helpEntries = append(helpEntries, &helpEntry{"INHERITED FLAGS", strings.Join(flagUsages(cmd.InheritedFlags(), padding), "\n")})
+		helpEntries = append(helpEntries, &helpEntry{"INHERITED FLAGS", displayLines(inheritedFlags).String()})
 	}
 	if cmd.Example != "" {
 		helpEntries = append(helpEntries, &helpEntry{"EXAMPLES", cmd.Example})
@@ -204,11 +197,15 @@ func rootUsageFunc(cmd *cobra.Command) error {
 		}
 	}
 
-	padding := computePaddingForLocalFlagsOnly(cmd)
-	if cmd.LocalFlags().HasFlags() {
+	var localFlags []*displayLine
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		localFlags = append(localFlags, &displayLine{name: "--" + f.Name, desc: f.Usage})
+	})
+	adjustPadding(localFlags...)
+	if len(localFlags) > 0 {
 		fmt.Fprint(out, "\n\nFlags:\n")
-		for _, usg := range flagUsages(cmd.LocalFlags(), padding) {
-			fmt.Fprintf(out, "  %s\n", usg)
+		for _, l := range localFlags {
+			fmt.Fprintf(out, "  %s\n", l.String())
 		}
 	}
 	return nil
@@ -231,15 +228,17 @@ func printSubcommandSuggestions(cmd *cobra.Command, arg string) {
 	rootUsageFunc(cmd)
 }
 
-// flagUsages returns a list of flag usage strings in the given FlagSet.
-func flagUsages(flagset *pflag.FlagSet, padding int) []string {
-	var usgs []string
-	// IDEA: Should we show the short-flag too?
-	flagset.VisitAll(func(f *pflag.Flag) {
-		s := rpad("--"+f.Name, padding) + f.Usage
-		usgs = append(usgs, s)
-	})
-	return usgs
+func adjustPadding(lines ...*displayLine) {
+	// find the maximum width of the name
+	max := 0
+	for _, l := range lines {
+		if n := utf8.RuneCountInString(l.name); n > max {
+			max = n
+		}
+	}
+	for _, l := range lines {
+		l.pad = max
+	}
 }
 
 // rpad adds padding to the right of a string.

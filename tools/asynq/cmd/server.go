@@ -23,9 +23,6 @@ func init() {
 var serverCmd = &cobra.Command{
 	Use:   "server <command> [flags]",
 	Short: "Manage servers",
-	Annotations: map[string]string{
-		"IsCore": "true",
-	},
 }
 
 var serverListCmd = &cobra.Command{
