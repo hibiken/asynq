@@ -115,7 +115,7 @@ func rootHelpFunc(cmd *cobra.Command, args []string) {
 	var lines []*displayLine
 	var commands []*displayLine
 	for _, c := range cmd.Commands() {
-		if c.Hidden || c.Short == "" {
+		if c.Hidden || c.Short == "" || c.Name() == "help" {
 			continue
 		}
 		l := &displayLine{name: c.Name() + ":", desc: c.Short}
