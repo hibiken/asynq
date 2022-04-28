@@ -58,18 +58,21 @@ func init() {
 	taskArchiveAllCmd.Flags().StringP("state", "s", "", "state of the tasks (required)")
 	taskArchiveAllCmd.MarkFlagRequired("queue")
 	taskArchiveAllCmd.MarkFlagRequired("state")
+	taskArchiveAllCmd.Flags().StringP("group", "g", "", "group to which the tasks belong (required for archiving aggregating tasks)")
 
 	taskCmd.AddCommand(taskDeleteAllCmd)
 	taskDeleteAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong (required)")
 	taskDeleteAllCmd.Flags().StringP("state", "s", "", "state of the tasks (required)")
 	taskDeleteAllCmd.MarkFlagRequired("queue")
 	taskDeleteAllCmd.MarkFlagRequired("state")
+	taskDeleteAllCmd.Flags().StringP("group", "g", "", "group to which the tasks belong (required for deleting aggregating tasks)")
 
 	taskCmd.AddCommand(taskRunAllCmd)
 	taskRunAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong (required)")
 	taskRunAllCmd.Flags().StringP("state", "s", "", "state of the tasks (required)")
 	taskRunAllCmd.MarkFlagRequired("queue")
 	taskRunAllCmd.MarkFlagRequired("state")
+	taskRunAllCmd.Flags().StringP("group", "g", "", "group to which the tasks belong (required for running aggregating tasks)")
 }
 
 var taskCmd = &cobra.Command{
@@ -528,6 +531,17 @@ func taskArchiveAll(cmd *cobra.Command, args []string) {
 		n, err = i.ArchiveAllScheduledTasks(qname)
 	case "retry":
 		n, err = i.ArchiveAllRetryTasks(qname)
+	case "aggregating":
+		group, err := cmd.Flags().GetString("group")
+		if err != nil {
+			fmt.Printf("error: %v\n", err)
+			os.Exit(1)
+		}
+		if group == "" {
+			fmt.Println("error: Flag --group is required for aggregating tasks")
+			os.Exit(1)
+		}
+		n, err = i.ArchiveAllAggregatingTasks(qname, group)
 	default:
 		fmt.Printf("error: unsupported state %q\n", state)
 		os.Exit(1)
@@ -564,6 +578,17 @@ func taskDeleteAll(cmd *cobra.Command, args []string) {
 		n, err = i.DeleteAllArchivedTasks(qname)
 	case "completed":
 		n, err = i.DeleteAllCompletedTasks(qname)
+	case "aggregating":
+		group, err := cmd.Flags().GetString("group")
+		if err != nil {
+			fmt.Printf("error: %v\n", err)
+			os.Exit(1)
+		}
+		if group == "" {
+			fmt.Println("error: Flag --group is required for aggregating tasks")
+			os.Exit(1)
+		}
+		n, err = i.DeleteAllAggregatingTasks(qname, group)
 	default:
 		fmt.Printf("error: unsupported state %q\n", state)
 		os.Exit(1)
@@ -596,6 +621,17 @@ func taskRunAll(cmd *cobra.Command, args []string) {
 		n, err = i.RunAllRetryTasks(qname)
 	case "archived":
 		n, err = i.RunAllArchivedTasks(qname)
+	case "aggregating":
+		group, err := cmd.Flags().GetString("group")
+		if err != nil {
+			fmt.Printf("error: %v\n", err)
+			os.Exit(1)
+		}
+		if group == "" {
+			fmt.Println("error: Flag --group is required for aggregating tasks")
+			os.Exit(1)
+		}
+		n, err = i.RunAllAggregatingTasks(qname, group)
 	default:
 		fmt.Printf("error: unsupported state %q\n", state)
 		os.Exit(1)
