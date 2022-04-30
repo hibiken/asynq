@@ -79,15 +79,16 @@ var taskCmd = &cobra.Command{
 	Use:   "task <command> [flags]",
 	Short: "Manage tasks",
 	Example: heredoc.Doc(`
-		$ asynq task ls --queue=myqueue --state=scheduled
+		$ asynq task list --queue=myqueue --state=scheduled
 		$ asynq task inspect --queue=myqueue --id=7837f142-6337-4217-9276-8f27281b67d1
 		$ asynq task delete --queue=myqueue --id=7837f142-6337-4217-9276-8f27281b67d1
 		$ asynq task deleteall --queue=myqueue --state=archived`),
 }
 
 var taskListCmd = &cobra.Command{
-	Use:   "ls --queue=QUEUE --state=STATE [flags]",
-	Short: "List tasks",
+	Use:     "list --queue=QUEUE --state=STATE [flags]",
+	Aliases: []string{"ls"},
+	Short:   "List tasks",
 	Long: heredoc.Doc(`
 	List tasks of the given state from the specified queue.
 
@@ -108,9 +109,9 @@ var taskListCmd = &cobra.Command{
 	By default, the command fetches the first 30 tasks.
 	Use --page and --size flags to specify the page number and size.`),
 	Example: heredoc.Doc(`
-		$ asynq task ls --queue=myqueue --state=pending
-		$ asynq task ls --queue=myqueue --state=aggregating --group=mygroup
-		$ asynq task ls --queue=myqueue --state=scheduled --page=2`),
+		$ asynq task list --queue=myqueue --state=pending
+		$ asynq task list --queue=myqueue --state=aggregating --group=mygroup
+		$ asynq task list --queue=myqueue --state=scheduled --page=2`),
 	Run: taskList,
 }
 
@@ -119,6 +120,8 @@ var taskInspectCmd = &cobra.Command{
 	Short: "Display detailed information on the specified task",
 	Args:  cobra.NoArgs,
 	Run:   taskInspect,
+	Example: heredoc.Doc(`
+		$ asynq task inspect --queue=myqueue --id=f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
 
 var taskCancelCmd = &cobra.Command{
@@ -126,6 +129,8 @@ var taskCancelCmd = &cobra.Command{
 	Short: "Cancel one or more active tasks",
 	Args:  cobra.MinimumNArgs(1),
 	Run:   taskCancel,
+	Example: heredoc.Doc(`
+		$ asynq task cancel f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
 
 var taskArchiveCmd = &cobra.Command{
@@ -133,13 +138,18 @@ var taskArchiveCmd = &cobra.Command{
 	Short: "Archive a task with the given id",
 	Args:  cobra.NoArgs,
 	Run:   taskArchive,
+	Example: heredoc.Doc(`
+		$ asynq task archive --queue=myqueue --id=f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
 
 var taskDeleteCmd = &cobra.Command{
-	Use:   "delete --queue=QUEUE --id=TASK_ID",
-	Short: "Delete a task with the given id",
-	Args:  cobra.NoArgs,
-	Run:   taskDelete,
+	Use:     "delete --queue=QUEUE --id=TASK_ID",
+	Aliases: []string{"remove", "rm"},
+	Short:   "Delete a task with the given id",
+	Args:    cobra.NoArgs,
+	Run:     taskDelete,
+	Example: heredoc.Doc(`
+		$ asynq task delete --queue=myqueue --id=f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
 
 var taskRunCmd = &cobra.Command{
@@ -147,6 +157,8 @@ var taskRunCmd = &cobra.Command{
 	Short: "Run a task with the given id",
 	Args:  cobra.NoArgs,
 	Run:   taskRun,
+	Example: heredoc.Doc(`
+		$ asynq task run --queue=myqueue --id=f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
 
 var taskArchiveAllCmd = &cobra.Command{
@@ -154,6 +166,9 @@ var taskArchiveAllCmd = &cobra.Command{
 	Short: "Archive all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskArchiveAll,
+	Example: heredoc.Doc(`
+		$ asynq task archiveall --queue=myqueue --state=retry
+		$ asynq task archiveall --queue=myqueue --state=aggregating --group=mygroup`),
 }
 
 var taskDeleteAllCmd = &cobra.Command{
@@ -161,6 +176,9 @@ var taskDeleteAllCmd = &cobra.Command{
 	Short: "Delete all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskDeleteAll,
+	Example: heredoc.Doc(`
+		$ asynq task deleteall --queue=myqueue --state=archived
+		$ asynq task deleteall --queue=myqueue --state=aggregating --group=mygroup`),
 }
 
 var taskRunAllCmd = &cobra.Command{
@@ -168,6 +186,9 @@ var taskRunAllCmd = &cobra.Command{
 	Short: "Run all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskRunAll,
+	Example: heredoc.Doc(`
+		$ asynq task runall --queue=myqueue --state=retry
+		$ asynq task runall --queue=myqueue --state=aggregating --group=mygroup`),
 }
 
 func taskList(cmd *cobra.Command, args []string) {

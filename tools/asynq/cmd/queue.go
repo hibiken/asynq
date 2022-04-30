@@ -41,8 +41,9 @@ var queueCmd = &cobra.Command{
 }
 
 var queueListCmd = &cobra.Command{
-	Use:   "ls",
-	Short: "List queues",
+	Use:     "list",
+	Short:   "List queues",
+	Aliases: []string{"ls"},
 	// TODO: Use RunE instead?
 	Run: queueList,
 }
@@ -53,6 +54,9 @@ var queueInspectCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	// TODO: Use RunE instead?
 	Run: queueInspect,
+	Example: heredoc.Doc(`
+		$ asynq queue inspect myqueue
+		$ asynq queue inspect queue1 queue2 queue3`),
 }
 
 var queueHistoryCmd = &cobra.Command{
@@ -60,6 +64,10 @@ var queueHistoryCmd = &cobra.Command{
 	Short: "Display historical aggregate data from one or more queues",
 	Args:  cobra.MinimumNArgs(1),
 	Run:   queueHistory,
+	Example: heredoc.Doc(`
+		$ asynq queue history myqueue
+		$ asynq queue history queue1 queue2 queue3
+		$ asynq queue history myqueue --days=90`),
 }
 
 var queuePauseCmd = &cobra.Command{
@@ -67,20 +75,32 @@ var queuePauseCmd = &cobra.Command{
 	Short: "Pause one or more queues",
 	Args:  cobra.MinimumNArgs(1),
 	Run:   queuePause,
+	Example: heredoc.Doc(`
+		$ asynq queue pause myqueue
+		$ asynq queue pause queue1 queue2 queue3`),
 }
 
 var queueUnpauseCmd = &cobra.Command{
-	Use:   "unpause QUEUE [QUEUE...]",
-	Short: "Unpause one or more queues",
-	Args:  cobra.MinimumNArgs(1),
-	Run:   queueUnpause,
+	Use:     "resume QUEUE [QUEUE...]",
+	Short:   "Resume (unpause) one or more queues",
+	Args:    cobra.MinimumNArgs(1),
+	Aliases: []string{"unpause"},
+	Run:     queueUnpause,
+	Example: heredoc.Doc(`
+		$ asynq queue resume myqueue
+		$ asynq queue resume queue1 queue2 queue3`),
 }
 
 var queueRemoveCmd = &cobra.Command{
-	Use:   "rm QUEUE [QUEUE...]",
-	Short: "Remove one or more queues",
-	Args:  cobra.MinimumNArgs(1),
-	Run:   queueRemove,
+	Use:     "remove QUEUE [QUEUE...]",
+	Short:   "Remove one or more queues",
+	Aliases: []string{"rm", "delete"},
+	Args:    cobra.MinimumNArgs(1),
+	Run:     queueRemove,
+	Example: heredoc.Doc(`
+		$ asynq queue rm myqueue
+		$ asynq queue rm queue1 queue2 queue3
+		$ asynq queue rm myqueue --force`),
 }
 
 func queueList(cmd *cobra.Command, args []string) {

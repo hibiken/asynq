@@ -54,7 +54,7 @@ var rootCmd = &cobra.Command{
 	Example: heredoc.Doc(`
 		$ asynq stats
 		$ asynq queue pause myqueue
-		$ asynq task ls --queue=myqueue --state=archived`),
+		$ asynq task list --queue=myqueue --state=archived`),
 	Annotations: map[string]string{
 		"help:feedback": heredoc.Doc(`
 			Open an issue at https://github.com/hibiken/asynq/issues/new/choose`),
