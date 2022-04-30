@@ -22,6 +22,7 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/utf8string"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
@@ -105,6 +106,18 @@ func (dls displayLines) String() string {
 	return strings.Join(lines, "\n")
 }
 
+// Capitalize the first word in the given string.
+func capitalize(s string) string {
+	str := utf8string.NewString(s)
+	if str.RuneCount() == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(strings.ToUpper(string(str.At(0))))
+	b.WriteString(str.Slice(1, str.RuneCount()))
+	return b.String()
+}
+
 func rootHelpFunc(cmd *cobra.Command, args []string) {
 	// Display helpful error message when user mistypes a subcommand (e.g. 'asynq queue lst').
 	if isRootCmd(cmd.Parent()) && len(args) >= 2 && args[1] != "--help" && args[1] != "-h" {
@@ -118,19 +131,19 @@ func rootHelpFunc(cmd *cobra.Command, args []string) {
 		if c.Hidden || c.Short == "" || c.Name() == "help" {
 			continue
 		}
-		l := &displayLine{name: c.Name() + ":", desc: c.Short}
+		l := &displayLine{name: c.Name() + ":", desc: capitalize(c.Short)}
 		commands = append(commands, l)
 		lines = append(lines, l)
 	}
 	var localFlags []*displayLine
 	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
-		l := &displayLine{name: "--" + f.Name, desc: f.Usage}
+		l := &displayLine{name: "--" + f.Name, desc: capitalize(f.Usage)}
 		localFlags = append(localFlags, l)
 		lines = append(lines, l)
 	})
 	var inheritedFlags []*displayLine
 	cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
-		l := &displayLine{name: "--" + f.Name, desc: f.Usage}
+		l := &displayLine{name: "--" + f.Name, desc: capitalize(f.Usage)}
 		inheritedFlags = append(inheritedFlags, l)
 		lines = append(lines, l)
 	})
@@ -199,7 +212,7 @@ func rootUsageFunc(cmd *cobra.Command) error {
 
 	var localFlags []*displayLine
 	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
-		localFlags = append(localFlags, &displayLine{name: "--" + f.Name, desc: f.Usage})
+		localFlags = append(localFlags, &displayLine{name: "--" + f.Name, desc: capitalize(f.Usage)})
 	})
 	adjustPadding(localFlags...)
 	if len(localFlags) > 0 {
@@ -287,16 +300,16 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.SetVersionTemplate(versionOutput)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file to set flag defaut values (default is $HOME/.asynq.yaml)")
-	rootCmd.PersistentFlags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "redis server URI")
-	rootCmd.PersistentFlags().IntVarP(&db, "db", "n", 0, "redis database number (default is 0)")
-	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "password to use when connecting to redis server")
-	rootCmd.PersistentFlags().BoolVar(&useRedisCluster, "cluster", false, "connect to redis cluster")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "Config file to set flag defaut values (default is $HOME/.asynq.yaml)")
+	rootCmd.PersistentFlags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "Redis server URI")
+	rootCmd.PersistentFlags().IntVarP(&db, "db", "n", 0, "Redis database number (default is 0)")
+	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "Password to use when connecting to redis server")
+	rootCmd.PersistentFlags().BoolVar(&useRedisCluster, "cluster", false, "Connect to redis cluster")
 	rootCmd.PersistentFlags().StringVar(&clusterAddrs, "cluster_addrs",
 		"127.0.0.1:7000,127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003,127.0.0.1:7004,127.0.0.1:7005",
-		"list of comma-separated redis server addresses")
+		"List of comma-separated redis server addresses")
 	rootCmd.PersistentFlags().StringVar(&tlsServerName, "tls_server",
-		"", "server name for TLS validation")
+		"", "Server name for TLS validation")
 	// Bind flags with config.
 	viper.BindPFlag("uri", rootCmd.PersistentFlags().Lookup("uri"))
 	viper.BindPFlag("db", rootCmd.PersistentFlags().Lookup("db"))
