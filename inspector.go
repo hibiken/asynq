@@ -21,16 +21,31 @@ import (
 type Inspector struct {
 	rdb *rdb.RDB
 }
+type InspectorConfig struct {
+	MaxArchiveSize           int
+	ArchivedExpirationInDays int
+}
 
 // New returns a new instance of Inspector.
-func NewInspector(r RedisConnOpt) *Inspector {
+func NewInspectorWithConfig(r RedisConnOpt, cfg InspectorConfig) *Inspector {
 	c, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("inspeq: unsupported RedisConnOpt type %T", r))
 	}
 	return &Inspector{
-		rdb: rdb.NewRDB(c),
+		rdb: rdb.NewRDBWithConfig(c, rdb.RDBConfig{
+			MaxArchiveSize:           cfg.MaxArchiveSize,
+			ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+		}),
 	}
+}
+
+// New returns a new instance of Inspector.
+func NewInspector(r RedisConnOpt) *Inspector {
+	return NewInspectorWithConfig(r, InspectorConfig{
+		MaxArchiveSize:           base.DefaultMaxArchiveSize,
+		ArchivedExpirationInDays: base.DefaultArchivedExpirationInDays,
+	})
 }
 
 // Close closes the connection with redis.

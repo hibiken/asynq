@@ -67,11 +67,14 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 	}
 
 	return &Scheduler{
-		id:         generateSchedulerID(),
-		state:      &serverState{value: srvStateNew},
-		logger:     logger,
-		client:     NewClient(r),
-		rdb:        rdb.NewRDB(c),
+		id:     generateSchedulerID(),
+		state:  &serverState{value: srvStateNew},
+		logger: logger,
+		client: NewClient(r),
+		rdb: rdb.NewRDBWithConfig(c, rdb.RDBConfig{
+			MaxArchiveSize:           opts.MaxArchiveSize,
+			ArchivedExpirationInDays: opts.ArchivedExpirationInDays,
+		}),
 		cron:       cron.New(cron.WithLocation(loc)),
 		location:   loc,
 		done:       make(chan struct{}),
@@ -108,6 +111,9 @@ type SchedulerOpts struct {
 	// EnqueueErrorHandler gets called when scheduler cannot enqueue a registered task
 	// due to an error.
 	EnqueueErrorHandler func(task *Task, opts []Option, err error)
+
+	MaxArchiveSize           int
+	ArchivedExpirationInDays int
 }
 
 // enqueueJob encapsulates the job of enqueing a task and recording the event.

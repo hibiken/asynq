@@ -220,6 +220,9 @@ type Config struct {
 	//
 	// If unset or nil, the group aggregation feature will be disabled on the server.
 	GroupAggregator GroupAggregator
+
+	MaxArchiveSize           int
+	ArchivedExpirationInDays int
 }
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
@@ -451,7 +454,10 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	}
 	logger.SetLevel(toInternalLogLevel(loglevel))
 
-	rdb := rdb.NewRDB(c)
+	rdb := rdb.NewRDBWithConfig(c, rdb.RDBConfig{
+		MaxArchiveSize:           cfg.MaxArchiveSize,
+		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+	})
 	starting := make(chan *workerInfo)
 	finished := make(chan *base.TaskMessage)
 	syncCh := make(chan *syncRequest)
