@@ -86,7 +86,7 @@ var taskCmd = &cobra.Command{
 }
 
 var taskListCmd = &cobra.Command{
-	Use:     "list --queue=QUEUE --state=STATE [flags]",
+	Use:     "list --queue=<queue> --state=<state> [flags]",
 	Aliases: []string{"ls"},
 	Short:   "List tasks",
 	Long: heredoc.Doc(`
@@ -106,7 +106,7 @@ var taskListCmd = &cobra.Command{
 }
 
 var taskInspectCmd = &cobra.Command{
-	Use:   "inspect --queue=QUEUE --id=TASK_ID",
+	Use:   "inspect --queue=<queue> --id=<task_id>",
 	Short: "Display detailed information on the specified task",
 	Args:  cobra.NoArgs,
 	Run:   taskInspect,
@@ -115,7 +115,7 @@ var taskInspectCmd = &cobra.Command{
 }
 
 var taskCancelCmd = &cobra.Command{
-	Use:   "cancel TASK_ID [TASK_ID...]",
+	Use:   "cancel <task_id> [<task_id>...]",
 	Short: "Cancel one or more active tasks",
 	Args:  cobra.MinimumNArgs(1),
 	Run:   taskCancel,
@@ -124,7 +124,7 @@ var taskCancelCmd = &cobra.Command{
 }
 
 var taskArchiveCmd = &cobra.Command{
-	Use:   "archive --queue=QUEUE --id=TASK_ID",
+	Use:   "archive --queue=<queue> --id=<task_id>",
 	Short: "Archive a task with the given id",
 	Args:  cobra.NoArgs,
 	Run:   taskArchive,
@@ -133,7 +133,7 @@ var taskArchiveCmd = &cobra.Command{
 }
 
 var taskDeleteCmd = &cobra.Command{
-	Use:     "delete --queue=QUEUE --id=TASK_ID",
+	Use:     "delete --queue=<queue> --id=<task_id>",
 	Aliases: []string{"remove", "rm"},
 	Short:   "Delete a task with the given id",
 	Args:    cobra.NoArgs,
@@ -143,7 +143,7 @@ var taskDeleteCmd = &cobra.Command{
 }
 
 var taskRunCmd = &cobra.Command{
-	Use:   "run --queue=QUEUE --id=TASK_ID",
+	Use:   "run --queue=<queue> --id=<task_id>",
 	Short: "Run a task with the given id",
 	Args:  cobra.NoArgs,
 	Run:   taskRun,
@@ -152,7 +152,7 @@ var taskRunCmd = &cobra.Command{
 }
 
 var taskArchiveAllCmd = &cobra.Command{
-	Use:   "archiveall --queue=QUEUE --state=STATE",
+	Use:   "archiveall --queue=<queue> --state=<state>",
 	Short: "Archive all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskArchiveAll,
@@ -162,7 +162,7 @@ var taskArchiveAllCmd = &cobra.Command{
 }
 
 var taskDeleteAllCmd = &cobra.Command{
-	Use:   "deleteall --queue=QUEUE --state=STATE",
+	Use:   "deleteall --queue=<queue> --state=<state>",
 	Short: "Delete all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskDeleteAll,
@@ -172,7 +172,7 @@ var taskDeleteAllCmd = &cobra.Command{
 }
 
 var taskRunAllCmd = &cobra.Command{
-	Use:   "runall --queue=QUEUE --state=STATE",
+	Use:   "runall --queue=<queue> --state=<state>",
 	Short: "Run all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskRunAll,

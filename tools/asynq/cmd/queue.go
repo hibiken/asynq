@@ -49,7 +49,7 @@ var queueListCmd = &cobra.Command{
 }
 
 var queueInspectCmd = &cobra.Command{
-	Use:   "inspect QUEUE [QUEUE...]",
+	Use:   "inspect <queue> [<queue>...]",
 	Short: "Display detailed information on one or more queues",
 	Args:  cobra.MinimumNArgs(1),
 	// TODO: Use RunE instead?
@@ -60,7 +60,7 @@ var queueInspectCmd = &cobra.Command{
 }
 
 var queueHistoryCmd = &cobra.Command{
-	Use:   "history QUEUE [QUEUE...]",
+	Use:   "history <queue> [<queue>...]",
 	Short: "Display historical aggregate data from one or more queues",
 	Args:  cobra.MinimumNArgs(1),
 	Run:   queueHistory,
@@ -71,7 +71,7 @@ var queueHistoryCmd = &cobra.Command{
 }
 
 var queuePauseCmd = &cobra.Command{
-	Use:   "pause QUEUE [QUEUE...]",
+	Use:   "pause <queue> [<queue>...]",
 	Short: "Pause one or more queues",
 	Args:  cobra.MinimumNArgs(1),
 	Run:   queuePause,
@@ -81,7 +81,7 @@ var queuePauseCmd = &cobra.Command{
 }
 
 var queueUnpauseCmd = &cobra.Command{
-	Use:     "resume QUEUE [QUEUE...]",
+	Use:     "resume <queue> [<queue>...]",
 	Short:   "Resume (unpause) one or more queues",
 	Args:    cobra.MinimumNArgs(1),
 	Aliases: []string{"unpause"},
@@ -92,7 +92,7 @@ var queueUnpauseCmd = &cobra.Command{
 }
 
 var queueRemoveCmd = &cobra.Command{
-	Use:     "remove QUEUE [QUEUE...]",
+	Use:     "remove <queue> [<queue>...]",
 	Short:   "Remove one or more queues",
 	Aliases: []string{"rm", "delete"},
 	Args:    cobra.MinimumNArgs(1),

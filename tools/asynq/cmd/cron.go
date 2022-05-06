@@ -33,13 +33,14 @@ var cronCmd = &cobra.Command{
 }
 
 var cronListCmd = &cobra.Command{
-	Use:   "ls",
-	Short: "List cron entries",
-	Run:   cronList,
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List cron entries",
+	Run:     cronList,
 }
 
 var cronHistoryCmd = &cobra.Command{
-	Use:   "history [ENTRY_ID...]",
+	Use:   "history <entry_id> [<entry_id>...]",
 	Short: "Show history of each cron tasks",
 	Args:  cobra.MinimumNArgs(1),
 	Run:   cronHistory,
