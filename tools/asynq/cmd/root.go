@@ -14,11 +14,15 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/MakeNowJust/heredoc/v2"
+	"github.com/fatih/color"
 	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"golang.org/x/exp/utf8string"
 
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
@@ -39,10 +43,22 @@ var (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:     "asynq",
-	Short:   "A monitoring tool for asynq queues",
-	Long:    `Asynq is a montoring CLI to inspect tasks and queues managed by asynq.`,
+	Use:     "asynq <command> <subcommand> [flags]",
+	Short:   "Asynq CLI",
+	Long:    `Command line tool to inspect tasks and queues managed by Asynq`,
 	Version: base.Version,
+
+	SilenceUsage:  true,
+	SilenceErrors: true,
+
+	Example: heredoc.Doc(`
+		$ asynq stats
+		$ asynq queue pause myqueue
+		$ asynq task list --queue=myqueue --state=archived`),
+	Annotations: map[string]string{
+		"help:feedback": heredoc.Doc(`
+			Open an issue at https://github.com/hibiken/asynq/issues/new/choose`),
+	},
 }
 
 var versionOutput = fmt.Sprintf("asynq version %s\n", base.Version)
@@ -64,22 +80,233 @@ func Execute() {
 	}
 }
 
+func isRootCmd(cmd *cobra.Command) bool {
+	return cmd != nil && !cmd.HasParent()
+}
+
+// displayLine represents a line displayed in the output as '<name> <desc>',
+// where pad is used to pad the name from desc.
+type displayLine struct {
+	name string
+	desc string
+	pad  int // number of rpad
+}
+
+func (l *displayLine) String() string {
+	return rpad(l.name, l.pad) + l.desc
+}
+
+type displayLines []*displayLine
+
+func (dls displayLines) String() string {
+	var lines []string
+	for _, dl := range dls {
+		lines = append(lines, dl.String())
+	}
+	return strings.Join(lines, "\n")
+}
+
+// Capitalize the first word in the given string.
+func capitalize(s string) string {
+	str := utf8string.NewString(s)
+	if str.RuneCount() == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(strings.ToUpper(string(str.At(0))))
+	b.WriteString(str.Slice(1, str.RuneCount()))
+	return b.String()
+}
+
+func rootHelpFunc(cmd *cobra.Command, args []string) {
+	// Display helpful error message when user mistypes a subcommand (e.g. 'asynq queue lst').
+	if isRootCmd(cmd.Parent()) && len(args) >= 2 && args[1] != "--help" && args[1] != "-h" {
+		printSubcommandSuggestions(cmd, args[1])
+		return
+	}
+
+	var lines []*displayLine
+	var commands []*displayLine
+	for _, c := range cmd.Commands() {
+		if c.Hidden || c.Short == "" || c.Name() == "help" {
+			continue
+		}
+		l := &displayLine{name: c.Name() + ":", desc: capitalize(c.Short)}
+		commands = append(commands, l)
+		lines = append(lines, l)
+	}
+	var localFlags []*displayLine
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		l := &displayLine{name: "--" + f.Name, desc: capitalize(f.Usage)}
+		localFlags = append(localFlags, l)
+		lines = append(lines, l)
+	})
+	var inheritedFlags []*displayLine
+	cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
+		l := &displayLine{name: "--" + f.Name, desc: capitalize(f.Usage)}
+		inheritedFlags = append(inheritedFlags, l)
+		lines = append(lines, l)
+	})
+	adjustPadding(lines...)
+
+	type helpEntry struct {
+		Title string
+		Body  string
+	}
+	var helpEntries []*helpEntry
+	desc := cmd.Long
+	if desc == "" {
+		desc = cmd.Short
+	}
+	if desc != "" {
+		helpEntries = append(helpEntries, &helpEntry{"", desc})
+	}
+	helpEntries = append(helpEntries, &helpEntry{"USAGE", cmd.UseLine()})
+	if len(commands) > 0 {
+		helpEntries = append(helpEntries, &helpEntry{"COMMANDS", displayLines(commands).String()})
+	}
+	if cmd.LocalFlags().HasFlags() {
+		helpEntries = append(helpEntries, &helpEntry{"FLAGS", displayLines(localFlags).String()})
+	}
+	if cmd.InheritedFlags().HasFlags() {
+		helpEntries = append(helpEntries, &helpEntry{"INHERITED FLAGS", displayLines(inheritedFlags).String()})
+	}
+	if cmd.Example != "" {
+		helpEntries = append(helpEntries, &helpEntry{"EXAMPLES", cmd.Example})
+	}
+	helpEntries = append(helpEntries, &helpEntry{"LEARN MORE", heredoc.Doc(`
+		Use 'asynq <command> <subcommand> --help' for more information about a command.`)})
+	if s, ok := cmd.Annotations["help:feedback"]; ok {
+		helpEntries = append(helpEntries, &helpEntry{"FEEDBACK", s})
+	}
+
+	out := cmd.OutOrStdout()
+	bold := color.New(color.Bold)
+	for _, e := range helpEntries {
+		if e.Title != "" {
+			// If there is a title, add indentation to each line in the body
+			bold.Fprintln(out, e.Title)
+			fmt.Fprintln(out, indent(e.Body, 2 /* spaces */))
+		} else {
+			// If there is no title, print the body as is
+			fmt.Fprintln(out, e.Body)
+		}
+		fmt.Fprintln(out)
+	}
+}
+
+func rootUsageFunc(cmd *cobra.Command) error {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "Usage: %s", cmd.UseLine())
+	if subcmds := cmd.Commands(); len(subcmds) > 0 {
+		fmt.Fprint(out, "\n\nAvailable commands:\n")
+		for _, c := range subcmds {
+			if c.Hidden {
+				continue
+			}
+			fmt.Fprintf(out, "  %s\n", c.Name())
+		}
+	}
+
+	var localFlags []*displayLine
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+		localFlags = append(localFlags, &displayLine{name: "--" + f.Name, desc: capitalize(f.Usage)})
+	})
+	adjustPadding(localFlags...)
+	if len(localFlags) > 0 {
+		fmt.Fprint(out, "\n\nFlags:\n")
+		for _, l := range localFlags {
+			fmt.Fprintf(out, "  %s\n", l.String())
+		}
+	}
+	return nil
+}
+
+func printSubcommandSuggestions(cmd *cobra.Command, arg string) {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "unknown command %q for %q\n", arg, cmd.CommandPath())
+	if cmd.SuggestionsMinimumDistance <= 0 {
+		cmd.SuggestionsMinimumDistance = 2
+	}
+	candidates := cmd.SuggestionsFor(arg)
+	if len(candidates) > 0 {
+		fmt.Fprint(out, "\nDid you mean this?\n")
+		for _, c := range candidates {
+			fmt.Fprintf(out, "\t%s\n", c)
+		}
+	}
+	fmt.Fprintln(out)
+	rootUsageFunc(cmd)
+}
+
+func adjustPadding(lines ...*displayLine) {
+	// find the maximum width of the name
+	max := 0
+	for _, l := range lines {
+		if n := utf8.RuneCountInString(l.name); n > max {
+			max = n
+		}
+	}
+	for _, l := range lines {
+		l.pad = max
+	}
+}
+
+// rpad adds padding to the right of a string.
+func rpad(s string, padding int) string {
+	tmpl := fmt.Sprintf("%%-%ds ", padding)
+	return fmt.Sprintf(tmpl, s)
+
+}
+
+// indent indents the given text by given spaces.
+func indent(text string, space int) string {
+	if len(text) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	indentation := strings.Repeat(" ", space)
+	lastRune := '\n'
+	for _, r := range text {
+		if lastRune == '\n' {
+			b.WriteString(indentation)
+		}
+		b.WriteRune(r)
+		lastRune = r
+	}
+	return b.String()
+}
+
+// dedent removes any indentation from the given text.
+func dedent(text string) string {
+	lines := strings.Split(text, "\n")
+	var b strings.Builder
+	for _, l := range lines {
+		b.WriteString(strings.TrimLeftFunc(l, unicode.IsSpace))
+		b.WriteRune('\n')
+	}
+	return b.String()
+}
+
 func init() {
 	cobra.OnInitialize(initConfig)
+
+	rootCmd.SetHelpFunc(rootHelpFunc)
+	rootCmd.SetUsageFunc(rootUsageFunc)
 
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.SetVersionTemplate(versionOutput)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file to set flag defaut values (default is $HOME/.asynq.yaml)")
-	rootCmd.PersistentFlags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "redis server URI")
-	rootCmd.PersistentFlags().IntVarP(&db, "db", "n", 0, "redis database number (default is 0)")
-	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "password to use when connecting to redis server")
-	rootCmd.PersistentFlags().BoolVar(&useRedisCluster, "cluster", false, "connect to redis cluster")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "Config file to set flag defaut values (default is $HOME/.asynq.yaml)")
+	rootCmd.PersistentFlags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "Redis server URI")
+	rootCmd.PersistentFlags().IntVarP(&db, "db", "n", 0, "Redis database number (default is 0)")
+	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "Password to use when connecting to redis server")
+	rootCmd.PersistentFlags().BoolVar(&useRedisCluster, "cluster", false, "Connect to redis cluster")
 	rootCmd.PersistentFlags().StringVar(&clusterAddrs, "cluster_addrs",
 		"127.0.0.1:7000,127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003,127.0.0.1:7004,127.0.0.1:7005",
-		"list of comma-separated redis server addresses")
+		"List of comma-separated redis server addresses")
 	rootCmd.PersistentFlags().StringVar(&tlsServerName, "tls_server",
-		"", "server name for TLS validation")
+		"", "Server name for TLS validation")
 	// Bind flags with config.
 	viper.BindPFlag("uri", rootCmd.PersistentFlags().Lookup("uri"))
 	viper.BindPFlag("db", rootCmd.PersistentFlags().Lookup("db"))

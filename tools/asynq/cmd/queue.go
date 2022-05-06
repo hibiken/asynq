@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/fatih/color"
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/errors"
@@ -31,51 +32,75 @@ func init() {
 }
 
 var queueCmd = &cobra.Command{
-	Use:   "queue",
+	Use:   "queue <command> [flags]",
 	Short: "Manage queues",
+	Example: heredoc.Doc(`
+	  $ asynq queue ls
+	  $ asynq queue inspect myqueue
+	  $ asynq queue pause myqueue`),
 }
 
 var queueListCmd = &cobra.Command{
-	Use:   "ls",
-	Short: "List queues",
+	Use:     "list",
+	Short:   "List queues",
+	Aliases: []string{"ls"},
 	// TODO: Use RunE instead?
 	Run: queueList,
 }
 
 var queueInspectCmd = &cobra.Command{
-	Use:   "inspect QUEUE [QUEUE...]",
+	Use:   "inspect <queue> [<queue>...]",
 	Short: "Display detailed information on one or more queues",
 	Args:  cobra.MinimumNArgs(1),
 	// TODO: Use RunE instead?
 	Run: queueInspect,
+	Example: heredoc.Doc(`
+		$ asynq queue inspect myqueue
+		$ asynq queue inspect queue1 queue2 queue3`),
 }
 
 var queueHistoryCmd = &cobra.Command{
-	Use:   "history QUEUE [QUEUE...]",
+	Use:   "history <queue> [<queue>...]",
 	Short: "Display historical aggregate data from one or more queues",
 	Args:  cobra.MinimumNArgs(1),
 	Run:   queueHistory,
+	Example: heredoc.Doc(`
+		$ asynq queue history myqueue
+		$ asynq queue history queue1 queue2 queue3
+		$ asynq queue history myqueue --days=90`),
 }
 
 var queuePauseCmd = &cobra.Command{
-	Use:   "pause QUEUE [QUEUE...]",
+	Use:   "pause <queue> [<queue>...]",
 	Short: "Pause one or more queues",
 	Args:  cobra.MinimumNArgs(1),
 	Run:   queuePause,
+	Example: heredoc.Doc(`
+		$ asynq queue pause myqueue
+		$ asynq queue pause queue1 queue2 queue3`),
 }
 
 var queueUnpauseCmd = &cobra.Command{
-	Use:   "unpause QUEUE [QUEUE...]",
-	Short: "Unpause one or more queues",
-	Args:  cobra.MinimumNArgs(1),
-	Run:   queueUnpause,
+	Use:     "resume <queue> [<queue>...]",
+	Short:   "Resume (unpause) one or more queues",
+	Args:    cobra.MinimumNArgs(1),
+	Aliases: []string{"unpause"},
+	Run:     queueUnpause,
+	Example: heredoc.Doc(`
+		$ asynq queue resume myqueue
+		$ asynq queue resume queue1 queue2 queue3`),
 }
 
 var queueRemoveCmd = &cobra.Command{
-	Use:   "rm QUEUE [QUEUE...]",
-	Short: "Remove one or more queues",
-	Args:  cobra.MinimumNArgs(1),
-	Run:   queueRemove,
+	Use:     "remove <queue> [<queue>...]",
+	Short:   "Remove one or more queues",
+	Aliases: []string{"rm", "delete"},
+	Args:    cobra.MinimumNArgs(1),
+	Run:     queueRemove,
+	Example: heredoc.Doc(`
+		$ asynq queue rm myqueue
+		$ asynq queue rm queue1 queue2 queue3
+		$ asynq queue rm myqueue --force`),
 }
 
 func queueList(cmd *cobra.Command, args []string) {
