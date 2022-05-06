@@ -20,7 +20,7 @@ func init() {
 	rootCmd.AddCommand(taskCmd)
 	taskCmd.AddCommand(taskListCmd)
 	taskListCmd.Flags().StringP("queue", "q", "", "queue to inspect (required)")
-	taskListCmd.Flags().StringP("state", "s", "", "state of the tasks to inspect (required)")
+	taskListCmd.Flags().StringP("state", "s", "", "state of the tasks; one of { active | pending | aggregating | scheduled | retry | archived | completed } (required)")
 	taskListCmd.Flags().Int("page", 1, "page number")
 	taskListCmd.Flags().Int("size", 30, "page size")
 	taskListCmd.Flags().StringP("group", "g", "", "group to inspect (required for listing aggregating tasks)")
@@ -55,21 +55,21 @@ func init() {
 
 	taskCmd.AddCommand(taskArchiveAllCmd)
 	taskArchiveAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong (required)")
-	taskArchiveAllCmd.Flags().StringP("state", "s", "", "state of the tasks (required)")
+	taskArchiveAllCmd.Flags().StringP("state", "s", "", "state of the tasks; one of { pending | aggregating | scheduled | retry } (required)")
 	taskArchiveAllCmd.MarkFlagRequired("queue")
 	taskArchiveAllCmd.MarkFlagRequired("state")
 	taskArchiveAllCmd.Flags().StringP("group", "g", "", "group to which the tasks belong (required for archiving aggregating tasks)")
 
 	taskCmd.AddCommand(taskDeleteAllCmd)
 	taskDeleteAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong (required)")
-	taskDeleteAllCmd.Flags().StringP("state", "s", "", "state of the tasks (required)")
+	taskDeleteAllCmd.Flags().StringP("state", "s", "", "state of the tasks; one of { pending | aggregating | scheduled | retry | archived | completed } (required)")
 	taskDeleteAllCmd.MarkFlagRequired("queue")
 	taskDeleteAllCmd.MarkFlagRequired("state")
 	taskDeleteAllCmd.Flags().StringP("group", "g", "", "group to which the tasks belong (required for deleting aggregating tasks)")
 
 	taskCmd.AddCommand(taskRunAllCmd)
 	taskRunAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong (required)")
-	taskRunAllCmd.Flags().StringP("state", "s", "", "state of the tasks (required)")
+	taskRunAllCmd.Flags().StringP("state", "s", "", "state of the tasks; one of { scheduled | retry | archived } (required)")
 	taskRunAllCmd.MarkFlagRequired("queue")
 	taskRunAllCmd.MarkFlagRequired("state")
 	taskRunAllCmd.Flags().StringP("group", "g", "", "group to which the tasks belong (required for running aggregating tasks)")
@@ -94,19 +94,9 @@ var taskListCmd = &cobra.Command{
 
 	The --queue and --state flags are required.
 
-	The value for the state flag should be one of:
-	  - active
-	  - pending
-	  - aggregating
-	  - scheduled
-	  - retry
-	  - archived
-	  - completed
-
 	Note: For aggregating tasks, additional --group flag is required.
 
-	List opeartion paginates the result set.
-	By default, the command fetches the first 30 tasks.
+	List opeartion paginates the result set. By default, the command fetches the first 30 tasks.
 	Use --page and --size flags to specify the page number and size.`),
 	Example: heredoc.Doc(`
 		$ asynq task list --queue=myqueue --state=pending
