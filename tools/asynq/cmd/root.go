@@ -175,9 +175,7 @@ func rootHelpFunc(cmd *cobra.Command, args []string) {
 		helpEntries = append(helpEntries, &helpEntry{"EXAMPLES", cmd.Example})
 	}
 	helpEntries = append(helpEntries, &helpEntry{"LEARN MORE", heredoc.Doc(`
-		Use 'asynq <command> <subcommand> --help' for more information about a command.
-		Read a manual at https://github.com/hibiken/asynq/wiki/cli.
-		Follow a tutorial at https://github.com/hibiken/asynq/wiki/cli-tutor`)})
+		Use 'asynq <command> <subcommand> --help' for more information about a command.`)})
 	if s, ok := cmd.Annotations["help:feedback"]; ok {
 		helpEntries = append(helpEntries, &helpEntry{"FEEDBACK", s})
 	}
@@ -293,7 +291,6 @@ func dedent(text string) string {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	// TODO: Update help command
 	rootCmd.SetHelpFunc(rootHelpFunc)
 	rootCmd.SetUsageFunc(rootUsageFunc)
 
