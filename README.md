@@ -2,6 +2,25 @@
 
 # Simple, reliable & efficient distributed task queue in Go
 
+## REBASE
+[reference](https://www.johneverettcase.com/post/2021/07/28/git-rebase-fork.html)
+
+```bash
+git remote add upstream https://github.com/hibiken/asynq
+git remote -v
+git fetch upstream
+git checkout master
+git rebase upstream/master
+git push origin master --force
+```
+This is so that our repace in go.mod works
+
+```
+replace github.com/hibiken/asynq => github.com/fluffy-bunny/asynq v0.23.3
+```
+If you don't do this it will just pull the original fork and place it in your 0.23.3 folder (lies)
+
+
 [![GoDoc](https://godoc.org/github.com/hibiken/asynq?status.svg)](https://godoc.org/github.com/hibiken/asynq)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hibiken/asynq)](https://goreportcard.com/report/github.com/hibiken/asynq)
 ![Build Status](https://github.com/hibiken/asynq/workflows/build/badge.svg)
