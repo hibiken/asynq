@@ -899,6 +899,9 @@ return redis.status_reply("OK")`)
 // Archive sends the given task to archive, attaching the error message to the task.
 // It also trims the archive by timestamp and set size.
 func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string) error {
+	if *(r.config.MaxArchiveSize) <= 0 {
+		return nil
+	}
 	var op errors.Op = "rdb.Archive"
 	now := r.clock.Now()
 	modified := *msg
