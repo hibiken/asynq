@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/fatih/color"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
@@ -24,19 +25,15 @@ import (
 // statsCmd represents the stats command
 var statsCmd = &cobra.Command{
 	Use:   "stats",
-	Short: "Shows current state of the tasks and queues",
-	Long: `Stats (aysnq stats) will show the overview of tasks and queues at that instant.
+	Short: "View current state",
+	Long: heredoc.Doc(`
+	  Stats shows the overview of tasks and queues at that instant.
 
-Specifically, the command shows the following:
-* Number of tasks in each state
-* Number of tasks in each queue
-* Aggregate data for the current day
-* Basic information about the running redis instance
-
-To monitor the tasks continuously, it's recommended that you run this
-command in conjunction with the watch command.
-
-Example: watch -n 3 asynq stats -> Shows current state of tasks every three seconds`,
+	  The command shows the following:
+	    * Number of tasks in each state
+	    * Number of tasks in each queue
+	    * Aggregate data for the current day
+	    * Basic information about the running redis instance`),
 	Args: cobra.NoArgs,
 	Run:  stats,
 }

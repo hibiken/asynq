@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/fatih/color"
 	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
@@ -18,8 +19,8 @@ import (
 func init() {
 	rootCmd.AddCommand(taskCmd)
 	taskCmd.AddCommand(taskListCmd)
-	taskListCmd.Flags().StringP("queue", "q", "", "queue to inspect")
-	taskListCmd.Flags().StringP("state", "s", "", "state of the tasks to inspect")
+	taskListCmd.Flags().StringP("queue", "q", "", "queue to inspect (required)")
+	taskListCmd.Flags().StringP("state", "s", "", "state of the tasks; one of { active | pending | aggregating | scheduled | retry | archived | completed } (required)")
 	taskListCmd.Flags().Int("page", 1, "page number")
 	taskListCmd.Flags().Int("size", 30, "page size")
 	taskListCmd.Flags().StringP("group", "g", "", "group to inspect (required for listing aggregating tasks)")
@@ -29,141 +30,155 @@ func init() {
 	taskCmd.AddCommand(taskCancelCmd)
 
 	taskCmd.AddCommand(taskInspectCmd)
-	taskInspectCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
-	taskInspectCmd.Flags().StringP("id", "i", "", "id of the task")
+	taskInspectCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs (required)")
+	taskInspectCmd.Flags().StringP("id", "i", "", "id of the task (required)")
 	taskInspectCmd.MarkFlagRequired("queue")
 	taskInspectCmd.MarkFlagRequired("id")
 
 	taskCmd.AddCommand(taskArchiveCmd)
-	taskArchiveCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
-	taskArchiveCmd.Flags().StringP("id", "i", "", "id of the task")
+	taskArchiveCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs (required)")
+	taskArchiveCmd.Flags().StringP("id", "i", "", "id of the task (required)")
 	taskArchiveCmd.MarkFlagRequired("queue")
 	taskArchiveCmd.MarkFlagRequired("id")
 
 	taskCmd.AddCommand(taskDeleteCmd)
-	taskDeleteCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
-	taskDeleteCmd.Flags().StringP("id", "i", "", "id of the task")
+	taskDeleteCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs (required)")
+	taskDeleteCmd.Flags().StringP("id", "i", "", "id of the task (required)")
 	taskDeleteCmd.MarkFlagRequired("queue")
 	taskDeleteCmd.MarkFlagRequired("id")
 
 	taskCmd.AddCommand(taskRunCmd)
-	taskRunCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs")
-	taskRunCmd.Flags().StringP("id", "i", "", "id of the task")
+	taskRunCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs (required)")
+	taskRunCmd.Flags().StringP("id", "i", "", "id of the task (required)")
 	taskRunCmd.MarkFlagRequired("queue")
 	taskRunCmd.MarkFlagRequired("id")
 
 	taskCmd.AddCommand(taskArchiveAllCmd)
-	taskArchiveAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong")
-	taskArchiveAllCmd.Flags().StringP("state", "s", "", "state of the tasks")
+	taskArchiveAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong (required)")
+	taskArchiveAllCmd.Flags().StringP("state", "s", "", "state of the tasks; one of { pending | aggregating | scheduled | retry } (required)")
 	taskArchiveAllCmd.MarkFlagRequired("queue")
 	taskArchiveAllCmd.MarkFlagRequired("state")
+	taskArchiveAllCmd.Flags().StringP("group", "g", "", "group to which the tasks belong (required for archiving aggregating tasks)")
 
 	taskCmd.AddCommand(taskDeleteAllCmd)
-	taskDeleteAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong")
-	taskDeleteAllCmd.Flags().StringP("state", "s", "", "state of the tasks")
+	taskDeleteAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong (required)")
+	taskDeleteAllCmd.Flags().StringP("state", "s", "", "state of the tasks; one of { pending | aggregating | scheduled | retry | archived | completed } (required)")
 	taskDeleteAllCmd.MarkFlagRequired("queue")
 	taskDeleteAllCmd.MarkFlagRequired("state")
+	taskDeleteAllCmd.Flags().StringP("group", "g", "", "group to which the tasks belong (required for deleting aggregating tasks)")
 
 	taskCmd.AddCommand(taskRunAllCmd)
-	taskRunAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong")
-	taskRunAllCmd.Flags().StringP("state", "s", "", "state of the tasks")
+	taskRunAllCmd.Flags().StringP("queue", "q", "", "queue to which the tasks belong (required)")
+	taskRunAllCmd.Flags().StringP("state", "s", "", "state of the tasks; one of { scheduled | retry | archived } (required)")
 	taskRunAllCmd.MarkFlagRequired("queue")
 	taskRunAllCmd.MarkFlagRequired("state")
+	taskRunAllCmd.Flags().StringP("group", "g", "", "group to which the tasks belong (required for running aggregating tasks)")
 }
 
 var taskCmd = &cobra.Command{
-	Use:   "task",
+	Use:   "task <command> [flags]",
 	Short: "Manage tasks",
+	Example: heredoc.Doc(`
+		$ asynq task list --queue=myqueue --state=scheduled
+		$ asynq task inspect --queue=myqueue --id=7837f142-6337-4217-9276-8f27281b67d1
+		$ asynq task delete --queue=myqueue --id=7837f142-6337-4217-9276-8f27281b67d1
+		$ asynq task deleteall --queue=myqueue --state=archived`),
 }
 
 var taskListCmd = &cobra.Command{
-	Use:   "ls --queue=QUEUE --state=STATE",
-	Short: "List tasks",
-	Long: `List tasks of the given state from the specified queue.
+	Use:     "list --queue=<queue> --state=<state> [flags]",
+	Aliases: []string{"ls"},
+	Short:   "List tasks",
+	Long: heredoc.Doc(`
+	List tasks of the given state from the specified queue.
 
-The value for the state flag should be one of:
-- active
-- pending
-- aggregating
-- scheduled
-- retry
-- archived
-- completed
+	The --queue and --state flags are required.
 
-List opeartion paginates the result set.
-By default, the command fetches the first 30 tasks.
-Use --page and --size flags to specify the page number and size.
+	Note: For aggregating tasks, additional --group flag is required.
 
-
-Example: 
-To list pending tasks from "default" queue, run
-  asynq task ls --queue=default --state=pending
-
-To list the tasks from the second page, run
-  asynq task ls --queue=default --state=pending --page=1
-
-For aggregating tasks, additional --group flag is required.
-
-Example:
-  asynq task ls --queue=default --state=aggregating --group=mygroup
-`,
+	List opeartion paginates the result set. By default, the command fetches the first 30 tasks.
+	Use --page and --size flags to specify the page number and size.`),
+	Example: heredoc.Doc(`
+		$ asynq task list --queue=myqueue --state=pending
+		$ asynq task list --queue=myqueue --state=aggregating --group=mygroup
+		$ asynq task list --queue=myqueue --state=scheduled --page=2`),
 	Run: taskList,
 }
 
 var taskInspectCmd = &cobra.Command{
-	Use:   "inspect --queue=QUEUE --id=TASK_ID",
+	Use:   "inspect --queue=<queue> --id=<task_id>",
 	Short: "Display detailed information on the specified task",
 	Args:  cobra.NoArgs,
 	Run:   taskInspect,
+	Example: heredoc.Doc(`
+		$ asynq task inspect --queue=myqueue --id=f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
 
 var taskCancelCmd = &cobra.Command{
-	Use:   "cancel TASK_ID [TASK_ID...]",
+	Use:   "cancel <task_id> [<task_id>...]",
 	Short: "Cancel one or more active tasks",
 	Args:  cobra.MinimumNArgs(1),
 	Run:   taskCancel,
+	Example: heredoc.Doc(`
+		$ asynq task cancel f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
 
 var taskArchiveCmd = &cobra.Command{
-	Use:   "archive --queue=QUEUE --id=TASK_ID",
+	Use:   "archive --queue=<queue> --id=<task_id>",
 	Short: "Archive a task with the given id",
 	Args:  cobra.NoArgs,
 	Run:   taskArchive,
+	Example: heredoc.Doc(`
+		$ asynq task archive --queue=myqueue --id=f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
 
 var taskDeleteCmd = &cobra.Command{
-	Use:   "delete --queue=QUEUE --id=TASK_ID",
-	Short: "Delete a task with the given id",
-	Args:  cobra.NoArgs,
-	Run:   taskDelete,
+	Use:     "delete --queue=<queue> --id=<task_id>",
+	Aliases: []string{"remove", "rm"},
+	Short:   "Delete a task with the given id",
+	Args:    cobra.NoArgs,
+	Run:     taskDelete,
+	Example: heredoc.Doc(`
+		$ asynq task delete --queue=myqueue --id=f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
 
 var taskRunCmd = &cobra.Command{
-	Use:   "run --queue=QUEUE --id=TASK_ID",
+	Use:   "run --queue=<queue> --id=<task_id>",
 	Short: "Run a task with the given id",
 	Args:  cobra.NoArgs,
 	Run:   taskRun,
+	Example: heredoc.Doc(`
+		$ asynq task run --queue=myqueue --id=f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
 
 var taskArchiveAllCmd = &cobra.Command{
-	Use:   "archiveall --queue=QUEUE --state=STATE",
+	Use:   "archiveall --queue=<queue> --state=<state>",
 	Short: "Archive all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskArchiveAll,
+	Example: heredoc.Doc(`
+		$ asynq task archiveall --queue=myqueue --state=retry
+		$ asynq task archiveall --queue=myqueue --state=aggregating --group=mygroup`),
 }
 
 var taskDeleteAllCmd = &cobra.Command{
-	Use:   "deleteall --queue=QUEUE --state=STATE",
+	Use:   "deleteall --queue=<queue> --state=<state>",
 	Short: "Delete all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskDeleteAll,
+	Example: heredoc.Doc(`
+		$ asynq task deleteall --queue=myqueue --state=archived
+		$ asynq task deleteall --queue=myqueue --state=aggregating --group=mygroup`),
 }
 
 var taskRunAllCmd = &cobra.Command{
-	Use:   "runall --queue=QUEUE --state=STATE",
+	Use:   "runall --queue=<queue> --state=<state>",
 	Short: "Run all tasks in the given state",
 	Args:  cobra.NoArgs,
 	Run:   taskRunAll,
+	Example: heredoc.Doc(`
+		$ asynq task runall --queue=myqueue --state=retry
+		$ asynq task runall --queue=myqueue --state=aggregating --group=mygroup`),
 }
 
 func taskList(cmd *cobra.Command, args []string) {
@@ -527,6 +542,17 @@ func taskArchiveAll(cmd *cobra.Command, args []string) {
 		n, err = i.ArchiveAllScheduledTasks(qname)
 	case "retry":
 		n, err = i.ArchiveAllRetryTasks(qname)
+	case "aggregating":
+		group, err := cmd.Flags().GetString("group")
+		if err != nil {
+			fmt.Printf("error: %v\n", err)
+			os.Exit(1)
+		}
+		if group == "" {
+			fmt.Println("error: Flag --group is required for aggregating tasks")
+			os.Exit(1)
+		}
+		n, err = i.ArchiveAllAggregatingTasks(qname, group)
 	default:
 		fmt.Printf("error: unsupported state %q\n", state)
 		os.Exit(1)
@@ -563,6 +589,17 @@ func taskDeleteAll(cmd *cobra.Command, args []string) {
 		n, err = i.DeleteAllArchivedTasks(qname)
 	case "completed":
 		n, err = i.DeleteAllCompletedTasks(qname)
+	case "aggregating":
+		group, err := cmd.Flags().GetString("group")
+		if err != nil {
+			fmt.Printf("error: %v\n", err)
+			os.Exit(1)
+		}
+		if group == "" {
+			fmt.Println("error: Flag --group is required for aggregating tasks")
+			os.Exit(1)
+		}
+		n, err = i.DeleteAllAggregatingTasks(qname, group)
 	default:
 		fmt.Printf("error: unsupported state %q\n", state)
 		os.Exit(1)
@@ -595,6 +632,17 @@ func taskRunAll(cmd *cobra.Command, args []string) {
 		n, err = i.RunAllRetryTasks(qname)
 	case "archived":
 		n, err = i.RunAllArchivedTasks(qname)
+	case "aggregating":
+		group, err := cmd.Flags().GetString("group")
+		if err != nil {
+			fmt.Printf("error: %v\n", err)
+			os.Exit(1)
+		}
+		if group == "" {
+			fmt.Println("error: Flag --group is required for aggregating tasks")
+			os.Exit(1)
+		}
+		n, err = i.RunAllAggregatingTasks(qname, group)
 	default:
 		fmt.Printf("error: unsupported state %q\n", state)
 		os.Exit(1)
