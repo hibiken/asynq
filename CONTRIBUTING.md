@@ -38,7 +38,7 @@ Thank you! We'll try to respond as quickly as possible.
 ## Contributing Code
 
 1. Fork this repo
-2. Download your fork `git clone https://github.com/your-username/asynq && cd asynq`
+2. Download your fork `git clone git@github.com:your-username/asynq.git && cd asynq`
 3. Create your branch `git checkout -b your-branch-name`
 4. Make and commit your changes
 5. Push the branch `git push origin your-branch-name`
