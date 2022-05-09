@@ -22,12 +22,33 @@ type Inspector struct {
 	rdb *rdb.RDB
 }
 type InspectorConfig struct {
-	MaxArchiveSize           int
-	ArchivedExpirationInDays int
+	MaxArchiveSize           *int
+	ArchivedExpirationInDays *int
+}
+
+func validateInspectorConfig(cfg *InspectorConfig) {
+	if cfg.MaxArchiveSize == nil {
+		value := base.DefaultMaxArchiveSize
+		cfg.MaxArchiveSize = &value
+	}
+	if *(cfg.MaxArchiveSize) < 0 {
+		value := 1
+		cfg.MaxArchiveSize = &value
+	}
+	if cfg.ArchivedExpirationInDays == nil {
+		value := base.DefaultArchivedExpirationInDays
+		cfg.ArchivedExpirationInDays = &value
+	}
+	if *(cfg.ArchivedExpirationInDays) < 0 {
+		value := 1
+		cfg.ArchivedExpirationInDays = &value
+	}
 }
 
 // New returns a new instance of Inspector.
 func NewInspectorWithConfig(r RedisConnOpt, cfg InspectorConfig) *Inspector {
+	validateInspectorConfig(&cfg)
+
 	c, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("inspeq: unsupported RedisConnOpt type %T", r))
@@ -42,10 +63,7 @@ func NewInspectorWithConfig(r RedisConnOpt, cfg InspectorConfig) *Inspector {
 
 // New returns a new instance of Inspector.
 func NewInspector(r RedisConnOpt) *Inspector {
-	return NewInspectorWithConfig(r, InspectorConfig{
-		MaxArchiveSize:           base.DefaultMaxArchiveSize,
-		ArchivedExpirationInDays: base.DefaultArchivedExpirationInDays,
-	})
+	return NewInspectorWithConfig(r, InspectorConfig{})
 }
 
 // Close closes the connection with redis.

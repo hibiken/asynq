@@ -1181,7 +1181,7 @@ func (r *RDB) ArchiveAllAggregatingTasks(qname, gname string) (int64, error) {
 	now := r.clock.Now()
 	argv := []interface{}{
 		now.Unix(),
-		now.AddDate(0, 0, -r.config.ArchivedExpirationInDays).Unix(),
+		now.AddDate(0, 0, -(*r.config.ArchivedExpirationInDays)).Unix(),
 		r.config.MaxArchiveSize,
 		base.TaskKeyPrefix(qname),
 		gname,
@@ -1237,7 +1237,7 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 	now := r.clock.Now()
 	argv := []interface{}{
 		now.Unix(),
-		now.AddDate(0, 0, -r.config.ArchivedExpirationInDays).Unix(),
+		now.AddDate(0, 0, -(*r.config.ArchivedExpirationInDays)).Unix(),
 		r.config.MaxArchiveSize,
 		base.TaskKeyPrefix(qname),
 	}
@@ -1328,7 +1328,7 @@ func (r *RDB) ArchiveTask(qname, id string) error {
 	argv := []interface{}{
 		id,
 		now.Unix(),
-		now.AddDate(0, 0, -r.config.ArchivedExpirationInDays).Unix(),
+		now.AddDate(0, 0, -(*r.config.ArchivedExpirationInDays)).Unix(),
 		r.config.MaxArchiveSize,
 		base.QueueKeyPrefix(qname),
 		base.GroupKeyPrefix(qname),
@@ -1393,7 +1393,7 @@ func (r *RDB) archiveAll(src, dst, qname string) (int64, error) {
 	now := r.clock.Now()
 	argv := []interface{}{
 		now.Unix(),
-		now.AddDate(0, 0, -r.config.ArchivedExpirationInDays).Unix(),
+		now.AddDate(0, 0, -(*r.config.ArchivedExpirationInDays)).Unix(),
 		r.config.MaxArchiveSize,
 		base.TaskKeyPrefix(qname),
 		qname,

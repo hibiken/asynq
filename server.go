@@ -221,8 +221,15 @@ type Config struct {
 	// If unset or nil, the group aggregation feature will be disabled on the server.
 	GroupAggregator GroupAggregator
 
-	MaxArchiveSize           int
-	ArchivedExpirationInDays int
+	// MaxArchiveSize specifies the maximum size of the archive that can be created by the server.
+	//
+	// If unset the DefaultMaxArchiveSize is used.  If set to a zero or a negative value, nothing will be archived.
+	MaxArchiveSize *int
+
+	// ArchivedExpirationInDays specifies the number of days after which archived tasks are deleted.
+	//
+	// If unset, DefaultArchivedExpirationInDays is used.  The value must be greater than zero.
+	ArchivedExpirationInDays *int
 }
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
@@ -392,9 +399,30 @@ const (
 	defaultGroupGracePeriod = 1 * time.Minute
 )
 
+func validateConfig(cfg *Config) {
+	if cfg.MaxArchiveSize == nil {
+		value := base.DefaultMaxArchiveSize
+		cfg.MaxArchiveSize = &value
+	}
+	if *(cfg.MaxArchiveSize) < 0 {
+		value := 1
+		cfg.MaxArchiveSize = &value
+	}
+	if cfg.ArchivedExpirationInDays == nil {
+		value := base.DefaultArchivedExpirationInDays
+		cfg.ArchivedExpirationInDays = &value
+	}
+	if *(cfg.ArchivedExpirationInDays) < 0 {
+		value := 1
+		cfg.ArchivedExpirationInDays = &value
+	}
+}
+
 // NewServer returns a new Server given a redis connection option
 // and server configuration.
 func NewServer(r RedisConnOpt, cfg Config) *Server {
+	validateConfig(&cfg)
+
 	c, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))

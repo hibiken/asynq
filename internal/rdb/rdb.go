@@ -31,12 +31,33 @@ type RDB struct {
 	config RDBConfig
 }
 type RDBConfig struct {
-	MaxArchiveSize           int
-	ArchivedExpirationInDays int
+	MaxArchiveSize           *int
+	ArchivedExpirationInDays *int
+}
+
+func validateRDBConfig(cfg *RDBConfig) {
+	if cfg.MaxArchiveSize == nil {
+		value := base.DefaultMaxArchiveSize
+		cfg.MaxArchiveSize = &value
+	}
+	if *(cfg.MaxArchiveSize) < 0 {
+		value := 1
+		cfg.MaxArchiveSize = &value
+	}
+	if cfg.ArchivedExpirationInDays == nil {
+		value := base.DefaultArchivedExpirationInDays
+		cfg.ArchivedExpirationInDays = &value
+	}
+	if *(cfg.ArchivedExpirationInDays) < 0 {
+		value := 1
+		cfg.ArchivedExpirationInDays = &value
+	}
 }
 
 // NewRDB returns a new instance of RDB.
 func NewRDBWithConfig(client redis.UniversalClient, cfg RDBConfig) *RDB {
+	validateRDBConfig(&cfg)
+
 	return &RDB{
 		client: client,
 		clock:  timeutil.NewRealClock(),
@@ -49,10 +70,6 @@ func NewRDB(client redis.UniversalClient) *RDB {
 	return &RDB{
 		client: client,
 		clock:  timeutil.NewRealClock(),
-		config: RDBConfig{
-			MaxArchiveSize:           base.DefaultMaxArchiveSize,
-			ArchivedExpirationInDays: base.DefaultArchivedExpirationInDays,
-		},
 	}
 }
 
@@ -891,7 +908,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 	if err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	cutoff := now.AddDate(0, 0, -r.config.ArchivedExpirationInDays)
+	cutoff := now.AddDate(0, 0, -(*r.config.ArchivedExpirationInDays))
 	expireAt := now.Add(statsTTL)
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),

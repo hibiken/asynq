@@ -112,8 +112,15 @@ type SchedulerOpts struct {
 	// due to an error.
 	EnqueueErrorHandler func(task *Task, opts []Option, err error)
 
-	MaxArchiveSize           int
-	ArchivedExpirationInDays int
+	// MaxArchiveSize specifies the maximum size of the archive that can be created by the server.
+	//
+	// If unset the DefaultMaxArchiveSize is used.  If set to a zero or a negative value, nothing will be archived.
+	MaxArchiveSize *int
+
+	// ArchivedExpirationInDays specifies the number of days after which archived tasks are deleted.
+	//
+	// If unset, DefaultArchivedExpirationInDays is used.  The value must be greater than zero.
+	ArchivedExpirationInDays *int
 }
 
 // enqueueJob encapsulates the job of enqueing a task and recording the event.
