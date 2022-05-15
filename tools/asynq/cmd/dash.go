@@ -139,6 +139,18 @@ func dash(cmd *cobra.Command, args []string) {
 					state.prevView = state.view
 					state.view = viewTypeHelp
 					drawDash(s, baseStyle, &state)
+				} else if ev.Key() == tcell.KeyF1 {
+					state.view = viewTypeQueues
+					drawDash(s, baseStyle, &state)
+				} else if ev.Key() == tcell.KeyF2 {
+					state.view = viewTypeServers
+					drawDash(s, baseStyle, &state)
+				} else if ev.Key() == tcell.KeyF3 {
+					state.view = viewTypeSchedulers
+					drawDash(s, baseStyle, &state)
+				} else if ev.Key() == tcell.KeyF4 {
+					state.view = viewTypeRedis
+					drawDash(s, baseStyle, &state)
 				}
 			}
 
@@ -186,15 +198,25 @@ func drawDash(s tcell.Screen, style tcell.Style, state *dashState) {
 		drawQueueSizeGraphs(d, style, state)
 		d.NL() // empty line
 		drawQueueTable(d, style, state)
-		d.GoToBottom()
-		drawFooter(d, style, state)
+	case viewTypeServers:
+		d.Println("=== Servers ===", style.Bold(true))
+		d.NL() // empty line
+		// TODO: Draw body
+	case viewTypeSchedulers:
+		d.Println("=== Schedulers === ", style.Bold(true))
+		d.NL() // empty line
+		// TODO: Draw body
+	case viewTypeRedis:
+		d.Println("=== Redis Info === ", style.Bold(true))
+		d.NL() // empty line
+		// TODO: Draw body
 	case viewTypeHelp:
 		d.Println("=== HELP ===", style.Bold(true))
 		d.NL() // empty line
 		// TODO: Draw HELP body
-		d.GoToBottom()
-		drawFooter(d, style, state)
 	}
+	d.GoToBottom()
+	drawFooter(d, style, state)
 }
 
 func drawQueueSizeGraphs(d *ScreenDrawer, style tcell.Style, state *dashState) {
