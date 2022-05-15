@@ -41,10 +41,20 @@ func init() {
 	dashCmd.Flags().BoolVar(&flagUseRealData, "realdata", false, "Use real data in redis")
 }
 
+// viewType is an enum for dashboard views.
+type viewType int
+
+const (
+	viewTypeQueues viewType = iota
+	viewTypeHelp
+)
+
 type dashState struct {
-	queues []*asynq.QueueInfo
-	err    error
-	rowIdx int // highlighted row
+	queues   []*asynq.QueueInfo
+	err      error
+	rowIdx   int      // highlighted row
+	view     viewType // current view type
+	prevView viewType // to support "go back"
 }
 
 func dash(cmd *cobra.Command, args []string) {
@@ -66,6 +76,7 @@ func dash(cmd *cobra.Command, args []string) {
 
 	queues, err := getQueueInfo(inspector)
 	state := dashState{
+		view:   viewTypeQueues,
 		queues: queues,
 		err:    err,
 	}
@@ -96,7 +107,14 @@ func dash(cmd *cobra.Command, args []string) {
 			case *tcell.EventResize:
 				s.Sync()
 			case *tcell.EventKey:
-				if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC || ev.Rune() == 'q' {
+				if ev.Key() == tcell.KeyEscape {
+					if state.view == viewTypeHelp {
+						state.view = state.prevView // exit help
+						drawDash(s, baseStyle, &state)
+					} else {
+						quit()
+					}
+				} else if ev.Key() == tcell.KeyCtrlC || ev.Rune() == 'q' {
 					quit()
 				} else if ev.Key() == tcell.KeyCtrlL {
 					s.Sync()
@@ -113,6 +131,10 @@ func dash(cmd *cobra.Command, args []string) {
 					} else {
 						state.rowIdx--
 					}
+					drawDash(s, baseStyle, &state)
+				} else if ev.Rune() == '?' {
+					state.prevView = state.view
+					state.view = viewTypeHelp
 					drawDash(s, baseStyle, &state)
 				}
 			}
@@ -154,13 +176,22 @@ func drawDash(s tcell.Screen, style tcell.Style, state *dashState) {
 	s.Clear()
 	// Simulate data update on every render
 	d := NewScreenDrawer(s)
-	d.Println("=== Queues ===", style.Bold(true))
-	d.NL() // empty line
-	drawQueueSizeGraphs(d, style, state)
-	d.NL() // empty line
-	drawQueueTable(d, style, state)
-	d.GoToBottom()
-	drawFooter(d, style, state)
+	switch state.view {
+	case viewTypeQueues:
+		d.Println("=== Queues ===", style.Bold(true))
+		d.NL() // empty line
+		drawQueueSizeGraphs(d, style, state)
+		d.NL() // empty line
+		drawQueueTable(d, style, state)
+		d.GoToBottom()
+		drawFooter(d, style, state)
+	case viewTypeHelp:
+		d.Println("=== HELP ===", style.Bold(true))
+		d.NL() // empty line
+		// TODO: Draw HELP body
+		d.GoToBottom()
+		drawFooter(d, style, state)
+	}
 }
 
 func drawQueueSizeGraphs(d *ScreenDrawer, style tcell.Style, state *dashState) {
@@ -236,7 +267,12 @@ func drawFooter(d *ScreenDrawer, baseStyle tcell.Style, state *dashState) {
 		return
 	}
 	style := baseStyle.Background(tcell.ColorDarkSlateGray)
-	d.Print("F1=HELP", style)
+	switch state.view {
+	case viewTypeHelp:
+		d.Print("Esc=GoBack", style)
+	default:
+		d.Print("F1=Queues  F2=Servers  F3=Schedulers  F4=Redis  ?=Help", style)
+	}
 	d.FillLine(' ', style)
 }
 
@@ -328,8 +364,7 @@ func ByteCount(b int64) string {
 		exp++
 
 	}
-	return fmt.Sprintf("%.1f% cB",
-		float64(b)/float64(div), "kMGTPE"[exp])
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "kMGTPE"[exp])
 
 }
 
@@ -416,6 +451,7 @@ func drawQueueTable(d *ScreenDrawer, style tcell.Style, state *dashState) {
 
 	if flagDebug {
 		d.Println(fmt.Sprintf("DEBUG: rowIdx = %d", state.rowIdx), style)
+		d.Println(fmt.Sprintf("DEBUG: view = %v", state.view), style)
 	}
 }
 
