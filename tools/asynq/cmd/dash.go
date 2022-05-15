@@ -46,6 +46,9 @@ type viewType int
 
 const (
 	viewTypeQueues viewType = iota
+	viewTypeServers
+	viewTypeSchedulers
+	viewTypeRedis
 	viewTypeHelp
 )
 
@@ -271,7 +274,28 @@ func drawFooter(d *ScreenDrawer, baseStyle tcell.Style, state *dashState) {
 	case viewTypeHelp:
 		d.Print("Esc=GoBack", style)
 	default:
-		d.Print("F1=Queues  F2=Servers  F3=Schedulers  F4=Redis  ?=Help", style)
+		type menu struct {
+			label string
+			view  viewType
+		}
+		menus := []*menu{
+			{"F1=Queues", viewTypeQueues},
+			{"F2=Servers", viewTypeServers},
+			{"F3=Schedulers", viewTypeSchedulers},
+			{"F4=Redis", viewTypeRedis},
+			{"?=Help", viewTypeHelp},
+		}
+		var b strings.Builder
+		for _, m := range menus {
+			b.WriteString(m.label)
+			// Add * for the current view
+			if m.view == state.view {
+				b.WriteString("* ")
+			} else {
+				b.WriteString("  ")
+			}
+		}
+		d.Print(b.String(), style)
 	}
 	d.FillLine(' ', style)
 }
