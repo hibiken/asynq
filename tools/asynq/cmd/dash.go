@@ -53,11 +53,19 @@ const (
 )
 
 type dashState struct {
-	queues   []*asynq.QueueInfo
-	err      error
-	rowIdx   int      // highlighted row
-	view     viewType // current view type
-	prevView viewType // to support "go back"
+	queues    []*asynq.QueueInfo
+	redisInfo redisInfo
+	err       error
+	rowIdx    int      // highlighted row
+	view      viewType // current view type
+	prevView  viewType // to support "go back"
+}
+
+type redisInfo struct {
+	version         string
+	uptime          string
+	memoryUsage     int
+	peakMemoryUsage int
 }
 
 func dash(cmd *cobra.Command, args []string) {
@@ -79,8 +87,9 @@ func dash(cmd *cobra.Command, args []string) {
 
 	// channels to send/receive data fetched asynchronously
 	var (
-		queuesCh = make(chan []*asynq.QueueInfo)
-		errorCh  = make(chan error)
+		errorCh     = make(chan error)
+		queuesCh    = make(chan []*asynq.QueueInfo)
+		redisInfoCh = make(chan *redisInfo)
 	)
 
 	go getQueueInfo(inspector, queuesCh, errorCh)
@@ -150,12 +159,16 @@ func dash(cmd *cobra.Command, args []string) {
 					state.view = viewTypeQueues
 					drawDash(s, baseStyle, &state)
 				} else if ev.Key() == tcell.KeyF2 && state.view != viewTypeServers {
+					//TODO Start data fetch and reset ticker
 					state.view = viewTypeServers
 					drawDash(s, baseStyle, &state)
 				} else if ev.Key() == tcell.KeyF3 && state.view != viewTypeSchedulers {
+					//TODO Start data fetch and reset ticker
 					state.view = viewTypeSchedulers
 					drawDash(s, baseStyle, &state)
 				} else if ev.Key() == tcell.KeyF4 && state.view != viewTypeRedis {
+					go getRedisInfo(redisInfoCh, errorCh)
+					ticker.Reset(interval)
 					state.view = viewTypeRedis
 					drawDash(s, baseStyle, &state)
 				}
@@ -165,12 +178,17 @@ func dash(cmd *cobra.Command, args []string) {
 			switch state.view {
 			case viewTypeQueues:
 				go getQueueInfo(inspector, queuesCh, errorCh)
-
-				// TODO: Add more cases for other type of data
+			case viewTypeRedis:
+				go getRedisInfo(redisInfoCh, errorCh)
 			}
 
 		case queues := <-queuesCh:
 			state.queues = queues
+			state.err = nil
+			drawDash(s, baseStyle, &state)
+
+		case redisInfo := <-redisInfoCh:
+			state.redisInfo = *redisInfo
 			state.err = nil
 			drawDash(s, baseStyle, &state)
 
@@ -210,6 +228,16 @@ func getQueueInfo(i *asynq.Inspector, queuesCh chan<- []*asynq.QueueInfo, errorC
 
 }
 
+func getRedisInfo(redisInfoCh chan<- *redisInfo, errorCh chan<- error) {
+	n := rand.Intn(1000)
+	redisInfoCh <- &redisInfo{
+		version:         "6.2.6",
+		uptime:          "9 days",
+		memoryUsage:     n,
+		peakMemoryUsage: n + 123,
+	}
+}
+
 func drawDash(s tcell.Screen, style tcell.Style, state *dashState) {
 	s.Clear()
 	// Simulate data update on every render
@@ -232,7 +260,10 @@ func drawDash(s tcell.Screen, style tcell.Style, state *dashState) {
 	case viewTypeRedis:
 		d.Println("=== Redis Info === ", style.Bold(true))
 		d.NL() // empty line
-		// TODO: Draw body
+		d.Println(fmt.Sprintf("Version: %s", state.redisInfo.version), style)
+		d.Println(fmt.Sprintf("Uptime: %s", state.redisInfo.uptime), style)
+		d.Println(fmt.Sprintf("Memory Usage: %s", ByteCount(int64(state.redisInfo.memoryUsage))), style)
+		d.Println(fmt.Sprintf("Peak Memory Usage: %s", ByteCount(int64(state.redisInfo.peakMemoryUsage))), style)
 	case viewTypeHelp:
 		d.Println("=== HELP ===", style.Bold(true))
 		d.NL() // empty line
