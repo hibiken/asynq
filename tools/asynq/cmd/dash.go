@@ -77,18 +77,23 @@ func dash(cmd *cobra.Command, args []string) {
 	baseStyle := tcell.StyleDefault.Background(tcell.ColorReset).Foreground(tcell.ColorReset)
 	s.SetStyle(baseStyle)
 
-	queues, err := getQueueInfo(inspector)
-	state := dashState{
-		view:   viewTypeQueues,
-		queues: queues,
-		err:    err,
-	}
+	// channels to send/receive data fetched asynchronously
+	var (
+		queuesCh = make(chan []*asynq.QueueInfo)
+		errorCh  = make(chan error)
+	)
+
+	go getQueueInfo(inspector, queuesCh, errorCh)
+
+	var state dashState // contained in this goroutine only; do not share
+
 	// draw initial screen
 	drawDash(s, baseStyle, &state)
 
 	eventCh := make(chan tcell.Event)
 	done := make(chan struct{})
-	ticker := time.NewTicker(2 * time.Second)
+	const interval = 2 * time.Second
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	// TODO: Double check that we are not leaking goroutine with this one.
@@ -139,51 +144,69 @@ func dash(cmd *cobra.Command, args []string) {
 					state.prevView = state.view
 					state.view = viewTypeHelp
 					drawDash(s, baseStyle, &state)
-				} else if ev.Key() == tcell.KeyF1 {
+				} else if ev.Key() == tcell.KeyF1 && state.view != viewTypeQueues {
+					go getQueueInfo(inspector, queuesCh, errorCh)
+					ticker.Reset(interval)
 					state.view = viewTypeQueues
 					drawDash(s, baseStyle, &state)
-				} else if ev.Key() == tcell.KeyF2 {
+				} else if ev.Key() == tcell.KeyF2 && state.view != viewTypeServers {
 					state.view = viewTypeServers
 					drawDash(s, baseStyle, &state)
-				} else if ev.Key() == tcell.KeyF3 {
+				} else if ev.Key() == tcell.KeyF3 && state.view != viewTypeSchedulers {
 					state.view = viewTypeSchedulers
 					drawDash(s, baseStyle, &state)
-				} else if ev.Key() == tcell.KeyF4 {
+				} else if ev.Key() == tcell.KeyF4 && state.view != viewTypeRedis {
 					state.view = viewTypeRedis
 					drawDash(s, baseStyle, &state)
 				}
 			}
 
 		case <-ticker.C:
-			state.queues, state.err = getQueueInfo(inspector)
+			switch state.view {
+			case viewTypeQueues:
+				go getQueueInfo(inspector, queuesCh, errorCh)
+
+				// TODO: Add more cases for other type of data
+			}
+
+		case queues := <-queuesCh:
+			state.queues = queues
+			state.err = nil
+			drawDash(s, baseStyle, &state)
+
+		case err := <-errorCh:
+			state.err = err
 			drawDash(s, baseStyle, &state)
 		}
 	}
 
 }
 
-func getQueueInfo(i *asynq.Inspector) ([]*asynq.QueueInfo, error) {
+func getQueueInfo(i *asynq.Inspector, queuesCh chan<- []*asynq.QueueInfo, errorCh chan<- error) {
 	if !flagUseRealData {
 		n := rand.Intn(100)
-		return []*asynq.QueueInfo{
+		queuesCh <- []*asynq.QueueInfo{
 			{Queue: "default", Size: 1800 + n, Pending: 700 + n, Active: 300, Aggregating: 300, Scheduled: 200, Retry: 100, Archived: 200},
 			{Queue: "critical", Size: 2300 + n, Pending: 1000 + n, Active: 500, Retry: 400, Completed: 400},
 			{Queue: "low", Size: 900 + n, Pending: n, Active: 300, Scheduled: 400, Completed: 200},
-		}, nil
+		}
+		return
 	}
 	queues, err := i.Queues()
 	if err != nil {
-		return nil, err
+		errorCh <- err
+		return
 	}
 	var res []*asynq.QueueInfo
 	for _, q := range queues {
 		info, err := i.GetQueueInfo(q)
 		if err != nil {
-			return nil, err
+			errorCh <- err
+			return
 		}
 		res = append(res, info)
 	}
-	return res, nil
+	queuesCh <- res
 
 }
 
