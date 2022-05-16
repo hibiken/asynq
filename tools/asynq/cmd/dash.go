@@ -46,6 +46,7 @@ type viewType int
 
 const (
 	viewTypeQueues viewType = iota
+	viewTypeQueueDetails
 	viewTypeServers
 	viewTypeSchedulers
 	viewTypeRedis
@@ -56,9 +57,12 @@ type dashState struct {
 	queues    []*asynq.QueueInfo
 	redisInfo redisInfo
 	err       error
-	rowIdx    int      // highlighted row
-	view      viewType // current view type
-	prevView  viewType // to support "go back"
+
+	rowIdx        int    // highlighted row
+	selectedQueue string // name of the selected queue
+
+	view     viewType // current view type
+	prevView viewType // to support "go back"
 }
 
 type redisInfo struct {
@@ -124,14 +128,18 @@ func dash(cmd *cobra.Command, args []string) {
 			case *tcell.EventResize:
 				s.Sync()
 			case *tcell.EventKey:
-				if ev.Key() == tcell.KeyEscape {
+				// Esc and 'q' key have "go back" semantics
+				if ev.Key() == tcell.KeyEscape || ev.Rune() == 'q' {
 					if state.view == viewTypeHelp {
 						state.view = state.prevView // exit help
+						drawDash(s, baseStyle, &state)
+					} else if state.view == viewTypeQueueDetails {
+						state.view = viewTypeQueues
 						drawDash(s, baseStyle, &state)
 					} else {
 						quit()
 					}
-				} else if ev.Key() == tcell.KeyCtrlC || ev.Rune() == 'q' {
+				} else if ev.Key() == tcell.KeyCtrlC {
 					quit()
 				} else if ev.Key() == tcell.KeyCtrlL {
 					s.Sync()
@@ -149,6 +157,12 @@ func dash(cmd *cobra.Command, args []string) {
 						state.rowIdx--
 					}
 					drawDash(s, baseStyle, &state)
+				} else if ev.Key() == tcell.KeyEnter {
+					if state.view == viewTypeQueues && state.rowIdx != 0 {
+						state.selectedQueue = state.queues[state.rowIdx-1].Queue
+						state.view = viewTypeQueueDetails
+						drawDash(s, baseStyle, &state)
+					}
 				} else if ev.Rune() == '?' {
 					state.prevView = state.view
 					state.view = viewTypeHelp
@@ -249,6 +263,10 @@ func drawDash(s tcell.Screen, style tcell.Style, state *dashState) {
 		drawQueueSizeGraphs(d, style, state)
 		d.NL() // empty line
 		drawQueueTable(d, style, state)
+	case viewTypeQueueDetails:
+		d.Println(fmt.Sprintf("=== Queues > %s ===", state.selectedQueue), style)
+		d.NL()
+		// TODO: draw body
 	case viewTypeServers:
 		d.Println("=== Servers ===", style.Bold(true))
 		d.NL() // empty line
@@ -551,6 +569,7 @@ func drawQueueTable(d *ScreenDrawer, style tcell.Style, state *dashState) {
 
 	if flagDebug {
 		d.Println(fmt.Sprintf("DEBUG: rowIdx = %d", state.rowIdx), style)
+		d.Println(fmt.Sprintf("DEBUG: selectedQueue = %s", state.selectedQueue), style)
 		d.Println(fmt.Sprintf("DEBUG: view = %v", state.view), style)
 	}
 }
