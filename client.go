@@ -211,11 +211,6 @@ func (name groupOption) Value() interface{} { return string(name) }
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
 var ErrDuplicateTask = errors.New("task already exists")
 
-// ErrTaskIDConflict indicates that the given task could not be enqueued since its task ID already exists.
-//
-// ErrTaskIDConflict error only applies to tasks enqueued with a TaskID option.
-var ErrTaskIDConflict = errors.New("task ID conflicts with another task")
-
 type option struct {
 	retry     int
 	queue     string
@@ -397,8 +392,6 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 	switch {
 	case errors.Is(err, errors.ErrDuplicateTask):
 		return nil, fmt.Errorf("%w", ErrDuplicateTask)
-	case errors.Is(err, errors.ErrTaskIdConflict):
-		return nil, fmt.Errorf("%w", ErrTaskIDConflict)
 	case err != nil:
 		return nil, err
 	}

@@ -170,10 +170,22 @@ var (
 
 	// ErrDuplicateTask indicates that another task with the same unique key holds the uniqueness lock.
 	ErrDuplicateTask = errors.New("task already exists")
-
-	// ErrTaskIdConflict indicates that another task with the same task ID already exist
-	ErrTaskIdConflict = errors.New("task id conflicts with another task")
 )
+
+// ErrTaskIdConflict indicates that another task with the same task ID already exist.
+type TaskIDConflictError struct {
+	id string
+}
+
+func NewTaskIDConflictError(id string) error {
+	return TaskIDConflictError{
+		id: id,
+	}
+}
+
+func (t TaskIDConflictError) Error() string {
+	return fmt.Sprintf("task id conflicts with another task at taskID=%s", t.id)
+}
 
 // TaskNotFoundError indicates that a task with the given ID does not exist
 // in the given queue.

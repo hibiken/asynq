@@ -153,8 +153,9 @@ func TestEnqueueTaskIdConflictError(t *testing.T) {
 			t.Errorf("First message: Enqueue failed: %v", err)
 			continue
 		}
-		if err := r.Enqueue(context.Background(), tc.secondMsg); !errors.Is(err, errors.ErrTaskIdConflict) {
-			t.Errorf("Second message: Enqueue returned %v, want %v", err, errors.ErrTaskIdConflict)
+		err := r.Enqueue(context.Background(), tc.secondMsg)
+		if _, ok := err.(errors.TaskIDConflictError); !ok {
+			t.Errorf("Second message: Enqueue returned %v, want %v", err, errors.NewTaskIDConflictError(tc.firstMsg.ID))
 			continue
 		}
 	}
@@ -286,8 +287,9 @@ func TestEnqueueUniqueTaskIdConflictError(t *testing.T) {
 			t.Errorf("First message: EnqueueUnique failed: %v", err)
 			continue
 		}
-		if err := r.EnqueueUnique(context.Background(), tc.secondMsg, ttl); !errors.Is(err, errors.ErrTaskIdConflict) {
-			t.Errorf("Second message: EnqueueUnique returned %v, want %v", err, errors.ErrTaskIdConflict)
+		err := r.EnqueueUnique(context.Background(), tc.secondMsg, ttl)
+		if _, ok := err.(errors.TaskIDConflictError); !ok {
+			t.Errorf("Second message: EnqueueUnique returned %v, want %v", err, errors.NewTaskIDConflictError(tc.firstMsg.ID))
 			continue
 		}
 	}
@@ -1267,8 +1269,9 @@ func TestAddToGroupeTaskIdConflictError(t *testing.T) {
 			t.Errorf("First message: AddToGroup failed: %v", err)
 			continue
 		}
-		if err := r.AddToGroup(ctx, tc.secondMsg, groupKey); !errors.Is(err, errors.ErrTaskIdConflict) {
-			t.Errorf("Second message: AddToGroup returned %v, want %v", err, errors.ErrTaskIdConflict)
+		err := r.AddToGroup(ctx, tc.secondMsg, groupKey)
+		if _, ok := err.(errors.TaskIDConflictError); !ok {
+			t.Errorf("Second message: AddToGroup returned %v, want %v", err, errors.NewTaskIDConflictError(tc.firstMsg.ID))
 			continue
 		}
 	}
@@ -1393,8 +1396,9 @@ func TestAddToGroupUniqueTaskIdConflictError(t *testing.T) {
 			t.Errorf("First message: AddToGroupUnique failed: %v", err)
 			continue
 		}
-		if err := r.AddToGroupUnique(ctx, tc.secondMsg, groupKey, ttl); !errors.Is(err, errors.ErrTaskIdConflict) {
-			t.Errorf("Second message: AddToGroupUnique returned %v, want %v", err, errors.ErrTaskIdConflict)
+		err := r.AddToGroupUnique(ctx, tc.secondMsg, groupKey, ttl)
+		if _, ok := err.(errors.TaskIDConflictError); !ok {
+			t.Errorf("Second message: AddToGroupUnique returned %v, want %v", err, errors.NewTaskIDConflictError(tc.firstMsg.ID))
 			continue
 		}
 	}
@@ -1491,8 +1495,9 @@ func TestScheduleTaskIdConflictError(t *testing.T) {
 			t.Errorf("First message: Schedule failed: %v", err)
 			continue
 		}
-		if err := r.Schedule(context.Background(), tc.secondMsg, processAt); !errors.Is(err, errors.ErrTaskIdConflict) {
-			t.Errorf("Second message: Schedule returned %v, want %v", err, errors.ErrTaskIdConflict)
+		err := r.Schedule(context.Background(), tc.secondMsg, processAt)
+		if _, ok := err.(errors.TaskIDConflictError); !ok {
+			t.Errorf("Second message: Schedule returned %v, want %v", err, errors.NewTaskIDConflictError(tc.firstMsg.ID))
 			continue
 		}
 	}
@@ -1617,8 +1622,10 @@ func TestScheduleUniqueTaskIdConflictError(t *testing.T) {
 			t.Errorf("First message: ScheduleUnique failed: %v", err)
 			continue
 		}
-		if err := r.ScheduleUnique(context.Background(), tc.secondMsg, processAt, ttl); !errors.Is(err, errors.ErrTaskIdConflict) {
-			t.Errorf("Second message: ScheduleUnique returned %v, want %v", err, errors.ErrTaskIdConflict)
+
+		err := r.ScheduleUnique(context.Background(), tc.secondMsg, processAt, ttl)
+		if _, ok := err.(errors.TaskIDConflictError); !ok {
+			t.Errorf("Second message: ScheduleUnique returned %v, want %v", err, errors.NewTaskIDConflictError(tc.firstMsg.ID))
 			continue
 		}
 	}

@@ -129,7 +129,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 		return err
 	}
 	if n == 0 {
-		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
+		return errors.E(op, errors.AlreadyExists, errors.NewTaskIDConflictError(msg.ID))
 	}
 	return nil
 }
@@ -196,7 +196,7 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 		return errors.E(op, errors.AlreadyExists, errors.ErrDuplicateTask)
 	}
 	if n == 0 {
-		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
+		return errors.E(op, errors.AlreadyExists, errors.NewTaskIDConflictError(msg.ID))
 	}
 	return nil
 }
@@ -548,7 +548,7 @@ func (r *RDB) AddToGroup(ctx context.Context, msg *base.TaskMessage, groupKey st
 		return err
 	}
 	if n == 0 {
-		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
+		return errors.E(op, errors.AlreadyExists, errors.NewTaskIDConflictError(msg.ID))
 	}
 	return nil
 }
@@ -615,7 +615,7 @@ func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, group
 		return errors.E(op, errors.AlreadyExists, errors.ErrDuplicateTask)
 	}
 	if n == 0 {
-		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
+		return errors.E(op, errors.AlreadyExists, errors.NewTaskIDConflictError(msg.ID))
 	}
 	return nil
 }
@@ -665,7 +665,7 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 		return err
 	}
 	if n == 0 {
-		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
+		return errors.E(op, errors.AlreadyExists, errors.NewTaskIDConflictError(msg.ID))
 	}
 	return nil
 }
@@ -729,7 +729,7 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 		return errors.E(op, errors.AlreadyExists, errors.ErrDuplicateTask)
 	}
 	if n == 0 {
-		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
+		return errors.E(op, errors.AlreadyExists, errors.NewTaskIDConflictError(msg.ID))
 	}
 	return nil
 }

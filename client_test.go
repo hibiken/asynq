@@ -13,6 +13,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/hibiken/asynq/internal/base"
+	errorspkg "github.com/hibiken/asynq/internal/errors"
 	h "github.com/hibiken/asynq/internal/testutil"
 )
 
@@ -719,8 +720,8 @@ func TestClientEnqueueWithConflictingTaskID(t *testing.T) {
 		t.Fatalf("First task: Enqueue failed: %v", err)
 	}
 	_, err := client.Enqueue(task, TaskID(taskID))
-	if !errors.Is(err, ErrTaskIDConflict) {
-		t.Errorf("Second task: Enqueue returned %v, want %v", err, ErrTaskIDConflict)
+	if _, ok := err.(errorspkg.TaskIDConflictError); !ok {
+		t.Errorf("Second task: Enqueue returned %v, want %v", err, errorspkg.NewTaskIDConflictError(taskID))
 	}
 }
 
