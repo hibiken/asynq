@@ -719,8 +719,8 @@ func TestClientEnqueueWithConflictingTaskID(t *testing.T) {
 		t.Fatalf("First task: Enqueue failed: %v", err)
 	}
 	_, err := client.Enqueue(task, TaskID(taskID))
-	if !errors.Is(err, ErrTaskIDConflict) {
-		t.Errorf("Second task: Enqueue returned %v, want %v", err, ErrTaskIDConflict)
+	if _, ok := err.(TaskIDConflictError); !ok {
+		t.Errorf("Second task: Enqueue returned %v, want %v", err, NewTaskIDConflictError(taskID))
 	}
 }
 

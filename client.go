@@ -213,8 +213,21 @@ var ErrDuplicateTask = errors.New("task already exists")
 
 // ErrTaskIDConflict indicates that the given task could not be enqueued since its task ID already exists.
 //
-// ErrTaskIDConflict error only applies to tasks enqueued with a TaskID option.
-var ErrTaskIDConflict = errors.New("task ID conflicts with another task")
+// TaskIDConflictError error only applies to tasks enqueued with a TaskID option.
+// TaskIDConflictError indicates that another task with the same task ID already exist.
+type TaskIDConflictError struct {
+	id string
+}
+
+func NewTaskIDConflictError(id string) error {
+	return TaskIDConflictError{
+		id: id,
+	}
+}
+
+func (t TaskIDConflictError) Error() string {
+	return fmt.Sprintf("task id conflicts with another task at taskID=%s", t.id)
+}
 
 type option struct {
 	retry     int
@@ -398,7 +411,7 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 	case errors.Is(err, errors.ErrDuplicateTask):
 		return nil, fmt.Errorf("%w", ErrDuplicateTask)
 	case errors.Is(err, errors.ErrTaskIdConflict):
-		return nil, fmt.Errorf("%w", ErrTaskIDConflict)
+		return nil, NewTaskIDConflictError(msg.ID)
 	case err != nil:
 		return nil, err
 	}
