@@ -242,7 +242,7 @@ func (fn GroupAggregatorFunc) Aggregate(group string, tasks []*Task) *Task {
 	return fn(group, tasks)
 }
 
-// An ErrorHandler handles an error occured during task processing.
+// An ErrorHandler handles an error occurred during task processing.
 type ErrorHandler interface {
 	HandleError(ctx context.Context, task *Task, err error)
 }

@@ -59,7 +59,7 @@ func (i *Inspector) Groups(queue string) ([]*GroupInfo, error) {
 	return res, nil
 }
 
-// GroupInfo represents a state of a group at a cerntain time.
+// GroupInfo represents a state of a group at a certain time.
 type GroupInfo struct {
 	// Name of the group.
 	Group string

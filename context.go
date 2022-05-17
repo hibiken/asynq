@@ -28,7 +28,7 @@ func GetRetryCount(ctx context.Context) (n int, ok bool) {
 
 // GetMaxRetry extracts maximum retry from a context, if any.
 //
-// Return value n indicates the maximum number of times the assoicated task
+// Return value n indicates the maximum number of times the associated task
 // can be retried if ProcessTask returns a non-nil error.
 func GetMaxRetry(ctx context.Context) (n int, ok bool) {
 	return asynqcontext.GetMaxRetry(ctx)

@@ -110,7 +110,7 @@ type SchedulerOpts struct {
 	EnqueueErrorHandler func(task *Task, opts []Option, err error)
 }
 
-// enqueueJob encapsulates the job of enqueing a task and recording the event.
+// enqueueJob encapsulates the job of enqueuing a task and recording the event.
 type enqueueJob struct {
 	id         uuid.UUID
 	cronspec   string
