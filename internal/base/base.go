@@ -607,7 +607,7 @@ func DecodeSchedulerEnqueueEvent(b []byte) (*SchedulerEnqueueEvent, error) {
 
 // Cancelations is a collection that holds cancel functions for all active tasks.
 //
-// Cancelations are safe for concurrent use by multipel goroutines.
+// Cancelations are safe for concurrent use by multiple goroutines.
 type Cancelations struct {
 	mu          sync.Mutex
 	cancelFuncs map[string]context.CancelFunc
@@ -662,7 +662,7 @@ func NewLease(expirationTime time.Time) *Lease {
 	}
 }
 
-// Reset chanegs the lease to expire at the given time.
+// Reset changes the lease to expire at the given time.
 // It returns true if the lease is still valid and reset operation was successful, false if the lease had been expired.
 func (l *Lease) Reset(expirationTime time.Time) bool {
 	if !l.IsValid() {
@@ -700,7 +700,7 @@ func (l *Lease) Deadline() time.Time {
 	return l.expireAt
 }
 
-// IsValid returns true if the lease's expieration time is in the future or equals to the current time,
+// IsValid returns true if the lease's expiration time is in the future or equals to the current time,
 // returns false otherwise.
 func (l *Lease) IsValid() bool {
 	now := l.Clock.Now()

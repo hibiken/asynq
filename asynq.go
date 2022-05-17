@@ -201,7 +201,7 @@ const (
 	// Indicates that the task is processed successfully and retained until the retention TTL expires.
 	TaskStateCompleted
 
-	// Indicates that the task is waiting in a group to be aggreated into one task.
+	// Indicates that the task is waiting in a group to be aggregated into one task.
 	TaskStateAggregating
 )
 
