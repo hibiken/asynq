@@ -287,6 +287,11 @@ func drawDash(s tcell.Screen, style tcell.Style, state *dashState) {
 		d.NL() // empty line
 		// TODO: Draw HELP body
 	}
+	if flagDebug {
+		d.Println(fmt.Sprintf("DEBUG: rowIdx = %d", state.rowIdx), style)
+		d.Println(fmt.Sprintf("DEBUG: selectedQueue = %s", state.selectedQueue), style)
+		d.Println(fmt.Sprintf("DEBUG: view = %v", state.view), style)
+	}
 	d.GoToBottom()
 	drawFooter(d, style, state)
 }
@@ -405,70 +410,6 @@ func maxwidth(names []string) int {
 	return max
 }
 
-const colBuffer = 4 // extra buffer between columns
-
-type columnAlignment int
-
-const (
-	alignRight columnAlignment = iota
-	alignLeft
-)
-
-type column struct {
-	name          string
-	width         int
-	align         columnAlignment
-	displayValues []string // TODO: Can we use these displayValues to display stuff?
-}
-
-func newColumn(name string, align columnAlignment) *column {
-	return &column{
-		name:  name,
-		width: runewidth.StringWidth(name),
-		align: align,
-	}
-}
-
-func (c *column) accommodate(v string) {
-	c.displayValues = append(c.displayValues, v)
-	if w := runewidth.StringWidth(v); w > c.width {
-		c.width = w
-	}
-}
-
-type table struct {
-	cols []*column
-}
-
-// QueueInfoFormatter exposes API to return display values for QueueInfo properties.
-type QueueInfoFormatter struct {
-	q *asynq.QueueInfo
-}
-
-func (f *QueueInfoFormatter) Queue() string     { return f.q.Queue }
-func (f *QueueInfoFormatter) Size() string      { return strconv.Itoa(f.q.Size) }
-func (f *QueueInfoFormatter) Processed() string { return strconv.Itoa(f.q.Processed) }
-func (f *QueueInfoFormatter) Failed() string    { return strconv.Itoa(f.q.Failed) }
-
-func (f *QueueInfoFormatter) State() string {
-	if f.q.Paused {
-		return "PAUSED"
-	}
-	return "RUN"
-}
-
-func (f *QueueInfoFormatter) Latency() string {
-	return f.q.Latency.String()
-}
-
-func (f *QueueInfoFormatter) ErrorRate() string {
-	return "0.23%" // TODO: Implement this
-}
-
-func (f *QueueInfoFormatter) MemoryUsage() string {
-	return ByteCount(f.q.MemoryUsage)
-}
-
 // ByteCount converts the given bytes into human readable string
 func ByteCount(b int64) string {
 	const unit = 1000
@@ -483,94 +424,85 @@ func ByteCount(b int64) string {
 
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "kMGTPE"[exp])
-
 }
 
 func drawQueueTable(d *ScreenDrawer, style tcell.Style, state *dashState) {
-	columns := []*column{
-		newColumn("Queue", alignLeft),
-		newColumn("State", alignLeft),
-		newColumn("Size", alignRight),
-		newColumn("Latency", alignRight),
-		newColumn("MemoryUsage", alignRight),
-		newColumn("Processed", alignRight),
-		newColumn("Failed", alignRight),
-		newColumn("ErrorRate", alignRight),
+	colConfigs := []*columnConfig[*asynq.QueueInfo]{
+		{"Queue", alignLeft, func(q *asynq.QueueInfo) string { return q.Queue }},
+		{"State", alignLeft, func(q *asynq.QueueInfo) string {
+			if q.Paused {
+				return "PAUSED"
+			} else {
+				return "RUN"
+			}
+		}},
+		{"Size", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Size) }},
+		{"Latency", alignRight, func(q *asynq.QueueInfo) string { return q.Latency.String() }},
+		{"MemoryUsage", alignRight, func(q *asynq.QueueInfo) string { return ByteCount(q.MemoryUsage) }},
+		{"Processed", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Processed) }},
+		{"Failed", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Failed) }},
+		{"ErrorRate", alignRight, func(q *asynq.QueueInfo) string { return "0.23%" /* TODO: implement this */ }},
 	}
+	drawTable(d, style, colConfigs, state.queues, state.rowIdx-1)
+}
 
-	// Adjust the column widths to accomodate the values
-	for _, q := range state.queues {
-		f := QueueInfoFormatter{q}
-		for _, col := range columns {
-			switch col.name {
-			case "Queue":
-				col.accommodate(f.Queue())
-			case "State":
-				col.accommodate(f.State())
-			case "Size":
-				col.accommodate(f.Size())
-			case "MemoryUsage":
-				col.accommodate(f.MemoryUsage())
-			case "Latency":
-				col.accommodate(f.Latency())
-			case "Processed":
-				col.accommodate(f.Processed())
-			case "Failed":
-				col.accommodate(f.Failed())
-			case "ErrorRate":
-				col.accommodate(f.ErrorRate())
+type columnAlignment int
+
+const (
+	alignRight columnAlignment = iota
+	alignLeft
+)
+
+type columnConfig[V any] struct {
+	name      string
+	alignment columnAlignment
+	displayFn func(v V) string
+}
+
+type column[V any] struct {
+	*columnConfig[V]
+	width int
+}
+
+// Helper to draw a table.
+func drawTable[V any](d *ScreenDrawer, style tcell.Style, configs []*columnConfig[V], data []V, highlightRowIdx int) {
+	const colBuffer = 4 // extra buffer between columns
+	cols := make([]*column[V], len(configs))
+	for i, cfg := range configs {
+		cols[i] = &column[V]{cfg, runewidth.StringWidth(cfg.name)}
+	}
+	// adjust the column width to accommodate the widest value.
+	for _, v := range data {
+		for _, col := range cols {
+			if w := runewidth.StringWidth(col.displayFn(v)); col.width < w {
+				col.width = w
 			}
 		}
 	}
-
-	// Header
+	// print header
 	headerStyle := style.Background(tcell.ColorDimGray).Foreground(tcell.ColorWhite)
-	width, _ := d.Screen().Size()
-	var b strings.Builder
-	for _, col := range columns {
-		if col.align == alignRight {
-			b.WriteString(lpad(col.name, col.width+colBuffer))
+	for _, col := range cols {
+		if col.alignment == alignLeft {
+			d.Print(rpad(col.name, col.width+colBuffer), headerStyle)
 		} else {
-			b.WriteString(rpad(col.name, col.width+colBuffer))
+			d.Print(lpad(col.name, col.width+colBuffer), headerStyle)
 		}
 	}
-	b.WriteString(strings.Repeat(" ", width-b.Len())) // span the full width
-	d.Println(b.String(), headerStyle)
-
-	// Body
-	for i, q := range state.queues {
+	d.FillLine(' ', headerStyle)
+	// print body
+	for i, v := range data {
 		rowStyle := style
-		if state.rowIdx == i+1 {
+		if highlightRowIdx == i {
 			rowStyle = style.Background(tcell.ColorDarkOliveGreen)
 		}
-		f := QueueInfoFormatter{q}
-		for _, col := range columns {
-			switch col.name {
-			case "Queue":
-				d.Print(rpad(f.Queue(), col.width+colBuffer), rowStyle)
-			case "State":
-				d.Print(rpad(f.State(), col.width+colBuffer), rowStyle)
-			case "Size":
-				d.Print(lpad(f.Size(), col.width+colBuffer), rowStyle)
-			case "MemoryUsage":
-				d.Print(lpad(f.MemoryUsage(), col.width+colBuffer), rowStyle)
-			case "Latency":
-				d.Print(lpad(f.Latency(), col.width+colBuffer), rowStyle)
-			case "Processed":
-				d.Print(lpad(f.Processed(), col.width+colBuffer), rowStyle)
-			case "Failed":
-				d.Print(lpad(f.Failed(), col.width+colBuffer), rowStyle)
-			case "ErrorRate":
-				d.Print(lpad(f.ErrorRate(), col.width+colBuffer), rowStyle)
+		for _, col := range cols {
+			if col.alignment == alignLeft {
+				d.Print(rpad(col.displayFn(v), col.width+colBuffer), rowStyle)
+			} else {
+				d.Print(lpad(col.displayFn(v), col.width+colBuffer), rowStyle)
 			}
 		}
 		d.FillLine(' ', rowStyle)
-	}
-
-	if flagDebug {
-		d.Println(fmt.Sprintf("DEBUG: rowIdx = %d", state.rowIdx), style)
-		d.Println(fmt.Sprintf("DEBUG: selectedQueue = %s", state.selectedQueue), style)
-		d.Println(fmt.Sprintf("DEBUG: view = %v", state.view), style)
 	}
 }
 
