@@ -292,7 +292,7 @@ Asynq ships with a command line tool to inspect the state of queues and tasks.
 To install the CLI tool, run the following command:
 
 ```sh
-go get -u github.com/hibiken/asynq/tools/asynq
+go install github.com/hibiken/asynq/tools/asynq
 ```
 
 Here's an example of running the `asynq stats` command:

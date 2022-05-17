@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -21,13 +22,16 @@ func init() {
 }
 
 var serverCmd = &cobra.Command{
-	Use:   "server",
+	Use:   "server <command> [flags]",
 	Short: "Manage servers",
+	Example: heredoc.Doc(`
+		$ asynq server list`),
 }
 
 var serverListCmd = &cobra.Command{
-	Use:   "ls",
-	Short: "List servers",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List servers",
 	Long: `Server list (asynq server ls) shows all running worker servers
 pulling tasks from the given redis instance.
 
