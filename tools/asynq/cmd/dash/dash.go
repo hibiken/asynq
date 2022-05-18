@@ -28,11 +28,13 @@ const (
 // State holds dashboard state.
 type State struct {
 	queues    []*asynq.QueueInfo
+	tasks     []*asynq.TaskInfo
 	redisInfo redisInfo
 	err       error
 
-	rowIdx    int             // highlighted row
-	taskState asynq.TaskState // highlighted task state in queue details view
+	queueTableRowIdx int             // highlighted row in queue table
+	taskTableRowIdx  int             // highlighted row in task table
+	taskState        asynq.TaskState // highlighted task state in queue details view
 
 	selectedQueue *asynq.QueueInfo // queue shown on queue details view
 
@@ -73,6 +75,7 @@ func Run(opts Options) {
 	var (
 		errorCh     = make(chan error)
 		queuesCh    = make(chan []*asynq.QueueInfo)
+		tasksCh     = make(chan []*asynq.TaskInfo)
 		redisInfoCh = make(chan *redisInfo)
 	)
 
@@ -123,25 +126,41 @@ func Run(opts Options) {
 					quit()
 				} else if ev.Key() == tcell.KeyCtrlL {
 					s.Sync()
-				} else if ev.Key() == tcell.KeyDown || ev.Rune() == 'j' {
-					if state.rowIdx < len(state.queues) {
-						state.rowIdx++
+				} else if (ev.Key() == tcell.KeyDown || ev.Rune() == 'j') && state.view == viewTypeQueues {
+					if state.queueTableRowIdx < len(state.queues) {
+						state.queueTableRowIdx++
 					} else {
-						state.rowIdx = 0 // loop back
+						state.queueTableRowIdx = 0 // loop back
 					}
 					drawDash(s, baseStyle, &state, opts)
-				} else if ev.Key() == tcell.KeyUp || ev.Rune() == 'k' {
-					if state.rowIdx == 0 {
-						state.rowIdx = len(state.queues)
+				} else if (ev.Key() == tcell.KeyUp || ev.Rune() == 'k') && state.view == viewTypeQueues {
+					if state.queueTableRowIdx == 0 {
+						state.queueTableRowIdx = len(state.queues)
 					} else {
-						state.rowIdx--
+						state.queueTableRowIdx--
+					}
+					drawDash(s, baseStyle, &state, opts)
+				} else if (ev.Key() == tcell.KeyDown || ev.Rune() == 'j') && state.view == viewTypeQueueDetails {
+					if state.taskTableRowIdx < len(state.tasks) {
+						state.taskTableRowIdx++
+					} else {
+						state.taskTableRowIdx = 0 // loop back
+					}
+					drawDash(s, baseStyle, &state, opts)
+				} else if (ev.Key() == tcell.KeyUp || ev.Rune() == 'k') && state.view == viewTypeQueueDetails {
+					if state.taskTableRowIdx == 0 {
+						state.taskTableRowIdx = len(state.tasks)
+					} else {
+						state.taskTableRowIdx--
 					}
 					drawDash(s, baseStyle, &state, opts)
 				} else if ev.Key() == tcell.KeyEnter {
-					if state.view == viewTypeQueues && state.rowIdx != 0 {
-						state.selectedQueue = state.queues[state.rowIdx-1]
+					if state.view == viewTypeQueues && state.queueTableRowIdx != 0 {
+						state.selectedQueue = state.queues[state.queueTableRowIdx-1]
 						state.view = viewTypeQueueDetails
 						state.taskState = asynq.TaskStateActive
+						state.tasks = nil
+						go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState, tasksCh, errorCh)
 						drawDash(s, baseStyle, &state, opts)
 					}
 				} else if ev.Rune() == '?' {
@@ -168,9 +187,13 @@ func Run(opts Options) {
 					drawDash(s, baseStyle, &state, opts)
 				} else if (ev.Key() == tcell.KeyRight || ev.Rune() == 'l') && state.view == viewTypeQueueDetails {
 					state.taskState = nextTaskState(state.taskState)
+					state.tasks = nil
+					go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState, tasksCh, errorCh)
 					drawDash(s, baseStyle, &state, opts)
 				} else if (ev.Key() == tcell.KeyLeft || ev.Rune() == 'h') && state.view == viewTypeQueueDetails {
 					state.taskState = prevTaskState(state.taskState)
+					state.tasks = nil
+					go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState, tasksCh, errorCh)
 					drawDash(s, baseStyle, &state, opts)
 				}
 			}
@@ -185,6 +208,11 @@ func Run(opts Options) {
 
 		case queues := <-queuesCh:
 			state.queues = queues
+			state.err = nil
+			drawDash(s, baseStyle, &state, opts)
+
+		case tasks := <-tasksCh:
+			state.tasks = tasks
 			state.err = nil
 			drawDash(s, baseStyle, &state, opts)
 

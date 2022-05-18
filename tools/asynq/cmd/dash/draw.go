@@ -9,6 +9,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/hibiken/asynq"
@@ -27,12 +28,16 @@ func drawDash(s tcell.Screen, style tcell.Style, state *State, opts Options) {
 		d.NL()
 		drawQueueTable(d, style, state)
 	case viewTypeQueueDetails:
-		d.Println(fmt.Sprintf("=== Queues > %s ===", state.selectedQueue.Queue), style.Bold(true))
+		d.Println("=== Queue Summary ===", style.Bold(true))
 		d.NL()
-		drawQueueInfoBanner(d, style, state)
+		drawQueueSummary(d, style, state)
 		d.NL()
-		d.Println("+++ Tasks +++", style.Bold(true))
+		d.NL()
+		d.Println("=== Tasks ===", style.Bold(true))
+		d.NL()
 		drawTaskStateBreakdown(d, style, state)
+		d.NL()
+		drawTaskTable(d, style, state)
 	case viewTypeServers:
 		d.Println("=== Servers ===", style.Bold(true))
 		d.NL()
@@ -54,7 +59,7 @@ func drawDash(s tcell.Screen, style tcell.Style, state *State, opts Options) {
 		// TODO: Draw HELP body
 	}
 	if opts.DebugMode {
-		d.Println(fmt.Sprintf("DEBUG: rowIdx = %d", state.rowIdx), style)
+		d.Println(fmt.Sprintf("DEBUG: rowIdx = %d", state.queueTableRowIdx), style)
 		d.Println(fmt.Sprintf("DEBUG: selectedQueue = %s", state.selectedQueue.Queue), style)
 		d.Println(fmt.Sprintf("DEBUG: view = %v", state.view), style)
 	}
@@ -215,19 +220,53 @@ var queueColumnConfigs = []*columnConfig[*asynq.QueueInfo]{
 		}
 	}},
 	{"Size", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Size) }},
-	{"Latency", alignRight, func(q *asynq.QueueInfo) string { return q.Latency.String() }},
+	{"Latency", alignRight, func(q *asynq.QueueInfo) string { return q.Latency.Round(time.Second).String() }},
 	{"MemoryUsage", alignRight, func(q *asynq.QueueInfo) string { return ByteCount(q.MemoryUsage) }},
 	{"Processed", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Processed) }},
 	{"Failed", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Failed) }},
-	{"ErrorRate", alignRight, func(q *asynq.QueueInfo) string { return "0.23%" /* TODO: implement this */ }},
+	{"ErrorRate", alignRight, func(q *asynq.QueueInfo) string { return formatErrorRate(q.Processed, q.Failed) }},
+}
+
+func formatErrorRate(processed, failed int) string {
+	if processed == 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%.2f", float64(failed)/float64(processed))
 }
 
 func drawQueueTable(d *ScreenDrawer, style tcell.Style, state *State) {
-	drawTable(d, style, queueColumnConfigs, state.queues, state.rowIdx-1)
+	drawTable(d, style, queueColumnConfigs, state.queues, state.queueTableRowIdx-1)
 }
 
-func drawQueueInfoBanner(d *ScreenDrawer, style tcell.Style, state *State) {
-	drawTable(d, style, queueColumnConfigs, []*asynq.QueueInfo{state.selectedQueue}, -1 /* no highlited row */)
+func drawQueueSummary(d *ScreenDrawer, style tcell.Style, state *State) {
+	q := state.selectedQueue
+	labelStyle := style.Foreground(tcell.ColorLightGray)
+	d.Print("Name:     ", labelStyle)
+	d.Println(q.Queue, style)
+	d.Print("Size:     ", labelStyle)
+	d.Println(strconv.Itoa(q.Size), style)
+	d.Print("Latency   ", labelStyle)
+	d.Println(q.Latency.Round(time.Second).String(), style)
+	d.Print("MemUsage  ", labelStyle)
+	d.Println(ByteCount(q.MemoryUsage), style)
+}
+
+func drawTaskTable(d *ScreenDrawer, style tcell.Style, state *State) {
+	if state.taskState == asynq.TaskStateAggregating {
+		d.Println("TODO: aggregating tasks need group name", style)
+		return
+	}
+	if len(state.tasks) == 0 {
+		return // print nothing
+	}
+	colConfigs := []*columnConfig[*asynq.TaskInfo]{
+		{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
+		{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
+		{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return string(t.Payload) }},
+		{"MaxRetry", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.MaxRetry) }},
+		{"LastError", alignLeft, func(t *asynq.TaskInfo) string { return t.LastErr }},
+	}
+	drawTable(d, style, colConfigs, state.tasks, state.taskTableRowIdx-1)
 }
 
 // Define the order of states to show
@@ -292,9 +331,10 @@ func drawTaskStateBreakdown(d *ScreenDrawer, style tcell.Style, state *State) {
 	for _, ts := range taskStates {
 		s := style
 		if state.taskState == ts {
-			s = s.Background(tcell.ColorDarkOliveGreen)
+			s = s.Bold(true).Underline(true)
 		}
-		d.Print(fmt.Sprintf("%s:%d", ts.String(), getTaskCount(state.selectedQueue, ts)), s)
+		d.Print(fmt.Sprintf("%s:%d", strings.Title(ts.String()), getTaskCount(state.selectedQueue, ts)), s)
 		d.Print(pad, style)
 	}
+	d.NL()
 }

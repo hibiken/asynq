@@ -19,7 +19,7 @@ func init() {
 	rootCmd.AddCommand(dashCmd)
 	// TODO: Remove this debug once we're done
 	dashCmd.Flags().BoolVar(&flagDebug, "debug", false, "Print debug info")
-	dashCmd.Flags().BoolVar(&flagUseRealData, "realdata", false, "Use real data in redis")
+	dashCmd.Flags().BoolVar(&flagUseRealData, "realdata", true, "Use real data in redis")
 }
 
 var dashCmd = &cobra.Command{

@@ -47,3 +47,29 @@ func fetchRedisInfo(redisInfoCh chan<- *redisInfo, errorCh chan<- error) {
 		peakMemoryUsage: n + 123,
 	}
 }
+
+func fetchTasks(i *asynq.Inspector, qname string, taskState asynq.TaskState, tasksCh chan<- []*asynq.TaskInfo, errorCh chan<- error) {
+	var (
+		tasks []*asynq.TaskInfo
+		err   error
+	)
+	switch taskState {
+	case asynq.TaskStateActive:
+		tasks, err = i.ListActiveTasks(qname)
+	case asynq.TaskStatePending:
+		tasks, err = i.ListPendingTasks(qname)
+	case asynq.TaskStateScheduled:
+		tasks, err = i.ListScheduledTasks(qname)
+	case asynq.TaskStateRetry:
+		tasks, err = i.ListRetryTasks(qname)
+	case asynq.TaskStateArchived:
+		tasks, err = i.ListArchivedTasks(qname)
+	case asynq.TaskStateCompleted:
+		tasks, err = i.ListCompletedTasks(qname)
+	}
+	if err != nil {
+		errorCh <- err
+		return
+	}
+	tasksCh <- tasks
+}
