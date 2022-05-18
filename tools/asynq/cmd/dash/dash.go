@@ -31,8 +31,9 @@ type State struct {
 	redisInfo redisInfo
 	err       error
 
-	rowIdx        int    // highlighted row
-	selectedQueue string // name of the selected queue
+	rowIdx int // highlighted row
+
+	selectedQueue *asynq.QueueInfo // queue shown on queue details view
 
 	view     viewType // current view type
 	prevView viewType // to support "go back"
@@ -137,7 +138,7 @@ func Run(opts Options) {
 					drawDash(s, baseStyle, &state, opts)
 				} else if ev.Key() == tcell.KeyEnter {
 					if state.view == viewTypeQueues && state.rowIdx != 0 {
-						state.selectedQueue = state.queues[state.rowIdx-1].Queue
+						state.selectedQueue = state.queues[state.rowIdx-1]
 						state.view = viewTypeQueueDetails
 						drawDash(s, baseStyle, &state, opts)
 					}

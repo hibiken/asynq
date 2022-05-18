@@ -27,9 +27,9 @@ func drawDash(s tcell.Screen, style tcell.Style, state *State, opts Options) {
 		d.NL() // empty line
 		drawQueueTable(d, style, state)
 	case viewTypeQueueDetails:
-		d.Println(fmt.Sprintf("=== Queues > %s ===", state.selectedQueue), style)
+		d.Println(fmt.Sprintf("=== Queues > %s ===", state.selectedQueue.Queue), style)
 		d.NL()
-		// TODO: draw body
+		drawQueueInfoBanner(d, style, state)
 	case viewTypeServers:
 		d.Println("=== Servers ===", style.Bold(true))
 		d.NL() // empty line
@@ -173,6 +173,19 @@ func maxwidth(names []string) int {
 	return max
 }
 
+// rpad adds padding to the right of a string.
+func rpad(s string, padding int) string {
+	tmpl := fmt.Sprintf("%%-%ds ", padding)
+	return fmt.Sprintf(tmpl, s)
+
+}
+
+// lpad adds padding to the left of a string.
+func lpad(s string, padding int) string {
+	tmpl := fmt.Sprintf("%%%ds ", padding)
+	return fmt.Sprintf(tmpl, s)
+}
+
 // ByteCount converts the given bytes into human readable string
 func ByteCount(b int64) string {
 	const unit = 1000
@@ -189,95 +202,27 @@ func ByteCount(b int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "kMGTPE"[exp])
 }
 
-func drawQueueTable(d *ScreenDrawer, style tcell.Style, state *State) {
-	colConfigs := []*columnConfig[*asynq.QueueInfo]{
-		{"Queue", alignLeft, func(q *asynq.QueueInfo) string { return q.Queue }},
-		{"State", alignLeft, func(q *asynq.QueueInfo) string {
-			if q.Paused {
-				return "PAUSED"
-			} else {
-				return "RUN"
-			}
-		}},
-		{"Size", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Size) }},
-		{"Latency", alignRight, func(q *asynq.QueueInfo) string { return q.Latency.String() }},
-		{"MemoryUsage", alignRight, func(q *asynq.QueueInfo) string { return ByteCount(q.MemoryUsage) }},
-		{"Processed", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Processed) }},
-		{"Failed", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Failed) }},
-		{"ErrorRate", alignRight, func(q *asynq.QueueInfo) string { return "0.23%" /* TODO: implement this */ }},
-	}
-	drawTable(d, style, colConfigs, state.queues, state.rowIdx-1)
-}
-
-type columnAlignment int
-
-const (
-	alignRight columnAlignment = iota
-	alignLeft
-)
-
-type columnConfig[V any] struct {
-	name      string
-	alignment columnAlignment
-	displayFn func(v V) string
-}
-
-type column[V any] struct {
-	*columnConfig[V]
-	width int
-}
-
-// Helper to draw a table.
-func drawTable[V any](d *ScreenDrawer, style tcell.Style, configs []*columnConfig[V], data []V, highlightRowIdx int) {
-	const colBuffer = 4 // extra buffer between columns
-	cols := make([]*column[V], len(configs))
-	for i, cfg := range configs {
-		cols[i] = &column[V]{cfg, runewidth.StringWidth(cfg.name)}
-	}
-	// adjust the column width to accommodate the widest value.
-	for _, v := range data {
-		for _, col := range cols {
-			if w := runewidth.StringWidth(col.displayFn(v)); col.width < w {
-				col.width = w
-			}
-		}
-	}
-	// print header
-	headerStyle := style.Background(tcell.ColorDimGray).Foreground(tcell.ColorWhite)
-	for _, col := range cols {
-		if col.alignment == alignLeft {
-			d.Print(rpad(col.name, col.width+colBuffer), headerStyle)
+var queueColumnConfigs = []*columnConfig[*asynq.QueueInfo]{
+	{"Queue", alignLeft, func(q *asynq.QueueInfo) string { return q.Queue }},
+	{"State", alignLeft, func(q *asynq.QueueInfo) string {
+		if q.Paused {
+			return "PAUSED"
 		} else {
-			d.Print(lpad(col.name, col.width+colBuffer), headerStyle)
+			return "RUN"
 		}
-	}
-	d.FillLine(' ', headerStyle)
-	// print body
-	for i, v := range data {
-		rowStyle := style
-		if highlightRowIdx == i {
-			rowStyle = style.Background(tcell.ColorDarkOliveGreen)
-		}
-		for _, col := range cols {
-			if col.alignment == alignLeft {
-				d.Print(rpad(col.displayFn(v), col.width+colBuffer), rowStyle)
-			} else {
-				d.Print(lpad(col.displayFn(v), col.width+colBuffer), rowStyle)
-			}
-		}
-		d.FillLine(' ', rowStyle)
-	}
+	}},
+	{"Size", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Size) }},
+	{"Latency", alignRight, func(q *asynq.QueueInfo) string { return q.Latency.String() }},
+	{"MemoryUsage", alignRight, func(q *asynq.QueueInfo) string { return ByteCount(q.MemoryUsage) }},
+	{"Processed", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Processed) }},
+	{"Failed", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Failed) }},
+	{"ErrorRate", alignRight, func(q *asynq.QueueInfo) string { return "0.23%" /* TODO: implement this */ }},
 }
 
-// rpad adds padding to the right of a string.
-func rpad(s string, padding int) string {
-	tmpl := fmt.Sprintf("%%-%ds ", padding)
-	return fmt.Sprintf(tmpl, s)
-
+func drawQueueTable(d *ScreenDrawer, style tcell.Style, state *State) {
+	drawTable(d, style, queueColumnConfigs, state.queues, state.rowIdx-1)
 }
 
-// lpad adds padding to the left of a string.
-func lpad(s string, padding int) string {
-	tmpl := fmt.Sprintf("%%%ds ", padding)
-	return fmt.Sprintf(tmpl, s)
+func drawQueueInfoBanner(d *ScreenDrawer, style tcell.Style, state *State) {
+	drawTable(d, style, queueColumnConfigs, []*asynq.QueueInfo{state.selectedQueue}, -1 /* no highlited row */)
 }
