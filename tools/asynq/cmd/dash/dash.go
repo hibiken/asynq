@@ -31,7 +31,8 @@ type State struct {
 	redisInfo redisInfo
 	err       error
 
-	rowIdx int // highlighted row
+	rowIdx    int             // highlighted row
+	taskState asynq.TaskState // highlighted task state in queue details view
 
 	selectedQueue *asynq.QueueInfo // queue shown on queue details view
 
@@ -140,6 +141,7 @@ func Run(opts Options) {
 					if state.view == viewTypeQueues && state.rowIdx != 0 {
 						state.selectedQueue = state.queues[state.rowIdx-1]
 						state.view = viewTypeQueueDetails
+						state.taskState = asynq.TaskStateActive
 						drawDash(s, baseStyle, &state, opts)
 					}
 				} else if ev.Rune() == '?' {
@@ -163,6 +165,12 @@ func Run(opts Options) {
 					go fetchRedisInfo(redisInfoCh, errorCh)
 					ticker.Reset(interval)
 					state.view = viewTypeRedis
+					drawDash(s, baseStyle, &state, opts)
+				} else if (ev.Key() == tcell.KeyRight || ev.Rune() == 'l') && state.view == viewTypeQueueDetails {
+					state.taskState = nextTaskState(state.taskState)
+					drawDash(s, baseStyle, &state, opts)
+				} else if (ev.Key() == tcell.KeyLeft || ev.Rune() == 'h') && state.view == viewTypeQueueDetails {
+					state.taskState = prevTaskState(state.taskState)
 					drawDash(s, baseStyle, &state, opts)
 				}
 			}

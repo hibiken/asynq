@@ -22,37 +22,40 @@ func drawDash(s tcell.Screen, style tcell.Style, state *State, opts Options) {
 	switch state.view {
 	case viewTypeQueues:
 		d.Println("=== Queues ===", style.Bold(true))
-		d.NL() // empty line
+		d.NL()
 		drawQueueSizeGraphs(d, style, state)
-		d.NL() // empty line
+		d.NL()
 		drawQueueTable(d, style, state)
 	case viewTypeQueueDetails:
-		d.Println(fmt.Sprintf("=== Queues > %s ===", state.selectedQueue.Queue), style)
+		d.Println(fmt.Sprintf("=== Queues > %s ===", state.selectedQueue.Queue), style.Bold(true))
 		d.NL()
 		drawQueueInfoBanner(d, style, state)
+		d.NL()
+		d.Println("+++ Tasks +++", style.Bold(true))
+		drawTaskStateBreakdown(d, style, state)
 	case viewTypeServers:
 		d.Println("=== Servers ===", style.Bold(true))
-		d.NL() // empty line
+		d.NL()
 		// TODO: Draw body
 	case viewTypeSchedulers:
 		d.Println("=== Schedulers === ", style.Bold(true))
-		d.NL() // empty line
+		d.NL()
 		// TODO: Draw body
 	case viewTypeRedis:
 		d.Println("=== Redis Info === ", style.Bold(true))
-		d.NL() // empty line
+		d.NL()
 		d.Println(fmt.Sprintf("Version: %s", state.redisInfo.version), style)
 		d.Println(fmt.Sprintf("Uptime: %s", state.redisInfo.uptime), style)
 		d.Println(fmt.Sprintf("Memory Usage: %s", ByteCount(int64(state.redisInfo.memoryUsage))), style)
 		d.Println(fmt.Sprintf("Peak Memory Usage: %s", ByteCount(int64(state.redisInfo.peakMemoryUsage))), style)
 	case viewTypeHelp:
 		d.Println("=== HELP ===", style.Bold(true))
-		d.NL() // empty line
+		d.NL()
 		// TODO: Draw HELP body
 	}
 	if opts.DebugMode {
 		d.Println(fmt.Sprintf("DEBUG: rowIdx = %d", state.rowIdx), style)
-		d.Println(fmt.Sprintf("DEBUG: selectedQueue = %s", state.selectedQueue), style)
+		d.Println(fmt.Sprintf("DEBUG: selectedQueue = %s", state.selectedQueue.Queue), style)
 		d.Println(fmt.Sprintf("DEBUG: view = %v", state.view), style)
 	}
 	d.GoToBottom()
@@ -225,4 +228,73 @@ func drawQueueTable(d *ScreenDrawer, style tcell.Style, state *State) {
 
 func drawQueueInfoBanner(d *ScreenDrawer, style tcell.Style, state *State) {
 	drawTable(d, style, queueColumnConfigs, []*asynq.QueueInfo{state.selectedQueue}, -1 /* no highlited row */)
+}
+
+// Define the order of states to show
+var taskStates = []asynq.TaskState{
+	asynq.TaskStateActive,
+	asynq.TaskStatePending,
+	asynq.TaskStateAggregating,
+	asynq.TaskStateScheduled,
+	asynq.TaskStateRetry,
+	asynq.TaskStateArchived,
+	asynq.TaskStateCompleted,
+}
+
+func nextTaskState(current asynq.TaskState) asynq.TaskState {
+	for i, ts := range taskStates {
+		if current == ts {
+			if i == len(taskStates)-1 {
+				return taskStates[0]
+			} else {
+				return taskStates[i+1]
+			}
+		}
+	}
+	panic("unkown task state")
+}
+
+func prevTaskState(current asynq.TaskState) asynq.TaskState {
+	for i, ts := range taskStates {
+		if current == ts {
+			if i == 0 {
+				return taskStates[len(taskStates)-1]
+			} else {
+				return taskStates[i-1]
+			}
+		}
+	}
+	panic("unkown task state")
+}
+
+func getTaskCount(queue *asynq.QueueInfo, taskState asynq.TaskState) int {
+	switch taskState {
+	case asynq.TaskStateActive:
+		return queue.Active
+	case asynq.TaskStatePending:
+		return queue.Pending
+	case asynq.TaskStateAggregating:
+		return queue.Aggregating
+	case asynq.TaskStateScheduled:
+		return queue.Scheduled
+	case asynq.TaskStateRetry:
+		return queue.Retry
+	case asynq.TaskStateArchived:
+		return queue.Archived
+	case asynq.TaskStateCompleted:
+		return queue.Completed
+	}
+	panic("unkonwn task state")
+}
+
+func drawTaskStateBreakdown(d *ScreenDrawer, style tcell.Style, state *State) {
+	const pad = "    " // padding between states
+	for _, ts := range taskStates {
+		s := style
+		if state.taskState == ts {
+			s = s.Background(tcell.ColorDarkOliveGreen)
+		}
+		d.Print(fmt.Sprintf("%s:%d", ts.String(), getTaskCount(state.selectedQueue, ts)), s)
+		d.Print(pad, style)
+	}
 }
