@@ -51,8 +51,8 @@ func drawDash(s tcell.Screen, style tcell.Style, state *State, opts Options) {
 		d.NL()
 		d.Println(fmt.Sprintf("Version: %s", state.redisInfo.version), style)
 		d.Println(fmt.Sprintf("Uptime: %s", state.redisInfo.uptime), style)
-		d.Println(fmt.Sprintf("Memory Usage: %s", ByteCount(int64(state.redisInfo.memoryUsage))), style)
-		d.Println(fmt.Sprintf("Peak Memory Usage: %s", ByteCount(int64(state.redisInfo.peakMemoryUsage))), style)
+		d.Println(fmt.Sprintf("Memory Usage: %s", byteCount(int64(state.redisInfo.memoryUsage))), style)
+		d.Println(fmt.Sprintf("Peak Memory Usage: %s", byteCount(int64(state.redisInfo.peakMemoryUsage))), style)
 	case viewTypeHelp:
 		d.Println("=== HELP ===", style.Bold(true))
 		d.NL()
@@ -194,8 +194,8 @@ func lpad(s string, padding int) string {
 	return fmt.Sprintf(tmpl, s)
 }
 
-// ByteCount converts the given bytes into human readable string
-func ByteCount(b int64) string {
+// byteCount converts the given bytes into human readable string
+func byteCount(b int64) string {
 	const unit = 1000
 	if b < unit {
 		return fmt.Sprintf("%d B", b)
@@ -212,19 +212,20 @@ func ByteCount(b int64) string {
 
 var queueColumnConfigs = []*columnConfig[*asynq.QueueInfo]{
 	{"Queue", alignLeft, func(q *asynq.QueueInfo) string { return q.Queue }},
-	{"State", alignLeft, func(q *asynq.QueueInfo) string {
-		if q.Paused {
-			return "PAUSED"
-		} else {
-			return "RUN"
-		}
-	}},
+	{"State", alignLeft, func(q *asynq.QueueInfo) string { return formatQueueState(q) }},
 	{"Size", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Size) }},
 	{"Latency", alignRight, func(q *asynq.QueueInfo) string { return q.Latency.Round(time.Second).String() }},
-	{"MemoryUsage", alignRight, func(q *asynq.QueueInfo) string { return ByteCount(q.MemoryUsage) }},
+	{"MemoryUsage", alignRight, func(q *asynq.QueueInfo) string { return byteCount(q.MemoryUsage) }},
 	{"Processed", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Processed) }},
 	{"Failed", alignRight, func(q *asynq.QueueInfo) string { return strconv.Itoa(q.Failed) }},
 	{"ErrorRate", alignRight, func(q *asynq.QueueInfo) string { return formatErrorRate(q.Processed, q.Failed) }},
+}
+
+func formatQueueState(q *asynq.QueueInfo) string {
+	if q.Paused {
+		return "PAUSED"
+	}
+	return "RUN"
 }
 
 func formatErrorRate(processed, failed int) string {
@@ -240,6 +241,10 @@ func drawQueueTable(d *ScreenDrawer, style tcell.Style, state *State) {
 
 func drawQueueSummary(d *ScreenDrawer, style tcell.Style, state *State) {
 	q := state.selectedQueue
+	if q == nil {
+		d.Println("ERROR: Press q to go back", style)
+		return
+	}
 	labelStyle := style.Foreground(tcell.ColorLightGray)
 	d.Print("Name:     ", labelStyle)
 	d.Println(q.Queue, style)
@@ -248,7 +253,13 @@ func drawQueueSummary(d *ScreenDrawer, style tcell.Style, state *State) {
 	d.Print("Latency   ", labelStyle)
 	d.Println(q.Latency.Round(time.Second).String(), style)
 	d.Print("MemUsage  ", labelStyle)
-	d.Println(ByteCount(q.MemoryUsage), style)
+	d.Println(byteCount(q.MemoryUsage), style)
+}
+
+// Returns the number of tasks to fetch.
+func taskPageSize(s tcell.Screen) int {
+	_, h := s.Size()
+	return h - 15 // height - (# of rows used)
 }
 
 func drawTaskTable(d *ScreenDrawer, style tcell.Style, state *State) {
@@ -267,6 +278,29 @@ func drawTaskTable(d *ScreenDrawer, style tcell.Style, state *State) {
 		{"LastError", alignLeft, func(t *asynq.TaskInfo) string { return t.LastErr }},
 	}
 	drawTable(d, style, colConfigs, state.tasks, state.taskTableRowIdx-1)
+
+	// Pagination
+	pageSize := taskPageSize(d.Screen())
+	totalCount := getTaskCount(state.selectedQueue, state.taskState)
+	if pageSize < totalCount {
+		start := (state.pageNum-1)*pageSize + 1
+		end := start + len(state.tasks) - 1
+		paginationStyle := style.Foreground(tcell.ColorLightGray)
+		d.Print(fmt.Sprintf("Showing %d-%d out of %d", start, end, totalCount), paginationStyle)
+		if isNextTaskPageAvailable(d.Screen(), state) {
+			d.Print("  n=NextPage", paginationStyle)
+		}
+		if state.pageNum > 1 {
+			d.Print("  p=PrevPage", paginationStyle)
+		}
+		d.FillLine(' ', paginationStyle)
+	}
+}
+
+func isNextTaskPageAvailable(s tcell.Screen, state *State) bool {
+	totalCount := getTaskCount(state.selectedQueue, state.taskState)
+	end := (state.pageNum-1)*taskPageSize(s) + len(state.tasks)
+	return end < totalCount
 }
 
 // Define the order of states to show

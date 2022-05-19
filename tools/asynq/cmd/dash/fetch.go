@@ -10,7 +10,7 @@ import (
 	"github.com/hibiken/asynq"
 )
 
-func fetchQueueInfo(i *asynq.Inspector, queuesCh chan<- []*asynq.QueueInfo, errorCh chan<- error, opts Options) {
+func fetchQueues(i *asynq.Inspector, queuesCh chan<- []*asynq.QueueInfo, errorCh chan<- error, opts Options) {
 	if !opts.UseRealData {
 		n := rand.Intn(100)
 		queuesCh <- []*asynq.QueueInfo{
@@ -35,7 +35,15 @@ func fetchQueueInfo(i *asynq.Inspector, queuesCh chan<- []*asynq.QueueInfo, erro
 		res = append(res, info)
 	}
 	queuesCh <- res
+}
 
+func fetchQueueInfo(i *asynq.Inspector, qname string, queueCh chan<- *asynq.QueueInfo, errorCh chan<- error) {
+	q, err := i.GetQueueInfo(qname)
+	if err != nil {
+		errorCh <- err
+		return
+	}
+	queueCh <- q
 }
 
 func fetchRedisInfo(redisInfoCh chan<- *redisInfo, errorCh chan<- error) {
@@ -48,24 +56,26 @@ func fetchRedisInfo(redisInfoCh chan<- *redisInfo, errorCh chan<- error) {
 	}
 }
 
-func fetchTasks(i *asynq.Inspector, qname string, taskState asynq.TaskState, tasksCh chan<- []*asynq.TaskInfo, errorCh chan<- error) {
+func fetchTasks(i *asynq.Inspector, qname string, taskState asynq.TaskState, pageSize, pageNum int,
+	tasksCh chan<- []*asynq.TaskInfo, errorCh chan<- error) {
 	var (
 		tasks []*asynq.TaskInfo
 		err   error
 	)
+	opts := []asynq.ListOption{asynq.PageSize(pageSize), asynq.Page(pageNum)}
 	switch taskState {
 	case asynq.TaskStateActive:
-		tasks, err = i.ListActiveTasks(qname)
+		tasks, err = i.ListActiveTasks(qname, opts...)
 	case asynq.TaskStatePending:
-		tasks, err = i.ListPendingTasks(qname)
+		tasks, err = i.ListPendingTasks(qname, opts...)
 	case asynq.TaskStateScheduled:
-		tasks, err = i.ListScheduledTasks(qname)
+		tasks, err = i.ListScheduledTasks(qname, opts...)
 	case asynq.TaskStateRetry:
-		tasks, err = i.ListRetryTasks(qname)
+		tasks, err = i.ListRetryTasks(qname, opts...)
 	case asynq.TaskStateArchived:
-		tasks, err = i.ListArchivedTasks(qname)
+		tasks, err = i.ListArchivedTasks(qname, opts...)
 	case asynq.TaskStateCompleted:
-		tasks, err = i.ListCompletedTasks(qname)
+		tasks, err = i.ListCompletedTasks(qname, opts...)
 	}
 	if err != nil {
 		errorCh <- err

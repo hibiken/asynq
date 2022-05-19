@@ -38,6 +38,8 @@ type State struct {
 
 	selectedQueue *asynq.QueueInfo // queue shown on queue details view
 
+	pageNum int // pagination page number
+
 	view     viewType // current view type
 	prevView viewType // to support "go back"
 }
@@ -74,12 +76,13 @@ func Run(opts Options) {
 	// channels to send/receive data fetched asynchronously
 	var (
 		errorCh     = make(chan error)
+		queueCh     = make(chan *asynq.QueueInfo)
 		queuesCh    = make(chan []*asynq.QueueInfo)
 		tasksCh     = make(chan []*asynq.TaskInfo)
 		redisInfoCh = make(chan *redisInfo)
 	)
 
-	go fetchQueueInfo(inspector, queuesCh, errorCh, opts)
+	go fetchQueues(inspector, queuesCh, errorCh, opts)
 
 	var state State // contained in this goroutine only; do not share
 
@@ -160,7 +163,10 @@ func Run(opts Options) {
 						state.view = viewTypeQueueDetails
 						state.taskState = asynq.TaskStateActive
 						state.tasks = nil
-						go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState, tasksCh, errorCh)
+						state.pageNum = 1
+						go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
+							taskPageSize(s), state.pageNum, tasksCh, errorCh)
+						ticker.Reset(interval)
 						drawDash(s, baseStyle, &state, opts)
 					}
 				} else if ev.Rune() == '?' {
@@ -168,7 +174,7 @@ func Run(opts Options) {
 					state.view = viewTypeHelp
 					drawDash(s, baseStyle, &state, opts)
 				} else if ev.Key() == tcell.KeyF1 && state.view != viewTypeQueues {
-					go fetchQueueInfo(inspector, queuesCh, errorCh, opts)
+					go fetchQueues(inspector, queuesCh, errorCh, opts)
 					ticker.Reset(interval)
 					state.view = viewTypeQueues
 					drawDash(s, baseStyle, &state, opts)
@@ -187,27 +193,60 @@ func Run(opts Options) {
 					drawDash(s, baseStyle, &state, opts)
 				} else if (ev.Key() == tcell.KeyRight || ev.Rune() == 'l') && state.view == viewTypeQueueDetails {
 					state.taskState = nextTaskState(state.taskState)
+					state.pageNum = 1
+					state.taskTableRowIdx = 0
 					state.tasks = nil
-					go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState, tasksCh, errorCh)
+					go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
+						taskPageSize(s), state.pageNum, tasksCh, errorCh)
+					ticker.Reset(interval)
 					drawDash(s, baseStyle, &state, opts)
 				} else if (ev.Key() == tcell.KeyLeft || ev.Rune() == 'h') && state.view == viewTypeQueueDetails {
 					state.taskState = prevTaskState(state.taskState)
+					state.pageNum = 1
+					state.taskTableRowIdx = 0
 					state.tasks = nil
-					go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState, tasksCh, errorCh)
+					go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
+						taskPageSize(s), state.pageNum, tasksCh, errorCh)
+					ticker.Reset(interval)
 					drawDash(s, baseStyle, &state, opts)
+				} else if ev.Rune() == 'n' && state.view == viewTypeQueueDetails {
+					pageSize := taskPageSize(s)
+					totalCount := getTaskCount(state.selectedQueue, state.taskState)
+					if (state.pageNum-1)*pageSize+len(state.tasks) < totalCount {
+						state.pageNum++
+						go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
+							pageSize, state.pageNum, tasksCh, errorCh)
+						ticker.Reset(interval)
+					}
+				} else if ev.Rune() == 'p' && state.view == viewTypeQueueDetails {
+					if state.pageNum > 1 {
+						state.pageNum--
+						go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
+							taskPageSize(s), state.pageNum, tasksCh, errorCh)
+						ticker.Reset(interval)
+					}
 				}
 			}
 
 		case <-ticker.C:
 			switch state.view {
 			case viewTypeQueues:
-				go fetchQueueInfo(inspector, queuesCh, errorCh, opts)
+				go fetchQueues(inspector, queuesCh, errorCh, opts)
+			case viewTypeQueueDetails:
+				go fetchQueueInfo(inspector, state.selectedQueue.Queue, queueCh, errorCh)
+				go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
+					taskPageSize(s), state.pageNum, tasksCh, errorCh)
 			case viewTypeRedis:
 				go fetchRedisInfo(redisInfoCh, errorCh)
 			}
 
 		case queues := <-queuesCh:
 			state.queues = queues
+			state.err = nil
+			drawDash(s, baseStyle, &state, opts)
+
+		case q := <-queueCh:
+			state.selectedQueue = q
 			state.err = nil
 			drawDash(s, baseStyle, &state, opts)
 
