@@ -6,9 +6,34 @@ package dash
 
 import (
 	"math/rand"
+	"time"
 
 	"github.com/hibiken/asynq"
 )
+
+type dataFetcher struct {
+	ticker    *time.Ticker
+	inspector *asynq.Inspector
+	opts      Options
+
+	errorCh     chan<- error
+	queueCh     chan<- *asynq.QueueInfo
+	queuesCh    chan<- []*asynq.QueueInfo
+	groupsCh    chan<- []*asynq.GroupInfo
+	tasksCh     chan<- []*asynq.TaskInfo
+	redisInfoCh chan<- *redisInfo
+}
+
+func (f *dataFetcher) fetchQueues() {
+	var (
+		inspector = f.inspector
+		queuesCh  = f.queuesCh
+		errorCh   = f.errorCh
+		opts      = f.opts
+	)
+	go fetchQueues(inspector, queuesCh, errorCh, opts)
+	f.ticker.Reset(opts.PollInterval)
+}
 
 func fetchQueues(i *asynq.Inspector, queuesCh chan<- []*asynq.QueueInfo, errorCh chan<- error, opts Options) {
 	if !opts.UseRealData {
@@ -37,6 +62,18 @@ func fetchQueues(i *asynq.Inspector, queuesCh chan<- []*asynq.QueueInfo, errorCh
 	queuesCh <- res
 }
 
+func (f *dataFetcher) fetchQueueInfo(qname string) {
+	var (
+		inspector = f.inspector
+		queueCh   = f.queueCh
+		errorCh   = f.errorCh
+		opts      = f.opts
+		ticker    = f.ticker
+	)
+	go fetchQueueInfo(inspector, qname, queueCh, errorCh)
+	ticker.Reset(opts.PollInterval)
+}
+
 func fetchQueueInfo(i *asynq.Inspector, qname string, queueCh chan<- *asynq.QueueInfo, errorCh chan<- error) {
 	q, err := i.GetQueueInfo(qname)
 	if err != nil {
@@ -44,6 +81,11 @@ func fetchQueueInfo(i *asynq.Inspector, qname string, queueCh chan<- *asynq.Queu
 		return
 	}
 	queueCh <- q
+}
+
+func (f *dataFetcher) fetchRedisInfo() {
+	go fetchRedisInfo(f.redisInfoCh, f.errorCh)
+	f.ticker.Reset(f.opts.PollInterval)
 }
 
 func fetchRedisInfo(redisInfoCh chan<- *redisInfo, errorCh chan<- error) {
@@ -56,6 +98,13 @@ func fetchRedisInfo(redisInfoCh chan<- *redisInfo, errorCh chan<- error) {
 	}
 }
 
+func (f *dataFetcher) fetchGroups(qname string) {
+	i, groupsCh, errorCh := f.inspector, f.groupsCh, f.errorCh
+	ticker, opts := f.ticker, f.opts
+	go fetchGroups(i, qname, groupsCh, errorCh)
+	ticker.Reset(opts.PollInterval)
+}
+
 func fetchGroups(i *asynq.Inspector, qname string, groupsCh chan<- []*asynq.GroupInfo, errorCh chan<- error) {
 	groups, err := i.Groups(qname)
 	if err != nil {
@@ -63,6 +112,18 @@ func fetchGroups(i *asynq.Inspector, qname string, groupsCh chan<- []*asynq.Grou
 		return
 	}
 	groupsCh <- groups
+}
+
+func (f *dataFetcher) fetchAggregatingTasks(qname, group string, pageSize, pageNum int) {
+	var (
+		i       = f.inspector
+		tasksCh = f.tasksCh
+		errorCh = f.errorCh
+		ticker  = f.ticker
+		opts    = f.opts
+	)
+	go fetchAggregatingTasks(i, qname, group, pageSize, pageNum, tasksCh, errorCh)
+	ticker.Reset(opts.PollInterval)
 }
 
 func fetchAggregatingTasks(i *asynq.Inspector, qname, group string, pageSize, pageNum int,
@@ -73,6 +134,18 @@ func fetchAggregatingTasks(i *asynq.Inspector, qname, group string, pageSize, pa
 		return
 	}
 	tasksCh <- tasks
+}
+
+func (f *dataFetcher) fetchTasks(qname string, taskState asynq.TaskState, pageSize, pageNum int) {
+	var (
+		i       = f.inspector
+		tasksCh = f.tasksCh
+		errorCh = f.errorCh
+		ticker  = f.ticker
+		opts    = f.opts
+	)
+	go fetchTasks(i, qname, taskState, pageSize, pageNum, tasksCh, errorCh)
+	ticker.Reset(opts.PollInterval)
 }
 
 func fetchTasks(i *asynq.Inspector, qname string, taskState asynq.TaskState, pageSize, pageNum int,

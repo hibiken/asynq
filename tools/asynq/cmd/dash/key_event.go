@@ -6,7 +6,6 @@ package dash
 
 import (
 	"os"
-	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/hibiken/asynq"
@@ -18,15 +17,7 @@ type keyEventHandler struct {
 	opts  Options
 	done  chan struct{}
 
-	ticker    *time.Ticker
-	inspector *asynq.Inspector
-
-	errorCh     chan error
-	queueCh     chan *asynq.QueueInfo
-	queuesCh    chan []*asynq.QueueInfo
-	groupsCh    chan []*asynq.GroupInfo
-	tasksCh     chan []*asynq.TaskInfo
-	redisInfoCh chan *redisInfo
+	fetcher *dataFetcher
 }
 
 func (h *keyEventHandler) quit() {
@@ -170,13 +161,10 @@ func (h *keyEventHandler) handleEnterKey() {
 
 func (h *keyEventHandler) enterKeyQueues() {
 	var (
-		s         = h.s
-		state     = h.state
-		opts      = h.opts
-		inspector = h.inspector
-		ticker    = h.ticker
-		errorCh   = h.errorCh
-		tasksCh   = h.tasksCh
+		s     = h.s
+		state = h.state
+		opts  = h.opts
+		f     = h.fetcher
 	)
 	if state.queueTableRowIdx != 0 {
 		state.selectedQueue = state.queues[state.queueTableRowIdx-1]
@@ -184,44 +172,33 @@ func (h *keyEventHandler) enterKeyQueues() {
 		state.taskState = asynq.TaskStateActive
 		state.tasks = nil
 		state.pageNum = 1
-		go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-			taskPageSize(s), state.pageNum, tasksCh, errorCh)
-		ticker.Reset(opts.PollInterval)
+		f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
 		drawDash(s, state, opts)
 	}
 }
 
 func (h *keyEventHandler) enterKeyQueueDetails() {
 	var (
-		s         = h.s
-		state     = h.state
-		opts      = h.opts
-		inspector = h.inspector
-		ticker    = h.ticker
-		errorCh   = h.errorCh
-		tasksCh   = h.tasksCh
+		s     = h.s
+		state = h.state
+		opts  = h.opts
+		f     = h.fetcher
 	)
 	if shouldShowGroupTable(state) && state.groupTableRowIdx != 0 {
 		state.selectedGroup = state.groups[state.groupTableRowIdx-1]
 		state.tasks = nil
 		state.pageNum = 1
-		go fetchAggregatingTasks(inspector, state.selectedQueue.Queue, state.selectedGroup.Group,
-			taskPageSize(s), state.pageNum, tasksCh, errorCh)
-		ticker.Reset(opts.PollInterval)
+		f.fetchAggregatingTasks(state.selectedQueue.Queue, state.selectedGroup.Group, taskPageSize(s), state.pageNum)
 		drawDash(s, state, opts)
 	}
 }
 
 func (h *keyEventHandler) handleLeftKey() {
 	var (
-		s         = h.s
-		state     = h.state
-		opts      = h.opts
-		inspector = h.inspector
-		ticker    = h.ticker
-		errorCh   = h.errorCh
-		tasksCh   = h.tasksCh
-		groupsCh  = h.groupsCh
+		s     = h.s
+		state = h.state
+		opts  = h.opts
+		f     = h.fetcher
 	)
 	if state.view == viewTypeQueueDetails {
 		state.taskState = prevTaskState(state.taskState)
@@ -230,26 +207,20 @@ func (h *keyEventHandler) handleLeftKey() {
 		state.tasks = nil
 		state.selectedGroup = nil
 		if shouldShowGroupTable(state) {
-			go fetchGroups(inspector, state.selectedQueue.Queue, groupsCh, errorCh)
+			f.fetchGroups(state.selectedQueue.Queue)
 		} else {
-			go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-				taskPageSize(s), state.pageNum, tasksCh, errorCh)
+			f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
 		}
-		ticker.Reset(opts.PollInterval)
 		drawDash(s, state, opts)
 	}
 }
 
 func (h *keyEventHandler) handleRightKey() {
 	var (
-		s         = h.s
-		state     = h.state
-		opts      = h.opts
-		inspector = h.inspector
-		ticker    = h.ticker
-		errorCh   = h.errorCh
-		tasksCh   = h.tasksCh
-		groupsCh  = h.groupsCh
+		s     = h.s
+		state = h.state
+		opts  = h.opts
+		f     = h.fetcher
 	)
 	if state.view == viewTypeQueueDetails {
 		state.taskState = nextTaskState(state.taskState)
@@ -258,25 +229,20 @@ func (h *keyEventHandler) handleRightKey() {
 		state.tasks = nil
 		state.selectedGroup = nil
 		if shouldShowGroupTable(state) {
-			go fetchGroups(inspector, state.selectedQueue.Queue, groupsCh, errorCh)
+			f.fetchGroups(state.selectedQueue.Queue)
 		} else {
-			go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-				taskPageSize(s), state.pageNum, tasksCh, errorCh)
+			f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
 		}
-		ticker.Reset(opts.PollInterval)
 		drawDash(s, state, opts)
 	}
 }
 
 func (h *keyEventHandler) nextPage() {
 	var (
-		s         = h.s
-		state     = h.state
-		opts      = h.opts
-		inspector = h.inspector
-		ticker    = h.ticker
-		errorCh   = h.errorCh
-		tasksCh   = h.tasksCh
+		s     = h.s
+		state = h.state
+		opts  = h.opts
+		f     = h.fetcher
 	)
 	if state.view == viewTypeQueueDetails {
 		if shouldShowGroupTable(state) {
@@ -293,9 +259,7 @@ func (h *keyEventHandler) nextPage() {
 			totalCount := getTaskCount(state.selectedQueue, state.taskState)
 			if (state.pageNum-1)*pageSize+len(state.tasks) < totalCount {
 				state.pageNum++
-				go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-					pageSize, state.pageNum, tasksCh, errorCh)
-				ticker.Reset(opts.PollInterval)
+				f.fetchTasks(state.selectedQueue.Queue, state.taskState, pageSize, state.pageNum)
 			}
 		}
 	}
@@ -303,13 +267,10 @@ func (h *keyEventHandler) nextPage() {
 
 func (h *keyEventHandler) prevPage() {
 	var (
-		s         = h.s
-		state     = h.state
-		opts      = h.opts
-		inspector = h.inspector
-		ticker    = h.ticker
-		errorCh   = h.errorCh
-		tasksCh   = h.tasksCh
+		s     = h.s
+		state = h.state
+		opts  = h.opts
+		f     = h.fetcher
 	)
 	if state.view == viewTypeQueueDetails {
 		if shouldShowGroupTable(state) {
@@ -322,9 +283,7 @@ func (h *keyEventHandler) prevPage() {
 		} else {
 			if state.pageNum > 1 {
 				state.pageNum--
-				go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-					taskPageSize(s), state.pageNum, tasksCh, errorCh)
-				ticker.Reset(opts.PollInterval)
+				f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
 			}
 		}
 	}
@@ -332,17 +291,13 @@ func (h *keyEventHandler) prevPage() {
 
 func (h *keyEventHandler) showQueues() {
 	var (
-		s         = h.s
-		state     = h.state
-		inspector = h.inspector
-		queuesCh  = h.queuesCh
-		errorCh   = h.errorCh
-		opts      = h.opts
-		ticker    = h.ticker
+		s     = h.s
+		state = h.state
+		opts  = h.opts
+		f     = h.fetcher
 	)
 	if state.view != viewTypeQueues {
-		go fetchQueues(inspector, queuesCh, errorCh, opts)
-		ticker.Reset(opts.PollInterval)
+		f.fetchQueues()
 		state.view = viewTypeQueues
 		drawDash(s, state, opts)
 	}
@@ -376,16 +331,13 @@ func (h *keyEventHandler) showSchedulers() {
 
 func (h *keyEventHandler) showRedisInfo() {
 	var (
-		s           = h.s
-		state       = h.state
-		opts        = h.opts
-		redisInfoCh = h.redisInfoCh
-		errorCh     = h.errorCh
-		ticker      = h.ticker
+		s     = h.s
+		state = h.state
+		opts  = h.opts
+		f     = h.fetcher
 	)
 	if state.view != viewTypeRedis {
-		go fetchRedisInfo(redisInfoCh, errorCh)
-		ticker.Reset(opts.PollInterval)
+		f.fetchRedisInfo()
 		state.view = viewTypeRedis
 		drawDash(s, state, opts)
 	}

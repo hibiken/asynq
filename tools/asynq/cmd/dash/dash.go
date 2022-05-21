@@ -99,19 +99,24 @@ func Run(opts Options) {
 	ticker := time.NewTicker(opts.PollInterval)
 	defer ticker.Stop()
 
+	f := dataFetcher{
+		ticker,
+		inspector,
+		opts,
+		errorCh,
+		queueCh,
+		queuesCh,
+		groupsCh,
+		tasksCh,
+		redisInfoCh,
+	}
+
 	h := keyEventHandler{
-		s:           s,
-		state:       &state,
-		opts:        opts,
-		done:        done,
-		ticker:      ticker,
-		inspector:   inspector,
-		errorCh:     errorCh,
-		queueCh:     queueCh,
-		queuesCh:    queuesCh,
-		groupsCh:    groupsCh,
-		tasksCh:     tasksCh,
-		redisInfoCh: redisInfoCh,
+		s:       s,
+		fetcher: &f,
+		state:   &state,
+		opts:    opts,
+		done:    done,
 	}
 
 	// TODO: Double check that we are not leaking goroutine with this one.
