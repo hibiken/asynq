@@ -55,8 +55,9 @@ type redisInfo struct {
 }
 
 type Options struct {
-	DebugMode   bool
-	UseRealData bool
+	DebugMode    bool
+	UseRealData  bool
+	PollInterval time.Duration
 }
 
 var baseStyle = tcell.StyleDefault.Background(tcell.ColorReset).Foreground(tcell.ColorReset)
@@ -64,18 +65,17 @@ var baseStyle = tcell.StyleDefault.Background(tcell.ColorReset).Foreground(tcell
 func Run(opts Options) {
 	s, err := tcell.NewScreen()
 	if err != nil {
-		fmt.Println("failed to create a screen: %v", err)
+		fmt.Printf("failed to create a screen: %v\n", err)
 		os.Exit(1)
 	}
 	if err := s.Init(); err != nil {
-		fmt.Println("failed to initialize screen: %v", err)
+		fmt.Printf("failed to initialize screen: %v\n", err)
 		os.Exit(1)
 	}
-
-	inspector := asynq.NewInspector(asynq.RedisClientOpt{Addr: ":6379"})
-
 	// Set default text style
 	s.SetStyle(baseStyle)
+
+	inspector := asynq.NewInspector(asynq.RedisClientOpt{Addr: ":6379"})
 
 	// channels to send/receive data fetched asynchronously
 	var (
@@ -86,7 +86,6 @@ func Run(opts Options) {
 		tasksCh     = make(chan []*asynq.TaskInfo)
 		redisInfoCh = make(chan *redisInfo)
 	)
-
 	go fetchQueues(inspector, queuesCh, errorCh, opts)
 
 	var state State // contained in this goroutine only; do not share
@@ -96,18 +95,28 @@ func Run(opts Options) {
 
 	eventCh := make(chan tcell.Event)
 	done := make(chan struct{})
-	const interval = 2 * time.Second
-	ticker := time.NewTicker(interval)
+	opts.PollInterval = 2 * time.Second
+	ticker := time.NewTicker(opts.PollInterval)
 	defer ticker.Stop()
+
+	h := keyEventHandler{
+		s:           s,
+		state:       &state,
+		opts:        opts,
+		done:        done,
+		ticker:      ticker,
+		inspector:   inspector,
+		errorCh:     errorCh,
+		queueCh:     queueCh,
+		queuesCh:    queuesCh,
+		groupsCh:    groupsCh,
+		tasksCh:     tasksCh,
+		redisInfoCh: redisInfoCh,
+	}
 
 	// TODO: Double check that we are not leaking goroutine with this one.
 	go s.ChannelEvents(eventCh, done)
 
-	quit := func() {
-		s.Fini()
-		close(done)
-		os.Exit(0)
-	}
 	for {
 		// Update screen
 		s.Show()
@@ -119,178 +128,7 @@ func Run(opts Options) {
 			case *tcell.EventResize:
 				s.Sync()
 			case *tcell.EventKey:
-				// Esc and 'q' key have "go back" semantics
-				if ev.Key() == tcell.KeyEscape || ev.Rune() == 'q' {
-					if state.view == viewTypeHelp {
-						state.view = state.prevView // exit help
-						drawDash(s, &state, opts)
-					} else if state.view == viewTypeQueueDetails {
-						state.view = viewTypeQueues
-						drawDash(s, &state, opts)
-					} else {
-						quit()
-					}
-				} else if ev.Key() == tcell.KeyCtrlC {
-					quit()
-				} else if ev.Key() == tcell.KeyCtrlL {
-					s.Sync()
-				} else if (ev.Key() == tcell.KeyDown || ev.Rune() == 'j') && state.view == viewTypeQueues {
-					if state.queueTableRowIdx < len(state.queues) {
-						state.queueTableRowIdx++
-					} else {
-						state.queueTableRowIdx = 0 // loop back
-					}
-					drawDash(s, &state, opts)
-				} else if (ev.Key() == tcell.KeyUp || ev.Rune() == 'k') && state.view == viewTypeQueues {
-					if state.queueTableRowIdx == 0 {
-						state.queueTableRowIdx = len(state.queues)
-					} else {
-						state.queueTableRowIdx--
-					}
-					drawDash(s, &state, opts)
-				} else if (ev.Key() == tcell.KeyDown || ev.Rune() == 'j') && state.view == viewTypeQueueDetails {
-					if shouldShowGroupTable(&state) {
-						if state.groupTableRowIdx < groupPageSize(s) {
-							state.groupTableRowIdx++
-						} else {
-							state.groupTableRowIdx = 0 // loop back
-						}
-					} else {
-						if state.taskTableRowIdx < len(state.tasks) {
-							state.taskTableRowIdx++
-						} else {
-							state.taskTableRowIdx = 0 // loop back
-						}
-					}
-					drawDash(s, &state, opts)
-				} else if (ev.Key() == tcell.KeyUp || ev.Rune() == 'k') && state.view == viewTypeQueueDetails {
-					if shouldShowGroupTable(&state) {
-						if state.groupTableRowIdx == 0 {
-							state.groupTableRowIdx = groupPageSize(s)
-						} else {
-							state.groupTableRowIdx--
-						}
-					} else {
-						if state.taskTableRowIdx == 0 {
-							state.taskTableRowIdx = len(state.tasks)
-						} else {
-							state.taskTableRowIdx--
-						}
-					}
-					drawDash(s, &state, opts)
-				} else if ev.Key() == tcell.KeyEnter {
-					switch state.view {
-					case viewTypeQueues:
-						if state.queueTableRowIdx != 0 {
-							state.selectedQueue = state.queues[state.queueTableRowIdx-1]
-							state.view = viewTypeQueueDetails
-							state.taskState = asynq.TaskStateActive
-							state.tasks = nil
-							state.pageNum = 1
-							go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-								taskPageSize(s), state.pageNum, tasksCh, errorCh)
-							ticker.Reset(interval)
-							drawDash(s, &state, opts)
-						}
-					case viewTypeQueueDetails:
-						if shouldShowGroupTable(&state) && state.groupTableRowIdx != 0 {
-							state.selectedGroup = state.groups[state.groupTableRowIdx-1]
-							state.tasks = nil
-							state.pageNum = 1
-							go fetchAggregatingTasks(inspector, state.selectedQueue.Queue, state.selectedGroup.Group,
-								taskPageSize(s), state.pageNum, tasksCh, errorCh)
-							ticker.Reset(interval)
-							drawDash(s, &state, opts)
-						}
-
-					}
-				} else if ev.Rune() == '?' {
-					state.prevView = state.view
-					state.view = viewTypeHelp
-					drawDash(s, &state, opts)
-				} else if ev.Key() == tcell.KeyF1 && state.view != viewTypeQueues {
-					go fetchQueues(inspector, queuesCh, errorCh, opts)
-					ticker.Reset(interval)
-					state.view = viewTypeQueues
-					drawDash(s, &state, opts)
-				} else if ev.Key() == tcell.KeyF2 && state.view != viewTypeServers {
-					//TODO Start data fetch and reset ticker
-					state.view = viewTypeServers
-					drawDash(s, &state, opts)
-				} else if ev.Key() == tcell.KeyF3 && state.view != viewTypeSchedulers {
-					//TODO Start data fetch and reset ticker
-					state.view = viewTypeSchedulers
-					drawDash(s, &state, opts)
-				} else if ev.Key() == tcell.KeyF4 && state.view != viewTypeRedis {
-					go fetchRedisInfo(redisInfoCh, errorCh)
-					ticker.Reset(interval)
-					state.view = viewTypeRedis
-					drawDash(s, &state, opts)
-				} else if (ev.Key() == tcell.KeyRight || ev.Rune() == 'l') && state.view == viewTypeQueueDetails {
-					state.taskState = nextTaskState(state.taskState)
-					state.pageNum = 1
-					state.taskTableRowIdx = 0
-					state.tasks = nil
-					state.selectedGroup = nil
-					if shouldShowGroupTable(&state) {
-						go fetchGroups(inspector, state.selectedQueue.Queue, groupsCh, errorCh)
-					} else {
-						go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-							taskPageSize(s), state.pageNum, tasksCh, errorCh)
-					}
-					ticker.Reset(interval)
-					drawDash(s, &state, opts)
-				} else if (ev.Key() == tcell.KeyLeft || ev.Rune() == 'h') && state.view == viewTypeQueueDetails {
-					state.taskState = prevTaskState(state.taskState)
-					state.pageNum = 1
-					state.taskTableRowIdx = 0
-					state.tasks = nil
-					state.selectedGroup = nil
-					if shouldShowGroupTable(&state) {
-						go fetchGroups(inspector, state.selectedQueue.Queue, groupsCh, errorCh)
-					} else {
-						go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-							taskPageSize(s), state.pageNum, tasksCh, errorCh)
-					}
-					ticker.Reset(interval)
-					drawDash(s, &state, opts)
-				} else if ev.Rune() == 'n' && state.view == viewTypeQueueDetails {
-					if shouldShowGroupTable(&state) {
-						pageSize := groupPageSize(s)
-						total := len(state.groups)
-						start := (state.pageNum - 1) * pageSize
-						end := start + pageSize
-						if end <= total {
-							state.pageNum++
-							drawDash(s, &state, opts)
-						}
-					} else {
-						pageSize := taskPageSize(s)
-						totalCount := getTaskCount(state.selectedQueue, state.taskState)
-						if (state.pageNum-1)*pageSize+len(state.tasks) < totalCount {
-							state.pageNum++
-							go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-								pageSize, state.pageNum, tasksCh, errorCh)
-							ticker.Reset(interval)
-						}
-					}
-				} else if ev.Rune() == 'p' && state.view == viewTypeQueueDetails {
-					if shouldShowGroupTable(&state) {
-						pageSize := groupPageSize(s)
-						start := (state.pageNum - 1) * pageSize
-						if start > 0 {
-							state.pageNum--
-							drawDash(s, &state, opts)
-						}
-					} else {
-						if state.pageNum > 1 {
-							state.pageNum--
-							go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-								taskPageSize(s), state.pageNum, tasksCh, errorCh)
-							ticker.Reset(interval)
-						}
-					}
-				}
+				h.HandleKeyEvent(ev)
 			}
 
 		case <-ticker.C:
