@@ -16,58 +16,58 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-func drawDash(s tcell.Screen, style tcell.Style, state *State, opts Options) {
+func drawDash(s tcell.Screen, state *State, opts Options) {
 	s.Clear()
 	// Simulate data update on every render
 	d := NewScreenDrawer(s)
 	switch state.view {
 	case viewTypeQueues:
-		d.Println("=== Queues ===", style.Bold(true))
+		d.Println("=== Queues ===", baseStyle.Bold(true))
 		d.NL()
-		drawQueueSizeGraphs(d, style, state)
+		drawQueueSizeGraphs(d, state)
 		d.NL()
-		drawQueueTable(d, style, state)
+		drawQueueTable(d, baseStyle, state)
 	case viewTypeQueueDetails:
-		d.Println("=== Queue Summary ===", style.Bold(true))
+		d.Println("=== Queue Summary ===", baseStyle.Bold(true))
 		d.NL()
-		drawQueueSummary(d, style, state)
+		drawQueueSummary(d, state)
 		d.NL()
 		d.NL()
-		d.Println("=== Tasks ===", style.Bold(true))
+		d.Println("=== Tasks ===", baseStyle.Bold(true))
 		d.NL()
-		drawTaskStateBreakdown(d, style, state)
+		drawTaskStateBreakdown(d, baseStyle, state)
 		d.NL()
-		drawTaskTable(d, style, state)
+		drawTaskTable(d, state)
 	case viewTypeServers:
-		d.Println("=== Servers ===", style.Bold(true))
+		d.Println("=== Servers ===", baseStyle.Bold(true))
 		d.NL()
 		// TODO: Draw body
 	case viewTypeSchedulers:
-		d.Println("=== Schedulers === ", style.Bold(true))
+		d.Println("=== Schedulers === ", baseStyle.Bold(true))
 		d.NL()
 		// TODO: Draw body
 	case viewTypeRedis:
-		d.Println("=== Redis Info === ", style.Bold(true))
+		d.Println("=== Redis Info === ", baseStyle.Bold(true))
 		d.NL()
-		d.Println(fmt.Sprintf("Version: %s", state.redisInfo.version), style)
-		d.Println(fmt.Sprintf("Uptime: %s", state.redisInfo.uptime), style)
-		d.Println(fmt.Sprintf("Memory Usage: %s", byteCount(int64(state.redisInfo.memoryUsage))), style)
-		d.Println(fmt.Sprintf("Peak Memory Usage: %s", byteCount(int64(state.redisInfo.peakMemoryUsage))), style)
+		d.Println(fmt.Sprintf("Version: %s", state.redisInfo.version), baseStyle)
+		d.Println(fmt.Sprintf("Uptime: %s", state.redisInfo.uptime), baseStyle)
+		d.Println(fmt.Sprintf("Memory Usage: %s", byteCount(int64(state.redisInfo.memoryUsage))), baseStyle)
+		d.Println(fmt.Sprintf("Peak Memory Usage: %s", byteCount(int64(state.redisInfo.peakMemoryUsage))), baseStyle)
 	case viewTypeHelp:
-		d.Println("=== HELP ===", style.Bold(true))
+		d.Println("=== HELP ===", baseStyle.Bold(true))
 		d.NL()
 		// TODO: Draw HELP body
 	}
 	if opts.DebugMode {
-		d.Println(fmt.Sprintf("DEBUG: rowIdx = %d", state.queueTableRowIdx), style)
-		d.Println(fmt.Sprintf("DEBUG: selectedQueue = %s", state.selectedQueue.Queue), style)
-		d.Println(fmt.Sprintf("DEBUG: view = %v", state.view), style)
+		d.Println(fmt.Sprintf("DEBUG: rowIdx = %d", state.queueTableRowIdx), baseStyle)
+		d.Println(fmt.Sprintf("DEBUG: selectedQueue = %s", state.selectedQueue.Queue), baseStyle)
+		d.Println(fmt.Sprintf("DEBUG: view = %v", state.view), baseStyle)
 	}
 	d.GoToBottom()
-	drawFooter(d, style, state)
+	drawFooter(d, state)
 }
 
-func drawQueueSizeGraphs(d *ScreenDrawer, style tcell.Style, state *State) {
+func drawQueueSizeGraphs(d *ScreenDrawer, state *State) {
 	var (
 		activeStyle      = tcell.StyleDefault.Foreground(tcell.GetColor("blue")).Background(tcell.ColorReset)
 		pendingStyle     = tcell.StyleDefault.Foreground(tcell.GetColor("green")).Background(tcell.ColorReset)
@@ -101,9 +101,9 @@ func drawQueueSizeGraphs(d *ScreenDrawer, style tcell.Style, state *State) {
 
 	const tick = '▇'
 	for _, q := range state.queues {
-		d.Print(q.Queue, style)
-		d.Print(strings.Repeat(" ", qnameWidth-runewidth.StringWidth(q.Queue)+1), style) // padding between qname and graph
-		d.Print("|", style)
+		d.Print(q.Queue, baseStyle)
+		d.Print(strings.Repeat(" ", qnameWidth-runewidth.StringWidth(q.Queue)+1), baseStyle) // padding between qname and graph
+		d.Print("|", baseStyle)
 		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Completed)*multipiler))), completedStyle)
 		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Archived)*multipiler))), archivedStyle)
 		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Retry)*multipiler))), retryStyle)
@@ -111,28 +111,28 @@ func drawQueueSizeGraphs(d *ScreenDrawer, style tcell.Style, state *State) {
 		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Aggregating)*multipiler))), aggregatingStyle)
 		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Pending)*multipiler))), pendingStyle)
 		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Active)*multipiler))), activeStyle)
-		d.Print(fmt.Sprintf(" %d", q.Size), style)
+		d.Print(fmt.Sprintf(" %d", q.Size), baseStyle)
 		d.NL()
 	}
 	d.NL()
-	d.Print("completed=", style)
+	d.Print("completed=", baseStyle)
 	d.Print(string(tick), completedStyle)
-	d.Print(" archived=", style)
+	d.Print(" archived=", baseStyle)
 	d.Print(string(tick), archivedStyle)
-	d.Print(" retry=", style)
+	d.Print(" retry=", baseStyle)
 	d.Print(string(tick), retryStyle)
-	d.Print(" scheduled=", style)
+	d.Print(" scheduled=", baseStyle)
 	d.Print(string(tick), scheduledStyle)
-	d.Print(" aggregating=", style)
+	d.Print(" aggregating=", baseStyle)
 	d.Print(string(tick), aggregatingStyle)
-	d.Print(" pending=", style)
+	d.Print(" pending=", baseStyle)
 	d.Print(string(tick), pendingStyle)
-	d.Print(" active=", style)
+	d.Print(" active=", baseStyle)
 	d.Print(string(tick), activeStyle)
 	d.NL()
 }
 
-func drawFooter(d *ScreenDrawer, baseStyle tcell.Style, state *State) {
+func drawFooter(d *ScreenDrawer, state *State) {
 	if state.err != nil {
 		style := baseStyle.Background(tcell.ColorDarkRed)
 		d.Print(state.err.Error(), style)
@@ -239,21 +239,21 @@ func drawQueueTable(d *ScreenDrawer, style tcell.Style, state *State) {
 	drawTable(d, style, queueColumnConfigs, state.queues, state.queueTableRowIdx-1)
 }
 
-func drawQueueSummary(d *ScreenDrawer, style tcell.Style, state *State) {
+func drawQueueSummary(d *ScreenDrawer, state *State) {
 	q := state.selectedQueue
 	if q == nil {
-		d.Println("ERROR: Press q to go back", style)
+		d.Println("ERROR: Press q to go back", baseStyle)
 		return
 	}
-	labelStyle := style.Foreground(tcell.ColorLightGray)
+	labelStyle := baseStyle.Foreground(tcell.ColorLightGray)
 	d.Print("Name:     ", labelStyle)
-	d.Println(q.Queue, style)
+	d.Println(q.Queue, baseStyle)
 	d.Print("Size:     ", labelStyle)
-	d.Println(strconv.Itoa(q.Size), style)
+	d.Println(strconv.Itoa(q.Size), baseStyle)
 	d.Print("Latency   ", labelStyle)
-	d.Println(q.Latency.Round(time.Second).String(), style)
+	d.Println(q.Latency.Round(time.Second).String(), baseStyle)
 	d.Print("MemUsage  ", labelStyle)
-	d.Println(byteCount(q.MemoryUsage), style)
+	d.Println(byteCount(q.MemoryUsage), baseStyle)
 }
 
 // Returns the max number of groups that can be displayed.
@@ -272,9 +272,9 @@ func shouldShowGroupTable(state *State) bool {
 	return state.taskState == asynq.TaskStateAggregating && state.selectedGroup == nil
 }
 
-func drawTaskTable(d *ScreenDrawer, style tcell.Style, state *State) {
+func drawTaskTable(d *ScreenDrawer, state *State) {
 	if shouldShowGroupTable(state) {
-		drawGroupTable(d, style, state)
+		drawGroupTable(d, state)
 		return
 	}
 	if len(state.tasks) == 0 {
@@ -288,7 +288,7 @@ func drawTaskTable(d *ScreenDrawer, style tcell.Style, state *State) {
 		{"MaxRetry", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.MaxRetry) }},
 		{"LastError", alignLeft, func(t *asynq.TaskInfo) string { return t.LastErr }},
 	}
-	drawTable(d, style, colConfigs, state.tasks, state.taskTableRowIdx-1)
+	drawTable(d, baseStyle, colConfigs, state.tasks, state.taskTableRowIdx-1)
 
 	// Pagination
 	pageSize := taskPageSize(d.Screen())
@@ -300,7 +300,7 @@ func drawTaskTable(d *ScreenDrawer, style tcell.Style, state *State) {
 	if pageSize < totalCount {
 		start := (state.pageNum-1)*pageSize + 1
 		end := start + len(state.tasks) - 1
-		paginationStyle := style.Foreground(tcell.ColorLightGray)
+		paginationStyle := baseStyle.Foreground(tcell.ColorLightGray)
 		d.Print(fmt.Sprintf("Showing %d-%d out of %d", start, end, totalCount), paginationStyle)
 		if isNextTaskPageAvailable(d.Screen(), state) {
 			d.Print("  n=NextPage", paginationStyle)
@@ -318,11 +318,11 @@ func isNextTaskPageAvailable(s tcell.Screen, state *State) bool {
 	return end < totalCount
 }
 
-func drawGroupTable(d *ScreenDrawer, style tcell.Style, state *State) {
+func drawGroupTable(d *ScreenDrawer, state *State) {
 	if len(state.groups) == 0 {
 		return // print nothing
 	}
-	d.Println("<<< Select group >>>", style)
+	d.Println("<<< Select group >>>", baseStyle)
 	colConfigs := []*columnConfig[*asynq.GroupInfo]{
 		{"Name", alignLeft, func(g *asynq.GroupInfo) string { return g.Group }},
 		{"Size", alignRight, func(g *asynq.GroupInfo) string { return strconv.Itoa(g.Size) }},
@@ -332,9 +332,9 @@ func drawGroupTable(d *ScreenDrawer, style tcell.Style, state *State) {
 	total := len(state.groups)
 	start := (state.pageNum - 1) * pageSize
 	end := min(start+pageSize, total)
-	drawTable(d, style, colConfigs, state.groups[start:end], state.groupTableRowIdx-1)
+	drawTable(d, baseStyle, colConfigs, state.groups[start:end], state.groupTableRowIdx-1)
 
-	footerStyle := style.Foreground(tcell.ColorLightGray)
+	footerStyle := baseStyle.Foreground(tcell.ColorLightGray)
 	if pageSize < total {
 		d.Print(fmt.Sprintf("Showing %d-%d out of %d", start+1, end, total), footerStyle)
 		if end < total {

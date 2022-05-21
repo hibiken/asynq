@@ -59,6 +59,8 @@ type Options struct {
 	UseRealData bool
 }
 
+var baseStyle = tcell.StyleDefault.Background(tcell.ColorReset).Foreground(tcell.ColorReset)
+
 func Run(opts Options) {
 	s, err := tcell.NewScreen()
 	if err != nil {
@@ -73,7 +75,6 @@ func Run(opts Options) {
 	inspector := asynq.NewInspector(asynq.RedisClientOpt{Addr: ":6379"})
 
 	// Set default text style
-	baseStyle := tcell.StyleDefault.Background(tcell.ColorReset).Foreground(tcell.ColorReset)
 	s.SetStyle(baseStyle)
 
 	// channels to send/receive data fetched asynchronously
@@ -91,7 +92,7 @@ func Run(opts Options) {
 	var state State // contained in this goroutine only; do not share
 
 	// draw initial screen
-	drawDash(s, baseStyle, &state, opts)
+	drawDash(s, &state, opts)
 
 	eventCh := make(chan tcell.Event)
 	done := make(chan struct{})
@@ -122,10 +123,10 @@ func Run(opts Options) {
 				if ev.Key() == tcell.KeyEscape || ev.Rune() == 'q' {
 					if state.view == viewTypeHelp {
 						state.view = state.prevView // exit help
-						drawDash(s, baseStyle, &state, opts)
+						drawDash(s, &state, opts)
 					} else if state.view == viewTypeQueueDetails {
 						state.view = viewTypeQueues
-						drawDash(s, baseStyle, &state, opts)
+						drawDash(s, &state, opts)
 					} else {
 						quit()
 					}
@@ -139,14 +140,14 @@ func Run(opts Options) {
 					} else {
 						state.queueTableRowIdx = 0 // loop back
 					}
-					drawDash(s, baseStyle, &state, opts)
+					drawDash(s, &state, opts)
 				} else if (ev.Key() == tcell.KeyUp || ev.Rune() == 'k') && state.view == viewTypeQueues {
 					if state.queueTableRowIdx == 0 {
 						state.queueTableRowIdx = len(state.queues)
 					} else {
 						state.queueTableRowIdx--
 					}
-					drawDash(s, baseStyle, &state, opts)
+					drawDash(s, &state, opts)
 				} else if (ev.Key() == tcell.KeyDown || ev.Rune() == 'j') && state.view == viewTypeQueueDetails {
 					if shouldShowGroupTable(&state) {
 						if state.groupTableRowIdx < groupPageSize(s) {
@@ -161,7 +162,7 @@ func Run(opts Options) {
 							state.taskTableRowIdx = 0 // loop back
 						}
 					}
-					drawDash(s, baseStyle, &state, opts)
+					drawDash(s, &state, opts)
 				} else if (ev.Key() == tcell.KeyUp || ev.Rune() == 'k') && state.view == viewTypeQueueDetails {
 					if shouldShowGroupTable(&state) {
 						if state.groupTableRowIdx == 0 {
@@ -176,7 +177,7 @@ func Run(opts Options) {
 							state.taskTableRowIdx--
 						}
 					}
-					drawDash(s, baseStyle, &state, opts)
+					drawDash(s, &state, opts)
 				} else if ev.Key() == tcell.KeyEnter {
 					switch state.view {
 					case viewTypeQueues:
@@ -189,7 +190,7 @@ func Run(opts Options) {
 							go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
 								taskPageSize(s), state.pageNum, tasksCh, errorCh)
 							ticker.Reset(interval)
-							drawDash(s, baseStyle, &state, opts)
+							drawDash(s, &state, opts)
 						}
 					case viewTypeQueueDetails:
 						if shouldShowGroupTable(&state) && state.groupTableRowIdx != 0 {
@@ -199,32 +200,32 @@ func Run(opts Options) {
 							go fetchAggregatingTasks(inspector, state.selectedQueue.Queue, state.selectedGroup.Group,
 								taskPageSize(s), state.pageNum, tasksCh, errorCh)
 							ticker.Reset(interval)
-							drawDash(s, baseStyle, &state, opts)
+							drawDash(s, &state, opts)
 						}
 
 					}
 				} else if ev.Rune() == '?' {
 					state.prevView = state.view
 					state.view = viewTypeHelp
-					drawDash(s, baseStyle, &state, opts)
+					drawDash(s, &state, opts)
 				} else if ev.Key() == tcell.KeyF1 && state.view != viewTypeQueues {
 					go fetchQueues(inspector, queuesCh, errorCh, opts)
 					ticker.Reset(interval)
 					state.view = viewTypeQueues
-					drawDash(s, baseStyle, &state, opts)
+					drawDash(s, &state, opts)
 				} else if ev.Key() == tcell.KeyF2 && state.view != viewTypeServers {
 					//TODO Start data fetch and reset ticker
 					state.view = viewTypeServers
-					drawDash(s, baseStyle, &state, opts)
+					drawDash(s, &state, opts)
 				} else if ev.Key() == tcell.KeyF3 && state.view != viewTypeSchedulers {
 					//TODO Start data fetch and reset ticker
 					state.view = viewTypeSchedulers
-					drawDash(s, baseStyle, &state, opts)
+					drawDash(s, &state, opts)
 				} else if ev.Key() == tcell.KeyF4 && state.view != viewTypeRedis {
 					go fetchRedisInfo(redisInfoCh, errorCh)
 					ticker.Reset(interval)
 					state.view = viewTypeRedis
-					drawDash(s, baseStyle, &state, opts)
+					drawDash(s, &state, opts)
 				} else if (ev.Key() == tcell.KeyRight || ev.Rune() == 'l') && state.view == viewTypeQueueDetails {
 					state.taskState = nextTaskState(state.taskState)
 					state.pageNum = 1
@@ -238,7 +239,7 @@ func Run(opts Options) {
 							taskPageSize(s), state.pageNum, tasksCh, errorCh)
 					}
 					ticker.Reset(interval)
-					drawDash(s, baseStyle, &state, opts)
+					drawDash(s, &state, opts)
 				} else if (ev.Key() == tcell.KeyLeft || ev.Rune() == 'h') && state.view == viewTypeQueueDetails {
 					state.taskState = prevTaskState(state.taskState)
 					state.pageNum = 1
@@ -252,7 +253,7 @@ func Run(opts Options) {
 							taskPageSize(s), state.pageNum, tasksCh, errorCh)
 					}
 					ticker.Reset(interval)
-					drawDash(s, baseStyle, &state, opts)
+					drawDash(s, &state, opts)
 				} else if ev.Rune() == 'n' && state.view == viewTypeQueueDetails {
 					if shouldShowGroupTable(&state) {
 						pageSize := groupPageSize(s)
@@ -261,7 +262,7 @@ func Run(opts Options) {
 						end := start + pageSize
 						if end <= total {
 							state.pageNum++
-							drawDash(s, baseStyle, &state, opts)
+							drawDash(s, &state, opts)
 						}
 					} else {
 						pageSize := taskPageSize(s)
@@ -279,7 +280,7 @@ func Run(opts Options) {
 						start := (state.pageNum - 1) * pageSize
 						if start > 0 {
 							state.pageNum--
-							drawDash(s, baseStyle, &state, opts)
+							drawDash(s, &state, opts)
 						}
 					} else {
 						if state.pageNum > 1 {
@@ -314,31 +315,31 @@ func Run(opts Options) {
 		case queues := <-queuesCh:
 			state.queues = queues
 			state.err = nil
-			drawDash(s, baseStyle, &state, opts)
+			drawDash(s, &state, opts)
 
 		case q := <-queueCh:
 			state.selectedQueue = q
 			state.err = nil
-			drawDash(s, baseStyle, &state, opts)
+			drawDash(s, &state, opts)
 
 		case groups := <-groupsCh:
 			state.groups = groups
 			state.err = nil
-			drawDash(s, baseStyle, &state, opts)
+			drawDash(s, &state, opts)
 
 		case tasks := <-tasksCh:
 			state.tasks = tasks
 			state.err = nil
-			drawDash(s, baseStyle, &state, opts)
+			drawDash(s, &state, opts)
 
 		case redisInfo := <-redisInfoCh:
 			state.redisInfo = *redisInfo
 			state.err = nil
-			drawDash(s, baseStyle, &state, opts)
+			drawDash(s, &state, opts)
 
 		case err := <-errorCh:
 			state.err = err
-			drawDash(s, baseStyle, &state, opts)
+			drawDash(s, &state, opts)
 		}
 	}
 
