@@ -256,20 +256,31 @@ func drawQueueSummary(d *ScreenDrawer, style tcell.Style, state *State) {
 	d.Println(byteCount(q.MemoryUsage), style)
 }
 
+// Returns the max number of groups that can be displayed.
+func groupPageSize(s tcell.Screen) int {
+	_, h := s.Size()
+	return h - 16 // height - (# of rows used)
+}
+
 // Returns the number of tasks to fetch.
 func taskPageSize(s tcell.Screen) int {
 	_, h := s.Size()
 	return h - 15 // height - (# of rows used)
 }
 
+func shouldShowGroupTable(state *State) bool {
+	return state.taskState == asynq.TaskStateAggregating && state.selectedGroup == nil
+}
+
 func drawTaskTable(d *ScreenDrawer, style tcell.Style, state *State) {
-	if state.taskState == asynq.TaskStateAggregating {
-		d.Println("TODO: aggregating tasks need group name", style)
+	if shouldShowGroupTable(state) {
+		drawGroupTable(d, style, state)
 		return
 	}
 	if len(state.tasks) == 0 {
 		return // print nothing
 	}
+	// TODO: colConfigs should be different for each state
 	colConfigs := []*columnConfig[*asynq.TaskInfo]{
 		{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
 		{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
@@ -282,6 +293,10 @@ func drawTaskTable(d *ScreenDrawer, style tcell.Style, state *State) {
 	// Pagination
 	pageSize := taskPageSize(d.Screen())
 	totalCount := getTaskCount(state.selectedQueue, state.taskState)
+	if state.taskState == asynq.TaskStateAggregating {
+		// aggregating tasks are scoped to each group when shown in the table.
+		totalCount = state.selectedGroup.Size
+	}
 	if pageSize < totalCount {
 		start := (state.pageNum-1)*pageSize + 1
 		end := start + len(state.tasks) - 1
@@ -301,6 +316,47 @@ func isNextTaskPageAvailable(s tcell.Screen, state *State) bool {
 	totalCount := getTaskCount(state.selectedQueue, state.taskState)
 	end := (state.pageNum-1)*taskPageSize(s) + len(state.tasks)
 	return end < totalCount
+}
+
+func drawGroupTable(d *ScreenDrawer, style tcell.Style, state *State) {
+	if len(state.groups) == 0 {
+		return // print nothing
+	}
+	d.Println("<<< Select group >>>", style)
+	colConfigs := []*columnConfig[*asynq.GroupInfo]{
+		{"Name", alignLeft, func(g *asynq.GroupInfo) string { return g.Group }},
+		{"Size", alignRight, func(g *asynq.GroupInfo) string { return strconv.Itoa(g.Size) }},
+	}
+	// pagination
+	pageSize := groupPageSize(d.Screen())
+	total := len(state.groups)
+	start := (state.pageNum - 1) * pageSize
+	end := min(start+pageSize, total)
+	drawTable(d, style, colConfigs, state.groups[start:end], state.groupTableRowIdx-1)
+
+	footerStyle := style.Foreground(tcell.ColorLightGray)
+	if pageSize < total {
+		d.Print(fmt.Sprintf("Showing %d-%d out of %d", start+1, end, total), footerStyle)
+		if end < total {
+			d.Print("  n=NextPage", footerStyle)
+		}
+		if start > 0 {
+			d.Print("  p=PrevPage", footerStyle)
+		}
+	}
+	d.FillLine(' ', footerStyle)
+}
+
+type number interface {
+	int | int64 | float64
+}
+
+// min returns the smaller of x and y. if x==y, returns x
+func min[V number](x, y V) V {
+	if x > y {
+		return y
+	}
+	return x
 }
 
 // Define the order of states to show

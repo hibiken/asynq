@@ -56,6 +56,25 @@ func fetchRedisInfo(redisInfoCh chan<- *redisInfo, errorCh chan<- error) {
 	}
 }
 
+func fetchGroups(i *asynq.Inspector, qname string, groupsCh chan<- []*asynq.GroupInfo, errorCh chan<- error) {
+	groups, err := i.Groups(qname)
+	if err != nil {
+		errorCh <- err
+		return
+	}
+	groupsCh <- groups
+}
+
+func fetchAggregatingTasks(i *asynq.Inspector, qname, group string, pageSize, pageNum int,
+	tasksCh chan<- []*asynq.TaskInfo, errorCh chan<- error) {
+	tasks, err := i.ListAggregatingTasks(qname, group, asynq.PageSize(pageSize), asynq.Page(pageNum))
+	if err != nil {
+		errorCh <- err
+		return
+	}
+	tasksCh <- tasks
+}
+
 func fetchTasks(i *asynq.Inspector, qname string, taskState asynq.TaskState, pageSize, pageNum int,
 	tasksCh chan<- []*asynq.TaskInfo, errorCh chan<- error) {
 	var (

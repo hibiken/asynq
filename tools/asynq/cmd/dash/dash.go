@@ -29,14 +29,17 @@ const (
 type State struct {
 	queues    []*asynq.QueueInfo
 	tasks     []*asynq.TaskInfo
+	groups    []*asynq.GroupInfo
 	redisInfo redisInfo
 	err       error
 
 	queueTableRowIdx int             // highlighted row in queue table
 	taskTableRowIdx  int             // highlighted row in task table
+	groupTableRowIdx int             // highlighted row in group table
 	taskState        asynq.TaskState // highlighted task state in queue details view
 
 	selectedQueue *asynq.QueueInfo // queue shown on queue details view
+	selectedGroup *asynq.GroupInfo
 
 	pageNum int // pagination page number
 
@@ -78,6 +81,7 @@ func Run(opts Options) {
 		errorCh     = make(chan error)
 		queueCh     = make(chan *asynq.QueueInfo)
 		queuesCh    = make(chan []*asynq.QueueInfo)
+		groupsCh    = make(chan []*asynq.GroupInfo)
 		tasksCh     = make(chan []*asynq.TaskInfo)
 		redisInfoCh = make(chan *redisInfo)
 	)
@@ -144,30 +148,60 @@ func Run(opts Options) {
 					}
 					drawDash(s, baseStyle, &state, opts)
 				} else if (ev.Key() == tcell.KeyDown || ev.Rune() == 'j') && state.view == viewTypeQueueDetails {
-					if state.taskTableRowIdx < len(state.tasks) {
-						state.taskTableRowIdx++
+					if shouldShowGroupTable(&state) {
+						if state.groupTableRowIdx < groupPageSize(s) {
+							state.groupTableRowIdx++
+						} else {
+							state.groupTableRowIdx = 0 // loop back
+						}
 					} else {
-						state.taskTableRowIdx = 0 // loop back
+						if state.taskTableRowIdx < len(state.tasks) {
+							state.taskTableRowIdx++
+						} else {
+							state.taskTableRowIdx = 0 // loop back
+						}
 					}
 					drawDash(s, baseStyle, &state, opts)
 				} else if (ev.Key() == tcell.KeyUp || ev.Rune() == 'k') && state.view == viewTypeQueueDetails {
-					if state.taskTableRowIdx == 0 {
-						state.taskTableRowIdx = len(state.tasks)
+					if shouldShowGroupTable(&state) {
+						if state.groupTableRowIdx == 0 {
+							state.groupTableRowIdx = groupPageSize(s)
+						} else {
+							state.groupTableRowIdx--
+						}
 					} else {
-						state.taskTableRowIdx--
+						if state.taskTableRowIdx == 0 {
+							state.taskTableRowIdx = len(state.tasks)
+						} else {
+							state.taskTableRowIdx--
+						}
 					}
 					drawDash(s, baseStyle, &state, opts)
 				} else if ev.Key() == tcell.KeyEnter {
-					if state.view == viewTypeQueues && state.queueTableRowIdx != 0 {
-						state.selectedQueue = state.queues[state.queueTableRowIdx-1]
-						state.view = viewTypeQueueDetails
-						state.taskState = asynq.TaskStateActive
-						state.tasks = nil
-						state.pageNum = 1
-						go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-							taskPageSize(s), state.pageNum, tasksCh, errorCh)
-						ticker.Reset(interval)
-						drawDash(s, baseStyle, &state, opts)
+					switch state.view {
+					case viewTypeQueues:
+						if state.queueTableRowIdx != 0 {
+							state.selectedQueue = state.queues[state.queueTableRowIdx-1]
+							state.view = viewTypeQueueDetails
+							state.taskState = asynq.TaskStateActive
+							state.tasks = nil
+							state.pageNum = 1
+							go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
+								taskPageSize(s), state.pageNum, tasksCh, errorCh)
+							ticker.Reset(interval)
+							drawDash(s, baseStyle, &state, opts)
+						}
+					case viewTypeQueueDetails:
+						if shouldShowGroupTable(&state) && state.groupTableRowIdx != 0 {
+							state.selectedGroup = state.groups[state.groupTableRowIdx-1]
+							state.tasks = nil
+							state.pageNum = 1
+							go fetchAggregatingTasks(inspector, state.selectedQueue.Queue, state.selectedGroup.Group,
+								taskPageSize(s), state.pageNum, tasksCh, errorCh)
+							ticker.Reset(interval)
+							drawDash(s, baseStyle, &state, opts)
+						}
+
 					}
 				} else if ev.Rune() == '?' {
 					state.prevView = state.view
@@ -196,8 +230,13 @@ func Run(opts Options) {
 					state.pageNum = 1
 					state.taskTableRowIdx = 0
 					state.tasks = nil
-					go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-						taskPageSize(s), state.pageNum, tasksCh, errorCh)
+					state.selectedGroup = nil
+					if shouldShowGroupTable(&state) {
+						go fetchGroups(inspector, state.selectedQueue.Queue, groupsCh, errorCh)
+					} else {
+						go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
+							taskPageSize(s), state.pageNum, tasksCh, errorCh)
+					}
 					ticker.Reset(interval)
 					drawDash(s, baseStyle, &state, opts)
 				} else if (ev.Key() == tcell.KeyLeft || ev.Rune() == 'h') && state.view == viewTypeQueueDetails {
@@ -205,25 +244,50 @@ func Run(opts Options) {
 					state.pageNum = 1
 					state.taskTableRowIdx = 0
 					state.tasks = nil
-					go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-						taskPageSize(s), state.pageNum, tasksCh, errorCh)
+					state.selectedGroup = nil
+					if shouldShowGroupTable(&state) {
+						go fetchGroups(inspector, state.selectedQueue.Queue, groupsCh, errorCh)
+					} else {
+						go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
+							taskPageSize(s), state.pageNum, tasksCh, errorCh)
+					}
 					ticker.Reset(interval)
 					drawDash(s, baseStyle, &state, opts)
 				} else if ev.Rune() == 'n' && state.view == viewTypeQueueDetails {
-					pageSize := taskPageSize(s)
-					totalCount := getTaskCount(state.selectedQueue, state.taskState)
-					if (state.pageNum-1)*pageSize+len(state.tasks) < totalCount {
-						state.pageNum++
-						go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-							pageSize, state.pageNum, tasksCh, errorCh)
-						ticker.Reset(interval)
+					if shouldShowGroupTable(&state) {
+						pageSize := groupPageSize(s)
+						total := len(state.groups)
+						start := (state.pageNum - 1) * pageSize
+						end := start + pageSize
+						if end <= total {
+							state.pageNum++
+							drawDash(s, baseStyle, &state, opts)
+						}
+					} else {
+						pageSize := taskPageSize(s)
+						totalCount := getTaskCount(state.selectedQueue, state.taskState)
+						if (state.pageNum-1)*pageSize+len(state.tasks) < totalCount {
+							state.pageNum++
+							go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
+								pageSize, state.pageNum, tasksCh, errorCh)
+							ticker.Reset(interval)
+						}
 					}
 				} else if ev.Rune() == 'p' && state.view == viewTypeQueueDetails {
-					if state.pageNum > 1 {
-						state.pageNum--
-						go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-							taskPageSize(s), state.pageNum, tasksCh, errorCh)
-						ticker.Reset(interval)
+					if shouldShowGroupTable(&state) {
+						pageSize := groupPageSize(s)
+						start := (state.pageNum - 1) * pageSize
+						if start > 0 {
+							state.pageNum--
+							drawDash(s, baseStyle, &state, opts)
+						}
+					} else {
+						if state.pageNum > 1 {
+							state.pageNum--
+							go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
+								taskPageSize(s), state.pageNum, tasksCh, errorCh)
+							ticker.Reset(interval)
+						}
 					}
 				}
 			}
@@ -234,8 +298,15 @@ func Run(opts Options) {
 				go fetchQueues(inspector, queuesCh, errorCh, opts)
 			case viewTypeQueueDetails:
 				go fetchQueueInfo(inspector, state.selectedQueue.Queue, queueCh, errorCh)
-				go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-					taskPageSize(s), state.pageNum, tasksCh, errorCh)
+				if shouldShowGroupTable(&state) {
+					go fetchGroups(inspector, state.selectedQueue.Queue, groupsCh, errorCh)
+				} else if state.taskState == asynq.TaskStateAggregating {
+					go fetchAggregatingTasks(inspector, state.selectedQueue.Queue, state.selectedGroup.Group,
+						taskPageSize(s), state.pageNum, tasksCh, errorCh)
+				} else {
+					go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
+						taskPageSize(s), state.pageNum, tasksCh, errorCh)
+				}
 			case viewTypeRedis:
 				go fetchRedisInfo(redisInfoCh, errorCh)
 			}
@@ -247,6 +318,11 @@ func Run(opts Options) {
 
 		case q := <-queueCh:
 			state.selectedQueue = q
+			state.err = nil
+			drawDash(s, baseStyle, &state, opts)
+
+		case groups := <-groupsCh:
+			state.groups = groups
 			state.err = nil
 			drawDash(s, baseStyle, &state, opts)
 
