@@ -28,9 +28,6 @@ jobs:
       - name: Build x module
         run: cd x && go build -v ./... && cd ..
 
-      - name: Build tools module
-        run: cd tools && go build -v ./... && cd ..
-
       - name: Test core module
         run: go test -race -v -coverprofile=coverage.txt -covermode=atomic ./...
 
@@ -42,3 +39,29 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
+
+  build-tool:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        go-version: [1.18.x]
+    runs-on: ${{ matrix.os }}
+    services:
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Build tools module
+        run: cd tools && go build -v ./... && cd ..
+
+      - name: Test tools module
+        run: cd tools && go test -race -v ./... && cd ..
+
