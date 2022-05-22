@@ -72,13 +72,19 @@ func Run(opts Options) {
 		fmt.Printf("failed to initialize screen: %v\n", err)
 		os.Exit(1)
 	}
-	// Set default text style
-	s.SetStyle(baseStyle)
+	s.SetStyle(baseStyle) // set default text style
+	opts.PollInterval = 2 * time.Second
 
-	inspector := asynq.NewInspector(asynq.RedisClientOpt{Addr: ":6379"})
-
-	// channels to send/receive data fetched asynchronously
 	var (
+		state = State{} // confined in this goroutine only; DO NOT SHARE
+
+		inspector = asynq.NewInspector(asynq.RedisClientOpt{Addr: ":6379"})
+		ticker    = time.NewTicker(opts.PollInterval)
+
+		eventCh = make(chan tcell.Event)
+		done    = make(chan struct{})
+
+		// channels to send/receive data fetched asynchronously
 		errorCh     = make(chan error)
 		queueCh     = make(chan *asynq.QueueInfo)
 		queuesCh    = make(chan []*asynq.QueueInfo)
@@ -86,17 +92,6 @@ func Run(opts Options) {
 		tasksCh     = make(chan []*asynq.TaskInfo)
 		redisInfoCh = make(chan *redisInfo)
 	)
-	go fetchQueues(inspector, queuesCh, errorCh, opts)
-
-	var state State // contained in this goroutine only; do not share
-
-	// draw initial screen
-	drawDash(s, &state, opts)
-
-	eventCh := make(chan tcell.Event)
-	done := make(chan struct{})
-	opts.PollInterval = 2 * time.Second
-	ticker := time.NewTicker(opts.PollInterval)
 	defer ticker.Stop()
 
 	f := dataFetcher{
@@ -111,16 +106,22 @@ func Run(opts Options) {
 		redisInfoCh,
 	}
 
+	d := dashDrawer{
+		s,
+		opts,
+	}
+
 	h := keyEventHandler{
 		s:       s,
 		fetcher: &f,
+		drawer:  &d,
 		state:   &state,
-		opts:    opts,
 		done:    done,
 	}
 
-	// TODO: Double check that we are not leaking goroutine with this one.
-	go s.ChannelEvents(eventCh, done)
+	go fetchQueues(inspector, queuesCh, errorCh, opts)
+	go s.ChannelEvents(eventCh, done) // TODO: Double check that we are not leaking goroutine with this one.
+	d.draw(&state)                    // draw initial screen
 
 	for {
 		// Update screen
@@ -158,31 +159,31 @@ func Run(opts Options) {
 		case queues := <-queuesCh:
 			state.queues = queues
 			state.err = nil
-			drawDash(s, &state, opts)
+			d.draw(&state)
 
 		case q := <-queueCh:
 			state.selectedQueue = q
 			state.err = nil
-			drawDash(s, &state, opts)
+			d.draw(&state)
 
 		case groups := <-groupsCh:
 			state.groups = groups
 			state.err = nil
-			drawDash(s, &state, opts)
+			d.draw(&state)
 
 		case tasks := <-tasksCh:
 			state.tasks = tasks
 			state.err = nil
-			drawDash(s, &state, opts)
+			d.draw(&state)
 
 		case redisInfo := <-redisInfoCh:
 			state.redisInfo = *redisInfo
 			state.err = nil
-			drawDash(s, &state, opts)
+			d.draw(&state)
 
 		case err := <-errorCh:
 			state.err = err
-			drawDash(s, &state, opts)
+			d.draw(&state)
 		}
 	}
 

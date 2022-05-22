@@ -16,7 +16,18 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
-func drawDash(s tcell.Screen, state *State, opts Options) {
+// drawer draws UI with the given state.
+type drawer interface {
+	draw(state *State)
+}
+
+type dashDrawer struct {
+	s    tcell.Screen
+	opts Options
+}
+
+func (dd *dashDrawer) draw(state *State) {
+	s, opts := dd.s, dd.opts
 	s.Clear()
 	// Simulate data update on every render
 	d := NewScreenDrawer(s)

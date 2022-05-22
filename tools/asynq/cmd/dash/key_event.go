@@ -11,13 +11,15 @@ import (
 	"github.com/hibiken/asynq"
 )
 
+// keyEventHandler handles keyboard events and updates the state.
+// It delegates data fetching to fetcher and UI rendering to drawer.
 type keyEventHandler struct {
 	s     tcell.Screen
 	state *State
-	opts  Options
 	done  chan struct{}
 
-	fetcher *dataFetcher
+	fetcher fetcher
+	drawer  drawer
 }
 
 func (h *keyEventHandler) quit() {
@@ -62,16 +64,15 @@ func (h *keyEventHandler) HandleKeyEvent(ev *tcell.EventKey) {
 
 func (h *keyEventHandler) goBack() {
 	var (
-		s     = h.s
 		state = h.state
-		opts  = h.opts
+		d     = h.drawer
 	)
 	if state.view == viewTypeHelp {
 		state.view = state.prevView // exit help
-		drawDash(s, state, opts)
+		d.draw(state)
 	} else if state.view == viewTypeQueueDetails {
 		state.view = viewTypeQueues
-		drawDash(s, state, opts)
+		d.draw(state)
 	} else {
 		h.quit()
 	}
@@ -92,11 +93,11 @@ func (h *keyEventHandler) downKeyQueues() {
 	} else {
 		h.state.queueTableRowIdx = 0 // loop back
 	}
-	drawDash(h.s, h.state, h.opts)
+	h.drawer.draw(h.state)
 }
 
 func (h *keyEventHandler) downKeyQueueDetails() {
-	s, state, opts := h.s, h.state, h.opts
+	s, state := h.s, h.state
 	if shouldShowGroupTable(state) {
 		if state.groupTableRowIdx < groupPageSize(s) {
 			state.groupTableRowIdx++
@@ -110,7 +111,7 @@ func (h *keyEventHandler) downKeyQueueDetails() {
 			state.taskTableRowIdx = 0 // loop back
 		}
 	}
-	drawDash(s, state, opts)
+	h.drawer.draw(state)
 }
 
 func (h *keyEventHandler) handleUpKey() {
@@ -123,17 +124,17 @@ func (h *keyEventHandler) handleUpKey() {
 }
 
 func (h *keyEventHandler) upKeyQueues() {
-	s, state, opts := h.s, h.state, h.opts
+	state := h.state
 	if state.queueTableRowIdx == 0 {
 		state.queueTableRowIdx = len(state.queues)
 	} else {
 		state.queueTableRowIdx--
 	}
-	drawDash(s, state, opts)
+	h.drawer.draw(state)
 }
 
 func (h *keyEventHandler) upKeyQueueDetails() {
-	s, state, opts := h.s, h.state, h.opts
+	s, state := h.s, h.state
 	if shouldShowGroupTable(state) {
 		if state.groupTableRowIdx == 0 {
 			state.groupTableRowIdx = groupPageSize(s)
@@ -147,7 +148,7 @@ func (h *keyEventHandler) upKeyQueueDetails() {
 			state.taskTableRowIdx--
 		}
 	}
-	drawDash(s, state, opts)
+	h.drawer.draw(state)
 }
 
 func (h *keyEventHandler) handleEnterKey() {
@@ -163,8 +164,8 @@ func (h *keyEventHandler) enterKeyQueues() {
 	var (
 		s     = h.s
 		state = h.state
-		opts  = h.opts
 		f     = h.fetcher
+		d     = h.drawer
 	)
 	if state.queueTableRowIdx != 0 {
 		state.selectedQueue = state.queues[state.queueTableRowIdx-1]
@@ -173,7 +174,7 @@ func (h *keyEventHandler) enterKeyQueues() {
 		state.tasks = nil
 		state.pageNum = 1
 		f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
-		drawDash(s, state, opts)
+		d.draw(state)
 	}
 }
 
@@ -181,15 +182,15 @@ func (h *keyEventHandler) enterKeyQueueDetails() {
 	var (
 		s     = h.s
 		state = h.state
-		opts  = h.opts
 		f     = h.fetcher
+		d     = h.drawer
 	)
 	if shouldShowGroupTable(state) && state.groupTableRowIdx != 0 {
 		state.selectedGroup = state.groups[state.groupTableRowIdx-1]
 		state.tasks = nil
 		state.pageNum = 1
 		f.fetchAggregatingTasks(state.selectedQueue.Queue, state.selectedGroup.Group, taskPageSize(s), state.pageNum)
-		drawDash(s, state, opts)
+		d.draw(state)
 	}
 }
 
@@ -197,8 +198,8 @@ func (h *keyEventHandler) handleLeftKey() {
 	var (
 		s     = h.s
 		state = h.state
-		opts  = h.opts
 		f     = h.fetcher
+		d     = h.drawer
 	)
 	if state.view == viewTypeQueueDetails {
 		state.taskState = prevTaskState(state.taskState)
@@ -211,7 +212,7 @@ func (h *keyEventHandler) handleLeftKey() {
 		} else {
 			f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
 		}
-		drawDash(s, state, opts)
+		d.draw(state)
 	}
 }
 
@@ -219,8 +220,8 @@ func (h *keyEventHandler) handleRightKey() {
 	var (
 		s     = h.s
 		state = h.state
-		opts  = h.opts
 		f     = h.fetcher
+		d     = h.drawer
 	)
 	if state.view == viewTypeQueueDetails {
 		state.taskState = nextTaskState(state.taskState)
@@ -233,7 +234,7 @@ func (h *keyEventHandler) handleRightKey() {
 		} else {
 			f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
 		}
-		drawDash(s, state, opts)
+		d.draw(state)
 	}
 }
 
@@ -241,8 +242,8 @@ func (h *keyEventHandler) nextPage() {
 	var (
 		s     = h.s
 		state = h.state
-		opts  = h.opts
 		f     = h.fetcher
+		d     = h.drawer
 	)
 	if state.view == viewTypeQueueDetails {
 		if shouldShowGroupTable(state) {
@@ -252,7 +253,7 @@ func (h *keyEventHandler) nextPage() {
 			end := start + pageSize
 			if end <= total {
 				state.pageNum++
-				drawDash(s, state, opts)
+				d.draw(state)
 			}
 		} else {
 			pageSize := taskPageSize(s)
@@ -269,8 +270,8 @@ func (h *keyEventHandler) prevPage() {
 	var (
 		s     = h.s
 		state = h.state
-		opts  = h.opts
 		f     = h.fetcher
+		d     = h.drawer
 	)
 	if state.view == viewTypeQueueDetails {
 		if shouldShowGroupTable(state) {
@@ -278,7 +279,7 @@ func (h *keyEventHandler) prevPage() {
 			start := (state.pageNum - 1) * pageSize
 			if start > 0 {
 				state.pageNum--
-				drawDash(s, state, opts)
+				d.draw(state)
 			}
 		} else {
 			if state.pageNum > 1 {
@@ -291,67 +292,62 @@ func (h *keyEventHandler) prevPage() {
 
 func (h *keyEventHandler) showQueues() {
 	var (
-		s     = h.s
 		state = h.state
-		opts  = h.opts
 		f     = h.fetcher
+		d     = h.drawer
 	)
 	if state.view != viewTypeQueues {
 		f.fetchQueues()
 		state.view = viewTypeQueues
-		drawDash(s, state, opts)
+		d.draw(state)
 	}
 }
 
 func (h *keyEventHandler) showServers() {
 	var (
-		s     = h.s
 		state = h.state
-		opts  = h.opts
+		d     = h.drawer
 	)
 	if state.view != viewTypeServers {
 		//TODO Start data fetch and reset ticker
 		state.view = viewTypeServers
-		drawDash(s, state, opts)
+		d.draw(state)
 	}
 }
 
 func (h *keyEventHandler) showSchedulers() {
 	var (
-		s     = h.s
 		state = h.state
-		opts  = h.opts
+		d     = h.drawer
 	)
 	if state.view != viewTypeSchedulers {
 		//TODO Start data fetch and reset ticker
 		state.view = viewTypeSchedulers
-		drawDash(s, state, opts)
+		d.draw(state)
 	}
 }
 
 func (h *keyEventHandler) showRedisInfo() {
 	var (
-		s     = h.s
 		state = h.state
-		opts  = h.opts
 		f     = h.fetcher
+		d     = h.drawer
 	)
 	if state.view != viewTypeRedis {
 		f.fetchRedisInfo()
 		state.view = viewTypeRedis
-		drawDash(s, state, opts)
+		d.draw(state)
 	}
 }
 
 func (h *keyEventHandler) showHelp() {
 	var (
-		s     = h.s
 		state = h.state
-		opts  = h.opts
+		d     = h.drawer
 	)
 	if state.view != viewTypeHelp {
 		state.prevView = state.view
 		state.view = viewTypeHelp
-		drawDash(s, state, opts)
+		d.draw(state)
 	}
 }

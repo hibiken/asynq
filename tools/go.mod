@@ -7,6 +7,7 @@ require (
 	github.com/fatih/color v1.9.0
 	github.com/gdamore/tcell/v2 v2.5.1
 	github.com/go-redis/redis/v8 v8.11.4
+	github.com/google/go-cmp v0.5.6
 	github.com/hibiken/asynq v0.23.0
 	github.com/hibiken/asynq/x v0.0.0-20220131170841-349f4c50fb1d
 	github.com/mattn/go-runewidth v0.0.13

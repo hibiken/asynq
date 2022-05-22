@@ -11,6 +11,15 @@ import (
 	"github.com/hibiken/asynq"
 )
 
+type fetcher interface {
+	fetchQueues()
+	fetchQueueInfo(qname string)
+	fetchRedisInfo()
+	fetchTasks(qname string, taskState asynq.TaskState, pageSize, pageNum int)
+	fetchAggregatingTasks(qname, group string, pageSize, pageNum int)
+	fetchGroups(qname string)
+}
+
 type dataFetcher struct {
 	ticker    *time.Ticker
 	inspector *asynq.Inspector
