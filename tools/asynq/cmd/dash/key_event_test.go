@@ -32,10 +32,51 @@ type keyEventHandlerTest struct {
 func TestKeyEventHandler(t *testing.T) {
 	tests := []*keyEventHandlerTest{
 		{
-			desc:      "navigates to help page",
+			desc:      "navigates to help view",
 			state:     &State{view: viewTypeQueues},
 			events:    []*tcell.EventKey{tcell.NewEventKey(tcell.KeyRune, '?', tcell.ModNone)},
 			wantState: State{view: viewTypeHelp},
+		},
+		{
+			desc: "navigates to queue details view",
+			state: &State{
+				view: viewTypeQueues,
+				queues: []*asynq.QueueInfo{
+					{Queue: "default", Size: 100, Active: 10, Pending: 40, Scheduled: 40, Completed: 10},
+				},
+				queueTableRowIdx: 0,
+			},
+			events: []*tcell.EventKey{
+				tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone),   // down
+				tcell.NewEventKey(tcell.KeyEnter, '\n', tcell.ModNone), // Enter
+			},
+			wantState: State{
+				view: viewTypeQueueDetails,
+				queues: []*asynq.QueueInfo{
+					{Queue: "default", Size: 100, Active: 10, Pending: 40, Scheduled: 40, Completed: 10},
+				},
+				selectedQueue:    &asynq.QueueInfo{Queue: "default", Size: 100, Active: 10, Pending: 40, Scheduled: 40, Completed: 10},
+				queueTableRowIdx: 1,
+				taskState:        asynq.TaskStateActive,
+				pageNum:          1,
+			},
+		},
+		{
+			desc: "does nothing if no queues are present",
+			state: &State{
+				view:             viewTypeQueues,
+				queues:           []*asynq.QueueInfo{}, // empty
+				queueTableRowIdx: 0,
+			},
+			events: []*tcell.EventKey{
+				tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone),   // down
+				tcell.NewEventKey(tcell.KeyEnter, '\n', tcell.ModNone), // Enter
+			},
+			wantState: State{
+				view:             viewTypeQueues,
+				queues:           []*asynq.QueueInfo{},
+				queueTableRowIdx: 0,
+			},
 		},
 		// TODO: Add more tests
 	}
