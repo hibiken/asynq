@@ -71,8 +71,15 @@ func (h *keyEventHandler) goBack() {
 		state.view = state.prevView // exit help
 		d.draw(state)
 	} else if state.view == viewTypeQueueDetails {
-		state.view = viewTypeQueues
-		d.draw(state)
+		// if task modal is open close it; otherwise go back to the previous view
+		if state.taskID != "" {
+			state.taskID = ""
+			state.selectedTask = nil
+			d.draw(state)
+		} else {
+			state.view = viewTypeQueues
+			d.draw(state)
+		}
 	} else {
 		h.quit()
 	}
@@ -191,7 +198,14 @@ func (h *keyEventHandler) enterKeyQueueDetails() {
 		state.pageNum = 1
 		f.fetchAggregatingTasks(state.selectedQueue.Queue, state.selectedGroup.Group, taskPageSize(s), state.pageNum)
 		d.draw(state)
+	} else if !shouldShowGroupTable(state) && state.taskTableRowIdx != 0 {
+		task := state.tasks[state.taskTableRowIdx-1]
+		state.taskID = task.ID
+		state.selectedTask = task
+		// TODO: go fetch task info
+		d.draw(state)
 	}
+
 }
 
 func (h *keyEventHandler) handleLeftKey() {

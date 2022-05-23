@@ -78,6 +78,87 @@ func TestKeyEventHandler(t *testing.T) {
 				queueTableRowIdx: 0,
 			},
 		},
+		{
+			desc: "opens task info modal",
+			state: &State{
+				view: viewTypeQueueDetails,
+				queues: []*asynq.QueueInfo{
+					{Queue: "default", Size: 500, Active: 10, Pending: 40},
+				},
+				queueTableRowIdx: 1,
+				selectedQueue:    &asynq.QueueInfo{Queue: "default", Size: 50, Active: 10, Pending: 40},
+				taskState:        asynq.TaskStatePending,
+				pageNum:          1,
+				tasks: []*asynq.TaskInfo{
+					{ID: "xxxx", Type: "foo"},
+					{ID: "yyyy", Type: "bar"},
+					{ID: "zzzz", Type: "baz"},
+				},
+				taskTableRowIdx: 2,
+			},
+			events: []*tcell.EventKey{
+				tcell.NewEventKey(tcell.KeyEnter, '\n', tcell.ModNone), // Enter
+			},
+			wantState: State{
+				view: viewTypeQueueDetails,
+				queues: []*asynq.QueueInfo{
+					{Queue: "default", Size: 500, Active: 10, Pending: 40},
+				},
+				queueTableRowIdx: 1,
+				selectedQueue:    &asynq.QueueInfo{Queue: "default", Size: 50, Active: 10, Pending: 40},
+				taskState:        asynq.TaskStatePending,
+				pageNum:          1,
+				tasks: []*asynq.TaskInfo{
+					{ID: "xxxx", Type: "foo"},
+					{ID: "yyyy", Type: "bar"},
+					{ID: "zzzz", Type: "baz"},
+				},
+				taskTableRowIdx: 2,
+				// new states
+				taskID:       "yyyy",
+				selectedTask: &asynq.TaskInfo{ID: "yyyy", Type: "bar"},
+			},
+		},
+		{
+			desc: "Esc closes task info modal",
+			state: &State{
+				view: viewTypeQueueDetails,
+				queues: []*asynq.QueueInfo{
+					{Queue: "default", Size: 500, Active: 10, Pending: 40},
+				},
+				queueTableRowIdx: 1,
+				selectedQueue:    &asynq.QueueInfo{Queue: "default", Size: 50, Active: 10, Pending: 40},
+				taskState:        asynq.TaskStatePending,
+				pageNum:          1,
+				tasks: []*asynq.TaskInfo{
+					{ID: "xxxx", Type: "foo"},
+					{ID: "yyyy", Type: "bar"},
+					{ID: "zzzz", Type: "baz"},
+				},
+				taskTableRowIdx: 2,
+				taskID:          "yyyy", // presence of this field opens the modal
+			},
+			events: []*tcell.EventKey{
+				tcell.NewEventKey(tcell.KeyEscape, ' ', tcell.ModNone), // Esc
+			},
+			wantState: State{
+				view: viewTypeQueueDetails,
+				queues: []*asynq.QueueInfo{
+					{Queue: "default", Size: 500, Active: 10, Pending: 40},
+				},
+				queueTableRowIdx: 1,
+				selectedQueue:    &asynq.QueueInfo{Queue: "default", Size: 50, Active: 10, Pending: 40},
+				taskState:        asynq.TaskStatePending,
+				pageNum:          1,
+				tasks: []*asynq.TaskInfo{
+					{ID: "xxxx", Type: "foo"},
+					{ID: "yyyy", Type: "bar"},
+					{ID: "zzzz", Type: "baz"},
+				},
+				taskTableRowIdx: 2,
+				taskID:          "", // this field should be unset
+			},
+		},
 		// TODO: Add more tests
 	}
 

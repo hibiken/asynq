@@ -442,6 +442,9 @@ func drawTaskStateBreakdown(d *ScreenDrawer, style tcell.Style, state *State) {
 }
 
 func drawTaskModal(d *ScreenDrawer, state *State) {
+	if state.taskID == "" {
+		return
+	}
 	contents := []*rowContent{
 		{" === Task Summary ===", baseStyle.Bold(true)},
 		{"", baseStyle},

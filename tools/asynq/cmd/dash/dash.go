@@ -37,6 +37,7 @@ type State struct {
 	taskTableRowIdx  int             // highlighted row in task table
 	groupTableRowIdx int             // highlighted row in group table
 	taskState        asynq.TaskState // highlighted task state in queue details view
+	taskID           string          // selected task ID
 
 	selectedQueue *asynq.QueueInfo // queue shown on queue details view
 	selectedGroup *asynq.GroupInfo
