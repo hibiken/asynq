@@ -49,6 +49,7 @@ func (dd *dashDrawer) draw(state *State) {
 		drawTaskStateBreakdown(d, baseStyle, state)
 		d.NL()
 		drawTaskTable(d, state)
+		drawTaskModal(d, state)
 	case viewTypeServers:
 		d.Println("=== Servers ===", baseStyle.Bold(true))
 		d.NL()
@@ -438,4 +439,75 @@ func drawTaskStateBreakdown(d *ScreenDrawer, style tcell.Style, state *State) {
 		d.Print(pad, style)
 	}
 	d.NL()
+}
+
+func drawTaskModal(d *ScreenDrawer, state *State) {
+	contents := []*rowContent{
+		{" === Task Summary ===", baseStyle.Bold(true)},
+		{"", baseStyle},
+		{" ID: xxxxx", baseStyle},
+		{" Type: xxxxx", baseStyle},
+		{" State: xxxx", baseStyle},
+	}
+	withModal(d, contents)
+}
+
+type rowContent struct {
+	s     string // should not include newline
+	style tcell.Style
+}
+
+func withModal(d *ScreenDrawer, contents []*rowContent) {
+	modalStyle := baseStyle //.Background(tcell.ColorDarkMagenta)
+	w, h := d.Screen().Size()
+	var (
+		modalWidth  = int(math.Floor(float64(w) * 0.6))
+		modalHeight = int(math.Floor(float64(h) * 0.6))
+		rowOffset   = int(math.Floor(float64(h) * 0.2)) // 20% from the top
+		colOffset   = int(math.Floor(float64(w) * 0.2)) // 20% from the left
+	)
+	if modalHeight < 3 {
+		return // no content can be shown
+	}
+	d.Goto(colOffset, rowOffset)
+	d.Print(string(tcell.RuneULCorner), modalStyle)
+	d.Print(strings.Repeat(string(tcell.RuneHLine), modalWidth-2), modalStyle)
+	d.Print(string(tcell.RuneURCorner), modalStyle)
+	d.NL()
+	for i := 1; i < modalHeight-1; i++ {
+		d.Goto(colOffset, rowOffset+i)
+		d.Print(string(tcell.RuneVLine), modalStyle)
+		cnt := &rowContent{strings.Repeat(" ", modalWidth-2), baseStyle}
+		if i <= len(contents) {
+			cnt = contents[i-1]
+			cnt.s = adjustWidth(cnt.s, modalWidth-2)
+		}
+		d.Print(truncate(cnt.s, modalWidth-2), cnt.style)
+		d.Print(string(tcell.RuneVLine), modalStyle)
+		d.NL()
+	}
+	d.Goto(colOffset, rowOffset+modalHeight-1)
+	d.Print(string(tcell.RuneLLCorner), modalStyle)
+	d.Print(strings.Repeat(string(tcell.RuneHLine), modalWidth-2), modalStyle)
+	d.Print(string(tcell.RuneLRCorner), modalStyle)
+	d.NL()
+}
+
+func adjustWidth(s string, width int) string {
+	sw := runewidth.StringWidth(s)
+	if sw > width {
+		return truncate(s, width)
+	}
+	var b strings.Builder
+	b.WriteString(s)
+	b.WriteString(strings.Repeat(" ", width-sw))
+	return b.String()
+}
+
+// truncates s if s exceeds max length.
+func truncate(s string, max int) string {
+	if runewidth.StringWidth(s) <= max {
+		return s
+	}
+	return string([]rune(s)[:max-1]) + "…"
 }

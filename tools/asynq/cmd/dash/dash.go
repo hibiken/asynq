@@ -40,6 +40,7 @@ type State struct {
 
 	selectedQueue *asynq.QueueInfo // queue shown on queue details view
 	selectedGroup *asynq.GroupInfo
+	selectedTask  *asynq.TaskInfo
 
 	pageNum int // pagination page number
 

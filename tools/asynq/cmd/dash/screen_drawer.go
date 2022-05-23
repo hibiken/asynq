@@ -57,6 +57,12 @@ func (d *ScreenDrawer) Screen() tcell.Screen {
 	return d.l.s
 }
 
+// Goto moves the screendrawer to the specified cell.
+func (d *ScreenDrawer) Goto(x, y int) {
+	d.l.row = y
+	d.l.col = x
+}
+
 // Go to the bottom of the screen.
 func (d *ScreenDrawer) GoToBottom() {
 	_, h := d.Screen().Size()
