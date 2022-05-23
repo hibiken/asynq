@@ -210,9 +210,10 @@ func (h *keyEventHandler) enterKeyQueueDetails() {
 		d.draw(state)
 	} else if !shouldShowGroupTable(state) && state.taskTableRowIdx != 0 {
 		task := state.tasks[state.taskTableRowIdx-1]
-		state.taskID = task.ID
 		state.selectedTask = task
-		// TODO: go fetch task info
+		state.taskID = task.ID
+		f.fetchTaskInfo(state.selectedQueue.Queue, task.ID)
+		h.resetTicker()
 		d.draw(state)
 	}
 

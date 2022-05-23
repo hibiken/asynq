@@ -14,6 +14,7 @@ type fetcher interface {
 	fetchQueues()
 	fetchQueueInfo(qname string)
 	fetchRedisInfo()
+	fetchTaskInfo(qname, taskID string)
 	fetchTasks(qname string, taskState asynq.TaskState, pageSize, pageNum int)
 	fetchAggregatingTasks(qname, group string, pageSize, pageNum int)
 	fetchGroups(qname string)
@@ -25,6 +26,7 @@ type dataFetcher struct {
 
 	errorCh     chan<- error
 	queueCh     chan<- *asynq.QueueInfo
+	taskCh      chan<- *asynq.TaskInfo
 	queuesCh    chan<- []*asynq.QueueInfo
 	groupsCh    chan<- []*asynq.GroupInfo
 	tasksCh     chan<- []*asynq.TaskInfo
@@ -168,4 +170,22 @@ func fetchTasks(i *asynq.Inspector, qname string, taskState asynq.TaskState, pag
 		return
 	}
 	tasksCh <- tasks
+}
+
+func (f *dataFetcher) fetchTaskInfo(qname, taskID string) {
+	var (
+		i       = f.inspector
+		taskCh  = f.taskCh
+		errorCh = f.errorCh
+	)
+	go fetchTaskInfo(i, qname, taskID, taskCh, errorCh)
+}
+
+func fetchTaskInfo(i *asynq.Inspector, qname, taskID string, taskCh chan<- *asynq.TaskInfo, errorCh chan<- error) {
+	info, err := i.GetTaskInfo(qname, taskID)
+	if err != nil {
+		errorCh <- err
+		return
+	}
+	taskCh <- info
 }

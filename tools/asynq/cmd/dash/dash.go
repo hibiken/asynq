@@ -5,6 +5,7 @@
 package dash
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -90,6 +91,7 @@ func Run(opts Options) {
 		// channels to send/receive data fetched asynchronously
 		errorCh     = make(chan error)
 		queueCh     = make(chan *asynq.QueueInfo)
+		taskCh      = make(chan *asynq.TaskInfo)
 		queuesCh    = make(chan []*asynq.QueueInfo)
 		groupsCh    = make(chan []*asynq.GroupInfo)
 		tasksCh     = make(chan []*asynq.TaskInfo)
@@ -102,6 +104,7 @@ func Run(opts Options) {
 		opts,
 		errorCh,
 		queueCh,
+		taskCh,
 		queuesCh,
 		groupsCh,
 		tasksCh,
@@ -156,6 +159,11 @@ func Run(opts Options) {
 					go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
 						taskPageSize(s), state.pageNum, tasksCh, errorCh)
 				}
+				// if the task modal is open, fetch the selected task's info
+				if state.taskID != "" {
+					go fetchTaskInfo(inspector, state.selectedQueue.Queue, state.taskID, taskCh, errorCh)
+				}
+
 			case viewTypeRedis:
 				go fetchRedisInfo(redisInfoCh, errorCh)
 			}
@@ -189,13 +197,22 @@ func Run(opts Options) {
 			}
 			d.draw(&state)
 
+		case t := <-taskCh:
+			state.selectedTask = t
+			state.err = nil
+			d.draw(&state)
+
 		case redisInfo := <-redisInfoCh:
 			state.redisInfo = *redisInfo
 			state.err = nil
 			d.draw(&state)
 
 		case err := <-errorCh:
-			state.err = err
+			if errors.Is(err, asynq.ErrTaskNotFound) {
+				state.selectedTask = nil
+			} else {
+				state.err = err
+			}
 			d.draw(&state)
 		}
 	}

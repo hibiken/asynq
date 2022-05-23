@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/hibiken/asynq"
@@ -445,14 +447,72 @@ func drawTaskModal(d *ScreenDrawer, state *State) {
 	if state.taskID == "" {
 		return
 	}
+	task := state.selectedTask
+	if task == nil {
+		// task no longer found
+		contents := []*rowContent{
+			{" === Task Summary ===", baseStyle.Bold(true)},
+			{"", baseStyle},
+			{fmt.Sprintf(" Task %q no longer exists", state.taskID), baseStyle},
+		}
+		withModal(d, contents)
+		return
+	}
 	contents := []*rowContent{
 		{" === Task Summary ===", baseStyle.Bold(true)},
 		{"", baseStyle},
-		{" ID: xxxxx", baseStyle},
-		{" Type: xxxxx", baseStyle},
-		{" State: xxxx", baseStyle},
+		{fmt.Sprintf(" ID: %s", task.ID), baseStyle},
+		{fmt.Sprintf(" Type: %s", task.Type), baseStyle},
+		{fmt.Sprintf(" State: %s", task.State.String()), baseStyle},
+		{fmt.Sprintf(" Queue: %s", task.Queue), baseStyle},
+		{fmt.Sprintf(" Retried: %d/%d", task.Retried, task.MaxRetry), baseStyle},
+	}
+	if task.LastErr != "" {
+		contents = append(contents, &rowContent{
+			fmt.Sprintf(" Last Failure: %s", task.LastErr),
+			baseStyle,
+		})
+		contents = append(contents, &rowContent{
+			fmt.Sprintf(" Last Failure Time: %v", task.LastFailedAt),
+			baseStyle,
+		})
+	}
+	if !task.NextProcessAt.IsZero() {
+		contents = append(contents, &rowContent{
+			fmt.Sprintf(" Next Process Time: %v", task.NextProcessAt),
+			baseStyle,
+		})
+	}
+	if !task.CompletedAt.IsZero() {
+		contents = append(contents, &rowContent{
+			fmt.Sprintf(" Completion Time: %v", task.CompletedAt),
+			baseStyle,
+		})
+	}
+	if isPrintable(task.Payload) {
+		contents = append(contents, &rowContent{
+			fmt.Sprintf("Payload: %s", string(task.Payload)),
+			baseStyle,
+		})
 	}
 	withModal(d, contents)
+}
+
+// Reports whether the given byte slice is printable (i.e. human readable)
+func isPrintable(data []byte) bool {
+	if !utf8.Valid(data) {
+		return false
+	}
+	isAllSpace := true
+	for _, r := range string(data) {
+		if !unicode.IsGraphic(r) {
+			return false
+		}
+		if !unicode.IsSpace(r) {
+			isAllSpace = false
+		}
+	}
+	return !isAllSpace
 }
 
 type rowContent struct {

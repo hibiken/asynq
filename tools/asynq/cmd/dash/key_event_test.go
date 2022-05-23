@@ -183,6 +183,7 @@ type fakeFetcher struct{}
 func (f *fakeFetcher) fetchQueues()                                                              {}
 func (f *fakeFetcher) fetchQueueInfo(qname string)                                               {}
 func (f *fakeFetcher) fetchRedisInfo()                                                           {}
+func (f *fakeFetcher) fetchTaskInfo(qname, taskID string)                                        {}
 func (f *fakeFetcher) fetchTasks(qname string, taskState asynq.TaskState, pageSize, pageNum int) {}
 func (f *fakeFetcher) fetchAggregatingTasks(qname, group string, pageSize, pageNum int)          {}
 func (f *fakeFetcher) fetchGroups(qname string)                                                  {}
