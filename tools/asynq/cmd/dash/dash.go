@@ -33,6 +33,7 @@ type State struct {
 	redisInfo redisInfo
 	err       error
 
+	// Note: index zero corresponds to the table header; index=1 correctponds to the first element
 	queueTableRowIdx int             // highlighted row in queue table
 	taskTableRowIdx  int             // highlighted row in task table
 	groupTableRowIdx int             // highlighted row in group table
@@ -97,7 +98,6 @@ func Run(opts Options) {
 	defer ticker.Stop()
 
 	f := dataFetcher{
-		ticker,
 		inspector,
 		opts,
 		errorCh,
@@ -114,11 +114,13 @@ func Run(opts Options) {
 	}
 
 	h := keyEventHandler{
-		s:       s,
-		fetcher: &f,
-		drawer:  &d,
-		state:   &state,
-		done:    done,
+		s:            s,
+		fetcher:      &f,
+		drawer:       &d,
+		state:        &state,
+		done:         done,
+		ticker:       ticker,
+		pollInterval: opts.PollInterval,
 	}
 
 	go fetchQueues(inspector, queuesCh, errorCh, opts)
@@ -161,6 +163,9 @@ func Run(opts Options) {
 		case queues := <-queuesCh:
 			state.queues = queues
 			state.err = nil
+			if len(queues) < state.queueTableRowIdx {
+				state.queueTableRowIdx = len(queues)
+			}
 			d.draw(&state)
 
 		case q := <-queueCh:
@@ -171,11 +176,17 @@ func Run(opts Options) {
 		case groups := <-groupsCh:
 			state.groups = groups
 			state.err = nil
+			if len(groups) < state.groupTableRowIdx {
+				state.groupTableRowIdx = len(groups)
+			}
 			d.draw(&state)
 
 		case tasks := <-tasksCh:
 			state.tasks = tasks
 			state.err = nil
+			if len(tasks) < state.taskTableRowIdx {
+				state.taskTableRowIdx = len(tasks)
+			}
 			d.draw(&state)
 
 		case redisInfo := <-redisInfoCh:

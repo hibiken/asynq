@@ -6,6 +6,7 @@ package dash
 
 import (
 	"os"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/hibiken/asynq"
@@ -20,6 +21,9 @@ type keyEventHandler struct {
 
 	fetcher fetcher
 	drawer  drawer
+
+	ticker       *time.Ticker
+	pollInterval time.Duration
 }
 
 func (h *keyEventHandler) quit() {
@@ -167,6 +171,10 @@ func (h *keyEventHandler) handleEnterKey() {
 	}
 }
 
+func (h *keyEventHandler) resetTicker() {
+	h.ticker.Reset(h.pollInterval)
+}
+
 func (h *keyEventHandler) enterKeyQueues() {
 	var (
 		s     = h.s
@@ -181,6 +189,7 @@ func (h *keyEventHandler) enterKeyQueues() {
 		state.tasks = nil
 		state.pageNum = 1
 		f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
+		h.resetTicker()
 		d.draw(state)
 	}
 }
@@ -197,6 +206,7 @@ func (h *keyEventHandler) enterKeyQueueDetails() {
 		state.tasks = nil
 		state.pageNum = 1
 		f.fetchAggregatingTasks(state.selectedQueue.Queue, state.selectedGroup.Group, taskPageSize(s), state.pageNum)
+		h.resetTicker()
 		d.draw(state)
 	} else if !shouldShowGroupTable(state) && state.taskTableRowIdx != 0 {
 		task := state.tasks[state.taskTableRowIdx-1]
@@ -226,6 +236,7 @@ func (h *keyEventHandler) handleLeftKey() {
 		} else {
 			f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
 		}
+		h.resetTicker()
 		d.draw(state)
 	}
 }
@@ -248,6 +259,7 @@ func (h *keyEventHandler) handleRightKey() {
 		} else {
 			f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
 		}
+		h.resetTicker()
 		d.draw(state)
 	}
 }
@@ -275,6 +287,7 @@ func (h *keyEventHandler) nextPage() {
 			if (state.pageNum-1)*pageSize+len(state.tasks) < totalCount {
 				state.pageNum++
 				f.fetchTasks(state.selectedQueue.Queue, state.taskState, pageSize, state.pageNum)
+				h.resetTicker()
 			}
 		}
 	}
@@ -299,6 +312,7 @@ func (h *keyEventHandler) prevPage() {
 			if state.pageNum > 1 {
 				state.pageNum--
 				f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
+				h.resetTicker()
 			}
 		}
 	}
@@ -312,6 +326,7 @@ func (h *keyEventHandler) showQueues() {
 	)
 	if state.view != viewTypeQueues {
 		f.fetchQueues()
+		h.resetTicker()
 		state.view = viewTypeQueues
 		d.draw(state)
 	}
@@ -349,6 +364,7 @@ func (h *keyEventHandler) showRedisInfo() {
 	)
 	if state.view != viewTypeRedis {
 		f.fetchRedisInfo()
+		h.resetTicker()
 		state.view = viewTypeRedis
 		d.draw(state)
 	}

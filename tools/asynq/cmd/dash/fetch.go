@@ -6,7 +6,6 @@ package dash
 
 import (
 	"math/rand"
-	"time"
 
 	"github.com/hibiken/asynq"
 )
@@ -21,7 +20,6 @@ type fetcher interface {
 }
 
 type dataFetcher struct {
-	ticker    *time.Ticker
 	inspector *asynq.Inspector
 	opts      Options
 
@@ -41,7 +39,6 @@ func (f *dataFetcher) fetchQueues() {
 		opts      = f.opts
 	)
 	go fetchQueues(inspector, queuesCh, errorCh, opts)
-	f.ticker.Reset(opts.PollInterval)
 }
 
 func fetchQueues(i *asynq.Inspector, queuesCh chan<- []*asynq.QueueInfo, errorCh chan<- error, opts Options) {
@@ -76,11 +73,8 @@ func (f *dataFetcher) fetchQueueInfo(qname string) {
 		inspector = f.inspector
 		queueCh   = f.queueCh
 		errorCh   = f.errorCh
-		opts      = f.opts
-		ticker    = f.ticker
 	)
 	go fetchQueueInfo(inspector, qname, queueCh, errorCh)
-	ticker.Reset(opts.PollInterval)
 }
 
 func fetchQueueInfo(i *asynq.Inspector, qname string, queueCh chan<- *asynq.QueueInfo, errorCh chan<- error) {
@@ -94,7 +88,6 @@ func fetchQueueInfo(i *asynq.Inspector, qname string, queueCh chan<- *asynq.Queu
 
 func (f *dataFetcher) fetchRedisInfo() {
 	go fetchRedisInfo(f.redisInfoCh, f.errorCh)
-	f.ticker.Reset(f.opts.PollInterval)
 }
 
 func fetchRedisInfo(redisInfoCh chan<- *redisInfo, errorCh chan<- error) {
@@ -109,9 +102,7 @@ func fetchRedisInfo(redisInfoCh chan<- *redisInfo, errorCh chan<- error) {
 
 func (f *dataFetcher) fetchGroups(qname string) {
 	i, groupsCh, errorCh := f.inspector, f.groupsCh, f.errorCh
-	ticker, opts := f.ticker, f.opts
 	go fetchGroups(i, qname, groupsCh, errorCh)
-	ticker.Reset(opts.PollInterval)
 }
 
 func fetchGroups(i *asynq.Inspector, qname string, groupsCh chan<- []*asynq.GroupInfo, errorCh chan<- error) {
@@ -128,11 +119,8 @@ func (f *dataFetcher) fetchAggregatingTasks(qname, group string, pageSize, pageN
 		i       = f.inspector
 		tasksCh = f.tasksCh
 		errorCh = f.errorCh
-		ticker  = f.ticker
-		opts    = f.opts
 	)
 	go fetchAggregatingTasks(i, qname, group, pageSize, pageNum, tasksCh, errorCh)
-	ticker.Reset(opts.PollInterval)
 }
 
 func fetchAggregatingTasks(i *asynq.Inspector, qname, group string, pageSize, pageNum int,
@@ -150,11 +138,8 @@ func (f *dataFetcher) fetchTasks(qname string, taskState asynq.TaskState, pageSi
 		i       = f.inspector
 		tasksCh = f.tasksCh
 		errorCh = f.errorCh
-		ticker  = f.ticker
-		opts    = f.opts
 	)
 	go fetchTasks(i, qname, taskState, pageSize, pageNum, tasksCh, errorCh)
-	ticker.Reset(opts.PollInterval)
 }
 
 func fetchTasks(i *asynq.Inspector, qname string, taskState asynq.TaskState, pageSize, pageNum int,
