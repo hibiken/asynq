@@ -27,7 +27,6 @@ type column[V any] struct {
 	width int
 }
 
-
 // Helper to draw a table.
 func drawTable[V any](d *ScreenDrawer, style tcell.Style, configs []*columnConfig[V], data []V, highlightRowIdx int) {
 	const colBuffer = "    " // extra buffer between columns
@@ -47,9 +46,9 @@ func drawTable[V any](d *ScreenDrawer, style tcell.Style, configs []*columnConfi
 	headerStyle := style.Background(tcell.ColorDimGray).Foreground(tcell.ColorWhite)
 	for _, col := range cols {
 		if col.alignment == alignLeft {
-			d.Print(rpad(col.name, col.width) + colBuffer, headerStyle)
+			d.Print(rpad(col.name, col.width)+colBuffer, headerStyle)
 		} else {
-			d.Print(lpad(col.name, col.width) + colBuffer, headerStyle)
+			d.Print(lpad(col.name, col.width)+colBuffer, headerStyle)
 		}
 	}
 	d.FillLine(' ', headerStyle)
@@ -61,9 +60,9 @@ func drawTable[V any](d *ScreenDrawer, style tcell.Style, configs []*columnConfi
 		}
 		for _, col := range cols {
 			if col.alignment == alignLeft {
-				d.Print(rpad(col.displayFn(v), col.width) + colBuffer, rowStyle)
+				d.Print(rpad(col.displayFn(v), col.width)+colBuffer, rowStyle)
 			} else {
-				d.Print(lpad(col.displayFn(v), col.width) + colBuffer, rowStyle)
+				d.Print(lpad(col.displayFn(v), col.width)+colBuffer, rowStyle)
 			}
 		}
 		d.FillLine(' ', rowStyle)

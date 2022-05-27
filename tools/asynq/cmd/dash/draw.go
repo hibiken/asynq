@@ -315,7 +315,7 @@ var activeTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
 	{"Retried", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.Retried) }},
 	{"Max Retry", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.MaxRetry) }},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return string(t.Payload) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
 }
 
 var pendingTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
@@ -323,13 +323,13 @@ var pendingTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
 	{"Retried", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.Retried) }},
 	{"Max Retry", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.MaxRetry) }},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return string(t.Payload) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
 }
 
 var aggregatingTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return string(t.Payload) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
 	{"Group", alignLeft, func(t *asynq.TaskInfo) string { return t.Group }},
 }
 
@@ -337,9 +337,9 @@ var scheduledTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
 	{"Next Process Time", alignLeft, func(t *asynq.TaskInfo) string {
-		return fmt.Sprintf("in %v", (t.NextProcessAt.Sub(time.Now()).Round(time.Second))) // FIXME: the cells are not aligned with the header
+		return fmt.Sprintf("in %v", (t.NextProcessAt.Sub(time.Now()).Round(time.Second)))
 	}},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return string(t.Payload) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
 }
 
 var retryTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
@@ -354,7 +354,7 @@ var retryTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"Next Process Time", alignLeft, func(t *asynq.TaskInfo) string {
 		return fmt.Sprintf("in %v", (t.NextProcessAt.Sub(time.Now()).Round(time.Second)))
 	}},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return string(t.Payload) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
 }
 
 var archivedTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
@@ -366,7 +366,7 @@ var archivedTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"Last Failure Time", alignLeft, func(t *asynq.TaskInfo) string {
 		return t.LastFailedAt.Format("2006-01-02 15:04:05 MST")
 	}},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return string(t.Payload) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
 }
 
 var completedTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
@@ -375,8 +375,8 @@ var completedTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"Completion Time", alignLeft, func(t *asynq.TaskInfo) string {
 		return t.CompletedAt.Format("2006-01-02 15:04:05 MST")
 	}},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return string(t.Payload) }}, // TODO: format these bytes correctly
-	{"Result", alignLeft, func(t *asynq.TaskInfo) string { return string(t.Result) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }}, // TODO: format these bytes correctly
+	{"Result", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Result) }},
 }
 
 func drawTaskTable(d *ScreenDrawer, state *State) {
@@ -574,12 +574,10 @@ func drawTaskModal(d *ScreenDrawer, state *State) {
 			baseStyle,
 		})
 	}
-	if isPrintable(task.Payload) {
-		contents = append(contents, &rowContent{
-			fmt.Sprintf("Payload: %s", string(task.Payload)),
-			baseStyle,
-		})
-	}
+	contents = append(contents, &rowContent{
+		fmt.Sprintf(" Payload: %s", formatByteSlice(task.Payload)),
+		baseStyle,
+	})
 	withModal(d, contents)
 }
 
@@ -598,6 +596,16 @@ func isPrintable(data []byte) bool {
 		}
 	}
 	return !isAllSpace
+}
+
+func formatByteSlice(data []byte) string {
+	if data == nil {
+		return "<nil>"
+	}
+	if !isPrintable(data) {
+		return "<non-printable>"
+	}
+	return string(data)
 }
 
 type rowContent struct {
