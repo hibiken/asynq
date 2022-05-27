@@ -536,46 +536,46 @@ func drawTaskModal(d *ScreenDrawer, state *State) {
 	if task == nil {
 		// task no longer found
 		contents := []*rowContent{
-			{" === Task Summary ===", baseStyle.Bold(true)},
+			{"=== Task Summary ===", baseStyle.Bold(true)},
 			{"", baseStyle},
-			{fmt.Sprintf(" Task %q no longer exists", state.taskID), baseStyle},
+			{fmt.Sprintf("Task %q no longer exists", state.taskID), baseStyle},
 		}
 		withModal(d, contents)
 		return
 	}
 	contents := []*rowContent{
-		{" === Task Summary ===", baseStyle.Bold(true)},
+		{"=== Task Summary ===", baseStyle.Bold(true)},
 		{"", baseStyle},
-		{fmt.Sprintf(" ID: %s", task.ID), baseStyle},
-		{fmt.Sprintf(" Type: %s", task.Type), baseStyle},
-		{fmt.Sprintf(" State: %s", task.State.String()), baseStyle},
-		{fmt.Sprintf(" Queue: %s", task.Queue), baseStyle},
-		{fmt.Sprintf(" Retried: %d/%d", task.Retried, task.MaxRetry), baseStyle},
+		{fmt.Sprintf("ID: %s", task.ID), baseStyle},
+		{fmt.Sprintf("Type: %s", task.Type), baseStyle},
+		{fmt.Sprintf("State: %s", task.State.String()), baseStyle},
+		{fmt.Sprintf("Queue: %s", task.Queue), baseStyle},
+		{fmt.Sprintf("Retried: %d/%d", task.Retried, task.MaxRetry), baseStyle},
 	}
 	if task.LastErr != "" {
 		contents = append(contents, &rowContent{
-			fmt.Sprintf(" Last Failure: %s", task.LastErr),
+			fmt.Sprintf("Last Failure: %s", task.LastErr),
 			baseStyle,
 		})
 		contents = append(contents, &rowContent{
-			fmt.Sprintf(" Last Failure Time: %v", task.LastFailedAt),
+			fmt.Sprintf("Last Failure Time: %v", task.LastFailedAt),
 			baseStyle,
 		})
 	}
 	if !task.NextProcessAt.IsZero() {
 		contents = append(contents, &rowContent{
-			fmt.Sprintf(" Next Process Time: %v", task.NextProcessAt),
+			fmt.Sprintf("Next Process Time: %v", task.NextProcessAt),
 			baseStyle,
 		})
 	}
 	if !task.CompletedAt.IsZero() {
 		contents = append(contents, &rowContent{
-			fmt.Sprintf(" Completion Time: %v", task.CompletedAt),
+			fmt.Sprintf("Completion Time: %v", task.CompletedAt),
 			baseStyle,
 		})
 	}
 	contents = append(contents, &rowContent{
-		fmt.Sprintf(" Payload: %s", formatByteSlice(task.Payload)),
+		fmt.Sprintf("Payload: %s", formatByteSlice(task.Payload)),
 		baseStyle,
 	})
 	withModal(d, contents)
@@ -614,7 +614,6 @@ type rowContent struct {
 }
 
 func withModal(d *ScreenDrawer, contents []*rowContent) {
-	modalStyle := baseStyle //.Background(tcell.ColorDarkMagenta)
 	w, h := d.Screen().Size()
 	var (
 		modalWidth  = int(math.Floor(float64(w) * 0.6))
@@ -626,26 +625,27 @@ func withModal(d *ScreenDrawer, contents []*rowContent) {
 		return // no content can be shown
 	}
 	d.Goto(colOffset, rowOffset)
-	d.Print(string(tcell.RuneULCorner), modalStyle)
-	d.Print(strings.Repeat(string(tcell.RuneHLine), modalWidth-2), modalStyle)
-	d.Print(string(tcell.RuneURCorner), modalStyle)
+	d.Print(string(tcell.RuneULCorner), baseStyle)
+	d.Print(strings.Repeat(string(tcell.RuneHLine), modalWidth-2), baseStyle)
+	d.Print(string(tcell.RuneURCorner), baseStyle)
 	d.NL()
+	contentWidth := modalWidth - 4 /* borders + paddings */
 	for i := 1; i < modalHeight-1; i++ {
 		d.Goto(colOffset, rowOffset+i)
-		d.Print(string(tcell.RuneVLine), modalStyle)
-		cnt := &rowContent{strings.Repeat(" ", modalWidth-2), baseStyle}
+		d.Print(fmt.Sprintf("%c ", tcell.RuneVLine), baseStyle)
+		cnt := &rowContent{strings.Repeat(" ", contentWidth), baseStyle}
 		if i <= len(contents) {
 			cnt = contents[i-1]
-			cnt.s = adjustWidth(cnt.s, modalWidth-2)
+			cnt.s = adjustWidth(cnt.s, contentWidth)
 		}
-		d.Print(truncate(cnt.s, modalWidth-2), cnt.style)
-		d.Print(string(tcell.RuneVLine), modalStyle)
+		d.Print(truncate(cnt.s, contentWidth), cnt.style)
+		d.Print(fmt.Sprintf(" %c", tcell.RuneVLine), baseStyle)
 		d.NL()
 	}
 	d.Goto(colOffset, rowOffset+modalHeight-1)
-	d.Print(string(tcell.RuneLLCorner), modalStyle)
-	d.Print(strings.Repeat(string(tcell.RuneHLine), modalWidth-2), modalStyle)
-	d.Print(string(tcell.RuneLRCorner), modalStyle)
+	d.Print(string(tcell.RuneLLCorner), baseStyle)
+	d.Print(strings.Repeat(string(tcell.RuneHLine), modalWidth-2), baseStyle)
+	d.Print(string(tcell.RuneLRCorner), baseStyle)
 	d.NL()
 }
 
