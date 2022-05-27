@@ -47,6 +47,14 @@ func (d *ScreenDrawer) FillLine(r rune, style tcell.Style) {
 	d.NL()
 }
 
+func (d *ScreenDrawer) FillUntil(r rune, style tcell.Style, limit int) {
+	if d.l.col > limit {
+		return // already passed the limit
+	}
+	s := strings.Repeat(string(r), limit-d.l.col)
+	d.Print(s, style)
+}
+
 // NL adds a newline (i.e., moves to the next line).
 func (d *ScreenDrawer) NL() {
 	d.l.row++

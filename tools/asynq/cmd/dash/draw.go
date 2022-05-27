@@ -535,50 +535,71 @@ func drawTaskModal(d *ScreenDrawer, state *State) {
 	task := state.selectedTask
 	if task == nil {
 		// task no longer found
-		contents := []*rowContent{
-			{"=== Task Summary ===", baseStyle.Bold(true)},
-			{"", baseStyle},
-			{fmt.Sprintf("Task %q no longer exists", state.taskID), baseStyle},
+		fns := []func(d *modalRowDrawer){
+			func(d *modalRowDrawer) { d.Print("=== Task Summary ===", baseStyle.Bold(true)) },
+			func(d *modalRowDrawer) { d.Print("", baseStyle) },
+			func(d *modalRowDrawer) { d.Print(fmt.Sprintf("Task %q no longer exists", state.taskID), baseStyle) },
 		}
-		withModal(d, contents)
+		withModal(d, fns)
 		return
 	}
-	contents := []*rowContent{
-		{"=== Task Summary ===", baseStyle.Bold(true)},
-		{"", baseStyle},
-		{fmt.Sprintf("ID: %s", task.ID), baseStyle},
-		{fmt.Sprintf("Type: %s", task.Type), baseStyle},
-		{fmt.Sprintf("State: %s", task.State.String()), baseStyle},
-		{fmt.Sprintf("Queue: %s", task.Queue), baseStyle},
-		{fmt.Sprintf("Retried: %d/%d", task.Retried, task.MaxRetry), baseStyle},
+	fns := []func(d *modalRowDrawer){
+		func(d *modalRowDrawer) { d.Print("=== Task Summary ===", baseStyle.Bold(true)) },
+		func(d *modalRowDrawer) { d.Print("", baseStyle) },
+		func(d *modalRowDrawer) {
+			d.Print("ID: ", labelStyle)
+			d.Print(task.ID, baseStyle)
+		},
+		func(d *modalRowDrawer) {
+			d.Print("Type: ", labelStyle)
+			d.Print(task.Type, baseStyle)
+		},
+		func(d *modalRowDrawer) {
+			d.Print("State: ", labelStyle)
+			d.Print(task.State.String(), baseStyle)
+		},
+		func(d *modalRowDrawer) {
+			d.Print("Queue: ", labelStyle)
+			d.Print(task.Queue, baseStyle)
+		},
+		func(d *modalRowDrawer) {
+			d.Print("Retry: ", labelStyle)
+			d.Print(fmt.Sprintf("%d/%d", task.Retried, task.MaxRetry), baseStyle)
+		},
 	}
 	if task.LastErr != "" {
-		contents = append(contents, &rowContent{
-			fmt.Sprintf("Last Failure: %s", task.LastErr),
-			baseStyle,
+		fns = append(fns, func(d *modalRowDrawer) {
+			d.Print("Last Failure: ", labelStyle)
+			d.Print(task.LastErr, baseStyle)
 		})
-		contents = append(contents, &rowContent{
-			fmt.Sprintf("Last Failure Time: %v", task.LastFailedAt),
-			baseStyle,
+		fns = append(fns, func(d *modalRowDrawer) {
+			d.Print("Last Failure Time: ", labelStyle)
+			d.Print(fmt.Sprintf("%v", task.LastFailedAt), baseStyle)
 		})
 	}
 	if !task.NextProcessAt.IsZero() {
-		contents = append(contents, &rowContent{
-			fmt.Sprintf("Next Process Time: %v", task.NextProcessAt),
-			baseStyle,
+		fns = append(fns, func(d *modalRowDrawer) {
+			d.Print("Next Process Time: ", labelStyle)
+			d.Print(fmt.Sprintf("%v", task.NextProcessAt), baseStyle)
 		})
 	}
 	if !task.CompletedAt.IsZero() {
-		contents = append(contents, &rowContent{
-			fmt.Sprintf("Completion Time: %v", task.CompletedAt),
-			baseStyle,
+		fns = append(fns, func(d *modalRowDrawer) {
+			d.Print("Completion Time: ", labelStyle)
+			d.Print(fmt.Sprintf("%v", task.CompletedAt), baseStyle)
 		})
 	}
-	contents = append(contents, &rowContent{
-		fmt.Sprintf("Payload: %s", formatByteSlice(task.Payload)),
-		baseStyle,
+	fns = append(fns, func(d *modalRowDrawer) {
+		d.Print("Payload: ", labelStyle)
+		d.Print(formatByteSlice(task.Payload), baseStyle)
 	})
-	withModal(d, contents)
+	if task.Result != nil {
+		fns = append(fns, func(d *modalRowDrawer) {
+			d.Print("Result: ", labelStyle)
+			d.Print(formatByteSlice(task.Result), baseStyle)
+		})
+	}
+	withModal(d, fns)
 }
 
 // Reports whether the given byte slice is printable (i.e. human readable)
@@ -608,12 +629,25 @@ func formatByteSlice(data []byte) string {
 	return string(data)
 }
 
-type rowContent struct {
-	s     string // should not include newline
-	style tcell.Style
+type modalRowDrawer struct {
+	d        *ScreenDrawer
+	width    int // current width occupied by content
+	maxWidth int
 }
 
-func withModal(d *ScreenDrawer, contents []*rowContent) {
+// Note: s should not include newline
+func (d *modalRowDrawer) Print(s string, style tcell.Style) {
+	if d.width >= d.maxWidth {
+		return // no longer write to this row
+	}
+	if d.width+runewidth.StringWidth(s) > d.maxWidth {
+		s = truncate(s, d.maxWidth-d.width)
+	}
+	d.d.Print(s, style)
+}
+
+// withModal draws a modal with the given functions row by row.
+func withModal(d *ScreenDrawer, rowPrintFns []func(d *modalRowDrawer)) {
 	w, h := d.Screen().Size()
 	var (
 		modalWidth  = int(math.Floor(float64(w) * 0.6))
@@ -629,16 +663,18 @@ func withModal(d *ScreenDrawer, contents []*rowContent) {
 	d.Print(strings.Repeat(string(tcell.RuneHLine), modalWidth-2), baseStyle)
 	d.Print(string(tcell.RuneURCorner), baseStyle)
 	d.NL()
-	contentWidth := modalWidth - 4 /* borders + paddings */
+	rowDrawer := modalRowDrawer{
+		d:        d,
+		width:    0,
+		maxWidth: modalWidth - 4, /* borders + paddings */
+	}
 	for i := 1; i < modalHeight-1; i++ {
 		d.Goto(colOffset, rowOffset+i)
 		d.Print(fmt.Sprintf("%c ", tcell.RuneVLine), baseStyle)
-		cnt := &rowContent{strings.Repeat(" ", contentWidth), baseStyle}
-		if i <= len(contents) {
-			cnt = contents[i-1]
-			cnt.s = adjustWidth(cnt.s, contentWidth)
+		if i < len(rowPrintFns) {
+			rowPrintFns[i-1](&rowDrawer)
 		}
-		d.Print(truncate(cnt.s, contentWidth), cnt.style)
+		d.FillUntil(' ', baseStyle, colOffset+modalWidth-2)
 		d.Print(fmt.Sprintf(" %c", tcell.RuneVLine), baseStyle)
 		d.NL()
 	}
