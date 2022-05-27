@@ -264,9 +264,9 @@ func drawQueueSummary(d *ScreenDrawer, state *State) {
 		d.Println("ERROR: Press q to go back", baseStyle)
 		return
 	}
-	d.Print("Name:     ", labelStyle)
+	d.Print("Name      ", labelStyle)
 	d.Println(q.Queue, baseStyle)
-	d.Print("Size:     ", labelStyle)
+	d.Print("Size      ", labelStyle)
 	d.Println(strconv.Itoa(q.Size), baseStyle)
 	d.Print("Latency   ", labelStyle)
 	d.Println(q.Latency.Round(time.Second).String(), baseStyle)
