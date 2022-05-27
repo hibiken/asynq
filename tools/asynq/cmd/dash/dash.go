@@ -64,8 +64,6 @@ type Options struct {
 	PollInterval time.Duration
 }
 
-var baseStyle = tcell.StyleDefault.Background(tcell.ColorReset).Foreground(tcell.ColorReset)
-
 func Run(opts Options) {
 	s, err := tcell.NewScreen()
 	if err != nil {

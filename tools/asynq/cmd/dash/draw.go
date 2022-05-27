@@ -18,6 +18,11 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+var (
+	baseStyle  = tcell.StyleDefault.Background(tcell.ColorReset).Foreground(tcell.ColorReset)
+	labelStyle = baseStyle.Foreground(tcell.ColorLightGray)
+)
+
 // drawer draws UI with the given state.
 type drawer interface {
 	Draw(state *State)
@@ -259,7 +264,6 @@ func drawQueueSummary(d *ScreenDrawer, state *State) {
 		d.Println("ERROR: Press q to go back", baseStyle)
 		return
 	}
-	labelStyle := baseStyle.Foreground(tcell.ColorLightGray)
 	d.Print("Name:     ", labelStyle)
 	d.Println(q.Queue, baseStyle)
 	d.Print("Size:     ", labelStyle)
