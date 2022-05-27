@@ -6,19 +6,24 @@ package dash
 
 import (
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/google/go-cmp/cmp"
 	"github.com/hibiken/asynq"
 )
 
-func makeKeyEventHandler(state *State) *keyEventHandler {
+func makeKeyEventHandler(t *testing.T, state *State) *keyEventHandler {
+	ticker := time.NewTicker(time.Second)
+	t.Cleanup(func() { ticker.Stop() })
 	return &keyEventHandler{
-		s:       tcell.NewSimulationScreen("UTF-8"),
-		state:   state,
-		done:    make(chan struct{}),
-		fetcher: &fakeFetcher{},
-		drawer:  &fakeDrawer{},
+		s:            tcell.NewSimulationScreen("UTF-8"),
+		state:        state,
+		done:         make(chan struct{}),
+		fetcher:      &fakeFetcher{},
+		drawer:       &fakeDrawer{},
+		ticker:       ticker,
+		pollInterval: time.Second,
 	}
 }
 
@@ -164,7 +169,7 @@ func TestKeyEventHandler(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
-			h := makeKeyEventHandler(tc.state)
+			h := makeKeyEventHandler(t, tc.state)
 			for _, e := range tc.events {
 				h.HandleKeyEvent(e)
 			}
@@ -180,14 +185,8 @@ func TestKeyEventHandler(t *testing.T) {
 
 type fakeFetcher struct{}
 
-func (f *fakeFetcher) fetchQueues()                                                              {}
-func (f *fakeFetcher) fetchQueueInfo(qname string)                                               {}
-func (f *fakeFetcher) fetchRedisInfo()                                                           {}
-func (f *fakeFetcher) fetchTaskInfo(qname, taskID string)                                        {}
-func (f *fakeFetcher) fetchTasks(qname string, taskState asynq.TaskState, pageSize, pageNum int) {}
-func (f *fakeFetcher) fetchAggregatingTasks(qname, group string, pageSize, pageNum int)          {}
-func (f *fakeFetcher) fetchGroups(qname string)                                                  {}
+func (f *fakeFetcher) Fetch(s *State) {}
 
 type fakeDrawer struct{}
 
-func (d *fakeDrawer) draw(s *State) {}
+func (d *fakeDrawer) Draw(s *State) {}

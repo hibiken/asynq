@@ -101,6 +101,7 @@ func Run(opts Options) {
 	f := dataFetcher{
 		inspector,
 		opts,
+		s,
 		errorCh,
 		queueCh,
 		taskCh,
@@ -127,7 +128,7 @@ func Run(opts Options) {
 
 	go fetchQueues(inspector, queuesCh, errorCh, opts)
 	go s.ChannelEvents(eventCh, done) // TODO: Double check that we are not leaking goroutine with this one.
-	d.draw(&state)                    // draw initial screen
+	d.Draw(&state)                    // draw initial screen
 
 	for {
 		// Update screen
@@ -173,12 +174,12 @@ func Run(opts Options) {
 			if len(queues) < state.queueTableRowIdx {
 				state.queueTableRowIdx = len(queues)
 			}
-			d.draw(&state)
+			d.Draw(&state)
 
 		case q := <-queueCh:
 			state.selectedQueue = q
 			state.err = nil
-			d.draw(&state)
+			d.Draw(&state)
 
 		case groups := <-groupsCh:
 			state.groups = groups
@@ -186,7 +187,7 @@ func Run(opts Options) {
 			if len(groups) < state.groupTableRowIdx {
 				state.groupTableRowIdx = len(groups)
 			}
-			d.draw(&state)
+			d.Draw(&state)
 
 		case tasks := <-tasksCh:
 			state.tasks = tasks
@@ -194,17 +195,17 @@ func Run(opts Options) {
 			if len(tasks) < state.taskTableRowIdx {
 				state.taskTableRowIdx = len(tasks)
 			}
-			d.draw(&state)
+			d.Draw(&state)
 
 		case t := <-taskCh:
 			state.selectedTask = t
 			state.err = nil
-			d.draw(&state)
+			d.Draw(&state)
 
 		case redisInfo := <-redisInfoCh:
 			state.redisInfo = *redisInfo
 			state.err = nil
-			d.draw(&state)
+			d.Draw(&state)
 
 		case err := <-errorCh:
 			if errors.Is(err, asynq.ErrTaskNotFound) {
@@ -212,7 +213,7 @@ func Run(opts Options) {
 			} else {
 				state.err = err
 			}
-			d.draw(&state)
+			d.Draw(&state)
 		}
 	}
 

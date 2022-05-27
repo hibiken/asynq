@@ -20,7 +20,7 @@ import (
 
 // drawer draws UI with the given state.
 type drawer interface {
-	draw(state *State)
+	Draw(state *State)
 }
 
 type dashDrawer struct {
@@ -28,7 +28,7 @@ type dashDrawer struct {
 	opts Options
 }
 
-func (dd *dashDrawer) draw(state *State) {
+func (dd *dashDrawer) Draw(state *State) {
 	s, opts := dd.s, dd.opts
 	s.Clear()
 	// Simulate data update on every render

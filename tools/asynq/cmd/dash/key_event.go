@@ -73,16 +73,16 @@ func (h *keyEventHandler) goBack() {
 	)
 	if state.view == viewTypeHelp {
 		state.view = state.prevView // exit help
-		d.draw(state)
+		d.Draw(state)
 	} else if state.view == viewTypeQueueDetails {
 		// if task modal is open close it; otherwise go back to the previous view
 		if state.taskID != "" {
 			state.taskID = ""
 			state.selectedTask = nil
-			d.draw(state)
+			d.Draw(state)
 		} else {
 			state.view = viewTypeQueues
-			d.draw(state)
+			d.Draw(state)
 		}
 	} else {
 		h.quit()
@@ -104,7 +104,7 @@ func (h *keyEventHandler) downKeyQueues() {
 	} else {
 		h.state.queueTableRowIdx = 0 // loop back
 	}
-	h.drawer.draw(h.state)
+	h.drawer.Draw(h.state)
 }
 
 func (h *keyEventHandler) downKeyQueueDetails() {
@@ -122,7 +122,7 @@ func (h *keyEventHandler) downKeyQueueDetails() {
 			state.taskTableRowIdx = 0 // loop back
 		}
 	}
-	h.drawer.draw(state)
+	h.drawer.Draw(state)
 }
 
 func (h *keyEventHandler) handleUpKey() {
@@ -141,7 +141,7 @@ func (h *keyEventHandler) upKeyQueues() {
 	} else {
 		state.queueTableRowIdx--
 	}
-	h.drawer.draw(state)
+	h.drawer.Draw(state)
 }
 
 func (h *keyEventHandler) upKeyQueueDetails() {
@@ -159,7 +159,7 @@ func (h *keyEventHandler) upKeyQueueDetails() {
 			state.taskTableRowIdx--
 		}
 	}
-	h.drawer.draw(state)
+	h.drawer.Draw(state)
 }
 
 func (h *keyEventHandler) handleEnterKey() {
@@ -177,7 +177,6 @@ func (h *keyEventHandler) resetTicker() {
 
 func (h *keyEventHandler) enterKeyQueues() {
 	var (
-		s     = h.s
 		state = h.state
 		f     = h.fetcher
 		d     = h.drawer
@@ -188,15 +187,14 @@ func (h *keyEventHandler) enterKeyQueues() {
 		state.taskState = asynq.TaskStateActive
 		state.tasks = nil
 		state.pageNum = 1
-		f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
+		f.Fetch(state)
 		h.resetTicker()
-		d.draw(state)
+		d.Draw(state)
 	}
 }
 
 func (h *keyEventHandler) enterKeyQueueDetails() {
 	var (
-		s     = h.s
 		state = h.state
 		f     = h.fetcher
 		d     = h.drawer
@@ -205,23 +203,22 @@ func (h *keyEventHandler) enterKeyQueueDetails() {
 		state.selectedGroup = state.groups[state.groupTableRowIdx-1]
 		state.tasks = nil
 		state.pageNum = 1
-		f.fetchAggregatingTasks(state.selectedQueue.Queue, state.selectedGroup.Group, taskPageSize(s), state.pageNum)
+		f.Fetch(state)
 		h.resetTicker()
-		d.draw(state)
+		d.Draw(state)
 	} else if !shouldShowGroupTable(state) && state.taskTableRowIdx != 0 {
 		task := state.tasks[state.taskTableRowIdx-1]
 		state.selectedTask = task
 		state.taskID = task.ID
-		f.fetchTaskInfo(state.selectedQueue.Queue, task.ID)
+		f.Fetch(state)
 		h.resetTicker()
-		d.draw(state)
+		d.Draw(state)
 	}
 
 }
 
 func (h *keyEventHandler) handleLeftKey() {
 	var (
-		s     = h.s
 		state = h.state
 		f     = h.fetcher
 		d     = h.drawer
@@ -232,19 +229,14 @@ func (h *keyEventHandler) handleLeftKey() {
 		state.taskTableRowIdx = 0
 		state.tasks = nil
 		state.selectedGroup = nil
-		if shouldShowGroupTable(state) {
-			f.fetchGroups(state.selectedQueue.Queue)
-		} else {
-			f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
-		}
+		f.Fetch(state)
 		h.resetTicker()
-		d.draw(state)
+		d.Draw(state)
 	}
 }
 
 func (h *keyEventHandler) handleRightKey() {
 	var (
-		s     = h.s
 		state = h.state
 		f     = h.fetcher
 		d     = h.drawer
@@ -255,13 +247,9 @@ func (h *keyEventHandler) handleRightKey() {
 		state.taskTableRowIdx = 0
 		state.tasks = nil
 		state.selectedGroup = nil
-		if shouldShowGroupTable(state) {
-			f.fetchGroups(state.selectedQueue.Queue)
-		} else {
-			f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
-		}
+		f.Fetch(state)
 		h.resetTicker()
-		d.draw(state)
+		d.Draw(state)
 	}
 }
 
@@ -280,14 +268,14 @@ func (h *keyEventHandler) nextPage() {
 			end := start + pageSize
 			if end <= total {
 				state.pageNum++
-				d.draw(state)
+				d.Draw(state)
 			}
 		} else {
 			pageSize := taskPageSize(s)
 			totalCount := getTaskCount(state.selectedQueue, state.taskState)
 			if (state.pageNum-1)*pageSize+len(state.tasks) < totalCount {
 				state.pageNum++
-				f.fetchTasks(state.selectedQueue.Queue, state.taskState, pageSize, state.pageNum)
+				f.Fetch(state)
 				h.resetTicker()
 			}
 		}
@@ -307,12 +295,12 @@ func (h *keyEventHandler) prevPage() {
 			start := (state.pageNum - 1) * pageSize
 			if start > 0 {
 				state.pageNum--
-				d.draw(state)
+				d.Draw(state)
 			}
 		} else {
 			if state.pageNum > 1 {
 				state.pageNum--
-				f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(s), state.pageNum)
+				f.Fetch(state)
 				h.resetTicker()
 			}
 		}
@@ -326,10 +314,10 @@ func (h *keyEventHandler) showQueues() {
 		d     = h.drawer
 	)
 	if state.view != viewTypeQueues {
-		f.fetchQueues()
-		h.resetTicker()
 		state.view = viewTypeQueues
-		d.draw(state)
+		f.Fetch(state)
+		h.resetTicker()
+		d.Draw(state)
 	}
 }
 
@@ -341,7 +329,7 @@ func (h *keyEventHandler) showServers() {
 	if state.view != viewTypeServers {
 		//TODO Start data fetch and reset ticker
 		state.view = viewTypeServers
-		d.draw(state)
+		d.Draw(state)
 	}
 }
 
@@ -353,7 +341,7 @@ func (h *keyEventHandler) showSchedulers() {
 	if state.view != viewTypeSchedulers {
 		//TODO Start data fetch and reset ticker
 		state.view = viewTypeSchedulers
-		d.draw(state)
+		d.Draw(state)
 	}
 }
 
@@ -364,10 +352,10 @@ func (h *keyEventHandler) showRedisInfo() {
 		d     = h.drawer
 	)
 	if state.view != viewTypeRedis {
-		f.fetchRedisInfo()
-		h.resetTicker()
 		state.view = viewTypeRedis
-		d.draw(state)
+		f.Fetch(state)
+		h.resetTicker()
+		d.Draw(state)
 	}
 }
 
@@ -379,6 +367,6 @@ func (h *keyEventHandler) showHelp() {
 	if state.view != viewTypeHelp {
 		state.prevView = state.view
 		state.view = viewTypeHelp
-		d.draw(state)
+		d.Draw(state)
 	}
 }

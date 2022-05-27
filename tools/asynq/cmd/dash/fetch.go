@@ -7,22 +7,19 @@ package dash
 import (
 	"math/rand"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/hibiken/asynq"
 )
 
 type fetcher interface {
-	fetchQueues()
-	fetchQueueInfo(qname string)
-	fetchRedisInfo()
-	fetchTaskInfo(qname, taskID string)
-	fetchTasks(qname string, taskState asynq.TaskState, pageSize, pageNum int)
-	fetchAggregatingTasks(qname, group string, pageSize, pageNum int)
-	fetchGroups(qname string)
+	// Fetch retries data required by the given state of the dashboard.
+	Fetch(state *State)
 }
 
 type dataFetcher struct {
 	inspector *asynq.Inspector
 	opts      Options
+	s         tcell.Screen
 
 	errorCh     chan<- error
 	queueCh     chan<- *asynq.QueueInfo
@@ -31,6 +28,27 @@ type dataFetcher struct {
 	groupsCh    chan<- []*asynq.GroupInfo
 	tasksCh     chan<- []*asynq.TaskInfo
 	redisInfoCh chan<- *redisInfo
+}
+
+func (f *dataFetcher) Fetch(state *State) {
+	switch state.view {
+	case viewTypeQueues:
+		f.fetchQueues()
+	case viewTypeQueueDetails:
+		if shouldShowGroupTable(state) {
+			f.fetchGroups(state.selectedQueue.Queue)
+		} else if state.taskState == asynq.TaskStateAggregating {
+			f.fetchAggregatingTasks(state.selectedQueue.Queue, state.selectedGroup.Group, taskPageSize(f.s), state.pageNum)
+		} else {
+			f.fetchTasks(state.selectedQueue.Queue, state.taskState, taskPageSize(f.s), state.pageNum)
+		}
+		// if the task modal is open, additionally fetch the selected task's info
+		if state.taskID != "" {
+			f.fetchTaskInfo(state.selectedQueue.Queue, state.taskID)
+		}
+	case viewTypeRedis:
+		f.fetchRedisInfo()
+	}
 }
 
 func (f *dataFetcher) fetchQueues() {
@@ -70,15 +88,6 @@ func fetchQueues(i *asynq.Inspector, queuesCh chan<- []*asynq.QueueInfo, errorCh
 	queuesCh <- res
 }
 
-func (f *dataFetcher) fetchQueueInfo(qname string) {
-	var (
-		inspector = f.inspector
-		queueCh   = f.queueCh
-		errorCh   = f.errorCh
-	)
-	go fetchQueueInfo(inspector, qname, queueCh, errorCh)
-}
-
 func fetchQueueInfo(i *asynq.Inspector, qname string, queueCh chan<- *asynq.QueueInfo, errorCh chan<- error) {
 	q, err := i.GetQueueInfo(qname)
 	if err != nil {
@@ -103,8 +112,14 @@ func fetchRedisInfo(redisInfoCh chan<- *redisInfo, errorCh chan<- error) {
 }
 
 func (f *dataFetcher) fetchGroups(qname string) {
-	i, groupsCh, errorCh := f.inspector, f.groupsCh, f.errorCh
+	var (
+		i        = f.inspector
+		groupsCh = f.groupsCh
+		errorCh  = f.errorCh
+		queueCh  = f.queueCh
+	)
 	go fetchGroups(i, qname, groupsCh, errorCh)
+	go fetchQueueInfo(i, qname, queueCh, errorCh)
 }
 
 func fetchGroups(i *asynq.Inspector, qname string, groupsCh chan<- []*asynq.GroupInfo, errorCh chan<- error) {
@@ -121,8 +136,10 @@ func (f *dataFetcher) fetchAggregatingTasks(qname, group string, pageSize, pageN
 		i       = f.inspector
 		tasksCh = f.tasksCh
 		errorCh = f.errorCh
+		queueCh = f.queueCh
 	)
 	go fetchAggregatingTasks(i, qname, group, pageSize, pageNum, tasksCh, errorCh)
+	go fetchQueueInfo(i, qname, queueCh, errorCh)
 }
 
 func fetchAggregatingTasks(i *asynq.Inspector, qname, group string, pageSize, pageNum int,
@@ -140,8 +157,10 @@ func (f *dataFetcher) fetchTasks(qname string, taskState asynq.TaskState, pageSi
 		i       = f.inspector
 		tasksCh = f.tasksCh
 		errorCh = f.errorCh
+		queueCh = f.queueCh
 	)
 	go fetchTasks(i, qname, taskState, pageSize, pageNum, tasksCh, errorCh)
+	go fetchQueueInfo(i, qname, queueCh, errorCh)
 }
 
 func fetchTasks(i *asynq.Inspector, qname string, taskState asynq.TaskState, pageSize, pageNum int,
