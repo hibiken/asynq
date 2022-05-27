@@ -5,6 +5,8 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/MakeNowJust/heredoc/v2"
@@ -20,7 +22,7 @@ var (
 
 func init() {
 	rootCmd.AddCommand(dashCmd)
-	dashCmd.Flags().DurationVar(&flagPollInterval, "refresh", 8*time.Second, "Interval between data refresh")
+	dashCmd.Flags().DurationVar(&flagPollInterval, "refresh", 8*time.Second, "Interval between data refresh. Minimum value is 1s.")
 	// TODO: Remove this debug once we're done
 	dashCmd.Flags().BoolVar(&flagDebug, "debug", false, "Print debug info")
 	dashCmd.Flags().BoolVar(&flagUseRealData, "realdata", true, "Use real data in redis")
@@ -33,6 +35,10 @@ var dashCmd = &cobra.Command{
 		Displays dashboard.`),
 	Args: cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		if flagPollInterval < 1*time.Second {
+			fmt.Println("error: --refresh cannot be less than 1s")
+			os.Exit(1)
+		}
 		dash.Run(dash.Options{
 			DebugMode:    flagDebug,
 			UseRealData:  flagUseRealData,
