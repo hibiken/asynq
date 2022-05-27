@@ -26,16 +26,16 @@ type Scheduler struct {
 
 	state *serverState
 
-	logger      *log.Logger
-	client      *Client
-	rdb         *rdb.RDB
-	cron        *cron.Cron
-	location    *time.Location
-	done        chan struct{}
-	wg          sync.WaitGroup
-	preHandler  func(task *Task, opts []Option)
-	postHandler func(info *TaskInfo, err error)
-	errHandler  func(task *Task, opts []Option, err error)
+	logger          *log.Logger
+	client          *Client
+	rdb             *rdb.RDB
+	cron            *cron.Cron
+	location        *time.Location
+	done            chan struct{}
+	wg              sync.WaitGroup
+	preEnqueueFunc  func(task *Task, opts []Option)
+	postEnqueueFunc func(info *TaskInfo, err error)
+	errHandler      func(task *Task, opts []Option, err error)
 
 	// guards idmap
 	mu sync.Mutex
@@ -69,18 +69,18 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 	}
 
 	return &Scheduler{
-		id:          generateSchedulerID(),
-		state:       &serverState{value: srvStateNew},
-		logger:      logger,
-		client:      NewClient(r),
-		rdb:         rdb.NewRDB(c),
-		cron:        cron.New(cron.WithLocation(loc)),
-		location:    loc,
-		done:        make(chan struct{}),
-		preHandler:  opts.PreEnqueueFunc,
-		postHandler: opts.PostEnqueueFunc,
-		errHandler:  opts.EnqueueErrorHandler,
-		idmap:       make(map[string]cron.EntryID),
+		id:              generateSchedulerID(),
+		state:           &serverState{value: srvStateNew},
+		logger:          logger,
+		client:          NewClient(r),
+		rdb:             rdb.NewRDB(c),
+		cron:            cron.New(cron.WithLocation(loc)),
+		location:        loc,
+		done:            make(chan struct{}),
+		preEnqueueFunc:  opts.PreEnqueueFunc,
+		postEnqueueFunc: opts.PostEnqueueFunc,
+		errHandler:      opts.EnqueueErrorHandler,
+		idmap:           make(map[string]cron.EntryID),
 	}
 }
 
@@ -125,26 +125,26 @@ type SchedulerOpts struct {
 
 // enqueueJob encapsulates the job of enqueuing a task and recording the event.
 type enqueueJob struct {
-	id          uuid.UUID
-	cronspec    string
-	task        *Task
-	opts        []Option
-	location    *time.Location
-	logger      *log.Logger
-	client      *Client
-	rdb         *rdb.RDB
-	preHandler  func(task *Task, opts []Option)
-	postHandler func(info *TaskInfo, err error)
-	errHandler  func(task *Task, opts []Option, err error)
+	id              uuid.UUID
+	cronspec        string
+	task            *Task
+	opts            []Option
+	location        *time.Location
+	logger          *log.Logger
+	client          *Client
+	rdb             *rdb.RDB
+	preEnqueueFunc  func(task *Task, opts []Option)
+	postEnqueueFunc func(info *TaskInfo, err error)
+	errHandler      func(task *Task, opts []Option, err error)
 }
 
 func (j *enqueueJob) Run() {
-	if j.preHandler != nil {
-		j.preHandler(j.task, j.opts)
+	if j.preEnqueueFunc != nil {
+		j.preEnqueueFunc(j.task, j.opts)
 	}
 	info, err := j.client.Enqueue(j.task, j.opts...)
-	if j.postHandler != nil {
-		j.postHandler(info, err)
+	if j.postEnqueueFunc != nil {
+		j.postEnqueueFunc(info, err)
 	}
 	if err != nil {
 		j.logger.Errorf("scheduler could not enqueue a task %+v: %v", j.task, err)
@@ -168,17 +168,17 @@ func (j *enqueueJob) Run() {
 // It returns an ID of the newly registered entry.
 func (s *Scheduler) Register(cronspec string, task *Task, opts ...Option) (entryID string, err error) {
 	job := &enqueueJob{
-		id:          uuid.New(),
-		cronspec:    cronspec,
-		task:        task,
-		opts:        opts,
-		location:    s.location,
-		client:      s.client,
-		rdb:         s.rdb,
-		logger:      s.logger,
-		preHandler:  s.preHandler,
-		postHandler: s.postHandler,
-		errHandler:  s.errHandler,
+		id:              uuid.New(),
+		cronspec:        cronspec,
+		task:            task,
+		opts:            opts,
+		location:        s.location,
+		client:          s.client,
+		rdb:             s.rdb,
+		logger:          s.logger,
+		preEnqueueFunc:  s.preEnqueueFunc,
+		postEnqueueFunc: s.postEnqueueFunc,
+		errHandler:      s.errHandler,
 	}
 	cronID, err := s.cron.AddJob(cronspec, job)
 	if err != nil {
