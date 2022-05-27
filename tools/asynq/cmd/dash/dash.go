@@ -77,7 +77,6 @@ func Run(opts Options) {
 		os.Exit(1)
 	}
 	s.SetStyle(baseStyle) // set default text style
-	opts.PollInterval = 2 * time.Second
 
 	var (
 		state = State{} // confined in this goroutine only; DO NOT SHARE
