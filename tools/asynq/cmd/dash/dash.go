@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -45,6 +46,46 @@ type State struct {
 
 	view     viewType // current view type
 	prevView viewType // to support "go back"
+}
+
+func (s *State) DebugString() string {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("len(queues)=%d ", len(s.queues)))
+	b.WriteString(fmt.Sprintf("len(tasks)=%d ", len(s.tasks)))
+	b.WriteString(fmt.Sprintf("len(groups)=%d ", len(s.groups)))
+	b.WriteString(fmt.Sprintf("err=%v ", s.err))
+
+	if s.taskState != 0 {
+		b.WriteString(fmt.Sprintf("taskState=%s ", s.taskState.String()))
+	} else {
+		b.WriteString(fmt.Sprintf("taskState=0"))
+	}
+	b.WriteString(fmt.Sprintf("taskID=%s ", s.taskID))
+
+	b.WriteString(fmt.Sprintf("queueTableRowIdx=%d ", s.queueTableRowIdx))
+	b.WriteString(fmt.Sprintf("taskTableRowIdx=%d ", s.taskTableRowIdx))
+	b.WriteString(fmt.Sprintf("groupTableRowIdx=%d ", s.groupTableRowIdx))
+
+	if s.selectedQueue != nil {
+		b.WriteString(fmt.Sprintf("selectedQueue={Queue:%s} ", s.selectedQueue.Queue))
+	} else {
+		b.WriteString("selectedQueue=nil ")
+	}
+
+	if s.selectedGroup != nil {
+		b.WriteString(fmt.Sprintf("selectedGroup={Group:%s} ", s.selectedGroup.Group))
+	} else {
+		b.WriteString("selectedGroup=nil ")
+	}
+
+	if s.selectedTask != nil {
+		b.WriteString(fmt.Sprintf("selectedTask={ID:%s} ", s.selectedTask.ID))
+	} else {
+		b.WriteString("selectedTask=nil ")
+	}
+
+	b.WriteString(fmt.Sprintf("pageNum=%d", s.pageNum))
+	return b.String()
 }
 
 type Options struct {

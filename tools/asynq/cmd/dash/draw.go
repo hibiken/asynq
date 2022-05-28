@@ -62,13 +62,12 @@ func (dd *dashDrawer) Draw(state *State) {
 		d.NL()
 		// TODO: Draw HELP body
 	}
-	if opts.DebugMode {
-		d.Println(fmt.Sprintf("DEBUG: rowIdx = %d", state.queueTableRowIdx), baseStyle)
-		d.Println(fmt.Sprintf("DEBUG: selectedQueue = %s", state.selectedQueue.Queue), baseStyle)
-		d.Println(fmt.Sprintf("DEBUG: view = %v", state.view), baseStyle)
-	}
 	d.GoToBottom()
-	drawFooter(d, state)
+	if opts.DebugMode {
+		drawDebugInfo(d, state)
+	} else {
+		drawFooter(d, state)
+	}
 }
 
 func drawQueueSizeGraphs(d *ScreenDrawer, state *State) {
@@ -666,4 +665,8 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return string([]rune(s)[:max-1]) + "…"
+}
+
+func drawDebugInfo(d *ScreenDrawer, state *State) {
+	d.Println(state.DebugString(), baseStyle)
 }
