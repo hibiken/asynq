@@ -173,7 +173,7 @@ func TestKeyEventHandler(t *testing.T) {
 			for _, e := range tc.events {
 				h.HandleKeyEvent(e)
 			}
-			if diff := cmp.Diff(tc.wantState, *tc.state, cmp.AllowUnexported(State{}, redisInfo{})); diff != "" {
+			if diff := cmp.Diff(tc.wantState, *tc.state, cmp.AllowUnexported(State{})); diff != "" {
 				t.Errorf("after state was %+v, want %+v: (-want,+got)\n%s", *tc.state, tc.wantState, diff)
 			}
 		})

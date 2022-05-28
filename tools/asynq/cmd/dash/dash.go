@@ -25,11 +25,10 @@ const (
 
 // State holds dashboard state.
 type State struct {
-	queues    []*asynq.QueueInfo
-	tasks     []*asynq.TaskInfo
-	groups    []*asynq.GroupInfo
-	redisInfo redisInfo
-	err       error
+	queues []*asynq.QueueInfo
+	tasks  []*asynq.TaskInfo
+	groups []*asynq.GroupInfo
+	err    error
 
 	// Note: index zero corresponds to the table header; index=1 correctponds to the first element
 	queueTableRowIdx int             // highlighted row in queue table
@@ -48,16 +47,8 @@ type State struct {
 	prevView viewType // to support "go back"
 }
 
-type redisInfo struct {
-	version         string
-	uptime          string
-	memoryUsage     int
-	peakMemoryUsage int
-}
-
 type Options struct {
 	DebugMode    bool
-	UseRealData  bool
 	PollInterval time.Duration
 }
 
@@ -83,13 +74,12 @@ func Run(opts Options) {
 		done    = make(chan struct{})
 
 		// channels to send/receive data fetched asynchronously
-		errorCh     = make(chan error)
-		queueCh     = make(chan *asynq.QueueInfo)
-		taskCh      = make(chan *asynq.TaskInfo)
-		queuesCh    = make(chan []*asynq.QueueInfo)
-		groupsCh    = make(chan []*asynq.GroupInfo)
-		tasksCh     = make(chan []*asynq.TaskInfo)
-		redisInfoCh = make(chan *redisInfo)
+		errorCh  = make(chan error)
+		queueCh  = make(chan *asynq.QueueInfo)
+		taskCh   = make(chan *asynq.TaskInfo)
+		queuesCh = make(chan []*asynq.QueueInfo)
+		groupsCh = make(chan []*asynq.GroupInfo)
+		tasksCh  = make(chan []*asynq.TaskInfo)
 	)
 	defer ticker.Stop()
 
@@ -103,7 +93,6 @@ func Run(opts Options) {
 		queuesCh,
 		groupsCh,
 		tasksCh,
-		redisInfoCh,
 	}
 
 	d := dashDrawer{
@@ -140,26 +129,7 @@ func Run(opts Options) {
 			}
 
 		case <-ticker.C:
-			// TODO: this should be just the call to fetcher.Fetch(state)
-			switch state.view {
-			case viewTypeQueues:
-				go fetchQueues(inspector, queuesCh, errorCh, opts)
-			case viewTypeQueueDetails:
-				go fetchQueueInfo(inspector, state.selectedQueue.Queue, queueCh, errorCh)
-				if shouldShowGroupTable(&state) {
-					go fetchGroups(inspector, state.selectedQueue.Queue, groupsCh, errorCh)
-				} else if state.taskState == asynq.TaskStateAggregating {
-					go fetchAggregatingTasks(inspector, state.selectedQueue.Queue, state.selectedGroup.Group,
-						taskPageSize(s), state.pageNum, tasksCh, errorCh)
-				} else {
-					go fetchTasks(inspector, state.selectedQueue.Queue, state.taskState,
-						taskPageSize(s), state.pageNum, tasksCh, errorCh)
-				}
-				// if the task modal is open, fetch the selected task's info
-				if state.taskID != "" {
-					go fetchTaskInfo(inspector, state.selectedQueue.Queue, state.taskID, taskCh, errorCh)
-				}
-			}
+			f.Fetch(&state)
 
 		case queues := <-queuesCh:
 			state.queues = queues
@@ -192,11 +162,6 @@ func Run(opts Options) {
 
 		case t := <-taskCh:
 			state.selectedTask = t
-			state.err = nil
-			d.Draw(&state)
-
-		case redisInfo := <-redisInfoCh:
-			state.redisInfo = *redisInfo
 			state.err = nil
 			d.Draw(&state)
 

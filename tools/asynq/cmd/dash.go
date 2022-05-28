@@ -16,7 +16,6 @@ import (
 
 var (
 	flagDebug        = false
-	flagUseRealData  = false
 	flagPollInterval = 8 * time.Second
 )
 
@@ -25,7 +24,6 @@ func init() {
 	dashCmd.Flags().DurationVar(&flagPollInterval, "refresh", 8*time.Second, "Interval between data refresh. Minimum value is 1s.")
 	// TODO: Remove this debug once we're done
 	dashCmd.Flags().BoolVar(&flagDebug, "debug", false, "Print debug info")
-	dashCmd.Flags().BoolVar(&flagUseRealData, "realdata", true, "Use real data in redis")
 }
 
 var dashCmd = &cobra.Command{
@@ -41,7 +39,6 @@ var dashCmd = &cobra.Command{
 		}
 		dash.Run(dash.Options{
 			DebugMode:    flagDebug,
-			UseRealData:  flagUseRealData,
 			PollInterval: flagPollInterval,
 		})
 	},

@@ -5,8 +5,6 @@
 package dash
 
 import (
-	"math/rand"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/hibiken/asynq"
 )
@@ -21,13 +19,12 @@ type dataFetcher struct {
 	opts      Options
 	s         tcell.Screen
 
-	errorCh     chan<- error
-	queueCh     chan<- *asynq.QueueInfo
-	taskCh      chan<- *asynq.TaskInfo
-	queuesCh    chan<- []*asynq.QueueInfo
-	groupsCh    chan<- []*asynq.GroupInfo
-	tasksCh     chan<- []*asynq.TaskInfo
-	redisInfoCh chan<- *redisInfo
+	errorCh  chan<- error
+	queueCh  chan<- *asynq.QueueInfo
+	taskCh   chan<- *asynq.TaskInfo
+	queuesCh chan<- []*asynq.QueueInfo
+	groupsCh chan<- []*asynq.GroupInfo
+	tasksCh  chan<- []*asynq.TaskInfo
 }
 
 func (f *dataFetcher) Fetch(state *State) {
@@ -60,15 +57,6 @@ func (f *dataFetcher) fetchQueues() {
 }
 
 func fetchQueues(i *asynq.Inspector, queuesCh chan<- []*asynq.QueueInfo, errorCh chan<- error, opts Options) {
-	if !opts.UseRealData {
-		n := rand.Intn(100)
-		queuesCh <- []*asynq.QueueInfo{
-			{Queue: "default", Size: 1800 + n, Pending: 700 + n, Active: 300, Aggregating: 300, Scheduled: 200, Retry: 100, Archived: 200},
-			{Queue: "critical", Size: 2300 + n, Pending: 1000 + n, Active: 500, Retry: 400, Completed: 400},
-			{Queue: "low", Size: 900 + n, Pending: n, Active: 300, Scheduled: 400, Completed: 200},
-		}
-		return
-	}
 	queues, err := i.Queues()
 	if err != nil {
 		errorCh <- err
@@ -93,20 +81,6 @@ func fetchQueueInfo(i *asynq.Inspector, qname string, queueCh chan<- *asynq.Queu
 		return
 	}
 	queueCh <- q
-}
-
-func (f *dataFetcher) fetchRedisInfo() {
-	go fetchRedisInfo(f.redisInfoCh, f.errorCh)
-}
-
-func fetchRedisInfo(redisInfoCh chan<- *redisInfo, errorCh chan<- error) {
-	n := rand.Intn(1000)
-	redisInfoCh <- &redisInfo{
-		version:         "6.2.6",
-		uptime:          "9 days",
-		memoryUsage:     n,
-		peakMemoryUsage: n + 123,
-	}
 }
 
 func (f *dataFetcher) fetchGroups(qname string) {
