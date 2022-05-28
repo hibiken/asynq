@@ -501,7 +501,9 @@ func drawTaskModal(d *ScreenDrawer, state *State) {
 		fns := []func(d *modalRowDrawer){
 			func(d *modalRowDrawer) { d.Print("=== Task Summary ===", baseStyle.Bold(true)) },
 			func(d *modalRowDrawer) { d.Print("", baseStyle) },
-			func(d *modalRowDrawer) { d.Print(fmt.Sprintf("Task %q no longer exists", state.taskID), baseStyle) },
+			func(d *modalRowDrawer) {
+				d.Print(fmt.Sprintf("Task %q no longer exists", state.taskID), baseStyle)
+			},
 		}
 		withModal(d, fns)
 		return
@@ -634,7 +636,7 @@ func withModal(d *ScreenDrawer, rowPrintFns []func(d *modalRowDrawer)) {
 	for i := 1; i < modalHeight-1; i++ {
 		d.Goto(colOffset, rowOffset+i)
 		d.Print(fmt.Sprintf("%c ", tcell.RuneVLine), baseStyle)
-		if i < len(rowPrintFns) {
+		if i <= len(rowPrintFns) {
 			rowPrintFns[i-1](&rowDrawer)
 		}
 		d.FillUntil(' ', baseStyle, colOffset+modalWidth-2)
