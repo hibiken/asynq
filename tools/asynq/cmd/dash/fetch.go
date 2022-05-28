@@ -46,8 +46,6 @@ func (f *dataFetcher) Fetch(state *State) {
 		if state.taskID != "" {
 			f.fetchTaskInfo(state.selectedQueue.Queue, state.taskID)
 		}
-	case viewTypeRedis:
-		f.fetchRedisInfo()
 	}
 }
 

@@ -57,21 +57,6 @@ func (dd *dashDrawer) Draw(state *State) {
 		d.NL()
 		drawTaskTable(d, state)
 		drawTaskModal(d, state)
-	case viewTypeServers:
-		d.Println("=== Servers ===", baseStyle.Bold(true))
-		d.NL()
-		// TODO: Draw body
-	case viewTypeSchedulers:
-		d.Println("=== Schedulers === ", baseStyle.Bold(true))
-		d.NL()
-		// TODO: Draw body
-	case viewTypeRedis:
-		d.Println("=== Redis Info === ", baseStyle.Bold(true))
-		d.NL()
-		d.Println(fmt.Sprintf("Version: %s", state.redisInfo.version), baseStyle)
-		d.Println(fmt.Sprintf("Uptime: %s", state.redisInfo.uptime), baseStyle)
-		d.Println(fmt.Sprintf("Memory Usage: %s", byteCount(int64(state.redisInfo.memoryUsage))), baseStyle)
-		d.Println(fmt.Sprintf("Peak Memory Usage: %s", byteCount(int64(state.redisInfo.peakMemoryUsage))), baseStyle)
 	case viewTypeHelp:
 		d.Println("=== HELP ===", baseStyle.Bold(true))
 		d.NL()
@@ -161,30 +146,9 @@ func drawFooter(d *ScreenDrawer, state *State) {
 	style := baseStyle.Background(tcell.ColorDarkSlateGray)
 	switch state.view {
 	case viewTypeHelp:
-		d.Print("Esc=GoBack", style)
+		d.Print("<Esc>: GoBack", style)
 	default:
-		type menu struct {
-			label string
-			view  viewType
-		}
-		menus := []*menu{
-			{"F1=Queues", viewTypeQueues},
-			{"F2=Servers", viewTypeServers},
-			{"F3=Schedulers", viewTypeSchedulers},
-			{"F4=Redis", viewTypeRedis},
-			{"?=Help", viewTypeHelp},
-		}
-		var b strings.Builder
-		for _, m := range menus {
-			b.WriteString(m.label)
-			// Add * for the current view
-			if m.view == state.view {
-				b.WriteString("* ")
-			} else {
-				b.WriteString("  ")
-			}
-		}
-		d.Print(b.String(), style)
+		d.Print("<?>: Help    <Ctrl+C>: Exit ", style)
 	}
 	d.FillLine(' ', style)
 }

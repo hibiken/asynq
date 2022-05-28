@@ -51,14 +51,6 @@ func (h *keyEventHandler) HandleKeyEvent(ev *tcell.EventKey) {
 		h.handleEnterKey()
 	} else if ev.Rune() == '?' {
 		h.showHelp()
-	} else if ev.Key() == tcell.KeyF1 {
-		h.showQueues()
-	} else if ev.Key() == tcell.KeyF2 {
-		h.showServers()
-	} else if ev.Key() == tcell.KeyF3 {
-		h.showSchedulers()
-	} else if ev.Key() == tcell.KeyF4 {
-		h.showRedisInfo()
 	} else if ev.Rune() == 'n' {
 		h.nextPage()
 	} else if ev.Rune() == 'p' {
@@ -304,58 +296,6 @@ func (h *keyEventHandler) prevPage() {
 				h.resetTicker()
 			}
 		}
-	}
-}
-
-func (h *keyEventHandler) showQueues() {
-	var (
-		state = h.state
-		f     = h.fetcher
-		d     = h.drawer
-	)
-	if state.view != viewTypeQueues {
-		state.view = viewTypeQueues
-		f.Fetch(state)
-		h.resetTicker()
-		d.Draw(state)
-	}
-}
-
-func (h *keyEventHandler) showServers() {
-	var (
-		state = h.state
-		d     = h.drawer
-	)
-	if state.view != viewTypeServers {
-		//TODO Start data fetch and reset ticker
-		state.view = viewTypeServers
-		d.Draw(state)
-	}
-}
-
-func (h *keyEventHandler) showSchedulers() {
-	var (
-		state = h.state
-		d     = h.drawer
-	)
-	if state.view != viewTypeSchedulers {
-		//TODO Start data fetch and reset ticker
-		state.view = viewTypeSchedulers
-		d.Draw(state)
-	}
-}
-
-func (h *keyEventHandler) showRedisInfo() {
-	var (
-		state = h.state
-		f     = h.fetcher
-		d     = h.drawer
-	)
-	if state.view != viewTypeRedis {
-		state.view = viewTypeRedis
-		f.Fetch(state)
-		h.resetTicker()
-		d.Draw(state)
 	}
 }
 

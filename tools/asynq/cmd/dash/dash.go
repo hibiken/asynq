@@ -20,9 +20,6 @@ type viewType int
 const (
 	viewTypeQueues viewType = iota
 	viewTypeQueueDetails
-	viewTypeServers
-	viewTypeSchedulers
-	viewTypeRedis
 	viewTypeHelp
 )
 
@@ -143,6 +140,7 @@ func Run(opts Options) {
 			}
 
 		case <-ticker.C:
+			// TODO: this should be just the call to fetcher.Fetch(state)
 			switch state.view {
 			case viewTypeQueues:
 				go fetchQueues(inspector, queuesCh, errorCh, opts)
@@ -161,9 +159,6 @@ func Run(opts Options) {
 				if state.taskID != "" {
 					go fetchTaskInfo(inspector, state.selectedQueue.Queue, state.taskID, taskCh, errorCh)
 				}
-
-			case viewTypeRedis:
-				go fetchRedisInfo(redisInfoCh, errorCh)
 			}
 
 		case queues := <-queuesCh:
