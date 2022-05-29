@@ -5,6 +5,8 @@
 package dash
 
 import (
+	"sort"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/hibiken/asynq"
 )
@@ -62,6 +64,7 @@ func fetchQueues(i *asynq.Inspector, queuesCh chan<- []*asynq.QueueInfo, errorCh
 		errorCh <- err
 		return
 	}
+	sort.Strings(queues)
 	var res []*asynq.QueueInfo
 	for _, q := range queues {
 		info, err := i.GetQueueInfo(q)
