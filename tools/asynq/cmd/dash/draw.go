@@ -217,6 +217,14 @@ func formatErrorRate(processed, failed int) string {
 	return fmt.Sprintf("%.2f", float64(failed)/float64(processed))
 }
 
+func formatNextProcessTime(t time.Time) string {
+	now := time.Now()
+	if t.Before(now) {
+		return "now"
+	}
+	return fmt.Sprintf("in %v", (t.Sub(now).Round(time.Second)))
+}
+
 func drawQueueTable(d *ScreenDrawer, style tcell.Style, state *State) {
 	drawTable(d, style, queueColumnConfigs, state.queues, state.queueTableRowIdx-1)
 }
@@ -300,7 +308,7 @@ var scheduledTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
 	{"Next Process Time", alignLeft, func(t *asynq.TaskInfo) string {
-		return fmt.Sprintf("in %v", (t.NextProcessAt.Sub(time.Now()).Round(time.Second)))
+		return formatNextProcessTime(t.NextProcessAt)
 	}},
 	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
 }
@@ -315,7 +323,7 @@ var retryTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 		return t.LastFailedAt.Format("2006-01-02 15:04:05 MST")
 	}},
 	{"Next Process Time", alignLeft, func(t *asynq.TaskInfo) string {
-		return fmt.Sprintf("in %v", (t.NextProcessAt.Sub(time.Now()).Round(time.Second)))
+		return formatNextProcessTime(t.NextProcessAt)
 	}},
 	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
 }
