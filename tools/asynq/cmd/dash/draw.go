@@ -21,6 +21,15 @@ import (
 var (
 	baseStyle  = tcell.StyleDefault.Background(tcell.ColorReset).Foreground(tcell.ColorReset)
 	labelStyle = baseStyle.Foreground(tcell.ColorLightGray)
+
+	// styles for bar graph
+	activeStyle      = baseStyle.Foreground(tcell.ColorBlue)
+	pendingStyle     = baseStyle.Foreground(tcell.ColorGreen)
+	aggregatingStyle = baseStyle.Foreground(tcell.ColorLightGreen)
+	scheduledStyle   = baseStyle.Foreground(tcell.ColorYellow)
+	retryStyle       = baseStyle.Foreground(tcell.ColorPink)
+	archivedStyle    = baseStyle.Foreground(tcell.ColorPurple)
+	completedStyle   = baseStyle.Foreground(tcell.ColorDarkGreen)
 )
 
 // drawer draws UI with the given state.
@@ -71,16 +80,6 @@ func (dd *dashDrawer) Draw(state *State) {
 }
 
 func drawQueueSizeGraphs(d *ScreenDrawer, state *State) {
-	var (
-		activeStyle      = tcell.StyleDefault.Foreground(tcell.GetColor("blue")).Background(tcell.ColorReset)
-		pendingStyle     = tcell.StyleDefault.Foreground(tcell.GetColor("green")).Background(tcell.ColorReset)
-		aggregatingStyle = tcell.StyleDefault.Foreground(tcell.GetColor("lightgreen")).Background(tcell.ColorReset)
-		scheduledStyle   = tcell.StyleDefault.Foreground(tcell.GetColor("yellow")).Background(tcell.ColorReset)
-		retryStyle       = tcell.StyleDefault.Foreground(tcell.GetColor("pink")).Background(tcell.ColorReset)
-		archivedStyle    = tcell.StyleDefault.Foreground(tcell.GetColor("purple")).Background(tcell.ColorReset)
-		completedStyle   = tcell.StyleDefault.Foreground(tcell.GetColor("darkgreen")).Background(tcell.ColorReset)
-	)
-
 	var qnames []string
 	var qsizes []string // queue size in strings
 	maxSize := 1        // not zero to avoid division by zero
@@ -406,17 +405,16 @@ func drawGroupTable(d *ScreenDrawer, state *State) {
 	end := min(start+pageSize, total)
 	drawTable(d, baseStyle, colConfigs, state.groups[start:end], state.groupTableRowIdx-1)
 
-	footerStyle := baseStyle.Foreground(tcell.ColorLightGray)
 	if pageSize < total {
-		d.Print(fmt.Sprintf("Showing %d-%d out of %d", start+1, end, total), footerStyle)
+		d.Print(fmt.Sprintf("Showing %d-%d out of %d", start+1, end, total), labelStyle)
 		if end < total {
-			d.Print("  n=NextPage", footerStyle)
+			d.Print("  n=NextPage", labelStyle)
 		}
 		if start > 0 {
-			d.Print("  p=PrevPage", footerStyle)
+			d.Print("  p=PrevPage", labelStyle)
 		}
 	}
-	d.FillLine(' ', footerStyle)
+	d.FillLine(' ', labelStyle)
 }
 
 type number interface {
