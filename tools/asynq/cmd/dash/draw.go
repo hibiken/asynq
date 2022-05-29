@@ -107,31 +107,31 @@ func drawQueueSizeGraphs(d *ScreenDrawer, state *State) {
 		d.Print(q.Queue, baseStyle)
 		d.Print(strings.Repeat(" ", qnameWidth-runewidth.StringWidth(q.Queue)+1), baseStyle) // padding between qname and graph
 		d.Print("|", baseStyle)
-		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Completed)*multipiler))), completedStyle)
-		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Archived)*multipiler))), archivedStyle)
-		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Retry)*multipiler))), retryStyle)
-		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Scheduled)*multipiler))), scheduledStyle)
-		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Aggregating)*multipiler))), aggregatingStyle)
-		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Pending)*multipiler))), pendingStyle)
 		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Active)*multipiler))), activeStyle)
+		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Pending)*multipiler))), pendingStyle)
+		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Aggregating)*multipiler))), aggregatingStyle)
+		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Scheduled)*multipiler))), scheduledStyle)
+		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Retry)*multipiler))), retryStyle)
+		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Archived)*multipiler))), archivedStyle)
+		d.Print(strings.Repeat(string(tick), int(math.Floor(float64(q.Completed)*multipiler))), completedStyle)
 		d.Print(fmt.Sprintf(" %d", q.Size), baseStyle)
 		d.NL()
 	}
 	d.NL()
-	d.Print("completed=", baseStyle)
-	d.Print(string(tick), completedStyle)
-	d.Print(" archived=", baseStyle)
-	d.Print(string(tick), archivedStyle)
-	d.Print(" retry=", baseStyle)
-	d.Print(string(tick), retryStyle)
-	d.Print(" scheduled=", baseStyle)
-	d.Print(string(tick), scheduledStyle)
-	d.Print(" aggregating=", baseStyle)
-	d.Print(string(tick), aggregatingStyle)
+	d.Print("active=", baseStyle)
+	d.Print(string(tick), activeStyle)
 	d.Print(" pending=", baseStyle)
 	d.Print(string(tick), pendingStyle)
-	d.Print(" active=", baseStyle)
-	d.Print(string(tick), activeStyle)
+	d.Print(" aggregating=", baseStyle)
+	d.Print(string(tick), aggregatingStyle)
+	d.Print(" scheduled=", baseStyle)
+	d.Print(string(tick), scheduledStyle)
+	d.Print(" retry=", baseStyle)
+	d.Print(string(tick), retryStyle)
+	d.Print(" archived=", baseStyle)
+	d.Print(string(tick), archivedStyle)
+	d.Print(" completed=", baseStyle)
+	d.Print(string(tick), completedStyle)
 	d.NL()
 }
 
@@ -509,7 +509,7 @@ func drawTaskModal(d *ScreenDrawer, state *State) {
 	if task == nil {
 		// task no longer found
 		fns := []func(d *modalRowDrawer){
-			func(d *modalRowDrawer) { d.Print("=== Task Summary ===", baseStyle.Bold(true)) },
+			func(d *modalRowDrawer) { d.Print("=== Task Info ===", baseStyle.Bold(true)) },
 			func(d *modalRowDrawer) { d.Print("", baseStyle) },
 			func(d *modalRowDrawer) {
 				d.Print(fmt.Sprintf("Task %q no longer exists", state.taskID), baseStyle)
@@ -519,7 +519,7 @@ func drawTaskModal(d *ScreenDrawer, state *State) {
 		return
 	}
 	fns := []func(d *modalRowDrawer){
-		func(d *modalRowDrawer) { d.Print("=== Task Summary ===", baseStyle.Bold(true)) },
+		func(d *modalRowDrawer) { d.Print("=== Task Info ===", baseStyle.Bold(true)) },
 		func(d *modalRowDrawer) { d.Print("", baseStyle) },
 		func(d *modalRowDrawer) {
 			d.Print("ID: ", labelStyle)
