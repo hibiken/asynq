@@ -225,6 +225,14 @@ func formatNextProcessTime(t time.Time) string {
 	return fmt.Sprintf("in %v", (t.Sub(now).Round(time.Second)))
 }
 
+func formatPastTime(t time.Time) string {
+	now := time.Now()
+	if t.After(now) || t.Equal(now) {
+		return "just now"
+	}
+	return fmt.Sprintf("%v ago", time.Since(t).Round(time.Second))
+}
+
 func drawQueueTable(d *ScreenDrawer, style tcell.Style, state *State) {
 	drawTable(d, style, queueColumnConfigs, state.queues, state.queueTableRowIdx-1)
 }
@@ -319,9 +327,7 @@ var retryTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"Retried", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.Retried) }},
 	{"Max Retry", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.MaxRetry) }},
 	{"Last Failure", alignLeft, func(t *asynq.TaskInfo) string { return t.LastErr }},
-	{"Last Failure Time", alignLeft, func(t *asynq.TaskInfo) string {
-		return t.LastFailedAt.Format("2006-01-02 15:04:05 MST")
-	}},
+	{"Last Failure Time", alignLeft, func(t *asynq.TaskInfo) string { return formatPastTime(t.LastFailedAt) }},
 	{"Next Process Time", alignLeft, func(t *asynq.TaskInfo) string {
 		return formatNextProcessTime(t.NextProcessAt)
 	}},
@@ -334,18 +340,14 @@ var archivedTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"Retried", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.Retried) }},
 	{"MaxRetry", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.MaxRetry) }},
 	{"Last Failure", alignLeft, func(t *asynq.TaskInfo) string { return t.LastErr }},
-	{"Last Failure Time", alignLeft, func(t *asynq.TaskInfo) string {
-		return t.LastFailedAt.Format("2006-01-02 15:04:05 MST")
-	}},
+	{"Last Failure Time", alignLeft, func(t *asynq.TaskInfo) string { return formatPastTime(t.LastFailedAt) }},
 	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
 }
 
 var completedTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
-	{"Completion Time", alignLeft, func(t *asynq.TaskInfo) string {
-		return t.CompletedAt.Format("2006-01-02 15:04:05 MST")
-	}},
+	{"Completion Time", alignLeft, func(t *asynq.TaskInfo) string { return formatPastTime(t.CompletedAt) }},
 	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }}, // TODO: format these bytes correctly
 	{"Result", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Result) }},
 }
@@ -547,19 +549,19 @@ func drawTaskModal(d *ScreenDrawer, state *State) {
 		})
 		fns = append(fns, func(d *modalRowDrawer) {
 			d.Print("Last Failure Time: ", labelStyle)
-			d.Print(fmt.Sprintf("%v", task.LastFailedAt), baseStyle)
+			d.Print(fmt.Sprintf("%v (%s)", task.LastFailedAt, formatPastTime(task.LastFailedAt)), baseStyle)
 		})
 	}
 	if !task.NextProcessAt.IsZero() {
 		fns = append(fns, func(d *modalRowDrawer) {
 			d.Print("Next Process Time: ", labelStyle)
-			d.Print(fmt.Sprintf("%v", task.NextProcessAt), baseStyle)
+			d.Print(fmt.Sprintf("%v (%s)", task.NextProcessAt, formatNextProcessTime(task.NextProcessAt)), baseStyle)
 		})
 	}
 	if !task.CompletedAt.IsZero() {
 		fns = append(fns, func(d *modalRowDrawer) {
 			d.Print("Completion Time: ", labelStyle)
-			d.Print(fmt.Sprintf("%v", task.CompletedAt), baseStyle)
+			d.Print(fmt.Sprintf("%v (%s)", task.CompletedAt, formatPastTime(task.CompletedAt)), baseStyle)
 		})
 	}
 	fns = append(fns, func(d *modalRowDrawer) {
@@ -599,7 +601,7 @@ func formatByteSlice(data []byte) string {
 	if !isPrintable(data) {
 		return "<non-printable>"
 	}
-	return string(data)
+	return strings.ReplaceAll(string(data), "\n", "  ")
 }
 
 type modalRowDrawer struct {
