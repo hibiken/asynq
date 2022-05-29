@@ -107,7 +107,7 @@ func (h *keyEventHandler) downKeyQueueDetails() {
 		} else {
 			state.groupTableRowIdx = 0 // loop back
 		}
-	} else {
+	} else if state.taskID == "" {
 		if state.taskTableRowIdx < len(state.tasks) {
 			state.taskTableRowIdx++
 		} else {
@@ -144,7 +144,7 @@ func (h *keyEventHandler) upKeyQueueDetails() {
 		} else {
 			state.groupTableRowIdx--
 		}
-	} else {
+	} else if state.taskID == "" {
 		if state.taskTableRowIdx == 0 {
 			state.taskTableRowIdx = len(state.tasks)
 		} else {
@@ -215,7 +215,7 @@ func (h *keyEventHandler) handleLeftKey() {
 		f     = h.fetcher
 		d     = h.drawer
 	)
-	if state.view == viewTypeQueueDetails {
+	if state.view == viewTypeQueueDetails && state.taskID == "" {
 		state.taskState = prevTaskState(state.taskState)
 		state.pageNum = 1
 		state.taskTableRowIdx = 0
@@ -233,7 +233,7 @@ func (h *keyEventHandler) handleRightKey() {
 		f     = h.fetcher
 		d     = h.drawer
 	)
-	if state.view == viewTypeQueueDetails {
+	if state.view == viewTypeQueueDetails && state.taskID == "" {
 		state.taskState = nextTaskState(state.taskState)
 		state.pageNum = 1
 		state.taskTableRowIdx = 0
