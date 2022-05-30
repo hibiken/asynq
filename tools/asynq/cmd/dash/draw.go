@@ -141,7 +141,7 @@ func drawFooter(d *ScreenDrawer, state *State) {
 		d.FillLine(' ', style)
 		return
 	}
-	style := baseStyle.Background(tcell.ColorDarkSlateGray)
+	style := baseStyle.Background(tcell.ColorDarkSlateGray).Foreground(tcell.ColorWhite)
 	switch state.view {
 	case viewTypeHelp:
 		d.Print("<Esc>: GoBack", style)
