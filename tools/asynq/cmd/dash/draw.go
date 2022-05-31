@@ -67,9 +67,7 @@ func (dd *dashDrawer) Draw(state *State) {
 		drawTaskTable(d, state)
 		drawTaskModal(d, state)
 	case viewTypeHelp:
-		d.Println("=== HELP ===", baseStyle.Bold(true))
-		d.NL()
-		// TODO: Draw HELP body
+		drawHelp(d)
 	}
 	d.GoToBottom()
 	if opts.DebugMode {
@@ -347,7 +345,7 @@ var completedTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
 	{"Completion Time", alignLeft, func(t *asynq.TaskInfo) string { return formatPastTime(t.CompletedAt) }},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }}, // TODO: format these bytes correctly
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
 	{"Result", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Result) }},
 }
 
@@ -679,4 +677,50 @@ func truncate(s string, max int) string {
 
 func drawDebugInfo(d *ScreenDrawer, state *State) {
 	d.Println(state.DebugString(), baseStyle)
+}
+
+func drawHelp(d *ScreenDrawer) {
+	keyStyle := labelStyle.Bold(true)
+	withModal(d, []func(*modalRowDrawer){
+		func(d *modalRowDrawer) { d.Print("=== Help ===", baseStyle.Bold(true)) },
+		func(d *modalRowDrawer) { d.Print("", baseStyle) },
+		func(d *modalRowDrawer) {
+			d.Print("<Enter>", keyStyle)
+			d.Print("              to select", baseStyle)
+		},
+		func(d *modalRowDrawer) {
+			d.Print("<Esc>", keyStyle)
+			d.Print(" or ", baseStyle)
+			d.Print("<q>", keyStyle)
+			d.Print("         to go back", baseStyle)
+		},
+		func(d *modalRowDrawer) {
+			d.Print("<UpArrow>", keyStyle)
+			d.Print(" or ", baseStyle)
+			d.Print("<k>", keyStyle)
+			d.Print("     to move up", baseStyle)
+		},
+		func(d *modalRowDrawer) {
+			d.Print("<DownArrow>", keyStyle)
+			d.Print(" or ", baseStyle)
+			d.Print("<j>", keyStyle)
+			d.Print("   to move down", baseStyle)
+		},
+		func(d *modalRowDrawer) {
+			d.Print("<LeftArrow>", keyStyle)
+			d.Print(" or ", baseStyle)
+			d.Print("<h>", keyStyle)
+			d.Print("   to move left", baseStyle)
+		},
+		func(d *modalRowDrawer) {
+			d.Print("<RightArrow>", keyStyle)
+			d.Print(" or ", baseStyle)
+			d.Print("<l>", keyStyle)
+			d.Print("  to move right", baseStyle)
+		},
+		func(d *modalRowDrawer) {
+			d.Print("<Ctrl+C>", keyStyle)
+			d.Print("             to quit", baseStyle)
+		},
+	})
 }
