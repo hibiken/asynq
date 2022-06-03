@@ -259,6 +259,12 @@ func rpad(s string, padding int) string {
 
 }
 
+// lpad adds padding to the left of a string.
+func lpad(s string, padding int) string {
+	tmpl := fmt.Sprintf("%%%ds ", padding)
+	return fmt.Sprintf(tmpl, s)
+}
+
 // indent indents the given text by given spaces.
 func indent(text string, space int) string {
 	if len(text) == 0 {
