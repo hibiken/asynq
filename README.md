@@ -295,9 +295,9 @@ To install the CLI tool, run the following command:
 go install github.com/hibiken/asynq/tools/asynq
 ```
 
-Here's an example of running the `asynq stats` command:
+Here's an example of running the `asynq dash` command:
 
-![Gif](/docs/assets/demo.gif)
+![Gif](/docs/assets/dash.gif)
 
 For details on how to use the tool, refer to the tool's [README](/tools/asynq/README.md).
 
