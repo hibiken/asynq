@@ -42,6 +42,10 @@ func (d *ScreenDrawer) Println(s string, style tcell.Style) {
 // and adds a newline.
 func (d *ScreenDrawer) FillLine(r rune, style tcell.Style) {
 	w, _ := d.Screen().Size()
+	if w-d.l.col < 0 {
+		d.NL()
+		return
+	}
 	s := strings.Repeat(string(r), w-d.l.col)
 	d.Print(s, style)
 	d.NL()

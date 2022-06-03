@@ -321,8 +321,7 @@ var scheduledTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 var retryTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
-	{"Retried", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.Retried) }},
-	{"Max Retry", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.MaxRetry) }},
+	{"Retry", alignRight, func(t *asynq.TaskInfo) string { return fmt.Sprintf("%d/%d", t.Retried, t.MaxRetry) }},
 	{"Last Failure", alignLeft, func(t *asynq.TaskInfo) string { return t.LastErr }},
 	{"Last Failure Time", alignLeft, func(t *asynq.TaskInfo) string { return formatPastTime(t.LastFailedAt) }},
 	{"Next Process Time", alignLeft, func(t *asynq.TaskInfo) string {
@@ -334,8 +333,7 @@ var retryTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 var archivedTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
-	{"Retried", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.Retried) }},
-	{"MaxRetry", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.MaxRetry) }},
+	{"Retry", alignRight, func(t *asynq.TaskInfo) string { return fmt.Sprintf("%d/%d", t.Retried, t.MaxRetry) }},
 	{"Last Failure", alignLeft, func(t *asynq.TaskInfo) string { return t.LastErr }},
 	{"Last Failure Time", alignLeft, func(t *asynq.TaskInfo) string { return formatPastTime(t.LastFailedAt) }},
 	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
