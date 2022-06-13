@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/testutil"
 )
@@ -153,4 +154,57 @@ func TestSchedulerUnregister(t *testing.T) {
 			t.Errorf("%d tasks were enqueued, want zero", len(got))
 		}
 	}
+}
+
+func TestSchedulerPostAndPreEnqueueHandler(t *testing.T) {
+	var (
+		preMu       sync.Mutex
+		preCounter  int
+		postMu      sync.Mutex
+		postCounter int
+	)
+	preHandler := func(task *Task, opts []Option) {
+		preMu.Lock()
+		preCounter++
+		preMu.Unlock()
+	}
+	postHandler := func(info *TaskInfo, err error) {
+		postMu.Lock()
+		postCounter++
+		postMu.Unlock()
+	}
+
+	// Connect to non-existent redis instance to simulate a redis server being down.
+	scheduler := NewScheduler(
+		getRedisConnOpt(t),
+		&SchedulerOpts{
+			PreEnqueueFunc:  preHandler,
+			PostEnqueueFunc: postHandler,
+		},
+	)
+
+	task := NewTask("test", nil)
+
+	if _, err := scheduler.Register("@every 3s", task); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scheduler.Start(); err != nil {
+		t.Fatal(err)
+	}
+	// Scheduler should attempt to enqueue the task three times (every 3s).
+	time.Sleep(10 * time.Second)
+	scheduler.Shutdown()
+
+	preMu.Lock()
+	if preCounter != 3 {
+		t.Errorf("PreEnqueueFunc was called %d times, want 3", preCounter)
+	}
+	preMu.Unlock()
+
+	postMu.Lock()
+	if postCounter != 3 {
+		t.Errorf("PostEnqueueFunc was called %d times, want 3", postCounter)
+	}
+	postMu.Unlock()
 }
