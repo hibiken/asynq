@@ -164,6 +164,8 @@ type Config struct {
 	//     ErrorHandler: asynq.ErrorHandlerFunc(reportError)
 	ErrorHandler ErrorHandler
 
+	RecoverPanicFunc RecoverPanicFunc
+
 	// Logger specifies the logger used by the server instance.
 	//
 	// If unset, default logger is used.
@@ -263,6 +265,8 @@ func (fn ErrorHandlerFunc) HandleError(ctx context.Context, task *Task, err erro
 // e is the error returned by the task handler.
 // t is the task in question.
 type RetryDelayFunc func(n int, e error, t *Task) time.Duration
+
+type RecoverPanicFunc func(errMsg string)
 
 // Logger supports logging at various log levels.
 type Logger interface {
@@ -490,20 +494,21 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		cancelations: cancels,
 	})
 	processor := newProcessor(processorParams{
-		logger:          logger,
-		broker:          rdb,
-		retryDelayFunc:  delayFunc,
-		baseCtxFn:       baseCtxFn,
-		isFailureFunc:   isFailureFunc,
-		syncCh:          syncCh,
-		cancelations:    cancels,
-		concurrency:     n,
-		queues:          queues,
-		strictPriority:  cfg.StrictPriority,
-		errHandler:      cfg.ErrorHandler,
-		shutdownTimeout: shutdownTimeout,
-		starting:        starting,
-		finished:        finished,
+		logger:           logger,
+		broker:           rdb,
+		retryDelayFunc:   delayFunc,
+		recoverPanicFunc: cfg.RecoverPanicFunc,
+		baseCtxFn:        baseCtxFn,
+		isFailureFunc:    isFailureFunc,
+		syncCh:           syncCh,
+		cancelations:     cancels,
+		concurrency:      n,
+		queues:           queues,
+		strictPriority:   cfg.StrictPriority,
+		errHandler:       cfg.ErrorHandler,
+		shutdownTimeout:  shutdownTimeout,
+		starting:         starting,
+		finished:         finished,
 	})
 	recoverer := newRecoverer(recovererParams{
 		logger:         logger,
