@@ -948,7 +948,7 @@ func (i *Inspector) CancelProcessing(id string) error {
 // guarantee that the task with the given id will be canceled. The return
 // value only indicates whether the cancelation signal has been sent.
 func (i *Inspector) CancelProcessingContext(ctx context.Context, id string) error {
-	return i.rdb.PublishCancelationContext(ctx, id)
+	return i.rdb.PublishCancelation(ctx, id)
 }
 
 // PauseQueue pauses task processing on the specified queue.

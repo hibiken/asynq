@@ -1459,13 +1459,7 @@ func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
 
 // PublishCancelation publish cancelation message to all subscribers.
 // The message is the ID for the task to be canceled.
-func (r *RDB) PublishCancelation(id string) error {
-	return r.PublishCancelationContext(context.Background(), id)
-}
-
-// PublishCancelationContext publish cancelation message to all subscribers.
-// The message is the ID for the task to be canceled.
-func (r *RDB) PublishCancelationContext(ctx context.Context, id string) error {
+func (r *RDB) PublishCancelation(ctx context.Context, id string) error {
 	var op errors.Op = "rdb.PublishCancelation"
 	if err := r.client.Publish(ctx, base.CancelChannel, id).Err(); err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("redis pubsub publish error: %v", err))

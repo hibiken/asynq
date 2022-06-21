@@ -749,7 +749,7 @@ type Broker interface {
 
 	// Cancelation related methods
 	CancelationPubSub() (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers
-	PublishCancelation(id string) error
+	PublishCancelation(ctx context.Context, id string) error
 
 	WriteResult(qname, id string, data []byte) (n int, err error)
 }

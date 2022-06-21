@@ -3053,7 +3053,7 @@ func TestCancelationPubSub(t *testing.T) {
 	publish := []string{"one", "two", "three"}
 
 	for _, msg := range publish {
-		r.PublishCancelation(msg)
+		r.PublishCancelation(context.Background(), msg)
 	}
 
 	// allow for message to reach subscribers.
