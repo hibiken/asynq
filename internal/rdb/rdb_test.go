@@ -616,7 +616,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		for _, qname := range tc.paused {
-			if err := r.Pause(qname); err != nil {
+			if err := r.Pause(context.Background(), qname); err != nil {
 				t.Fatal(err)
 			}
 		}
