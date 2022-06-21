@@ -1291,12 +1291,7 @@ return res
 `)
 
 // ListLeaseExpired returns a list of task messages with an expired lease from the given queues.
-func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
-	return r.ListLeaseExpiredContext(context.Background(), cutoff, qnames...)
-}
-
-// ListLeaseExpiredContext returns a list of task messages with an expired lease from the given queues.
-func (r *RDB) ListLeaseExpiredContext(ctx context.Context, cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
+func (r *RDB) ListLeaseExpired(ctx context.Context, cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
 	var op errors.Op = "rdb.ListLeaseExpired"
 	var msgs []*base.TaskMessage
 	for _, qname := range qnames {

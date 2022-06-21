@@ -2630,7 +2630,7 @@ func TestListLeaseExpired(t *testing.T) {
 		h.FlushDB(t, r.client)
 		h.SeedAllLease(t, r.client, tc.lease)
 
-		got, err := r.ListLeaseExpired(tc.cutoff, tc.qnames...)
+		got, err := r.ListLeaseExpired(context.Background(), tc.cutoff, tc.qnames...)
 		if err != nil {
 			t.Errorf("%s; ListLeaseExpired(%v) returned error: %v", tc.desc, tc.cutoff, err)
 			continue

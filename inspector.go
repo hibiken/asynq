@@ -402,7 +402,7 @@ func (i *Inspector) ListActiveTasksContext(ctx context.Context, queue string, op
 	case err != nil:
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
-	expired, err := i.rdb.ListLeaseExpiredContext(ctx, time.Now(), queue)
+	expired, err := i.rdb.ListLeaseExpired(ctx, time.Now(), queue)
 	if err != nil {
 		return nil, fmt.Errorf("asynq: %v", err)
 	}

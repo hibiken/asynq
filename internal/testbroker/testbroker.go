@@ -154,13 +154,13 @@ func (tb *TestBroker) DeleteExpiredCompletedTasks(qname string) error {
 	return tb.real.DeleteExpiredCompletedTasks(qname)
 }
 
-func (tb *TestBroker) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
+func (tb *TestBroker) ListLeaseExpired(ctx context.Context, cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return nil, errRedisDown
 	}
-	return tb.real.ListLeaseExpired(cutoff, qnames...)
+	return tb.real.ListLeaseExpired(ctx, cutoff, qnames...)
 }
 
 func (tb *TestBroker) ExtendLease(qname string, ids ...string) (time.Time, error) {

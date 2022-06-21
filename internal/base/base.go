@@ -740,7 +740,7 @@ type Broker interface {
 	DeleteExpiredCompletedTasks(qname string) error
 
 	// Lease related methods
-	ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*TaskMessage, error)
+	ListLeaseExpired(ctx context.Context, cutoff time.Time, qnames ...string) ([]*TaskMessage, error)
 	ExtendLease(qname string, ids ...string) (time.Time, error)
 
 	// State snapshot related methods
