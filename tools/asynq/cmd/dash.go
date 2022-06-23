@@ -39,6 +39,7 @@ var dashCmd = &cobra.Command{
 		}
 		dash.Run(dash.Options{
 			PollInterval: flagPollInterval,
+			RedisConnOpt: getRedisConnOpt(),
 		})
 	},
 }
