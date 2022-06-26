@@ -274,6 +274,7 @@ func (s *Scheduler) runHeartbeater() {
 		case <-s.done:
 			s.logger.Debugf("Scheduler heatbeater shutting down")
 			s.rdb.ClearSchedulerEntries(s.id)
+			ticker.Stop()
 			return
 		case <-ticker.C:
 			s.beat()
