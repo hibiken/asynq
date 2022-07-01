@@ -88,6 +88,11 @@ func MaxRetry(n int) Option {
 	return retryOption(n)
 }
 
+// UnlimitedRetry returns an option to specify the task will be retried indefinitely.
+func UnlimitedRetry() Option {
+	return retryOption(unlimitedRetry)
+}
+
 func (n retryOption) String() string     { return fmt.Sprintf("MaxRetry(%d)", int(n)) }
 func (n retryOption) Type() OptionType   { return MaxRetryOpt }
 func (n retryOption) Value() interface{} { return int(n) }
@@ -297,6 +302,8 @@ const (
 
 	// Default timeout used if both timeout and deadline are not specified.
 	defaultTimeout = 30 * time.Minute
+
+	unlimitedRetry = -1
 )
 
 // Value zero indicates no timeout and no deadline.

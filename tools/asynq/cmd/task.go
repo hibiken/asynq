@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/MakeNowJust/heredoc/v2"
@@ -323,7 +324,7 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
 				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload), formatProcessAt(t.NextProcessAt),
-					t.LastErr, formatPastTime(t.LastFailedAt), t.Retried, t.MaxRetry)
+					t.LastErr, formatPastTime(t.LastFailedAt), t.Retried, formatMaxRetry(t.MaxRetry))
 			}
 		},
 	)
@@ -429,7 +430,7 @@ func printTaskInfo(info *asynq.TaskInfo) {
 	fmt.Printf("ID:      %s\n", info.ID)
 	fmt.Printf("Type:    %s\n", info.Type)
 	fmt.Printf("State:   %v\n", info.State)
-	fmt.Printf("Retried: %d/%d\n", info.Retried, info.MaxRetry)
+	fmt.Printf("Retried: %d/%s\n", info.Retried, formatMaxRetry(info.MaxRetry))
 	fmt.Println()
 	fmt.Printf("Next process time: %s\n", formatNextProcessAt(info.NextProcessAt))
 	if len(info.LastErr) != 0 {
@@ -456,6 +457,17 @@ func formatPastTime(t time.Time) string {
 		return ""
 	}
 	return t.Format(time.UnixDate)
+}
+
+const optionUnlimitedRetry = -1
+
+// formatMaxRetry is used to display the number of allowed retries or unlimited if configured with -1.
+// TODO: this is redefined in ./dash/draw.go and should be consolidated
+func formatMaxRetry(maxRetry int) string {
+	if maxRetry == optionUnlimitedRetry {
+		return "unlimited"
+	}
+	return strconv.Itoa(maxRetry)
 }
 
 func taskArchive(cmd *cobra.Command, args []string) {

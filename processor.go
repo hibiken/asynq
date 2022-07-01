@@ -330,7 +330,7 @@ func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg 
 		p.retry(l, msg, err, false /*isFailure*/)
 		return
 	}
-	if msg.Retried >= msg.Retry || errors.Is(err, SkipRetry) {
+	if (msg.Retried >= msg.Retry && msg.Retry != unlimitedRetry) || errors.Is(err, SkipRetry) {
 		p.logger.Warnf("Retry exhausted for task id=%s", msg.ID)
 		p.archive(l, msg, err)
 	} else {

@@ -291,6 +291,11 @@ func TestProcessorRetry(t *testing.T) {
 	m3 := h.NewTaskMessage("reindex", nil)
 	m4 := h.NewTaskMessage("sync", nil)
 
+	// max retry message
+	m5 := h.NewTaskMessage("", nil)
+	m5.Retried = 500000000
+	m5.Retry = unlimitedRetry
+
 	errMsg := "something went wrong"
 	wrappedSkipRetry := fmt.Errorf("%s:%w", errMsg, SkipRetry)
 
@@ -307,16 +312,16 @@ func TestProcessorRetry(t *testing.T) {
 	}{
 		{
 			desc:    "Should automatically retry errored tasks",
-			pending: []*base.TaskMessage{m1, m2, m3, m4},
+			pending: []*base.TaskMessage{m1, m2, m3, m4, m5},
 			delay:   time.Minute,
 			handler: HandlerFunc(func(ctx context.Context, task *Task) error {
 				return fmt.Errorf(errMsg)
 			}),
 			wait:         2 * time.Second,
 			wantErrMsg:   errMsg,
-			wantRetry:    []*base.TaskMessage{m2, m3, m4},
+			wantRetry:    []*base.TaskMessage{m2, m3, m4, m5},
 			wantArchived: []*base.TaskMessage{m1},
-			wantErrCount: 4,
+			wantErrCount: 5,
 		},
 		{
 			desc:    "Should skip retry errored tasks",
