@@ -13,10 +13,11 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+	"github.com/spf13/cast"
+
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/timeutil"
-	"github.com/spf13/cast"
 )
 
 const statsTTL = 90 * 24 * time.Hour // 90 days
@@ -1471,13 +1472,17 @@ func (r *RDB) PublishCancelation(id string) error {
 // ARGV[1] -> enqueued_at timestamp
 // ARGV[2] -> serialized SchedulerEnqueueEvent data
 // ARGV[3] -> max number of events to be persisted
+// ARGV[4] -> history expiration timestamp
 var recordSchedulerEnqueueEventCmd = redis.NewScript(`
 redis.call("ZREMRANGEBYRANK", KEYS[1], 0, -ARGV[3])
 redis.call("ZADD", KEYS[1], ARGV[1], ARGV[2])
+redis.call("EXPIREAT", KEYS[1], ARGV[4])
 return redis.status_reply("OK")`)
 
 // Maximum number of enqueue events to store per entry.
 const maxEvents = 1000
+
+const schedulerHistoryExpirationInDays = 90
 
 // RecordSchedulerEnqueueEvent records the time when the given task was enqueued.
 func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerEnqueueEvent) error {
@@ -1487,6 +1492,8 @@ func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerE
 	if err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode scheduler enqueue event: %v", err))
 	}
+	now := r.clock.Now()
+	expireAt := now.AddDate(0, 0, schedulerHistoryExpirationInDays)
 	keys := []string{
 		base.SchedulerHistoryKey(entryID),
 	}
@@ -1494,6 +1501,7 @@ func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerE
 		event.EnqueuedAt.Unix(),
 		data,
 		maxEvents,
+		expireAt.Unix(),
 	}
 	return r.runScript(ctx, op, recordSchedulerEnqueueEventCmd, keys, argv...)
 }
