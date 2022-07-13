@@ -1818,6 +1818,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 		base.RetryKey(qname),
 		base.ArchivedKey(qname),
 		base.LeaseKey(qname),
+		base.ProcessedTotalKey(qname),
 	}
 	res, err := script.Run(context.Background(), r.client, keys, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
