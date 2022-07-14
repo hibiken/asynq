@@ -848,6 +848,7 @@ redis.call("ZADD", KEYS[4], ARGV[3], ARGV[1])
 redis.call("ZREMRANGEBYSCORE", KEYS[4], "-inf", ARGV[4])
 redis.call("ZREMRANGEBYRANK", KEYS[4], 0, -ARGV[5])
 redis.call("HSET", KEYS[1], "msg", ARGV[2], "state", "archived")
+redis.call("EXPIREAT", KEYS[1], ARGV[6])
 local n = redis.call("INCR", KEYS[5])
 if tonumber(n) == 1 then
 	redis.call("EXPIREAT", KEYS[5], ARGV[6])
