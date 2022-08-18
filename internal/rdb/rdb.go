@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -26,15 +27,18 @@ const LeaseDuration = 30 * time.Second
 
 // RDB is a client interface to query and mutate task queues.
 type RDB struct {
-	client redis.UniversalClient
-	clock  timeutil.Clock
+	client      redis.UniversalClient
+	clock       timeutil.Clock
+	queuesCache map[string]time.Time
+	mu          sync.Mutex
 }
 
 // NewRDB returns a new instance of RDB.
 func NewRDB(client redis.UniversalClient) *RDB {
 	return &RDB{
-		client: client,
-		clock:  timeutil.NewRealClock(),
+		client:      client,
+		clock:       timeutil.NewRealClock(),
+		queuesCache: map[string]time.Time{},
 	}
 }
 
@@ -112,9 +116,16 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	err = r.runIfNeeded(msg.Queue, func() error {
+		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
+
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
 		base.PendingKey(msg.Queue),
@@ -131,6 +142,23 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 	if n == 0 {
 		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
 	}
+	return nil
+}
+
+func (r *RDB) runIfNeeded(queue string, fn func() error) error {
+	r.mu.Lock()
+	now := r.clock.Now()
+	expiration := r.queuesCache[queue]
+	expired := now.After(expiration)
+	if expired {
+		r.queuesCache[queue] = now.Add(10 * time.Second)
+	}
+	r.mu.Unlock()
+
+	if expired {
+		return fn()
+	}
+
 	return nil
 }
 
@@ -152,7 +180,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 var enqueueUniqueCmd = redis.NewScript(`
 local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
 if not ok then
-  return -1 
+  return -1
 end
 if redis.call("EXISTS", KEYS[2]) == 1 then
   return 0
@@ -174,8 +202,14 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 	if err != nil {
 		return errors.E(op, errors.Internal, "cannot encode task message: %v", err)
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	err = r.runIfNeeded(msg.Queue, func() error {
+		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	keys := []string{
 		msg.UniqueKey,
@@ -529,8 +563,14 @@ func (r *RDB) AddToGroup(ctx context.Context, msg *base.TaskMessage, groupKey st
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	err = r.runIfNeeded(msg.Queue, func() error {
+		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
@@ -591,8 +631,14 @@ func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, group
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	err = r.runIfNeeded(msg.Queue, func() error {
+		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
@@ -648,8 +694,14 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	err = r.runIfNeeded(msg.Queue, func() error {
+		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
@@ -707,8 +759,14 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 	if err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode task message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	err = r.runIfNeeded(msg.Queue, func() error {
+		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	keys := []string{
 		msg.UniqueKey,

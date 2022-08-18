@@ -160,6 +160,54 @@ func TestEnqueueTaskIdConflictError(t *testing.T) {
 	}
 }
 
+func TestEnqueueQueueCache(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	t1 := h.NewTaskMessageWithQueue("sync1", nil, "low")
+	t2 := h.NewTaskMessageWithQueue("sync2", nil, "low")
+
+	enqueueTime := time.Now()
+	clock := timeutil.NewSimulatedClock(enqueueTime)
+	r.SetClock(clock)
+
+	err := r.Enqueue(context.Background(), t1)
+	if err != nil {
+		t.Fatalf("(*RDB).Enqueue(msg) = %v, want nil", err)
+	}
+
+	// Check queue is in the AllQueues set.
+	if !r.client.SIsMember(context.Background(), base.AllQueues, t1.Queue).Val() {
+		t.Fatalf("%q is not a member of SET %q", t1.Queue, base.AllQueues)
+	}
+
+	if _, ok := r.queuesCache[t1.Queue]; !ok {
+		t.Fatalf("%q is not cached in %v", t1.Queue, r.queuesCache)
+	}
+
+	// Move clock to ensure cache is expired
+	clock.AdvanceTime(15 * time.Second)
+
+	// Delete queue from AllQueues set to ensure it will be re-added
+	err = r.client.SRem(context.Background(), base.AllQueues, "low").Err()
+	if err != nil {
+		t.Fatalf("Redis SREM = %v, want nil", err)
+	}
+
+	err = r.Enqueue(context.Background(), t2)
+	if err != nil {
+		t.Fatalf("(*RDB).Enqueue(msg) = %v, want nil", err)
+	}
+
+	if !r.client.SIsMember(context.Background(), base.AllQueues, t2.Queue).Val() {
+		t.Fatalf("%q is not a member of SET %q", t2.Queue, base.AllQueues)
+	}
+
+	// Should be cached again
+	if expiration := r.queuesCache[t2.Queue]; expiration.Before(clock.Now()) {
+		t.Fatalf("%q cache is too old %v", t2.Queue, expiration)
+	}
+}
+
 func TestEnqueueUnique(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
