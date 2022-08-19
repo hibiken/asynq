@@ -258,7 +258,7 @@ func (fn GroupAggregatorFunc) Aggregate(group string, tasks []*Task) *Task {
 	return fn(group, tasks)
 }
 
-// An ErrorHandler handles an error occured during task processing.
+// An ErrorHandler handles an error occurred during task processing.
 type ErrorHandler interface {
 	HandleError(ctx context.Context, task *Task, err error)
 }
@@ -651,21 +651,13 @@ func (srv *Server) Start(handler Handler) error {
 	srv.logger.Info("Starting processing")
 
 	srv.heartbeater.start(&srv.wg)
-
 	srv.healthchecker.start(&srv.wg)
-
 	srv.subscriber.start(&srv.wg)
-
 	srv.syncer.start(&srv.wg)
-
 	srv.recoverer.start(&srv.wg)
-
 	srv.forwarder.start(&srv.wg)
-
 	srv.processor.start(&srv.wg)
-
 	srv.janitor.start(&srv.wg)
-
 	srv.aggregator.start(&srv.wg)
 	return nil
 }
