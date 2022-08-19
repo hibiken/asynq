@@ -650,31 +650,22 @@ func (srv *Server) Start(handler Handler) error {
 	}
 	srv.logger.Info("Starting processing")
 
-	//周期向redis更新状态
 	srv.heartbeater.start(&srv.wg)
 
-	//周期ping redis
 	srv.healthchecker.start(&srv.wg)
 
-	//监听取消命令？
 	srv.subscriber.start(&srv.wg)
 
-	//周期？清理过期请求？
 	srv.syncer.start(&srv.wg)
 
-	//active任务转换成retry
 	srv.recoverer.start(&srv.wg)
 
-	//retry和schedule任务转换成pending任务
 	srv.forwarder.start(&srv.wg)
 
-	//开启一个worker处理任务
 	srv.processor.start(&srv.wg)
 
-	//删除过期任务
 	srv.janitor.start(&srv.wg)
 
-	//？
 	srv.aggregator.start(&srv.wg)
 	return nil
 }
