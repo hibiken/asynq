@@ -26,14 +26,16 @@ type Scheduler struct {
 
 	state *serverState
 
-	logger     *log.Logger
-	client     *Client
-	rdb        *rdb.RDB
-	cron       *cron.Cron
-	location   *time.Location
-	done       chan struct{}
-	wg         sync.WaitGroup
-	errHandler func(task *Task, opts []Option, err error)
+	logger          *log.Logger
+	client          *Client
+	rdb             *rdb.RDB
+	cron            *cron.Cron
+	location        *time.Location
+	done            chan struct{}
+	wg              sync.WaitGroup
+	preEnqueueFunc  func(task *Task, opts []Option)
+	postEnqueueFunc func(info *TaskInfo, err error)
+	errHandler      func(task *Task, opts []Option, err error)
 
 	// guards idmap
 	mu sync.Mutex
@@ -67,19 +69,21 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 	}
 
 	return &Scheduler{
-		id:     generateSchedulerID(),
-		state:  &serverState{value: srvStateNew},
-		logger: logger,
-		client: NewClient(r),
+		id:              generateSchedulerID(),
+		state:           &serverState{value: srvStateNew},
+		logger:          logger,
+		client:          NewClient(r),
 		rdb: rdb.NewRDBWithConfig(c, rdb.RDBConfig{
 			MaxArchiveSize:           opts.MaxArchiveSize,
 			ArchivedExpirationInDays: opts.ArchivedExpirationInDays,
 		}),
-		cron:       cron.New(cron.WithLocation(loc)),
-		location:   loc,
-		done:       make(chan struct{}),
-		errHandler: opts.EnqueueErrorHandler,
-		idmap:      make(map[string]cron.EntryID),
+		cron:            cron.New(cron.WithLocation(loc)),
+		location:        loc,
+		done:            make(chan struct{}),
+		preEnqueueFunc:  opts.PreEnqueueFunc,
+		postEnqueueFunc: opts.PostEnqueueFunc,
+		errHandler:      opts.EnqueueErrorHandler,
+		idmap:           make(map[string]cron.EntryID),
 	}
 }
 
@@ -108,6 +112,15 @@ type SchedulerOpts struct {
 	// If unset, the UTC time zone (time.UTC) is used.
 	Location *time.Location
 
+	// PreEnqueueFunc, if provided, is called before a task gets enqueued by Scheduler.
+	// The callback function should return quickly to not block the current thread.
+	PreEnqueueFunc func(task *Task, opts []Option)
+
+	// PostEnqueueFunc, if provided, is called after a task gets enqueued by Scheduler.
+	// The callback function should return quickly to not block the current thread.
+	PostEnqueueFunc func(info *TaskInfo, err error)
+
+	// Deprecated: Use PostEnqueueFunc instead
 	// EnqueueErrorHandler gets called when scheduler cannot enqueue a registered task
 	// due to an error.
 	EnqueueErrorHandler func(task *Task, opts []Option, err error)
@@ -123,23 +136,30 @@ type SchedulerOpts struct {
 	ArchivedExpirationInDays *int
 }
 
-// enqueueJob encapsulates the job of enqueing a task and recording the event.
+// enqueueJob encapsulates the job of enqueuing a task and recording the event.
 type enqueueJob struct {
-	id         uuid.UUID
-	cronspec   string
-	task       *Task
-	opts       []Option
-	location   *time.Location
-	logger     *log.Logger
-	client     *Client
-	rdb        *rdb.RDB
-	errHandler func(task *Task, opts []Option, err error)
+	id              uuid.UUID
+	cronspec        string
+	task            *Task
+	opts            []Option
+	location        *time.Location
+	logger          *log.Logger
+	client          *Client
+	rdb             *rdb.RDB
+	preEnqueueFunc  func(task *Task, opts []Option)
+	postEnqueueFunc func(info *TaskInfo, err error)
+	errHandler      func(task *Task, opts []Option, err error)
 }
 
 func (j *enqueueJob) Run() {
+	if j.preEnqueueFunc != nil {
+		j.preEnqueueFunc(j.task, j.opts)
+	}
 	info, err := j.client.Enqueue(j.task, j.opts...)
+	if j.postEnqueueFunc != nil {
+		j.postEnqueueFunc(info, err)
+	}
 	if err != nil {
-		j.logger.Errorf("scheduler could not enqueue a task %+v: %v", j.task, err)
 		if j.errHandler != nil {
 			j.errHandler(j.task, j.opts, err)
 		}
@@ -152,7 +172,7 @@ func (j *enqueueJob) Run() {
 	}
 	err = j.rdb.RecordSchedulerEnqueueEvent(j.id.String(), event)
 	if err != nil {
-		j.logger.Errorf("scheduler could not record enqueue event of enqueued task %+v: %v", j.task, err)
+		j.logger.Warnf("scheduler could not record enqueue event of enqueued task %s: %v", info.ID, err)
 	}
 }
 
@@ -160,15 +180,17 @@ func (j *enqueueJob) Run() {
 // It returns an ID of the newly registered entry.
 func (s *Scheduler) Register(cronspec string, task *Task, opts ...Option) (entryID string, err error) {
 	job := &enqueueJob{
-		id:         uuid.New(),
-		cronspec:   cronspec,
-		task:       task,
-		opts:       opts,
-		location:   s.location,
-		client:     s.client,
-		rdb:        s.rdb,
-		logger:     s.logger,
-		errHandler: s.errHandler,
+		id:              uuid.New(),
+		cronspec:        cronspec,
+		task:            task,
+		opts:            opts,
+		location:        s.location,
+		client:          s.client,
+		rdb:             s.rdb,
+		logger:          s.logger,
+		preEnqueueFunc:  s.preEnqueueFunc,
+		postEnqueueFunc: s.postEnqueueFunc,
+		errHandler:      s.errHandler,
 	}
 	cronID, err := s.cron.AddJob(cronspec, job)
 	if err != nil {

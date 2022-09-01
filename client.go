@@ -270,7 +270,7 @@ func composeOptions(opts ...Option) (option, error) {
 		retry:     defaultMaxRetry,
 		queue:     base.DefaultQueueName,
 		taskID:    uuid.NewString(),
-		timeout:   0, // do not set to deafultTimeout here
+		timeout:   0, // do not set to defaultTimeout here
 		deadline:  time.Time{},
 		processAt: time.Now(),
 	}
@@ -350,7 +350,7 @@ func (c *Client) Close() error {
 // The argument opts specifies the behavior of task processing.
 // If there are conflicting Option values the last one overrides others.
 // Any options provided to NewTask can be overridden by options passed to Enqueue.
-// By deafult, max retry is set to 25 and timeout is set to 30 minutes.
+// By default, max retry is set to 25 and timeout is set to 30 minutes.
 //
 // If no ProcessAt or ProcessIn options are provided, the task will be pending immediately.
 //
@@ -366,7 +366,7 @@ func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
 // The argument opts specifies the behavior of task processing.
 // If there are conflicting Option values the last one overrides others.
 // Any options provided to NewTask can be overridden by options passed to Enqueue.
-// By deafult, max retry is set to 25 and timeout is set to 30 minutes.
+// By default, max retry is set to 25 and timeout is set to 30 minutes.
 //
 // If no ProcessAt or ProcessIn options are provided, the task will be pending immediately.
 //
