@@ -67,10 +67,7 @@ func NewRDBWithConfig(client redis.UniversalClient, cfg RDBConfig) *RDB {
 
 // NewRDB returns a new instance of RDB.
 func NewRDB(client redis.UniversalClient) *RDB {
-	return &RDB{
-		client: client,
-		clock:  timeutil.NewRealClock(),
-	}
+	return NewRDBWithConfig(client, RDBConfig{})
 }
 
 // Close closes the connection with redis server.
@@ -928,7 +925,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 		encoded,
 		now.Unix(),
 		cutoff.Unix(),
-		r.config.MaxArchiveSize,
+		*r.config.MaxArchiveSize,
 		expireAt.Unix(),
 		int64(math.MaxInt64),
 	}

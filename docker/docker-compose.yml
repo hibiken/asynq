@@ -1,0 +1,16 @@
+version: "3.7"
+
+services:
+  redis:
+      image: 'redislabs/rejson'
+      restart: unless-stopped
+      ports:
+        - 6379:6379
+      volumes:
+        - 'redis_data:/redislabs/redis/data'
+      environment:
+        ALLOW_EMPTY_PASSWORD: 'yes'
+      command: redis-server --save 20 1 --loadmodule "/usr/lib/redis/modules/rejson.so" --loadmodule "/usr/lib/redis/modules/redisearch.so" --requirepass "${MAPPED_REDIS_PASSWORD}"
+volumes:
+  redis_data:
+    driver: local
