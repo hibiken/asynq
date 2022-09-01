@@ -16,7 +16,7 @@ jobs:
           - 6379:6379
     steps:
       - uses: actions/checkout@v2
-
+      
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
@@ -64,4 +64,5 @@ jobs:
 
       - name: Test tools module
         run: cd tools && go test -race -v ./... && cd ..
-
+        
+        
