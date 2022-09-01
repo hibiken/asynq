@@ -73,7 +73,10 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 		state:           &serverState{value: srvStateNew},
 		logger:          logger,
 		client:          NewClient(r),
-		rdb:             rdb.NewRDB(c),
+		rdb: rdb.NewRDBWithConfig(c, rdb.RDBConfig{
+			MaxArchiveSize:           opts.MaxArchiveSize,
+			ArchivedExpirationInDays: opts.ArchivedExpirationInDays,
+		}),
 		cron:            cron.New(cron.WithLocation(loc)),
 		location:        loc,
 		done:            make(chan struct{}),
@@ -121,6 +124,16 @@ type SchedulerOpts struct {
 	// EnqueueErrorHandler gets called when scheduler cannot enqueue a registered task
 	// due to an error.
 	EnqueueErrorHandler func(task *Task, opts []Option, err error)
+
+	// MaxArchiveSize specifies the maximum size of the archive that can be created by the server.
+	//
+	// If unset the DefaultMaxArchiveSize is used.  If set to a zero or a negative value, nothing will be archived.
+	MaxArchiveSize *int
+
+	// ArchivedExpirationInDays specifies the number of days after which archived tasks are deleted.
+	//
+	// If unset, DefaultArchivedExpirationInDays is used.  The value must be greater than zero.
+	ArchivedExpirationInDays *int
 }
 
 // enqueueJob encapsulates the job of enqueuing a task and recording the event.
