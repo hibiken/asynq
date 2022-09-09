@@ -143,9 +143,9 @@ func TestParseRedisURI(t *testing.T) {
 		{
 			"redis-sentinel://:mypassword@localhost:5000,localhost:5001,localhost:5002?master=mymaster",
 			RedisFailoverClientOpt{
-				MasterName:    "mymaster",
-				SentinelAddrs: []string{"localhost:5000", "localhost:5001", "localhost:5002"},
-				Password:      "mypassword",
+				MasterName:       "mymaster",
+				SentinelAddrs:    []string{"localhost:5000", "localhost:5001", "localhost:5002"},
+				SentinelPassword: "mypassword",
 			},
 		},
 	}
