@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/test-go/testify/assert"
 )
 
 var taskCmpOpts = []cmp.Option{
@@ -919,5 +921,45 @@ func TestProcessorComputeDeadline(t *testing.T) {
 		if got.Unix() != tc.want.Unix() {
 			t.Errorf("%s: got=%v, want=%v", tc.desc, got.Unix(), tc.want.Unix())
 		}
+	}
+}
+
+func TestReturnPanicError(t *testing.T) {
+
+	task := NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"}))
+
+	tests := []struct {
+		name         string
+		handler      HandlerFunc
+		IsPanicError bool
+	}{
+		{
+			name: "should return panic error when occurred panic recovery",
+			handler: func(ctx context.Context, t *Task) error {
+				panic("something went terribly wrong")
+			},
+			IsPanicError: true,
+		},
+		{
+			name: "should return normal error when don't occur panic recovery",
+			handler: func(ctx context.Context, t *Task) error {
+				return fmt.Errorf("something went terribly wrong")
+			},
+			IsPanicError: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := processor{
+				logger:  log.NewLogger(nil),
+				handler: tc.handler,
+			}
+			err := p.perform(context.Background(), task)
+			assert.Equal(t, tc.IsPanicError, IsPanicError(err))
+			if tc.IsPanicError {
+				assert.Equal(t, true, strings.HasPrefix(err.Error(), "panic error cause by:"))
+			}
+		})
 	}
 }
