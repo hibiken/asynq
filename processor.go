@@ -179,7 +179,7 @@ func (p *processor) exec() {
 			// Sleep to avoid slamming redis and let scheduler move tasks into queues.
 			// Note: We are not using blocking pop operation and polling queues instead.
 			// This adds significant load to redis.
-			time.Sleep(time.Second)
+			time.Sleep(time.Millisecond * 100)
 			<-p.sema // release token
 			return
 		case err != nil:
