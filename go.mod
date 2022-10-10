@@ -16,4 +16,4 @@ require (
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 )
 
-replace github.com/hibiken/asynq v0.23.0 => github.com/jinsuojinsuo/asynq v0.0.0-20221010120852-a757de9634b2
+replace github.com/hibiken/asynq => github.com/jinsuojinsuo/asynq v0.0.0-20221010120852-a757de9634b2
