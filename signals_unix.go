@@ -1,4 +1,3 @@
-//go:build linux || bsd || darwin || freebsd
 // +build linux bsd darwin freebsd
 
 package asynq
