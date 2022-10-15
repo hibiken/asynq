@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gitee.com/liujinsuo/tool"
 	"math"
 	"math/rand"
 	"runtime"
@@ -392,6 +393,11 @@ const (
 	defaultGroupGracePeriod = 1 * time.Minute
 )
 
+func DefaultProcessorTaskCheckInterval() time.Duration {
+	timeNow := time.Now()
+	return tool.Time.NextWholeTime(time.Millisecond*1000, timeNow).Sub(timeNow) //下个整秒执行
+}
+
 // NewServer returns a new Server given a redis connection option
 // and server configuration.
 func NewServer(r RedisConnOpt, cfg Config) *Server {
@@ -492,6 +498,12 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		broker:       rdb,
 		cancelations: cancels,
 	})
+
+	ProcessorTaskCheckInterval := DefaultProcessorTaskCheckInterval
+	if cfg.ProcessorTaskCheckInterval != nil {
+		ProcessorTaskCheckInterval = cfg.ProcessorTaskCheckInterval
+	}
+
 	processor := newProcessor(processorParams{
 		logger:          logger,
 		broker:          rdb,
@@ -507,7 +519,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		shutdownTimeout: shutdownTimeout,
 		starting:        starting,
 		finished:        finished,
-		avgInterval:     cfg.ProcessorTaskCheckInterval,
+		avgInterval:     ProcessorTaskCheckInterval,
 	})
 	recoverer := newRecoverer(recovererParams{
 		logger:         logger,
