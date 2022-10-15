@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"gitee.com/liujinsuo/tool"
 	"sync"
 	"time"
 
@@ -56,7 +57,9 @@ func (f *forwarder) start(wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		timer := time.NewTimer(f.avgInterval)
+		timeNow := time.Now()
+		//timer := time.NewTimer(f.avgInterval)
+		timer := time.NewTimer(tool.Time.NextWholeTime(f.avgInterval, timeNow).Sub(timeNow))
 		for {
 			select {
 			case <-f.done:
@@ -64,7 +67,9 @@ func (f *forwarder) start(wg *sync.WaitGroup) {
 				return
 			case <-timer.C:
 				f.exec()
-				timer.Reset(f.avgInterval)
+				//timer.Reset(f.avgInterval)
+				timeNow = time.Now()
+				timer.Reset(tool.Time.NextWholeTime(f.avgInterval, timeNow).Sub(timeNow))
 			}
 		}
 	}()

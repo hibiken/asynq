@@ -195,6 +195,9 @@ type Config struct {
 	// If unset or zero, the interval is set to 5 seconds.
 	DelayedTaskCheckInterval time.Duration
 
+	//处理任务扫描间隔
+	ProcessorTaskCheckInterval func() time.Duration
+
 	// GroupGracePeriod specifies the amount of time the server will wait for an incoming task before aggregating
 	// the tasks in a group. If an incoming task is received within this period, the server will wait for another
 	// period of the same length, up to GroupMaxDelay if specified.
@@ -504,6 +507,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		shutdownTimeout: shutdownTimeout,
 		starting:        starting,
 		finished:        finished,
+		avgInterval:     cfg.ProcessorTaskCheckInterval,
 	})
 	recoverer := newRecoverer(recovererParams{
 		logger:         logger,
