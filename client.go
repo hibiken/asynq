@@ -150,9 +150,9 @@ func (t deadlineOption) Value() interface{} { return time.Time(t) }
 // TTL duration must be greater than or equal to 1 second.
 //
 // Uniqueness of a task is based on the following properties:
-//     - Task Type
-//     - Task Payload
-//     - Queue Name
+//   - Task Type
+//   - Task Payload
+//   - Queue Name
 func Unique(ttl time.Duration) Option {
 	return uniqueOption(ttl)
 }
@@ -425,4 +425,8 @@ func (c *Client) addToGroup(ctx context.Context, msg *base.TaskMessage, group st
 		return c.broker.AddToGroupUnique(ctx, msg, group, uniqueTTL)
 	}
 	return c.broker.AddToGroup(ctx, msg, group)
+}
+
+func (c *Client) StateChanged(handler func(map[string]interface{})) error {
+	return c.broker.StateChanged(handler)
 }
