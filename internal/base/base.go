@@ -752,4 +752,7 @@ type Broker interface {
 	PublishCancelation(id string) error
 
 	WriteResult(qname, id string, data []byte) (n int, err error)
+
+	// StateChanged watch state updates, with more customized detail
+	StateChanged(handler func(map[string]interface{}), more ...string) error
 }
