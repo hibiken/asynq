@@ -1509,7 +1509,7 @@ func (r *RDB) StateChanged(handler func(map[string]interface{}), more ...string)
 		}
 		if len(state) > 0 && len(key) > 0 &&
 			key == "task" || key == "next" ||
-			key == "result" || key == "message" {
+			key == "result" {
 			details[state] = key
 		}
 	}
@@ -1546,8 +1546,6 @@ func (r *RDB) StateChanged(handler func(map[string]interface{}), more ...string)
 			data = res.NextProcessAt
 		case "task":
 			data = res
-		case "message":
-			data = msg
 		default:
 			if len(res.Result) > 0 {
 				data = res.Result
