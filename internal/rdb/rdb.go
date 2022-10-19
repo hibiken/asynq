@@ -358,17 +358,9 @@ func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
 	// Note: We cannot pass empty unique key when running this script in redis-cluster.
 	if len(msg.UniqueKey) > 0 {
 		keys = append(keys, msg.UniqueKey)
-		err := r.runScript(ctx, op, doneUniqueCmd, keys, argv...)
-		if err == nil {
-			r.state(ctx, msg, base.TaskStateActive.String())
-		}
-		return err
+		return r.runScript(ctx, op, doneUniqueCmd, keys, argv...)
 	}
-	err := r.runScript(ctx, op, doneCmd, keys, argv...)
-	if err == nil {
-		r.state(ctx, msg, base.TaskStateActive.String())
-	}
-	return err
+	return r.runScript(ctx, op, doneCmd, keys, argv...)
 }
 
 // KEYS[1] -> asynq:{<qname>}:active
