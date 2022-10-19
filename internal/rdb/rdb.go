@@ -133,7 +133,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 	if n == 0 {
 		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
 	}
-	r.state(ctx, msg, "pending")
+	r.state(ctx, msg, base.TaskStatePending.String())
 	return nil
 }
 
@@ -201,7 +201,7 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 	if n == 0 {
 		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
 	}
-	r.state(ctx, msg, "pending")
+	r.state(ctx, msg, base.TaskStatePending.String())
 	return nil
 }
 
@@ -358,9 +358,17 @@ func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
 	// Note: We cannot pass empty unique key when running this script in redis-cluster.
 	if len(msg.UniqueKey) > 0 {
 		keys = append(keys, msg.UniqueKey)
-		return r.runScript(ctx, op, doneUniqueCmd, keys, argv...)
+		err := r.runScript(ctx, op, doneUniqueCmd, keys, argv...)
+		if err == nil {
+			r.state(ctx, msg, base.TaskStateActive.String())
+		}
+		return err
 	}
-	return r.runScript(ctx, op, doneCmd, keys, argv...)
+	err := r.runScript(ctx, op, doneCmd, keys, argv...)
+	if err == nil {
+		r.state(ctx, msg, base.TaskStateActive.String())
+	}
+	return err
 }
 
 // KEYS[1] -> asynq:{<qname>}:active
@@ -470,17 +478,17 @@ func (r *RDB) MarkAsComplete(ctx context.Context, msg *base.TaskMessage) error {
 		keys = append(keys, msg.UniqueKey)
 		err := r.runScript(ctx, op, markAsCompleteUniqueCmd, keys, argv...)
 		if err == nil {
-			r.state(ctx, msg, "completed")
+			r.state(ctx, msg, base.TaskStateCompleted.String())
 		} else {
-			r.state(ctx, msg, "failed")
+			r.state(ctx, msg, base.TaskStateRetry.String())
 		}
 		return err
 	}
 	err = r.runScript(ctx, op, markAsCompleteCmd, keys, argv...)
 	if err == nil {
-		r.state(ctx, msg, "completed")
+		r.state(ctx, msg, base.TaskStateCompleted.String())
 	} else {
-		r.state(ctx, msg, "failed")
+		r.state(ctx, msg, base.TaskStateRetry.String())
 	}
 	return err
 }
@@ -513,7 +521,7 @@ func (r *RDB) Requeue(ctx context.Context, msg *base.TaskMessage) error {
 	}
 	err := r.runScript(ctx, op, requeueCmd, keys, msg.ID)
 	if err == nil {
-		r.state(ctx, msg, "pending")
+		r.state(ctx, msg, base.TaskStatePending.String())
 	}
 	return err
 }
@@ -570,7 +578,7 @@ func (r *RDB) AddToGroup(ctx context.Context, msg *base.TaskMessage, groupKey st
 	if n == 0 {
 		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
 	}
-	r.state(ctx, msg, "aggregating")
+	r.state(ctx, msg, base.TaskStateAggregating.String())
 	return nil
 }
 
@@ -638,7 +646,7 @@ func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, group
 	if n == 0 {
 		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
 	}
-	r.state(ctx, msg, "aggregating")
+	r.state(ctx, msg, base.TaskStateAggregating.String())
 	return nil
 }
 
@@ -689,7 +697,7 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 	if n == 0 {
 		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
 	}
-	r.state(ctx, msg, "scheduled")
+	r.state(ctx, msg, base.TaskStateScheduled.String())
 	return nil
 }
 
@@ -754,7 +762,7 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 	if n == 0 {
 		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
 	}
-	r.state(ctx, msg, "scheduled")
+	r.state(ctx, msg, base.TaskStateScheduled.String())
 	return nil
 }
 
@@ -839,7 +847,7 @@ func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.T
 	}
 	err = r.runScript(ctx, op, retryCmd, keys, argv...)
 	if err == nil {
-		r.state(ctx, msg, "retry")
+		r.state(ctx, msg, base.TaskStateRetry.String())
 	}
 	return err
 }
@@ -929,7 +937,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 	}
 	err = r.runScript(ctx, op, archiveCmd, keys, argv...)
 	if err == nil {
-		r.state(ctx, msg, "archived")
+		r.state(ctx, msg, base.TaskStateArchived.String())
 	}
 	return err
 }
@@ -1496,9 +1504,8 @@ func (r *RDB) state(ctx context.Context, msg *base.TaskMessage, state string) {
 func (r *RDB) StateChanged(handler func(map[string]interface{}), more ...string) error {
 	ctx := context.Background()
 	pubsub := r.client.Subscribe(ctx, "state-changed")
-	details := map[string]string{
-		"completed": "result",
-	}
+	details := map[string]string{}
+	details[base.TaskStateCompleted.String()] = "result"
 	if len(more) > 0 {
 		key := more[0]
 		i := strings.Index(key, ":")
@@ -1522,22 +1529,22 @@ func (r *RDB) StateChanged(handler func(map[string]interface{}), more ...string)
 			continue
 		}
 		state := s.(string)
-		key, ok := details[state]
+		key, ok := details["*"]
 		if !ok {
-			key, ok = details["*"]
+			key, ok = details[state]
 		}
 		if !ok {
-			handler(out)
+			go handler(out)
 			continue
 		}
 		res, err := r.GetTaskInfo(out["queue"].(string), out["id"].(string))
 		if err != nil {
 			out["err"] = err.Error()
-			handler(out)
+			go handler(out)
 			continue
 		}
 		msg := res.Message
-		if state == "completed" {
+		if state == base.TaskStateCompleted.String() {
 			out["at"] = msg.CompletedAt
 		}
 		var data interface{}
@@ -1554,7 +1561,7 @@ func (r *RDB) StateChanged(handler func(map[string]interface{}), more ...string)
 		if data != nil {
 			out[key] = data
 		}
-		handler(out)
+		go handler(out)
 	}
 	return nil
 }
