@@ -698,7 +698,7 @@ func (srv *Server) Stop() {
 	srv.logger.Info("Processor stopped")
 }
 
-// StateChanged watch state updates
-func (srv *Server) StateChanged(handler func(map[string]interface{})) error {
-	return srv.broker.StateChanged(handler)
+// StateChanged watch state updates, with more customized detail
+func (srv *Server) StateChanged(handler func(map[string]interface{}), more ...string) error {
+	return srv.broker.StateChanged(handler, more...)
 }

@@ -753,6 +753,6 @@ type Broker interface {
 
 	WriteResult(qname, id string, data []byte) (n int, err error)
 
-	// Subscribe change
-	StateChanged(handler func(map[string]interface{})) error
+	// StateChanged watch state updates, with more customized detail
+	StateChanged(handler func(map[string]interface{}), more ...string) error
 }

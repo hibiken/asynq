@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -1491,22 +1492,69 @@ func (r *RDB) state(ctx context.Context, msg *base.TaskMessage, state string) {
 	r.client.Publish(ctx, "state-changed", payload)
 }
 
-// Subscribe returns a pubsub for config messages.
-func (r *RDB) StateChanged(handler func(map[string]interface{})) error {
+// StateChanged watch state updates, with more customized detail
+func (r *RDB) StateChanged(handler func(map[string]interface{}), more ...string) error {
 	ctx := context.Background()
 	pubsub := r.client.Subscribe(ctx, "state-changed")
+	details := map[string]string{
+		"completed": "result",
+	}
+	if len(more) > 0 {
+		key := more[0]
+		i := strings.Index(key, ":")
+		state := ""
+		if i > -1 {
+			state = key[:i]
+			key = key[i+1:]
+		}
+		if len(state) > 0 && len(key) > 0 &&
+			key == "task" || key == "next" ||
+			key == "result" || key == "message" {
+			details[state] = key
+		}
+	}
+
 	for m := range pubsub.Channel() {
 		var out map[string]interface{}
 		json.Unmarshal([]byte(m.Payload), &out)
-		if out["state"] == "completed" {
-			res, err := r.GetTaskInfo(out["queue"].(string), out["id"].(string))
-			if err != nil {
-				out["err"] = err.Error()
-			} else {
-				msg := res.Message
-				out["at"] = msg.CompletedAt
-				out["result"] = string(res.Result)
+		s, ok := out["state"]
+		if !ok {
+			continue
+		}
+		state := s.(string)
+		key, ok := details[state]
+		if !ok {
+			key, ok = details["*"]
+		}
+		if !ok {
+			handler(out)
+			continue
+		}
+		res, err := r.GetTaskInfo(out["queue"].(string), out["id"].(string))
+		if err != nil {
+			out["err"] = err.Error()
+			handler(out)
+			continue
+		}
+		msg := res.Message
+		if state == "completed" {
+			out["at"] = msg.CompletedAt
+		}
+		var data interface{}
+		switch key {
+		case "next":
+			data = res.NextProcessAt
+		case "task":
+			data = res
+		case "message":
+			data = msg
+		default:
+			if len(res.Result) > 0 {
+				data = res.Result
 			}
+		}
+		if data != nil {
+			out[key] = data
 		}
 		handler(out)
 	}

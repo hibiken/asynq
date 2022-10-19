@@ -427,7 +427,7 @@ func (c *Client) addToGroup(ctx context.Context, msg *base.TaskMessage, group st
 	return c.broker.AddToGroup(ctx, msg, group)
 }
 
-// StateChanged watchs state updates
-func (c *Client) StateChanged(handler func(map[string]interface{})) error {
-	return c.broker.StateChanged(handler)
+// StateChanged watchs state updates, with more customized detail
+func (c *Client) StateChanged(handler func(map[string]interface{}), more ...string) error {
+	return c.broker.StateChanged(handler, more...)
 }
