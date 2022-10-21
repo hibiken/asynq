@@ -1,0 +1,40 @@
+tasks:
+  -
+    name: test
+    default: true
+    language: Bash
+    code: |
+      set -e
+      go version
+      cd source/tools
+      go test -race -v ./...
+    depends:
+      - 
+        name: build
+      -
+        name: install-redis
+  -
+    name: build
+    language: Bash
+    code: |
+      set -e
+      go version
+      cd source/tools
+      go build -v ./... 
+    depends:
+      -
+        name: install-go
+  -
+    name: install-go
+    language: Bash
+    code: sudo apk add go
+
+  -
+    name: install-redis
+    language: Bash
+    code: |
+      set -e
+      sudo apk add redis
+      redis-server -v
+      nohup redis-server 1>/dev/null 2>/dev/null &
+      
