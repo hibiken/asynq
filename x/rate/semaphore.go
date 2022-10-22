@@ -104,6 +104,10 @@ func (s *Semaphore) Release(ctx context.Context) error {
 	return nil
 }
 
+func (s *Semaphore) LockCount(ctx context.Context) (int64, error) {
+	return s.rc.ZCard(ctx, semaphoreKey(s.scope)).Result()
+}
+
 // Close closes the connection to redis.
 func (s *Semaphore) Close() error {
 	return s.rc.Close()
