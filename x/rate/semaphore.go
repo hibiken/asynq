@@ -104,6 +104,7 @@ func (s *Semaphore) Release(ctx context.Context) error {
 	return nil
 }
 
+// LockCount returns the number of currently acquired tokens.
 func (s *Semaphore) LockCount(ctx context.Context) (int64, error) {
 	return s.rc.ZCard(ctx, semaphoreKey(s.scope)).Result()
 }
