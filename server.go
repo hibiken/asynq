@@ -18,7 +18,10 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
+	"github.com/hibiken/asynq/internal/mongobroker"
 	"github.com/hibiken/asynq/internal/rdb"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Server is responsible for task processing and task lifecycle management.
@@ -389,6 +392,28 @@ const (
 	defaultGroupGracePeriod = 1 * time.Minute
 )
 
+func NewMongoServer(opts *options.ClientOptions, db string, dbopts *options.DatabaseOptions, cfg Config) *Server {
+	if opts == nil {
+		opts = &options.ClientOptions{}
+	}
+	if dbopts == nil {
+		dbopts = &options.DatabaseOptions{}
+	}
+	c, err := mongo.NewClient(opts)
+	if err != nil {
+		panic(fmt.Sprintf("asynq: could not create mongo client %s %v", err, opts))
+	}
+
+	ctx := context.Background()
+	err = c.Connect(ctx)
+	if err != nil {
+		panic(fmt.Sprintf("asynq: could not connect to mongo %s %v", err, opts))
+	}
+	mgb := mongobroker.NewBroker(c, db, dbopts, ctx)
+
+	return newServer(mgb, cfg)
+}
+
 // NewServer returns a new Server given a redis connection option
 // and server configuration.
 func NewServer(r RedisConnOpt, cfg Config) *Server {
@@ -396,6 +421,12 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
+	rdb := rdb.NewRDB(c)
+
+	return newServer(rdb, cfg)
+}
+
+func newServer(rdb base.Broker, cfg Config) *Server {
 	baseCtxFn := cfg.BaseContext
 	if baseCtxFn == nil {
 		baseCtxFn = context.Background
@@ -451,7 +482,6 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	}
 	logger.SetLevel(toInternalLogLevel(loglevel))
 
-	rdb := rdb.NewRDB(c)
 	starting := make(chan *workerInfo)
 	finished := make(chan *base.TaskMessage)
 	syncCh := make(chan *syncRequest)
@@ -617,7 +647,7 @@ func (srv *Server) Start(handler Handler) error {
 
 	srv.heartbeater.start(&srv.wg)
 	srv.healthchecker.start(&srv.wg)
-	srv.subscriber.start(&srv.wg)
+	//srv.subscriber.start(&srv.wg)
 	srv.syncer.start(&srv.wg)
 	srv.recoverer.start(&srv.wg)
 	srv.forwarder.start(&srv.wg)
@@ -667,7 +697,7 @@ func (srv *Server) Shutdown() {
 	srv.processor.shutdown()
 	srv.recoverer.shutdown()
 	srv.syncer.shutdown()
-	srv.subscriber.shutdown()
+	//srv.subscriber.shutdown()
 	srv.janitor.shutdown()
 	srv.aggregator.shutdown()
 	srv.healthchecker.shutdown()
