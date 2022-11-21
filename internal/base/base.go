@@ -53,6 +53,11 @@ const (
 	TaskStateAggregating // describes a state where task is waiting in a group to be aggregated
 )
 
+type TaskProber interface {
+	Changed(map[string]interface{})
+	Result(state TaskState, raw *TaskInfo) (string, interface{})
+}
+
 func (s TaskState) String() string {
 	switch s {
 	case TaskStateActive:
@@ -752,4 +757,7 @@ type Broker interface {
 	PublishCancelation(id string) error
 
 	WriteResult(qname, id string, data []byte) (n int, err error)
+
+	// StateChanged watch state updates, with more customized detail
+	SetTaskProber(prober TaskProber)
 }
