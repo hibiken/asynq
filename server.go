@@ -239,10 +239,14 @@ func (p TaskStateProber) Changed(out map[string]interface{}) {
 }
 
 func (p TaskStateProber) Result(state base.TaskState, raw *base.TaskInfo) (key string, data interface{}) {
-	if state == base.TaskStateCompleted {
-		data = *newTaskInfo(raw.Message, raw.State, raw.NextProcessAt, raw.Result)
-		return
-	}
+	defer func() {
+		if len(key) == 0 {
+			key = "task"
+		}
+		if data == nil {
+			data = *newTaskInfo(raw.Message, raw.State, raw.NextProcessAt, raw.Result)
+		}
+	}()
 
 	probers := p.Probers
 	if len(probers) == 0 {
@@ -259,9 +263,7 @@ func (p TaskStateProber) Result(state base.TaskState, raw *base.TaskInfo) (key s
 	switch key {
 	case "next":
 		data = raw.NextProcessAt
-	case "task":
-		data = *newTaskInfo(raw.Message, raw.State, raw.NextProcessAt, raw.Result)
-	default:
+	case "result":
 		if len(raw.Result) > 0 {
 			data = raw.Result
 		}
