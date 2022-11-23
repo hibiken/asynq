@@ -85,7 +85,7 @@ func TestCurrentStats(t *testing.T) {
 		paused                          []string
 		oldestPendingMessageEnqueueTime map[string]time.Time
 		qname                           string
-		want                            *Stats
+		want                            *base.Stats
 	}{
 		{
 			tasks: []*h.TaskSeedData{
@@ -166,7 +166,7 @@ func TestCurrentStats(t *testing.T) {
 			},
 			paused: []string{},
 			qname:  "default",
-			want: &Stats{
+			want: &base.Stats{
 				Queue:          "default",
 				Paused:         false,
 				Size:           5,
@@ -255,7 +255,7 @@ func TestCurrentStats(t *testing.T) {
 			},
 			paused: []string{"critical", "low"},
 			qname:  "critical",
-			want: &Stats{
+			want: &base.Stats{
 				Queue:          "critical",
 				Paused:         true,
 				Size:           0,
@@ -321,7 +321,7 @@ func TestCurrentStats(t *testing.T) {
 			continue
 		}
 
-		ignoreMemUsg := cmpopts.IgnoreFields(Stats{}, "MemoryUsage")
+		ignoreMemUsg := cmpopts.IgnoreFields(base.Stats{}, "MemoryUsage")
 		if diff := cmp.Diff(tc.want, got, timeCmpOpt, ignoreMemUsg); diff != "" {
 			t.Errorf("r.CurrentStats(%q) = %v, %v, want %v, nil; (-want, +got)\n%s", tc.qname, got, err, tc.want, diff)
 			continue
@@ -379,7 +379,7 @@ func TestHistoricalStats(t *testing.T) {
 		}
 
 		for i := 0; i < tc.n; i++ {
-			want := &DailyStats{
+			want := &base.DailyStats{
 				Queue:     tc.qname,
 				Processed: (i + 1) * 1000,
 				Failed:    (i + 1) * 10,
@@ -468,12 +468,12 @@ func TestGroupStats(t *testing.T) {
 	tests := []struct {
 		desc  string
 		qname string
-		want  []*GroupStat
+		want  []*base.GroupStat
 	}{
 		{
 			desc:  "default queue groups",
 			qname: "default",
-			want: []*GroupStat{
+			want: []*base.GroupStat{
 				{Group: "group1", Size: 3},
 				{Group: "group2", Size: 1},
 			},
@@ -481,7 +481,7 @@ func TestGroupStats(t *testing.T) {
 		{
 			desc:  "custom queue groups",
 			qname: "custom",
-			want: []*GroupStat{
+			want: []*base.GroupStat{
 				{Group: "group1", Size: 2},
 			},
 		},
@@ -489,8 +489,8 @@ func TestGroupStats(t *testing.T) {
 
 	var sortGroupStatsOpt = cmp.Transformer(
 		"SortGroupStats",
-		func(in []*GroupStat) []*GroupStat {
-			out := append([]*GroupStat(nil), in...)
+		func(in []*base.GroupStat) []*base.GroupStat {
+			out := append([]*base.GroupStat(nil), in...)
 			sort.Slice(out, func(i, j int) bool {
 				return out[i].Group < out[j].Group
 			})
@@ -809,7 +809,7 @@ func TestListPending(t *testing.T) {
 	}
 }
 
-func TestListPendingbase.Pagination(t *testing.T) {
+func TestListPendingPagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	var msgs []*base.TaskMessage
@@ -928,7 +928,7 @@ func TestListActive(t *testing.T) {
 	}
 }
 
-func TestListActivebase.Pagination(t *testing.T) {
+func TestListActivePagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	var msgs []*base.TaskMessage
@@ -1063,7 +1063,7 @@ func TestListScheduled(t *testing.T) {
 	}
 }
 
-func TestListScheduledbase.Pagination(t *testing.T) {
+func TestListScheduledPagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	// create 100 tasks with an increasing number of wait time.
@@ -1218,7 +1218,7 @@ func TestListRetry(t *testing.T) {
 	}
 }
 
-func TestListRetrybase.Pagination(t *testing.T) {
+func TestListRetryPagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	// create 100 tasks with an increasing number of wait time.
@@ -1371,7 +1371,7 @@ func TestListArchived(t *testing.T) {
 	}
 }
 
-func TestListArchivedbase.Pagination(t *testing.T) {
+func TestListArchivedPagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	var entries []base.Z
@@ -1512,7 +1512,7 @@ func TestListCompleted(t *testing.T) {
 
 }
 
-func TestListCompletedbase.Pagination(t *testing.T) {
+func TestListCompletedPagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	var entries []base.Z
@@ -1656,7 +1656,7 @@ func TestListAggregating(t *testing.T) {
 	}
 }
 
-func TestListAggregatingbase.Pagination(t *testing.T) {
+func TestListAggregatingPagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 

@@ -777,6 +777,11 @@ func (p Pagination) Stop() int64 {
 // See rdb.RDB as a reference implementation.
 type QueueInspector interface {
 	Close() error
+	// SetClock sets the clock used by RDB to the given clock.
+	// Use this function to set the clock to SimulatedClock in tests.
+	SetClock(c timeutil.Clock)
+
+	PublishCancelation(id string) error
 
 	// Describe task and queues
 	AllQueues() ([]string, error)
@@ -788,6 +793,7 @@ type QueueInspector interface {
 	ListArchived(qname string, pgn Pagination) ([]*TaskInfo, error)
 	ListCompleted(qname string, pgn Pagination) ([]*TaskInfo, error)
 	ListAggregating(qname, gname string, pgn Pagination) ([]*TaskInfo, error)
+	ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*TaskMessage, error)
 
 	//Scheduler info
 	ListSchedulerEntries() ([]*SchedulerEntry, error)
