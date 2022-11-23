@@ -753,3 +753,81 @@ type Broker interface {
 
 	WriteResult(qname, id string, data []byte) (n int, err error)
 }
+
+// Pagination specifies the page size and page number
+// for the list operation.
+type Pagination struct {
+	// Number of items in the page.
+	Size int
+
+	// Page number starting from zero.
+	Page int
+}
+
+func (p Pagination) Start() int64 {
+	return int64(p.Size * p.Page)
+}
+
+func (p Pagination) Stop() int64 {
+	return int64(p.Size*p.Page + p.Size - 1)
+}
+
+// QueueInspector is the inspector part of a message broker, it exposes information about task queues.
+//
+// See rdb.RDB as a reference implementation.
+type QueueInspector interface {
+	Close() error
+
+	// Describe task and queues
+	AllQueues() ([]string, error)
+	GetTaskInfo(qname, id string) (*TaskInfo, error)
+	ListPending(qname string, pgn Pagination) ([]*TaskInfo, error)
+	ListActive(qname string, pgn Pagination) ([]*TaskInfo, error)
+	ListScheduled(qname string, pgn Pagination) ([]*TaskInfo, error)
+	ListRetry(qname string, pgn Pagination) ([]*TaskInfo, error)
+	ListArchived(qname string, pgn Pagination) ([]*TaskInfo, error)
+	ListCompleted(qname string, pgn Pagination) ([]*TaskInfo, error)
+	ListAggregating(qname, gname string, pgn Pagination) ([]*TaskInfo, error)
+
+	//Scheduler info
+	ListSchedulerEntries() ([]*SchedulerEntry, error)
+	ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*SchedulerEnqueueEvent, error)
+
+	// Stats
+	GroupStats(qname string) ([]*GroupStat, error)
+	CurrentStats(qname string) (*Stats, error)
+	HistoricalStats(qname string, n int) ([]*DailyStats, error)
+
+	//Server info
+	ListServers() ([]*ServerInfo, error)
+	ListWorkers() ([]*WorkerInfo, error)
+	ClusterKeySlot(qname string) (int64, error)
+	ClusterNodes(qname string) ([]redis.ClusterNode, error)
+
+	//Run tasks
+	RunAllScheduledTasks(qname string) (int64, error)
+	RunAllRetryTasks(qname string) (int64, error)
+	RunAllArchivedTasks(qname string) (int64, error)
+	RunAllAggregatingTasks(qname, gname string) (int64, error)
+	RunTask(qname, id string) error
+
+	// Archive actions
+	ArchiveAllRetryTasks(qname string) (int64, error)
+	ArchiveAllScheduledTasks(qname string) (int64, error)
+	ArchiveAllAggregatingTasks(qname, gname string) (int64, error)
+	ArchiveAllPendingTasks(qname string) (int64, error)
+	ArchiveTask(qname, id string) error
+
+	DeleteTask(qname, id string) error
+	DeleteAllArchivedTasks(qname string) (int64, error)
+	DeleteAllRetryTasks(qname string) (int64, error)
+	DeleteAllScheduledTasks(qname string) (int64, error)
+	DeleteAllCompletedTasks(qname string) (int64, error)
+	DeleteAllAggregatingTasks(qname, gname string) (int64, error)
+	DeleteAllPendingTasks(qname string) (int64, error)
+
+	// Queue actions
+	Pause(qname string) error
+	Unpause(qname string) error
+	RemoveQueue(qname string, force bool) error
+}
