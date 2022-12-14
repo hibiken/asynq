@@ -320,3 +320,8 @@ func (s *Scheduler) clearHistory() {
 		}
 	}
 }
+
+// Ping performs a ping against the redis connection.
+func (s *Scheduler) Ping() error {
+	return s.rdb.Ping()
+}
