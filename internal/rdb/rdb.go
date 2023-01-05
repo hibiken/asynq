@@ -67,7 +67,7 @@ func (r *RDB) runScript(ctx context.Context, op errors.Op, script *redis.Script,
 	return nil
 }
 
-// Runs the given script with keys and args and retuns the script's return value as int64.
+// Runs the given script with keys and args and returns the script's return value as int64.
 func (r *RDB) runScriptWithErrorCode(ctx context.Context, op errors.Op, script *redis.Script, keys []string, args ...interface{}) (int64, error) {
 	res, err := script.Run(ctx, r.client, keys, args...).Result()
 	if err != nil {
@@ -368,7 +368,7 @@ func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
 //
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
-// ARGV[3] -> task exipration time in unix time
+// ARGV[3] -> task expiration time in unix time
 // ARGV[4] -> task message data
 // ARGV[5] -> max int64 value
 var markAsCompleteCmd = redis.NewScript(`
@@ -405,7 +405,7 @@ return redis.status_reply("OK")
 //
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
-// ARGV[3] -> task exipration time in unix time
+// ARGV[3] -> task expiration time in unix time
 // ARGV[4] -> task message data
 // ARGV[5] -> max int64 value
 var markAsCompleteUniqueCmd = redis.NewScript(`
@@ -1086,7 +1086,7 @@ const aggregationTimeout = 2 * time.Minute
 // The time for gracePeriod and maxDelay is computed relative to the time t.
 //
 // Note: It assumes that this function is called at frequency less than or equal to the gracePeriod. In other words,
-// the function only checks the most recently added task aganist the given gracePeriod.
+// the function only checks the most recently added task against the given gracePeriod.
 func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int) (string, error) {
 	var op errors.Op = "RDB.AggregationCheck"
 	aggregationSetID := uuid.NewString()
