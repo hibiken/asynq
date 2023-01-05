@@ -22,7 +22,7 @@ import (
 // Test goes through a few phases.
 //
 // Phase1: Simulate Server startup; Simulate starting tasks listed in startedWorkers
-// Phase2: Simluate finishing tasks listed in finishedTasks
+// Phase2: Simulate finishing tasks listed in finishedTasks
 // Phase3: Simulate Server shutdown;
 func TestHeartbeater(t *testing.T) {
 	r := setup(t)
@@ -41,7 +41,7 @@ func TestHeartbeater(t *testing.T) {
 	t5 := h.NewTaskMessageWithQueue("task5", nil, "custom")
 	t6 := h.NewTaskMessageWithQueue("task6", nil, "default")
 
-	// Note: intentionally set to time less than now.Add(rdb.LeaseDuration) to test lease extention is working.
+	// Note: intentionally set to time less than now.Add(rdb.LeaseDuration) to test lease extension is working.
 	lease1 := h.NewLeaseWithClock(now.Add(10*time.Second), clock)
 	lease2 := h.NewLeaseWithClock(now.Add(10*time.Second), clock)
 	lease3 := h.NewLeaseWithClock(now.Add(10*time.Second), clock)

@@ -252,7 +252,7 @@ func SeedLease(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname s
 	seedRedisZSet(tb, r, base.LeaseKey(qname), entries, base.TaskStateActive)
 }
 
-// SeedCompletedQueue initializes the completed set witht the given entries.
+// SeedCompletedQueue initializes the completed set with the given entries.
 func SeedCompletedQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
 	tb.Helper()
 	r.SAdd(context.Background(), base.AllQueues, qname)
