@@ -616,7 +616,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		for _, qname := range tc.paused {
-			if err := r.Pause(qname); err != nil {
+			if err := r.Pause(context.Background(), qname); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -2630,7 +2630,7 @@ func TestListLeaseExpired(t *testing.T) {
 		h.FlushDB(t, r.client)
 		h.SeedAllLease(t, r.client, tc.lease)
 
-		got, err := r.ListLeaseExpired(tc.cutoff, tc.qnames...)
+		got, err := r.ListLeaseExpired(context.Background(), tc.cutoff, tc.qnames...)
 		if err != nil {
 			t.Errorf("%s; ListLeaseExpired(%v) returned error: %v", tc.desc, tc.cutoff, err)
 			continue
@@ -3053,7 +3053,7 @@ func TestCancelationPubSub(t *testing.T) {
 	publish := []string{"one", "two", "three"}
 
 	for _, msg := range publish {
-		r.PublishCancelation(msg)
+		r.PublishCancelation(context.Background(), msg)
 	}
 
 	// allow for message to reach subscribers.

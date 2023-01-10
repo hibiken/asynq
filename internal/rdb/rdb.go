@@ -13,10 +13,11 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+	"github.com/spf13/cast"
+
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/timeutil"
-	"github.com/spf13/cast"
 )
 
 const statsTTL = 90 * 24 * time.Hour // 90 days
@@ -1290,11 +1291,11 @@ return res
 `)
 
 // ListLeaseExpired returns a list of task messages with an expired lease from the given queues.
-func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
+func (r *RDB) ListLeaseExpired(ctx context.Context, cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
 	var op errors.Op = "rdb.ListLeaseExpired"
 	var msgs []*base.TaskMessage
 	for _, qname := range qnames {
-		res, err := listLeaseExpiredCmd.Run(context.Background(), r.client,
+		res, err := listLeaseExpiredCmd.Run(ctx, r.client,
 			[]string{base.LeaseKey(qname)},
 			cutoff.Unix(), base.TaskKeyPrefix(qname)).Result()
 		if err != nil {
@@ -1458,9 +1459,8 @@ func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
 
 // PublishCancelation publish cancelation message to all subscribers.
 // The message is the ID for the task to be canceled.
-func (r *RDB) PublishCancelation(id string) error {
+func (r *RDB) PublishCancelation(ctx context.Context, id string) error {
 	var op errors.Op = "rdb.PublishCancelation"
-	ctx := context.Background()
 	if err := r.client.Publish(ctx, base.CancelChannel, id).Err(); err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("redis pubsub publish error: %v", err))
 	}

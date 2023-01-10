@@ -205,7 +205,7 @@ func TestHeartbeater(t *testing.T) {
 		// Wait for heartbeater to write to redis
 		time.Sleep(tc.interval * 2)
 
-		ss, err := rdbClient.ListServers()
+		ss, err := rdbClient.ListServers(context.Background())
 		if err != nil {
 			t.Errorf("%s: could not read server info from redis: %v", tc.desc, err)
 			hb.shutdown()
@@ -289,7 +289,7 @@ func TestHeartbeater(t *testing.T) {
 			Status:            "closed",
 			ActiveWorkerCount: len(tc.startedWorkers) - len(tc.finishedTasks),
 		}
-		ss, err = rdbClient.ListServers()
+		ss, err = rdbClient.ListServers(context.Background())
 		if err != nil {
 			t.Errorf("%s: could not read server status from redis: %v", tc.desc, err)
 			hb.shutdown()

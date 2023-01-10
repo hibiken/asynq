@@ -154,13 +154,13 @@ func (tb *TestBroker) DeleteExpiredCompletedTasks(qname string) error {
 	return tb.real.DeleteExpiredCompletedTasks(qname)
 }
 
-func (tb *TestBroker) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
+func (tb *TestBroker) ListLeaseExpired(ctx context.Context, cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return nil, errRedisDown
 	}
-	return tb.real.ListLeaseExpired(cutoff, qnames...)
+	return tb.real.ListLeaseExpired(ctx, cutoff, qnames...)
 }
 
 func (tb *TestBroker) ExtendLease(qname string, ids ...string) (time.Time, error) {
@@ -199,13 +199,13 @@ func (tb *TestBroker) CancelationPubSub() (*redis.PubSub, error) {
 	return tb.real.CancelationPubSub()
 }
 
-func (tb *TestBroker) PublishCancelation(id string) error {
+func (tb *TestBroker) PublishCancelation(ctx context.Context, id string) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return errRedisDown
 	}
-	return tb.real.PublishCancelation(id)
+	return tb.real.PublishCancelation(ctx, id)
 }
 
 func (tb *TestBroker) WriteResult(qname, id string, data []byte) (int, error) {

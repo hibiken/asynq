@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -51,7 +52,7 @@ func TestSubscriber(t *testing.T) {
 		// wait for subscriber to establish connection to pubsub channel
 		time.Sleep(time.Second)
 
-		if err := rdbClient.PublishCancelation(tc.publishID); err != nil {
+		if err := rdbClient.PublishCancelation(context.Background(), tc.publishID); err != nil {
 			t.Fatalf("could not publish cancelation message: %v", err)
 		}
 
@@ -110,7 +111,7 @@ func TestSubscriberWithRedisDown(t *testing.T) {
 		called = true
 	})
 
-	if err := r.PublishCancelation(id); err != nil {
+	if err := r.PublishCancelation(context.Background(), id); err != nil {
 		t.Fatalf("could not publish cancelation message: %v", err)
 	}
 

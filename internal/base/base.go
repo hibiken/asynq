@@ -740,7 +740,7 @@ type Broker interface {
 	DeleteExpiredCompletedTasks(qname string) error
 
 	// Lease related methods
-	ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*TaskMessage, error)
+	ListLeaseExpired(ctx context.Context, cutoff time.Time, qnames ...string) ([]*TaskMessage, error)
 	ExtendLease(qname string, ids ...string) (time.Time, error)
 
 	// State snapshot related methods
@@ -749,7 +749,7 @@ type Broker interface {
 
 	// Cancelation related methods
 	CancelationPubSub() (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers
-	PublishCancelation(id string) error
+	PublishCancelation(ctx context.Context, id string) error
 
 	WriteResult(qname, id string, data []byte) (n int, err error)
 }

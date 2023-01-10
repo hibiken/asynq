@@ -16,6 +16,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
+
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	h "github.com/hibiken/asynq/internal/testutil"
@@ -42,7 +43,7 @@ func TestAllQueues(t *testing.T) {
 				t.Fatalf("could not initialize all queue set: %v", err)
 			}
 		}
-		got, err := r.AllQueues()
+		got, err := r.AllQueues(context.Background())
 		if err != nil {
 			t.Errorf("AllQueues() returned an error: %v", err)
 			continue
@@ -280,7 +281,7 @@ func TestCurrentStats(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		for _, qname := range tc.paused {
-			if err := r.Pause(qname); err != nil {
+			if err := r.Pause(context.Background(), qname); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -315,7 +316,7 @@ func TestCurrentStats(t *testing.T) {
 			r.client.HSet(ctx, base.TaskKey(qname, oldestPendingMessageID), "pending_since", enqueueTime.UnixNano())
 		}
 
-		got, err := r.CurrentStats(tc.qname)
+		got, err := r.CurrentStats(context.Background(), tc.qname)
 		if err != nil {
 			t.Errorf("r.CurrentStats(%q) = %v, %v, want %v, nil", tc.qname, got, err, tc.want)
 			continue
@@ -334,7 +335,7 @@ func TestCurrentStatsWithNonExistentQueue(t *testing.T) {
 	defer r.Close()
 
 	qname := "non-existent"
-	got, err := r.CurrentStats(qname)
+	got, err := r.CurrentStats(context.Background(), qname)
 	if !errors.IsQueueNotFound(err) {
 		t.Fatalf("r.CurrentStats(%q) = %v, %v, want nil, %v", qname, got, err, &errors.QueueNotFoundError{Queue: qname})
 	}
@@ -367,7 +368,7 @@ func TestHistoricalStats(t *testing.T) {
 			r.client.Set(context.Background(), failedKey, (i+1)*10, 0)
 		}
 
-		got, err := r.HistoricalStats(tc.qname, tc.n)
+		got, err := r.HistoricalStats(context.Background(), tc.qname, tc.n)
 		if err != nil {
 			t.Errorf("RDB.HistoricalStats(%q, %d) returned error: %v", tc.qname, tc.n, err)
 			continue
@@ -399,7 +400,7 @@ func TestRedisInfo(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 
-	info, err := r.RedisInfo()
+	info, err := r.RedisInfo(context.Background())
 	if err != nil {
 		t.Fatalf("RDB.RedisInfo() returned error: %v", err)
 	}
@@ -504,7 +505,7 @@ func TestGroupStats(t *testing.T) {
 		h.SeedRedisZSets(t, r.client, fixtures.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			got, err := r.GroupStats(tc.qname)
+			got, err := r.GroupStats(context.Background(), tc.qname)
 			if err != nil {
 				t.Fatalf("GroupStats returned error: %v", err)
 			}
@@ -646,7 +647,7 @@ func TestGetTaskInfo(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.GetTaskInfo(tc.qname, tc.id)
+		got, err := r.GetTaskInfo(context.Background(), tc.qname, tc.id)
 		if err != nil {
 			t.Errorf("GetTaskInfo(%q, %v) returned error: %v", tc.qname, tc.id, err)
 			continue
@@ -726,7 +727,7 @@ func TestGetTaskInfoError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		info, err := r.GetTaskInfo(tc.qname, tc.id)
+		info, err := r.GetTaskInfo(context.Background(), tc.qname, tc.id)
 		if info != nil {
 			t.Errorf("GetTaskInfo(%q, %v) returned info: %v", tc.qname, tc.id, info)
 		}
@@ -796,7 +797,7 @@ func TestListPending(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 
-		got, err := r.ListPending(tc.qname, Pagination{Size: 20, Page: 0})
+		got, err := r.ListPending(context.Background(), tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListPending(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
@@ -846,7 +847,7 @@ func TestListPendingPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListPending(tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		got, err := r.ListPending(context.Background(), tc.qname, Pagination{Size: tc.size, Page: tc.page})
 		op := fmt.Sprintf("r.ListPending(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
@@ -915,7 +916,7 @@ func TestListActive(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
 
-		got, err := r.ListActive(tc.qname, Pagination{Size: 20, Page: 0})
+		got, err := r.ListActive(context.Background(), tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListActive(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.inProgress)
@@ -955,7 +956,7 @@ func TestListActivePagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListActive(tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		got, err := r.ListActive(context.Background(), tc.qname, Pagination{Size: tc.size, Page: tc.page})
 		op := fmt.Sprintf("r.ListActive(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
@@ -1050,7 +1051,7 @@ func TestListScheduled(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got, err := r.ListScheduled(tc.qname, Pagination{Size: 20, Page: 0})
+		got, err := r.ListScheduled(context.Background(), tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListScheduled(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
@@ -1091,7 +1092,7 @@ func TestListScheduledPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListScheduled(tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		got, err := r.ListScheduled(context.Background(), tc.qname, Pagination{Size: tc.size, Page: tc.page})
 		op := fmt.Sprintf("r.ListScheduled(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
@@ -1204,7 +1205,7 @@ func TestListRetry(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		got, err := r.ListRetry(tc.qname, Pagination{Size: 20, Page: 0})
+		got, err := r.ListRetry(context.Background(), tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListRetry(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
@@ -1248,7 +1249,7 @@ func TestListRetryPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListRetry(tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		got, err := r.ListRetry(context.Background(), tc.qname, Pagination{Size: tc.size, Page: tc.page})
 		op := fmt.Sprintf("r.ListRetry(%q, Pagination{Size: %d, Page: %d})",
 			tc.qname, tc.size, tc.page)
 		if err != nil {
@@ -1357,7 +1358,7 @@ func TestListArchived(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.ListArchived(tc.qname, Pagination{Size: 20, Page: 0})
+		got, err := r.ListArchived(context.Background(), tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListArchived(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
@@ -1398,7 +1399,7 @@ func TestListArchivedPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListArchived(tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		got, err := r.ListArchived(context.Background(), tc.qname, Pagination{Size: tc.size, Page: tc.page})
 		op := fmt.Sprintf("r.ListArchived(Pagination{Size: %d, Page: %d})",
 			tc.size, tc.page)
 		if err != nil {
@@ -1497,7 +1498,7 @@ func TestListCompleted(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllCompletedQueues(t, r.client, tc.completed)
 
-		got, err := r.ListCompleted(tc.qname, Pagination{Size: 20, Page: 0})
+		got, err := r.ListCompleted(context.Background(), tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListCompleted(%q, Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
@@ -1539,7 +1540,7 @@ func TestListCompletedPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListCompleted(tc.qname, Pagination{Size: tc.size, Page: tc.page})
+		got, err := r.ListCompleted(context.Background(), tc.qname, Pagination{Size: tc.size, Page: tc.page})
 		op := fmt.Sprintf("r.ListCompleted(Pagination{Size: %d, Page: %d})",
 			tc.size, tc.page)
 		if err != nil {
@@ -1645,7 +1646,7 @@ func TestListAggregating(t *testing.T) {
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			got, err := r.ListAggregating(tc.qname, tc.gname, Pagination{})
+			got, err := r.ListAggregating(context.Background(), tc.qname, tc.gname, Pagination{})
 			if err != nil {
 				t.Fatalf("ListAggregating returned error: %v", err)
 			}
@@ -1759,7 +1760,7 @@ func TestListAggregatingPagination(t *testing.T) {
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			got, err := r.ListAggregating(tc.qname, tc.gname, Pagination{Page: tc.page, Size: tc.size})
+			got, err := r.ListAggregating(context.Background(), tc.qname, tc.gname, Pagination{Page: tc.page, Size: tc.size})
 			if err != nil {
 				t.Fatalf("ListAggregating returned error: %v", err)
 			}
@@ -1803,19 +1804,19 @@ func TestListTasksError(t *testing.T) {
 
 	for _, tc := range tests {
 		pgn := Pagination{Page: 0, Size: 20}
-		if _, got := r.ListActive(tc.qname, pgn); !tc.match(got) {
+		if _, got := r.ListActive(context.Background(), tc.qname, pgn); !tc.match(got) {
 			t.Errorf("%s: ListActive returned %v", tc.desc, got)
 		}
-		if _, got := r.ListPending(tc.qname, pgn); !tc.match(got) {
+		if _, got := r.ListPending(context.Background(), tc.qname, pgn); !tc.match(got) {
 			t.Errorf("%s: ListPending returned %v", tc.desc, got)
 		}
-		if _, got := r.ListScheduled(tc.qname, pgn); !tc.match(got) {
+		if _, got := r.ListScheduled(context.Background(), tc.qname, pgn); !tc.match(got) {
 			t.Errorf("%s: ListScheduled returned %v", tc.desc, got)
 		}
-		if _, got := r.ListRetry(tc.qname, pgn); !tc.match(got) {
+		if _, got := r.ListRetry(context.Background(), tc.qname, pgn); !tc.match(got) {
 			t.Errorf("%s: ListRetry returned %v", tc.desc, got)
 		}
-		if _, got := r.ListArchived(tc.qname, pgn); !tc.match(got) {
+		if _, got := r.ListArchived(context.Background(), tc.qname, pgn); !tc.match(got) {
 			t.Errorf("%s: ListArchived returned %v", tc.desc, got)
 		}
 	}
@@ -1885,7 +1886,7 @@ func TestRunArchivedTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		if got := r.RunTask(tc.qname, tc.id); got != nil {
+		if got := r.RunTask(context.Background(), tc.qname, tc.id); got != nil {
 			t.Errorf("r.RunTask(%q, %s) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -1965,7 +1966,7 @@ func TestRunRetryTask(t *testing.T) {
 		h.FlushDB(t, r.client)                      // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry) // initialize retry queue
 
-		if got := r.RunTask(tc.qname, tc.id); got != nil {
+		if got := r.RunTask(context.Background(), tc.qname, tc.id); got != nil {
 			t.Errorf("r.RunTask(%q, %s) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -2079,7 +2080,7 @@ func TestRunAggregatingTask(t *testing.T) {
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			err := r.RunTask(tc.qname, tc.id)
+			err := r.RunTask(context.Background(), tc.qname, tc.id)
 			if err != nil {
 				t.Fatalf("RunTask returned error: %v", err)
 			}
@@ -2150,7 +2151,7 @@ func TestRunScheduledTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		if got := r.RunTask(tc.qname, tc.id); got != nil {
+		if got := r.RunTask(context.Background(), tc.qname, tc.id); got != nil {
 			t.Errorf("r.RunTask(%q, %s) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -2297,7 +2298,7 @@ func TestRunTaskError(t *testing.T) {
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got := r.RunTask(tc.qname, tc.id)
+		got := r.RunTask(context.Background(), tc.qname, tc.id)
 		if !tc.match(got) {
 			t.Errorf("%s: unexpected return value %v", tc.desc, got)
 			continue
@@ -2406,7 +2407,7 @@ func TestRunAllScheduledTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got, err := r.RunAllScheduledTasks(tc.qname)
+		got, err := r.RunAllScheduledTasks(context.Background(), tc.qname)
 		if err != nil {
 			t.Errorf("%s; r.RunAllScheduledTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
@@ -2512,7 +2513,7 @@ func TestRunAllRetryTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		got, err := r.RunAllRetryTasks(tc.qname)
+		got, err := r.RunAllRetryTasks(context.Background(), tc.qname)
 		if err != nil {
 			t.Errorf("%s; r.RunAllRetryTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
@@ -2618,7 +2619,7 @@ func TestRunAllArchivedTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.RunAllArchivedTasks(tc.qname)
+		got, err := r.RunAllArchivedTasks(context.Background(), tc.qname)
 		if err != nil {
 			t.Errorf("%s; r.RunAllArchivedTasks(%q) = %v, %v; want %v, nil",
 				tc.desc, tc.qname, got, err, tc.want)
@@ -2662,16 +2663,16 @@ func TestRunAllTasksError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		if _, got := r.RunAllScheduledTasks(tc.qname); !tc.match(got) {
+		if _, got := r.RunAllScheduledTasks(context.Background(), tc.qname); !tc.match(got) {
 			t.Errorf("%s: RunAllScheduledTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.RunAllRetryTasks(tc.qname); !tc.match(got) {
+		if _, got := r.RunAllRetryTasks(context.Background(), tc.qname); !tc.match(got) {
 			t.Errorf("%s: RunAllRetryTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.RunAllArchivedTasks(tc.qname); !tc.match(got) {
+		if _, got := r.RunAllArchivedTasks(context.Background(), tc.qname); !tc.match(got) {
 			t.Errorf("%s: RunAllArchivedTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.RunAllAggregatingTasks(tc.qname, "mygroup"); !tc.match(got) {
+		if _, got := r.RunAllAggregatingTasks(context.Background(), tc.qname, "mygroup"); !tc.match(got) {
 			t.Errorf("%s: RunAllAggregatingTasks returned %v", tc.desc, got)
 		}
 	}
@@ -2772,7 +2773,7 @@ func TestRunAllAggregatingTasks(t *testing.T) {
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			got, err := r.RunAllAggregatingTasks(tc.qname, tc.gname)
+			got, err := r.RunAllAggregatingTasks(context.Background(), tc.qname, tc.gname)
 			if err != nil {
 				t.Fatalf("RunAllAggregatingTasks returned error: %v", err)
 			}
@@ -2863,7 +2864,7 @@ func TestArchiveRetryTask(t *testing.T) {
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		if got := r.ArchiveTask(tc.qname, tc.id); got != nil {
+		if got := r.ArchiveTask(context.Background(), tc.qname, tc.id); got != nil {
 			t.Errorf("(*RDB).ArchiveTask(%q, %v) returned error: %v",
 				tc.qname, tc.id, got)
 			continue
@@ -2964,7 +2965,7 @@ func TestArchiveScheduledTask(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		if got := r.ArchiveTask(tc.qname, tc.id); got != nil {
+		if got := r.ArchiveTask(context.Background(), tc.qname, tc.id); got != nil {
 			t.Errorf("(*RDB).ArchiveTask(%q, %v) returned error: %v",
 				tc.qname, tc.id, got)
 			continue
@@ -3085,7 +3086,7 @@ func TestArchiveAggregatingTask(t *testing.T) {
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			err := r.ArchiveTask(tc.qname, tc.id)
+			err := r.ArchiveTask(context.Background(), tc.qname, tc.id)
 			if err != nil {
 				t.Fatalf("ArchiveTask returned error: %v", err)
 			}
@@ -3156,7 +3157,7 @@ func TestArchivePendingTask(t *testing.T) {
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		if got := r.ArchiveTask(tc.qname, tc.id); got != nil {
+		if got := r.ArchiveTask(context.Background(), tc.qname, tc.id); got != nil {
 			t.Errorf("(*RDB).ArchiveTask(%q, %v) returned error: %v",
 				tc.qname, tc.id, got)
 			continue
@@ -3304,7 +3305,7 @@ func TestArchiveTaskError(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.ArchiveTask(tc.qname, tc.id)
+		got := r.ArchiveTask(context.Background(), tc.qname, tc.id)
 		if !tc.match(got) {
 			t.Errorf("%s: returned error didn't match: got=%v", tc.desc, got)
 			continue
@@ -3446,7 +3447,7 @@ func TestArchiveAllPendingTasks(t *testing.T) {
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.ArchiveAllPendingTasks(tc.qname)
+		got, err := r.ArchiveAllPendingTasks(context.Background(), tc.qname)
 		if got != tc.want || err != nil {
 			t.Errorf("(*RDB).KillAllRetryTasks(%q) = %v, %v; want %v, nil",
 				tc.qname, got, err, tc.want)
@@ -3571,7 +3572,7 @@ func TestArchiveAllAggregatingTasks(t *testing.T) {
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			got, err := r.ArchiveAllAggregatingTasks(tc.qname, tc.gname)
+			got, err := r.ArchiveAllAggregatingTasks(context.Background(), tc.qname, tc.gname)
 			if err != nil {
 				t.Fatalf("ArchiveAllAggregatingTasks returned error: %v", err)
 			}
@@ -3710,7 +3711,7 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.ArchiveAllRetryTasks(tc.qname)
+		got, err := r.ArchiveAllRetryTasks(context.Background(), tc.qname)
 		if got != tc.want || err != nil {
 			t.Errorf("(*RDB).KillAllRetryTasks(%q) = %v, %v; want %v, nil",
 				tc.qname, got, err, tc.want)
@@ -3860,7 +3861,7 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.ArchiveAllScheduledTasks(tc.qname)
+		got, err := r.ArchiveAllScheduledTasks(context.Background(), tc.qname)
 		if got != tc.want || err != nil {
 			t.Errorf("(*RDB).KillAllScheduledTasks(%q) = %v, %v; want %v, nil",
 				tc.qname, got, err, tc.want)
@@ -3902,13 +3903,13 @@ func TestArchiveAllTasksError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		if _, got := r.ArchiveAllPendingTasks(tc.qname); !tc.match(got) {
+		if _, got := r.ArchiveAllPendingTasks(context.Background(), tc.qname); !tc.match(got) {
 			t.Errorf("%s: ArchiveAllPendingTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.ArchiveAllScheduledTasks(tc.qname); !tc.match(got) {
+		if _, got := r.ArchiveAllScheduledTasks(context.Background(), tc.qname); !tc.match(got) {
 			t.Errorf("%s: ArchiveAllScheduledTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.ArchiveAllRetryTasks(tc.qname); !tc.match(got) {
+		if _, got := r.ArchiveAllRetryTasks(context.Background(), tc.qname); !tc.match(got) {
 			t.Errorf("%s: ArchiveAllRetryTasks returned %v", tc.desc, got)
 		}
 	}
@@ -3966,7 +3967,7 @@ func TestDeleteArchivedTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
+		if got := r.DeleteTask(context.Background(), tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -4032,7 +4033,7 @@ func TestDeleteRetryTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
+		if got := r.DeleteTask(context.Background(), tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -4098,7 +4099,7 @@ func TestDeleteScheduledTask(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
+		if got := r.DeleteTask(context.Background(), tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -4197,7 +4198,7 @@ func TestDeleteAggregatingTask(t *testing.T) {
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			err := r.DeleteTask(tc.qname, tc.id)
+			err := r.DeleteTask(context.Background(), tc.qname, tc.id)
 			if err != nil {
 				t.Fatalf("DeleteTask returned error: %v", err)
 			}
@@ -4248,7 +4249,7 @@ func TestDeletePendingTask(t *testing.T) {
 		h.FlushDB(t, r.client)
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 
-		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
+		if got := r.DeleteTask(context.Background(), tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -4300,7 +4301,7 @@ func TestDeleteTaskWithUniqueLock(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
+		if got := r.DeleteTask(context.Background(), tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
 			continue
 		}
@@ -4395,7 +4396,7 @@ func TestDeleteTaskError(t *testing.T) {
 		h.SeedAllActiveQueues(t, r.client, tc.active)
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got := r.DeleteTask(tc.qname, tc.id)
+		got := r.DeleteTask(context.Background(), tc.qname, tc.id)
 		if !tc.match(got) {
 			t.Errorf("%s: r.DeleteTask(qname, id) returned %v", tc.desc, got)
 			continue
@@ -4463,7 +4464,7 @@ func TestDeleteAllArchivedTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.DeleteAllArchivedTasks(tc.qname)
+		got, err := r.DeleteAllArchivedTasks(context.Background(), tc.qname)
 		if err != nil {
 			t.Errorf("r.DeleteAllArchivedTasks(%q) returned error: %v", tc.qname, err)
 		}
@@ -4533,7 +4534,7 @@ func TestDeleteAllCompletedTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllCompletedQueues(t, r.client, tc.completed)
 
-		got, err := r.DeleteAllCompletedTasks(tc.qname)
+		got, err := r.DeleteAllCompletedTasks(context.Background(), tc.qname)
 		if err != nil {
 			t.Errorf("r.DeleteAllCompletedTasks(%q) returned error: %v", tc.qname, err)
 		}
@@ -4600,7 +4601,7 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.DeleteAllArchivedTasks(tc.qname)
+		got, err := r.DeleteAllArchivedTasks(context.Background(), tc.qname)
 		if err != nil {
 			t.Errorf("r.DeleteAllArchivedTasks(%q) returned error: %v", tc.qname, err)
 		}
@@ -4668,7 +4669,7 @@ func TestDeleteAllRetryTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		got, err := r.DeleteAllRetryTasks(tc.qname)
+		got, err := r.DeleteAllRetryTasks(context.Background(), tc.qname)
 		if err != nil {
 			t.Errorf("r.DeleteAllRetryTasks(%q) returned error: %v", tc.qname, err)
 		}
@@ -4730,7 +4731,7 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got, err := r.DeleteAllScheduledTasks(tc.qname)
+		got, err := r.DeleteAllScheduledTasks(context.Background(), tc.qname)
 		if err != nil {
 			t.Errorf("r.DeleteAllScheduledTasks(%q) returned error: %v", tc.qname, err)
 		}
@@ -4832,7 +4833,7 @@ func TestDeleteAllAggregatingTasks(t *testing.T) {
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			got, err := r.DeleteAllAggregatingTasks(tc.qname, tc.gname)
+			got, err := r.DeleteAllAggregatingTasks(context.Background(), tc.qname, tc.gname)
 			if err != nil {
 				t.Fatalf("DeleteAllAggregatingTasks returned error: %v", err)
 			}
@@ -4886,7 +4887,7 @@ func TestDeleteAllPendingTasks(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 
-		got, err := r.DeleteAllPendingTasks(tc.qname)
+		got, err := r.DeleteAllPendingTasks(context.Background(), tc.qname)
 		if err != nil {
 			t.Errorf("r.DeleteAllPendingTasks(%q) returned error: %v", tc.qname, err)
 		}
@@ -4919,16 +4920,16 @@ func TestDeleteAllTasksError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		if _, got := r.DeleteAllPendingTasks(tc.qname); !tc.match(got) {
+		if _, got := r.DeleteAllPendingTasks(context.Background(), tc.qname); !tc.match(got) {
 			t.Errorf("%s: DeleteAllPendingTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.DeleteAllScheduledTasks(tc.qname); !tc.match(got) {
+		if _, got := r.DeleteAllScheduledTasks(context.Background(), tc.qname); !tc.match(got) {
 			t.Errorf("%s: DeleteAllScheduledTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.DeleteAllRetryTasks(tc.qname); !tc.match(got) {
+		if _, got := r.DeleteAllRetryTasks(context.Background(), tc.qname); !tc.match(got) {
 			t.Errorf("%s: DeleteAllRetryTasks returned %v", tc.desc, got)
 		}
-		if _, got := r.DeleteAllArchivedTasks(tc.qname); !tc.match(got) {
+		if _, got := r.DeleteAllArchivedTasks(context.Background(), tc.qname); !tc.match(got) {
 			t.Errorf("%s: DeleteAllArchivedTasks returned %v", tc.desc, got)
 		}
 	}
@@ -5009,7 +5010,7 @@ func TestRemoveQueue(t *testing.T) {
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		err := r.RemoveQueue(tc.qname, tc.force)
+		err := r.RemoveQueue(context.Background(), tc.qname, tc.force)
 		if err != nil {
 			t.Errorf("(*RDB).RemoveQueue(%q, %t) = %v, want nil",
 				tc.qname, tc.force, err)
@@ -5147,7 +5148,7 @@ func TestRemoveQueueError(t *testing.T) {
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got := r.RemoveQueue(tc.qname, tc.force)
+		got := r.RemoveQueue(context.Background(), tc.qname, tc.force)
 		if !tc.match(got) {
 			t.Errorf("%s; returned error didn't match expected value; got=%v", tc.desc, got)
 			continue
@@ -5238,7 +5239,7 @@ func TestListServers(t *testing.T) {
 			}
 		}
 
-		got, err := r.ListServers()
+		got, err := r.ListServers(context.Background())
 		if err != nil {
 			t.Errorf("r.ListServers returned an error: %v", err)
 		}
@@ -5314,7 +5315,7 @@ func TestListWorkers(t *testing.T) {
 			continue
 		}
 
-		got, err := r.ListWorkers()
+		got, err := r.ListWorkers(context.Background())
 		if err != nil {
 			t.Errorf("(*RDB).ListWorkers() returned an error: %v", err)
 			continue
@@ -5353,7 +5354,7 @@ func TestWriteListClearSchedulerEntries(t *testing.T) {
 	if err := r.WriteSchedulerEntries(schedulerID, data, 30*time.Second); err != nil {
 		t.Fatalf("WriteSchedulerEnties failed: %v", err)
 	}
-	entries, err := r.ListSchedulerEntries()
+	entries, err := r.ListSchedulerEntries(context.Background())
 	if err != nil {
 		t.Fatalf("ListSchedulerEntries failed: %v", err)
 	}
@@ -5363,7 +5364,7 @@ func TestWriteListClearSchedulerEntries(t *testing.T) {
 	if err := r.ClearSchedulerEntries(schedulerID); err != nil {
 		t.Fatalf("ClearSchedulerEntries failed: %v", err)
 	}
-	entries, err = r.ListSchedulerEntries()
+	entries, err = r.ListSchedulerEntries(context.Background())
 	if err != nil {
 		t.Fatalf("ListSchedulerEntries() after clear failed: %v", err)
 	}
@@ -5418,7 +5419,7 @@ loop:
 				continue loop
 			}
 		}
-		got, err := r.ListSchedulerEnqueueEvents(tc.entryID, Pagination{Size: 20, Page: 0})
+		got, err := r.ListSchedulerEnqueueEvents(context.Background(), tc.entryID, Pagination{Size: 20, Page: 0})
 		if err != nil {
 			t.Errorf("ListSchedulerEnqueueEvents(%q) failed: %v", tc.entryID, err)
 			continue
@@ -5465,7 +5466,7 @@ func TestRecordSchedulerEnqueueEventTrimsDataSet(t *testing.T) {
 	if n := r.client.ZCard(context.Background(), key).Val(); n != maxEvents {
 		t.Fatalf("unexpected number of events; got %d, want %d", n, maxEvents)
 	}
-	events, err := r.ListSchedulerEnqueueEvents(entryID, Pagination{Size: maxEvents})
+	events, err := r.ListSchedulerEnqueueEvents(context.Background(), entryID, Pagination{Size: maxEvents})
 	if err != nil {
 		t.Fatalf("ListSchedulerEnqueueEvents failed: %v", err)
 	}
@@ -5490,7 +5491,7 @@ func TestPause(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
-		err := r.Pause(tc.qname)
+		err := r.Pause(context.Background(), tc.qname)
 		if err != nil {
 			t.Errorf("Pause(%q) returned error: %v", tc.qname, err)
 		}
@@ -5515,12 +5516,12 @@ func TestPauseError(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		for _, qname := range tc.paused {
-			if err := r.Pause(qname); err != nil {
+			if err := r.Pause(context.Background(), qname); err != nil {
 				t.Fatalf("could not pause %q: %v", qname, err)
 			}
 		}
 
-		err := r.Pause(tc.qname)
+		err := r.Pause(context.Background(), tc.qname)
 		if err == nil {
 			t.Errorf("%s; Pause(%q) returned nil: want error", tc.desc, tc.qname)
 		}
@@ -5540,12 +5541,12 @@ func TestUnpause(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		for _, qname := range tc.paused {
-			if err := r.Pause(qname); err != nil {
+			if err := r.Pause(context.Background(), qname); err != nil {
 				t.Fatalf("could not pause %q: %v", qname, err)
 			}
 		}
 
-		err := r.Unpause(tc.qname)
+		err := r.Unpause(context.Background(), tc.qname)
 		if err != nil {
 			t.Errorf("Unpause(%q) returned error: %v", tc.qname, err)
 		}
@@ -5570,12 +5571,12 @@ func TestUnpauseError(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		for _, qname := range tc.paused {
-			if err := r.Pause(qname); err != nil {
+			if err := r.Pause(context.Background(), qname); err != nil {
 				t.Fatalf("could not pause %q: %v", qname, err)
 			}
 		}
 
-		err := r.Unpause(tc.qname)
+		err := r.Unpause(context.Background(), tc.qname)
 		if err == nil {
 			t.Errorf("%s; Unpause(%q) returned nil: want error", tc.desc, tc.qname)
 		}
