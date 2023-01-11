@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
@@ -20,6 +19,7 @@ import (
 	"github.com/hibiken/asynq/internal/errors"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/redis/go-redis/v9"
 )
 
 func TestAllQueues(t *testing.T) {
@@ -250,7 +250,7 @@ func TestCurrentStats(t *testing.T) {
 			},
 			oldestPendingMessageEnqueueTime: map[string]time.Time{
 				"default":  now.Add(-15 * time.Second),
-				"critical": time.Time{}, // zero value since there's no pending task in this queue
+				"critical": {}, // zero value since there's no pending task in this queue
 				"low":      now.Add(-30 * time.Second),
 			},
 			paused: []string{"critical", "low"},
@@ -392,7 +392,6 @@ func TestHistoricalStats(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func TestRedisInfo(t *testing.T) {
@@ -487,7 +486,7 @@ func TestGroupStats(t *testing.T) {
 		},
 	}
 
-	var sortGroupStatsOpt = cmp.Transformer(
+	sortGroupStatsOpt := cmp.Transformer(
 		"SortGroupStats",
 		func(in []*GroupStat) []*GroupStat {
 			out := append([]*GroupStat(nil), in...)
@@ -1509,7 +1508,6 @@ func TestListCompleted(t *testing.T) {
 			continue
 		}
 	}
-
 }
 
 func TestListCompletedPagination(t *testing.T) {
@@ -2324,7 +2322,6 @@ func TestRunTaskError(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 func TestRunAllScheduledTasks(t *testing.T) {
@@ -3335,6 +3332,7 @@ func TestArchiveTaskError(t *testing.T) {
 		}
 	}
 }
+
 func TestArchiveAllPendingTasks(t *testing.T) {
 	r := setup(t)
 	defer r.Close()

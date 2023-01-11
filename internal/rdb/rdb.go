@@ -11,11 +11,11 @@ import (
 	"math"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
 )
 
@@ -152,7 +152,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 var enqueueUniqueCmd = redis.NewScript(`
 local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
 if not ok then
-  return -1 
+  return -1
 end
 if redis.call("EXISTS", KEYS[2]) == 1 then
   return 0
@@ -1319,9 +1319,9 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 // It returns a new expiration time if the operation was successful.
 func (r *RDB) ExtendLease(qname string, ids ...string) (expirationTime time.Time, err error) {
 	expireAt := r.clock.Now().Add(LeaseDuration)
-	var zs []*redis.Z
+	var zs []redis.Z
 	for _, id := range ids {
-		zs = append(zs, &redis.Z{Member: id, Score: float64(expireAt.Unix())})
+		zs = append(zs, redis.Z{Member: id, Score: float64(expireAt.Unix())})
 	}
 	// Use XX option to only update elements that already exist; Don't add new elements
 	// TODO: Consider adding GT option to ensure we only "extend" the lease. Ceveat is that GT is supported from redis v6.2.0 or above.
@@ -1367,10 +1367,10 @@ func (r *RDB) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo
 	}
 	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
 	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
-	if err := r.client.ZAdd(ctx, base.AllServers, &redis.Z{Score: float64(exp.Unix()), Member: skey}).Err(); err != nil {
+	if err := r.client.ZAdd(ctx, base.AllServers, redis.Z{Score: float64(exp.Unix()), Member: skey}).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
-	if err := r.client.ZAdd(ctx, base.AllWorkers, &redis.Z{Score: float64(exp.Unix()), Member: wkey}).Err(); err != nil {
+	if err := r.client.ZAdd(ctx, base.AllWorkers, redis.Z{Score: float64(exp.Unix()), Member: wkey}).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zadd", Err: err})
 	}
 	return r.runScript(ctx, op, writeServerStateCmd, []string{skey, wkey}, args...)
@@ -1423,7 +1423,7 @@ func (r *RDB) WriteSchedulerEntries(schedulerID string, entries []*base.Schedule
 	}
 	exp := r.clock.Now().Add(ttl).UTC()
 	key := base.SchedulerEntriesKey(schedulerID)
-	err := r.client.ZAdd(ctx, base.AllSchedulers, &redis.Z{Score: float64(exp.Unix()), Member: key}).Err()
+	err := r.client.ZAdd(ctx, base.AllSchedulers, redis.Z{Score: float64(exp.Unix()), Member: key}).Err()
 	if err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zadd", Err: err})
 	}
