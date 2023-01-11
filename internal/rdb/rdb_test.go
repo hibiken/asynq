@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
@@ -23,6 +22,7 @@ import (
 	"github.com/hibiken/asynq/internal/errors"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/redis/go-redis/v9"
 )
 
 // variables used for package testing.
@@ -1272,7 +1272,6 @@ func TestAddToGroupeTaskIdConflictError(t *testing.T) {
 			continue
 		}
 	}
-
 }
 
 func TestAddToGroupUnique(t *testing.T) {
@@ -1356,7 +1355,6 @@ func TestAddToGroupUnique(t *testing.T) {
 			continue
 		}
 	}
-
 }
 
 func TestAddToGroupUniqueTaskIdConflictError(t *testing.T) {
@@ -1398,7 +1396,6 @@ func TestAddToGroupUniqueTaskIdConflictError(t *testing.T) {
 			continue
 		}
 	}
-
 }
 
 func TestSchedule(t *testing.T) {
