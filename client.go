@@ -26,14 +26,47 @@ import (
 type Client struct {
 	broker base.Broker
 }
+type ClientConfig struct {
+	MaxArchiveSize           *int
+	ArchivedExpirationInDays *int
+}
 
-// NewClient returns a new Client instance given a redis connection option.
-func NewClient(r RedisConnOpt) *Client {
+func validateClientConfig(cfg *ClientConfig) {
+	if cfg.MaxArchiveSize == nil {
+		value := base.DefaultMaxArchiveSize
+		cfg.MaxArchiveSize = &value
+	}
+	if *(cfg.MaxArchiveSize) < 0 {
+		value := 1
+		cfg.MaxArchiveSize = &value
+	}
+	if cfg.ArchivedExpirationInDays == nil {
+		value := base.DefaultArchivedExpirationInDays
+		cfg.ArchivedExpirationInDays = &value
+	}
+	if *(cfg.ArchivedExpirationInDays) < 0 {
+		value := 1
+		cfg.ArchivedExpirationInDays = &value
+	}
+}
+
+// NewClientWithConfig returns a new Client instance given a redis connection option.
+func NewClientWithConfig(r RedisConnOpt, cfg ClientConfig) *Client {
+	validateClientConfig(&cfg)
+
 	c, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
-	return &Client{broker: rdb.NewRDB(c)}
+	return &Client{broker: rdb.NewRDBWithConfig(c, rdb.RDBConfig{
+		MaxArchiveSize:           cfg.MaxArchiveSize,
+		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+	})}
+}
+
+// NewClient returns a new Client instance given a redis connection option.
+func NewClient(r RedisConnOpt) *Client {
+	return NewClientWithConfig(r, ClientConfig{})
 }
 
 type OptionType int
