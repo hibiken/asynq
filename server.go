@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gitee.com/liujinsuo/tool"
 	"math"
 	"math/rand"
 	"runtime"
@@ -194,6 +195,9 @@ type Config struct {
 	//
 	// If unset or zero, the interval is set to 5 seconds.
 	DelayedTaskCheckInterval time.Duration
+
+	//处理任务扫描间隔
+	ProcessorTaskCheckInterval func() time.Duration
 
 	// GroupGracePeriod specifies the amount of time the server will wait for an incoming task before aggregating
 	// the tasks in a group. If an incoming task is received within this period, the server will wait for another
@@ -389,6 +393,11 @@ const (
 	defaultGroupGracePeriod = 1 * time.Minute
 )
 
+func DefaultProcessorTaskCheckInterval() time.Duration {
+	timeNow := time.Now()
+	return tool.Time.NextWholeTime(time.Millisecond*1000, timeNow).Sub(timeNow) //下个整秒执行
+}
+
 // NewServer returns a new Server given a redis connection option
 // and server configuration.
 func NewServer(r RedisConnOpt, cfg Config) *Server {
@@ -489,6 +498,12 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		broker:       rdb,
 		cancelations: cancels,
 	})
+
+	ProcessorTaskCheckInterval := DefaultProcessorTaskCheckInterval
+	if cfg.ProcessorTaskCheckInterval != nil {
+		ProcessorTaskCheckInterval = cfg.ProcessorTaskCheckInterval
+	}
+
 	processor := newProcessor(processorParams{
 		logger:          logger,
 		broker:          rdb,
@@ -504,6 +519,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		shutdownTimeout: shutdownTimeout,
 		starting:        starting,
 		finished:        finished,
+		avgInterval:     ProcessorTaskCheckInterval,
 	})
 	recoverer := newRecoverer(recovererParams{
 		logger:         logger,
