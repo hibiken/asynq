@@ -65,6 +65,9 @@ message TaskMessage {
   // the number of seconds elapsed since January 1, 1970 UTC.
   // This field is populated if result_ttl > 0 upon completion.
   int64 completed_at = 13;
+
+  // Headers describes metadata attached to a message.
+  map<string, string> headers = 15;
 };
 
 // ServerInfo holds information about a running server.

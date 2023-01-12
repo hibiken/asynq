@@ -220,6 +220,7 @@ func (p *processor) exec() {
 				task := newTask(
 					msg.Type,
 					msg.Payload,
+					msg.Headers,
 					&ResultWriter{
 						id:     msg.ID,
 						qname:  msg.Queue,

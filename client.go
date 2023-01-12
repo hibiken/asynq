@@ -49,6 +49,7 @@ const (
 	TaskIDOpt
 	RetentionOpt
 	GroupOpt
+	HeadersOpt
 )
 
 // Option specifies the task processing behavior.
@@ -75,6 +76,7 @@ type (
 	processInOption time.Duration
 	retentionOption time.Duration
 	groupOption     string
+	headersOption   map[string]string
 )
 
 // MaxRetry returns an option to specify the max number of times
@@ -206,6 +208,17 @@ func (name groupOption) String() string     { return fmt.Sprintf("Group(%q)", st
 func (name groupOption) Type() OptionType   { return GroupOpt }
 func (name groupOption) Value() interface{} { return string(name) }
 
+// Headers returns an option to attach metadata used for the task.
+func Headers(name map[string]string) Option {
+	return headersOption(name)
+}
+
+func (headers headersOption) String() string {
+	return fmt.Sprintf("Headers(%#v)", map[string]string(headers))
+}
+func (headers headersOption) Type() OptionType   { return HeadersOpt }
+func (headers headersOption) Value() interface{} { return map[string]string(headers) }
+
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
@@ -226,6 +239,7 @@ type option struct {
 	processAt time.Time
 	retention time.Duration
 	group     string
+	headers   map[string]string
 }
 
 // composeOptions merges user provided options into the default options
@@ -279,6 +293,8 @@ func composeOptions(opts ...Option) (option, error) {
 				return option{}, errors.New("group key cannot be empty")
 			}
 			res.group = key
+		case headersOption:
+			res.headers = opt
 		default:
 			// ignore unexpected option
 		}
@@ -378,6 +394,7 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 		UniqueKey: uniqueKey,
 		GroupKey:  opt.group,
 		Retention: int64(opt.retention.Seconds()),
+		Headers:   opt.headers,
 	}
 	now := time.Now()
 	var state base.TaskState
