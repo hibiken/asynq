@@ -47,7 +47,7 @@ func newSubscriber(params subscriberParams) *subscriber {
 func (s *subscriber) shutdown() {
 	s.logger.Debug("Subscriber shutting down...")
 	// Signal the subscriber goroutine to stop.
-	s.done <- struct{}{}
+	close(s.done)
 }
 
 func (s *subscriber) pubSubUtilSuccessfully() (pubsub *redis.PubSub, err error) {
