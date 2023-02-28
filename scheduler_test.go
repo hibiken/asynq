@@ -208,3 +208,70 @@ func TestSchedulerPostAndPreEnqueueHandler(t *testing.T) {
 	}
 	postMu.Unlock()
 }
+
+func TestSchedulerWithCustomEntryIDGeneratorFunc(t *testing.T) {
+	tests := []struct {
+		cronspec string
+		task     *Task
+		opts     []Option
+		wait     time.Duration
+		queue    string
+		want     []*base.TaskMessage
+	}{
+		{
+			cronspec: "@every 3s",
+			task:     NewTask("task1", nil),
+			opts: []Option{MaxRetry(10),
+				SchedulerEntryID("entry1"),
+			},
+			wait:  10 * time.Second,
+			queue: "default",
+			want: []*base.TaskMessage{
+				{
+					Type:    "task1",
+					Payload: nil,
+					Retry:   10,
+					Timeout: int64(defaultTimeout.Seconds()),
+					Queue:   "default",
+					ID:      "entry1",
+				},
+				{
+					Type:    "task1",
+					Payload: nil,
+					Retry:   10,
+					Timeout: int64(defaultTimeout.Seconds()),
+					Queue:   "default",
+					ID:      "entry1",
+				},
+				{
+					Type:    "task1",
+					Payload: nil,
+					Retry:   10,
+					Timeout: int64(defaultTimeout.Seconds()),
+					Queue:   "default",
+					ID:      "entry1",
+				},
+			},
+		},
+	}
+
+	r := setup(t)
+
+	for _, tc := range tests {
+		scheduler := NewScheduler(getRedisConnOpt(t), nil)
+		if _, err := scheduler.Register(tc.cronspec, tc.task, tc.opts...); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := scheduler.Start(); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(tc.wait)
+		scheduler.Shutdown()
+
+		got := testutil.GetPendingMessages(t, r, tc.queue)
+		if diff := cmp.Diff(tc.want, got, testutil.IgnoreIDOpt); diff != "" {
+			t.Errorf("mismatch found in queue %q: (-want,+got)\n%s", tc.queue, diff)
+		}
+	}
+}
