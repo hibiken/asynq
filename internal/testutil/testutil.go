@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Shopify/asynq/internal/base"
+	"github.com/Shopify/asynq/internal/timeutil"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/timeutil"
 )
 
 // EquateInt64Approx returns a Comparer option that treats int64 values
@@ -126,6 +126,19 @@ func NewTaskMessageWithQueue(taskType string, payload []byte, qname string) *bas
 		Payload:  payload,
 		Timeout:  1800, // default timeout of 30 mins
 		Deadline: 0,    // no deadline
+	}
+}
+
+// NewTaskMessageWithMetadata returns a new instance of TaskMessage given a task metadata.
+func NewTaskMessageWithMetadata(taskType string, md map[string]string) *base.TaskMessage {
+	return &base.TaskMessage{
+		ID:       uuid.NewString(),
+		Type:     taskType,
+		Queue:    base.DefaultQueueName,
+		Retry:    25,
+		Timeout:  1800, // default timeout of 30 mins
+		Deadline: 0,    // no deadline
+		Metadata: md,
 	}
 }
 

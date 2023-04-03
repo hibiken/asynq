@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Shopify/asynq/internal/base"
+	"github.com/Shopify/asynq/internal/log"
+	"github.com/Shopify/asynq/internal/rdb"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/log"
-	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/robfig/cron/v3"
 )
 

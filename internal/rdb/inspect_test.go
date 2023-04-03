@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Shopify/asynq/internal/base"
+	"github.com/Shopify/asynq/internal/errors"
+	h "github.com/Shopify/asynq/internal/testutil"
+	"github.com/Shopify/asynq/internal/timeutil"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/errors"
-	h "github.com/hibiken/asynq/internal/testutil"
-	"github.com/hibiken/asynq/internal/timeutil"
 )
 
 func TestAllQueues(t *testing.T) {
@@ -532,6 +532,7 @@ func TestGetTaskInfo(t *testing.T) {
 	m6 := h.NewTaskMessageWithQueue("task5", nil, "custom")
 	m6.CompletedAt = twoHoursAgo.Unix()
 	m6.Retention = int64((24 * time.Hour).Seconds())
+	m7 := h.NewTaskMessageWithMetadata("task6", map[string]string{"foo": "bar"})
 
 	fixtures := struct {
 		active    map[string][]*base.TaskMessage
@@ -542,7 +543,7 @@ func TestGetTaskInfo(t *testing.T) {
 		completed map[string][]base.Z
 	}{
 		active: map[string][]*base.TaskMessage{
-			"default": {m1},
+			"default": {m1, m7},
 			"custom":  {},
 		},
 		pending: map[string][]*base.TaskMessage{
@@ -600,6 +601,16 @@ func TestGetTaskInfo(t *testing.T) {
 				Message:       m2,
 				State:         base.TaskStateScheduled,
 				NextProcessAt: fiveMinsFromNow,
+				Result:        nil,
+			},
+		},
+		{
+			qname: "default",
+			id:    m7.ID,
+			want: &base.TaskInfo{
+				Message:       m7,
+				State:         base.TaskStateActive,
+				NextProcessAt: time.Time{}, // zero value for N/A
 				Result:        nil,
 			},
 		},
@@ -744,6 +755,7 @@ func TestListPending(t *testing.T) {
 	m2 := h.NewTaskMessage("reindex", nil)
 	m3 := h.NewTaskMessageWithQueue("important_notification", nil, "critical")
 	m4 := h.NewTaskMessageWithQueue("minor_notification", nil, "low")
+	m5 := h.NewTaskMessageWithMetadata("dp_something", map[string]string{"foo": "bar"})
 
 	tests := []struct {
 		pending map[string][]*base.TaskMessage
@@ -752,12 +764,13 @@ func TestListPending(t *testing.T) {
 	}{
 		{
 			pending: map[string][]*base.TaskMessage{
-				base.DefaultQueueName: {m1, m2},
+				base.DefaultQueueName: {m1, m2, m5},
 			},
 			qname: base.DefaultQueueName,
 			want: []*base.TaskInfo{
 				{Message: m1, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
 				{Message: m2, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
+				{Message: m5, State: base.TaskStatePending, NextProcessAt: time.Now(), Result: nil},
 			},
 		},
 		{

@@ -14,11 +14,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Shopify/asynq/internal/errors"
+	pb "github.com/Shopify/asynq/internal/proto"
+	"github.com/Shopify/asynq/internal/timeutil"
 	"github.com/go-redis/redis/v8"
 	"github.com/golang/protobuf/ptypes"
-	"github.com/hibiken/asynq/internal/errors"
-	pb "github.com/hibiken/asynq/internal/proto"
-	"github.com/hibiken/asynq/internal/timeutil"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -294,6 +294,11 @@ type TaskMessage struct {
 	//
 	// Use zero to indicate no value.
 	CompletedAt int64
+
+	// Metadata specifies extensible metadata for the task.
+	//
+	// Can be used to carry tracing identifiers, etc.
+	Metadata map[string]string
 }
 
 // EncodeMessage marshals the given task message and returns an encoded bytes.
@@ -316,6 +321,7 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 		GroupKey:     msg.GroupKey,
 		Retention:    msg.Retention,
 		CompletedAt:  msg.CompletedAt,
+		Metadata:     msg.Metadata,
 	})
 }
 
@@ -340,6 +346,7 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 		GroupKey:     pbmsg.GetGroupKey(),
 		Retention:    pbmsg.GetRetention(),
 		CompletedAt:  pbmsg.GetCompletedAt(),
+		Metadata:     pbmsg.GetMetadata(),
 	}, nil
 }
 

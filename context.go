@@ -7,7 +7,7 @@ package asynq
 import (
 	"context"
 
-	asynqcontext "github.com/hibiken/asynq/internal/context"
+	asynqcontext "github.com/Shopify/asynq/internal/context"
 )
 
 // GetTaskID extracts a task ID from a context, if any.
@@ -39,4 +39,11 @@ func GetMaxRetry(ctx context.Context) (n int, ok bool) {
 // Return value queue indicates which queue the task was pulled from.
 func GetQueueName(ctx context.Context) (queue string, ok bool) {
 	return asynqcontext.GetQueueName(ctx)
+}
+
+// GetMetadata extracts metadata key-value pairs from a context, if any.
+//
+// Return value md is a map of metadata key-value pairs.
+func GetMetadata(ctx context.Context) (md map[string]string, ok bool) {
+	return asynqcontext.GetMetadata(ctx)
 }
