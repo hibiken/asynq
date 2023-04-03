@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/Shopify/asynq"
 	"github.com/gdamore/tcell/v2"
-	"github.com/hibiken/asynq"
 )
 
 // keyEventHandler handles keyboard events and updates the state.

@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/hibiken/asynq/internal/base"
+	"github.com/Shopify/asynq/internal/base"
 )
 
 // A taskMetadata holds task scoped data to put in context.
@@ -17,6 +17,7 @@ type taskMetadata struct {
 	maxRetry   int
 	retryCount int
 	qname      string
+	metadata   map[string]string
 }
 
 // ctxKey type is unexported to prevent collisions with context keys defined in
@@ -34,6 +35,7 @@ func New(base context.Context, msg *base.TaskMessage, deadline time.Time) (conte
 		maxRetry:   msg.Retry,
 		retryCount: msg.Retried,
 		qname:      msg.Queue,
+		metadata:   msg.Metadata,
 	}
 	ctx := context.WithValue(base, metadataCtxKey, metadata)
 	return context.WithDeadline(ctx, deadline)
@@ -84,4 +86,15 @@ func GetQueueName(ctx context.Context) (qname string, ok bool) {
 		return "", false
 	}
 	return metadata.qname, true
+}
+
+// GetMetadata extracts metadata key-value pairs from a context, if any.
+//
+// Return value md is a map of metadata key-value pairs.
+func GetMetadata(ctx context.Context) (md map[string]string, ok bool) {
+	metadata, ok := ctx.Value(metadataCtxKey).(taskMetadata)
+	if !ok {
+		return nil, false
+	}
+	return metadata.metadata, true
 }

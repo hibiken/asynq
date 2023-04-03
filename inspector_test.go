@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Shopify/asynq/internal/base"
+	"github.com/Shopify/asynq/internal/rdb"
+	h "github.com/Shopify/asynq/internal/testutil"
+	"github.com/Shopify/asynq/internal/timeutil"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/rdb"
-	h "github.com/hibiken/asynq/internal/testutil"
-	"github.com/hibiken/asynq/internal/timeutil"
 )
 
 func TestInspectorQueues(t *testing.T) {

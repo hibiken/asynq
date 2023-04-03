@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/MakeNowJust/heredoc/v2"
+	"github.com/Shopify/asynq"
 	"github.com/fatih/color"
-	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 )
 
@@ -245,7 +245,7 @@ func listActiveTasks(qname string, pageNum, pageSize int) {
 		return
 	}
 	printTable(
-		[]string{"ID", "Type", "Payload"},
+		[]string{"ID", "Type", "Meta", "Payload"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
 				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload))

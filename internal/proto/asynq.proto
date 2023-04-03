@@ -7,31 +7,31 @@ package asynq;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/hibiken/asynq/internal/proto";
+option go_package = "github.com/Shopify/asynq/internal/proto";
 
 // TaskMessage is the internal representation of a task with additional
 // metadata fields.
-// Next ID: 15
+// Next ID: 16
 message TaskMessage {
-	// Type indicates the kind of the task to be performed.
+  // Type indicates the kind of the task to be performed.
   string type = 1;
 
-	// Payload holds data needed to process the task.
+  // Payload holds data needed to process the task.
   bytes payload = 2;
 
-	// Unique identifier for the task.
+  // Unique identifier for the task.
   string id = 3;
 
-	// Name of the queue to which this task belongs.
+  // Name of the queue to which this task belongs.
   string queue = 4;
 
-	// Max number of retries for this task.
+  // Max number of retries for this task.
   int32 retry = 5;
 
-	// Number of times this task has been retried so far.
+  // Number of times this task has been retried so far.
   int32 retried = 6;
 
-	// Error message from the last failure.
+  // Error message from the last failure.
   string error_msg = 7;
 
   // Time of last failure in Unix time,
@@ -39,17 +39,17 @@ message TaskMessage {
   // Use zero to indicate no last failure.
   int64 last_failed_at = 11;
 
-	// Timeout specifies timeout in seconds.
-	// Use zero to indicate no timeout.
+  // Timeout specifies timeout in seconds.
+  // Use zero to indicate no timeout.
   int64 timeout = 8;
 
-	// Deadline specifies the deadline for the task in Unix time,
-	// the number of seconds elapsed since January 1, 1970 UTC.
-	// Use zero to indicate no deadline.
+  // Deadline specifies the deadline for the task in Unix time,
+  // the number of seconds elapsed since January 1, 1970 UTC.
+  // Use zero to indicate no deadline.
   int64 deadline = 9;
 
-	// UniqueKey holds the redis key used for uniqueness lock for this task.
-	// Empty string indicates that no uniqueness lock was used.
+  // UniqueKey holds the redis key used for uniqueness lock for this task.
+  // Empty string indicates that no uniqueness lock was used.
   string unique_key = 10;
 
   // GroupKey is a name of the group used for task aggregation.
@@ -65,6 +65,10 @@ message TaskMessage {
   // the number of seconds elapsed since January 1, 1970 UTC.
   // This field is populated if result_ttl > 0 upon completion.
   int64 completed_at = 13;
+
+  // Metadata provides a way to attach arbitrary key-value pairs to a task.
+  // This field can be used for things like tracing identifiers.
+  map<string, string> metadata = 15;
 };
 
 // ServerInfo holds information about a running server.
@@ -126,43 +130,43 @@ message WorkerInfo {
   // Time this worker started processing the task.
   google.protobuf.Timestamp start_time = 8;
 
-  // Deadline by which the worker needs to complete processing 
+  // Deadline by which the worker needs to complete processing
   // the task. If worker exceeds the deadline, the task will fail.
   google.protobuf.Timestamp deadline = 9;
 };
 
-// SchedulerEntry holds information about a periodic task registered 
+// SchedulerEntry holds information about a periodic task registered
 // with a scheduler.
 message SchedulerEntry {
-	// Identifier of the scheduler entry.
-	string id = 1;
+  // Identifier of the scheduler entry.
+  string id = 1;
 
-	// Periodic schedule spec of the entry.
-	string spec = 2;
+  // Periodic schedule spec of the entry.
+  string spec = 2;
 
-	// Task type of the periodic task.
-	string task_type = 3;
+  // Task type of the periodic task.
+  string task_type = 3;
 
-	// Task payload of the periodic task.
-	bytes task_payload = 4;
+  // Task payload of the periodic task.
+  bytes task_payload = 4;
 
-	// Options used to enqueue the periodic task.
-	repeated string enqueue_options = 5;
+  // Options used to enqueue the periodic task.
+  repeated string enqueue_options = 5;
 
-	// Next time the task will be enqueued.
+  // Next time the task will be enqueued.
   google.protobuf.Timestamp next_enqueue_time = 6;
 
-	// Last time the task was enqueued.
-	// Zero time if task was never enqueued.
+  // Last time the task was enqueued.
+  // Zero time if task was never enqueued.
   google.protobuf.Timestamp prev_enqueue_time = 7;
 };
 
 // SchedulerEnqueueEvent holds information about an enqueue event
 // by a scheduler.
 message SchedulerEnqueueEvent {
-	// ID of the task that was enqueued.
+  // ID of the task that was enqueued.
   string task_id = 1;
 
-	// Time the task was enqueued.
+  // Time the task was enqueued.
   google.protobuf.Timestamp enqueue_time = 2;
 };

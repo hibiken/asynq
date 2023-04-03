@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Shopify/asynq/internal/base"
+	"github.com/Shopify/asynq/internal/errors"
+	"github.com/Shopify/asynq/internal/rdb"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/errors"
-	"github.com/hibiken/asynq/internal/rdb"
 )
 
 // A Client is responsible for scheduling tasks.
@@ -49,6 +49,7 @@ const (
 	TaskIDOpt
 	RetentionOpt
 	GroupOpt
+	MetadataOpt
 )
 
 // Option specifies the task processing behavior.
@@ -75,6 +76,7 @@ type (
 	processInOption time.Duration
 	retentionOption time.Duration
 	groupOption     string
+	metadataOption  map[string]string
 )
 
 // MaxRetry returns an option to specify the max number of times
@@ -150,9 +152,9 @@ func (t deadlineOption) Value() interface{} { return time.Time(t) }
 // TTL duration must be greater than or equal to 1 second.
 //
 // Uniqueness of a task is based on the following properties:
-//     - Task Type
-//     - Task Payload
-//     - Queue Name
+//   - Task Type
+//   - Task Payload
+//   - Queue Name
 func Unique(ttl time.Duration) Option {
 	return uniqueOption(ttl)
 }
@@ -206,6 +208,14 @@ func (name groupOption) String() string     { return fmt.Sprintf("Group(%q)", st
 func (name groupOption) Type() OptionType   { return GroupOpt }
 func (name groupOption) Value() interface{} { return string(name) }
 
+func Metadata(md map[string]string) Option {
+	return metadataOption(md)
+}
+
+func (md metadataOption) String() string     { return fmt.Sprintf("Metadata(%v)", map[string]string(md)) }
+func (md metadataOption) Type() OptionType   { return MetadataOpt }
+func (md metadataOption) Value() interface{} { return map[string]string(md) }
+
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
@@ -226,6 +236,7 @@ type option struct {
 	processAt time.Time
 	retention time.Duration
 	group     string
+	metadata  map[string]string
 }
 
 // composeOptions merges user provided options into the default options
@@ -240,6 +251,7 @@ func composeOptions(opts ...Option) (option, error) {
 		timeout:   0, // do not set to defaultTimeout here
 		deadline:  time.Time{},
 		processAt: time.Now(),
+		metadata:  make(map[string]string),
 	}
 	for _, opt := range opts {
 		switch opt := opt.(type) {
@@ -279,6 +291,13 @@ func composeOptions(opts ...Option) (option, error) {
 				return option{}, errors.New("group key cannot be empty")
 			}
 			res.group = key
+		case metadataOption:
+			for k, v := range map[string]string(opt) {
+				if isBlank(k) {
+					return option{}, errors.New("metadata key cannot be empty")
+				}
+				res.metadata[k] = v
+			}
 		default:
 			// ignore unexpected option
 		}
@@ -378,6 +397,7 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 		UniqueKey: uniqueKey,
 		GroupKey:  opt.group,
 		Retention: int64(opt.retention.Seconds()),
+		Metadata:  opt.metadata,
 	}
 	now := time.Now()
 	var state base.TaskState

@@ -15,11 +15,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/MakeNowJust/heredoc/v2"
+	"github.com/Shopify/asynq"
+	"github.com/Shopify/asynq/internal/base"
+	"github.com/Shopify/asynq/internal/rdb"
 	"github.com/fatih/color"
 	"github.com/go-redis/redis/v8"
-	"github.com/hibiken/asynq"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/utf8string"
@@ -57,7 +57,7 @@ var rootCmd = &cobra.Command{
 		$ asynq task list --queue=myqueue --state=archived`),
 	Annotations: map[string]string{
 		"help:feedback": heredoc.Doc(`
-			Open an issue at https://github.com/hibiken/asynq/issues/new/choose`),
+			Open an issue at https://github.com/Shopify/asynq/issues/new/choose`),
 	},
 }
 
@@ -404,18 +404,22 @@ func getTLSConfig() *tls.Config {
 // cols is a list of headers and printRow specifies how to print rows.
 //
 // Example:
-// type User struct {
-//     Name string
-//     Addr string
-//     Age  int
-// }
+//
+//	type User struct {
+//	    Name string
+//	    Addr string
+//	    Age  int
+//	}
+//
 // data := []*User{{"user1", "addr1", 24}, {"user2", "addr2", 42}, ...}
 // cols := []string{"Name", "Addr", "Age"}
-// printRows := func(w io.Writer, tmpl string) {
-//     for _, u := range data {
-//         fmt.Fprintf(w, tmpl, u.Name, u.Addr, u.Age)
-//     }
-// }
+//
+//	printRows := func(w io.Writer, tmpl string) {
+//	    for _, u := range data {
+//	        fmt.Fprintf(w, tmpl, u.Name, u.Addr, u.Age)
+//	    }
+//	}
+//
 // printTable(cols, printRows)
 func printTable(cols []string, printRows func(w io.Writer, tmpl string)) {
 	format := strings.Repeat("%v\t", len(cols)) + "\n"
