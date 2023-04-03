@@ -134,7 +134,7 @@ func NewTaskMessageWithMetadata(taskType string, md map[string]string) *base.Tas
 	return &base.TaskMessage{
 		ID:       uuid.NewString(),
 		Type:     taskType,
-		Queue:    base.DefaultQueue,
+		Queue:    base.DefaultQueueName,
 		Retry:    25,
 		Timeout:  1800, // default timeout of 30 mins
 		Deadline: 0,    // no deadline

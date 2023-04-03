@@ -532,7 +532,7 @@ func TestGetTaskInfo(t *testing.T) {
 	m6 := h.NewTaskMessageWithQueue("task5", nil, "custom")
 	m6.CompletedAt = twoHoursAgo.Unix()
 	m6.Retention = int64((24 * time.Hour).Seconds())
-	m7 := h.NewTaskMessageWithMetadata("task5", map[string]string{"foo": "bar"})
+	m7 := h.NewTaskMessageWithMetadata("task6", map[string]string{"foo": "bar"})
 
 	fixtures := struct {
 		active    map[string][]*base.TaskMessage
