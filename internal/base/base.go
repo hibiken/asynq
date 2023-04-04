@@ -6,10 +6,13 @@
 package base
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"hash"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -196,13 +199,26 @@ func SchedulerHistoryKey(entryID string) string {
 	return fmt.Sprintf("asynq:scheduler_history:%s", entryID)
 }
 
+type hasher func(payload []byte, h hash.Hash)
+
 // UniqueKey returns a redis key with the given type, payload, and queue name.
-func UniqueKey(qname, tasktype string, payload []byte) string {
+func UniqueKey(qname, tasktype string, payload []byte, customHasher hasher) string {
 	if payload == nil {
 		return fmt.Sprintf("%sunique:%s:", QueueKeyPrefix(qname), tasktype)
 	}
-	checksum := md5.Sum(payload)
-	return fmt.Sprintf("%sunique:%s:%s", QueueKeyPrefix(qname), tasktype, hex.EncodeToString(checksum[:]))
+
+	md5Hash := md5.New()
+
+	if customHasher != nil {
+		// Use custom hasher to populate the md5 hash from payload.
+		customHasher(payload, md5Hash)
+	} else {
+		// Apply md5 hash directly to payload.
+		_, _ = io.Copy(md5Hash, bytes.NewReader(payload))
+	}
+
+	checksum := md5Hash.Sum(nil)
+	return fmt.Sprintf("%sunique:%s:%s", QueueKeyPrefix(qname), tasktype, hex.EncodeToString(checksum))
 }
 
 // GroupKeyPrefix returns a prefix for group key.

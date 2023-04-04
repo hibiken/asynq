@@ -7,6 +7,7 @@ package asynq
 import (
 	"context"
 	"fmt"
+	"hash"
 	"strings"
 	"time"
 
@@ -50,6 +51,7 @@ const (
 	RetentionOpt
 	GroupOpt
 	MetadataOpt
+	PayloadHasherOpt
 )
 
 // Option specifies the task processing behavior.
@@ -66,18 +68,23 @@ type Option interface {
 
 // Internal option representations.
 type (
-	retryOption     int
-	queueOption     string
-	taskIDOption    string
-	timeoutOption   time.Duration
-	deadlineOption  time.Time
-	uniqueOption    time.Duration
-	processAtOption time.Time
-	processInOption time.Duration
-	retentionOption time.Duration
-	groupOption     string
-	metadataOption  map[string]string
+	retryOption         int
+	queueOption         string
+	taskIDOption        string
+	timeoutOption       time.Duration
+	deadlineOption      time.Time
+	uniqueOption        time.Duration
+	processAtOption     time.Time
+	processInOption     time.Duration
+	retentionOption     time.Duration
+	groupOption         string
+	metadataOption      map[string]string
+	payloadHasherOption HasherFunc
 )
+
+// HasherFunc provides custom logic to populate a hash with the task payload.
+// This is useful for building unique keys from payloads with non-deterministic serialization (e.g. JSON, protobuf).
+type HasherFunc func(payload []byte, h hash.Hash)
 
 // MaxRetry returns an option to specify the max number of times
 // the task will be retried.
@@ -216,6 +223,14 @@ func (md metadataOption) String() string     { return fmt.Sprintf("Metadata(%v)"
 func (md metadataOption) Type() OptionType   { return MetadataOpt }
 func (md metadataOption) Value() interface{} { return map[string]string(md) }
 
+func PayloadHasher(hasher HasherFunc) Option {
+	return payloadHasherOption(hasher)
+}
+
+func (h payloadHasherOption) String() string     { return fmt.Sprintf("HasherFunc(%T)", h) }
+func (h payloadHasherOption) Type() OptionType   { return PayloadHasherOpt }
+func (h payloadHasherOption) Value() interface{} { return HasherFunc(h) }
+
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
@@ -227,16 +242,17 @@ var ErrDuplicateTask = errors.New("task already exists")
 var ErrTaskIDConflict = errors.New("task ID conflicts with another task")
 
 type option struct {
-	retry     int
-	queue     string
-	taskID    string
-	timeout   time.Duration
-	deadline  time.Time
-	uniqueTTL time.Duration
-	processAt time.Time
-	retention time.Duration
-	group     string
-	metadata  map[string]string
+	retry         int
+	queue         string
+	taskID        string
+	timeout       time.Duration
+	deadline      time.Time
+	uniqueTTL     time.Duration
+	processAt     time.Time
+	retention     time.Duration
+	group         string
+	metadata      map[string]string
+	payloadHasher HasherFunc
 }
 
 // composeOptions merges user provided options into the default options
@@ -298,6 +314,8 @@ func composeOptions(opts ...Option) (option, error) {
 				}
 				res.metadata[k] = v
 			}
+		case payloadHasherOption:
+			res.payloadHasher = HasherFunc(opt)
 		default:
 			// ignore unexpected option
 		}
@@ -384,7 +402,11 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 	}
 	var uniqueKey string
 	if opt.uniqueTTL > 0 {
-		uniqueKey = base.UniqueKey(opt.queue, task.Type(), task.Payload())
+		uniqueKey = base.UniqueKey(
+			opt.queue,
+			task.Type(),
+			task.Payload(),
+			(func([]byte, hash.Hash))(opt.payloadHasher))
 	}
 	msg := &base.TaskMessage{
 		ID:        opt.taskID,

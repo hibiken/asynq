@@ -598,7 +598,7 @@ func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, group
 		base.TaskKey(msg.Queue, msg.ID),
 		base.GroupKey(msg.Queue, groupKey),
 		base.AllGroups(msg.Queue),
-		base.UniqueKey(msg.Queue, msg.Type, msg.Payload),
+		msg.UniqueKey, // Already available in TaskMessage (no need to recompute this).
 	}
 	argv := []interface{}{
 		encoded,

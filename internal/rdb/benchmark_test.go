@@ -38,7 +38,7 @@ func BenchmarkEnqueueUnique(b *testing.B) {
 		Type:      "task1",
 		Payload:   nil,
 		Queue:     base.DefaultQueueName,
-		UniqueKey: base.UniqueKey("default", "task1", nil),
+		UniqueKey: base.UniqueKey("default", "task1", nil, nil),
 	}
 	uniqueTTL := 5 * time.Minute
 	b.ResetTimer()
@@ -79,7 +79,7 @@ func BenchmarkScheduleUnique(b *testing.B) {
 		Type:      "task1",
 		Payload:   nil,
 		Queue:     base.DefaultQueueName,
-		UniqueKey: base.UniqueKey("default", "task1", nil),
+		UniqueKey: base.UniqueKey("default", "task1", nil, nil),
 	}
 	processAt := time.Now().Add(3 * time.Minute)
 	uniqueTTL := 5 * time.Minute

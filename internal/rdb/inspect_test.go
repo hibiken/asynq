@@ -4283,7 +4283,7 @@ func TestDeleteTaskWithUniqueLock(t *testing.T) {
 		Type:      "email",
 		Payload:   h.JSON(map[string]interface{}{"user_id": json.Number("123")}),
 		Queue:     base.DefaultQueueName,
-		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]interface{}{"user_id": 123})),
+		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]interface{}{"user_id": 123}), nil),
 	}
 	t1 := time.Now().Add(3 * time.Hour)
 

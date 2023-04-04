@@ -5,11 +5,13 @@
 package base
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"sync"
 	"testing"
 	"time"
@@ -339,56 +341,79 @@ func TestUniqueKey(t *testing.T) {
 		"time":     time.Date(2020, time.July, 28, 0, 0, 0, 0, time.UTC),
 		"duration": time.Hour})
 
-	checksum := func(data []byte) string {
+	defaultChecksum := func(data []byte) string {
 		sum := md5.Sum(data)
 		return hex.EncodeToString(sum[:])
 	}
+
+	customHasher := func(data []byte, h hash.Hash) {
+		_, _ = h.Write(bytes.ToUpper(data)) // Upper-case the data before hashing.
+	}
+
+	customChecksum := func(data []byte) string {
+		return defaultChecksum(bytes.ToUpper(data))
+	}
+
 	tests := []struct {
-		desc     string
-		qname    string
-		tasktype string
-		payload  []byte
-		want     string
+		desc         string
+		qname        string
+		tasktype     string
+		payload      []byte
+		customHasher hasher
+		want         string
 	}{
 		{
 			"with primitive types",
 			"default",
 			"email:send",
 			payload1,
-			fmt.Sprintf("asynq:{default}:unique:email:send:%s", checksum(payload1)),
+			nil,
+			fmt.Sprintf("asynq:{default}:unique:email:send:%s", defaultChecksum(payload1)),
 		},
 		{
 			"with unsorted keys",
 			"default",
 			"email:send",
 			payload2,
-			fmt.Sprintf("asynq:{default}:unique:email:send:%s", checksum(payload2)),
+			nil,
+			fmt.Sprintf("asynq:{default}:unique:email:send:%s", defaultChecksum(payload2)),
 		},
 		{
 			"with composite types",
 			"default",
 			"email:send",
 			payload3,
-			fmt.Sprintf("asynq:{default}:unique:email:send:%s", checksum(payload3)),
+			nil,
+			fmt.Sprintf("asynq:{default}:unique:email:send:%s", defaultChecksum(payload3)),
 		},
 		{
 			"with complex types",
 			"default",
 			"email:send",
 			payload4,
-			fmt.Sprintf("asynq:{default}:unique:email:send:%s", checksum(payload4)),
+			nil,
+			fmt.Sprintf("asynq:{default}:unique:email:send:%s", defaultChecksum(payload4)),
 		},
 		{
 			"with nil payload",
 			"default",
 			"reindex",
 			nil,
+			nil,
 			"asynq:{default}:unique:reindex:",
+		},
+		{
+			"with custom hasher",
+			"default",
+			"email:send",
+			payload1,
+			customHasher,
+			fmt.Sprintf("asynq:{default}:unique:email:send:%s", customChecksum(payload1)),
 		},
 	}
 
 	for _, tc := range tests {
-		got := UniqueKey(tc.qname, tc.tasktype, tc.payload)
+		got := UniqueKey(tc.qname, tc.tasktype, tc.payload, tc.customHasher)
 		if got != tc.want {
 			t.Errorf("%s: UniqueKey(%q, %q, %v) = %q, want %q", tc.desc, tc.qname, tc.tasktype, tc.payload, got, tc.want)
 		}

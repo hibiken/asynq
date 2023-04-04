@@ -168,7 +168,7 @@ func TestEnqueueUnique(t *testing.T) {
 		Type:      "email",
 		Payload:   h.JSON(map[string]interface{}{"user_id": json.Number("123")}),
 		Queue:     base.DefaultQueueName,
-		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]interface{}{"user_id": 123})),
+		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]interface{}{"user_id": 123}), nil),
 	}
 
 	enqueueTime := time.Now()
@@ -1234,7 +1234,7 @@ func TestAddToGroup(t *testing.T) {
 	}
 }
 
-func TestAddToGroupeTaskIdConflictError(t *testing.T) {
+func TestAddToGroupTaskIdConflictError(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 
@@ -1282,7 +1282,7 @@ func TestAddToGroupUnique(t *testing.T) {
 	now := time.Now()
 	r.SetClock(timeutil.NewSimulatedClock(now))
 	msg := h.NewTaskMessage("mytask", []byte("foo"))
-	msg.UniqueKey = base.UniqueKey(msg.Queue, msg.Type, msg.Payload)
+	msg.UniqueKey = base.UniqueKey(msg.Queue, msg.Type, msg.Payload, nil)
 	ctx := context.Background()
 
 	tests := []struct {
@@ -1506,7 +1506,7 @@ func TestScheduleUnique(t *testing.T) {
 		Type:      "email",
 		Payload:   h.JSON(map[string]interface{}{"user_id": 123}),
 		Queue:     base.DefaultQueueName,
-		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]interface{}{"user_id": 123})),
+		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]interface{}{"user_id": 123}), nil),
 	}
 
 	tests := []struct {
