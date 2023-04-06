@@ -46,7 +46,7 @@ func newSubscriber(params subscriberParams) *subscriber {
 func (s *subscriber) shutdown() {
 	s.logger.Debug("Subscriber shutting down...")
 	// Signal the subscriber goroutine to stop.
-	s.done <- struct{}{}
+	close(s.done)
 }
 
 func (s *subscriber) start(wg *sync.WaitGroup) {
@@ -80,6 +80,11 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 				s.logger.Debug("Subscriber done")
 				return
 			case msg := <-cancelCh:
+				if msg == nil {
+					s.logger.Warn("channel closed")
+					pubsub.Close()
+					return
+				}
 				cancel, ok := s.cancelations.Get(msg.Payload)
 				if ok {
 					cancel()
