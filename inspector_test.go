@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
@@ -20,6 +19,7 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/redis/go-redis/v9"
 )
 
 func TestInspectorQueues(t *testing.T) {
@@ -39,7 +39,7 @@ func TestInspectorQueues(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 		for _, qname := range tc.queues {
-			if err := r.SAdd(context.Background(), base.AllQueues, qname).Err(); err != nil {
+			if err := r.SAdd(context.Background(), base.AllQueues(), qname).Err(); err != nil {
 				t.Fatalf("could not initialize all queue set: %v", err)
 			}
 		}
@@ -138,8 +138,8 @@ func TestInspectorDeleteQueue(t *testing.T) {
 				tc.qname, tc.force, err)
 			continue
 		}
-		if r.SIsMember(context.Background(), base.AllQueues, tc.qname).Val() {
-			t.Errorf("%q is a member of %q", tc.qname, base.AllQueues)
+		if r.SIsMember(context.Background(), base.AllQueues(), tc.qname).Val() {
+			t.Errorf("%q is a member of %q", tc.qname, base.AllQueues())
 		}
 	}
 }
@@ -429,7 +429,7 @@ func TestInspectorHistory(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 
-		r.SAdd(context.Background(), base.AllQueues, tc.qname)
+		r.SAdd(context.Background(), base.AllQueues(), tc.qname)
 		// populate last n days data
 		for i := 0; i < tc.n; i++ {
 			ts := now.Add(-time.Duration(i) * 24 * time.Hour)
@@ -1138,7 +1138,7 @@ func TestInspectorListAggregatingTasks(t *testing.T) {
 		tasks     []*h.TaskSeedData
 		allQueues []string
 		allGroups map[string][]string
-		groups    map[string][]*redis.Z
+		groups    map[string][]redis.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -1152,7 +1152,7 @@ func TestInspectorListAggregatingTasks(t *testing.T) {
 			base.AllGroups("default"): {"group1", "group2"},
 			base.AllGroups("custom"):  {"group1"},
 		},
-		groups: map[string][]*redis.Z{
+		groups: map[string][]redis.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-30 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
@@ -1196,7 +1196,7 @@ func TestInspectorListAggregatingTasks(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 		h.SeedTasks(t, r, fxt.tasks)
-		h.SeedRedisSet(t, r, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSet(t, r, base.AllQueues(), fxt.allQueues)
 		h.SeedRedisSets(t, r, fxt.allGroups)
 		h.SeedRedisZSets(t, r, fxt.groups)
 
@@ -3445,7 +3445,7 @@ func TestInspectorGroups(t *testing.T) {
 	fixtures := struct {
 		tasks     []*h.TaskSeedData
 		allGroups map[string][]string
-		groups    map[string][]*redis.Z
+		groups    map[string][]redis.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -3458,7 +3458,7 @@ func TestInspectorGroups(t *testing.T) {
 			base.AllGroups("default"): {"group1", "group2"},
 			base.AllGroups("custom"):  {"group1"},
 		},
-		groups: map[string][]*redis.Z{
+		groups: map[string][]redis.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-10 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-20 * time.Second).Unix())},

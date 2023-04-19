@@ -7,7 +7,6 @@ package dash
 import (
 	"sort"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/hibiken/asynq"
 )
 

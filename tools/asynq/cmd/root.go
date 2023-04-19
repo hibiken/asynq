@@ -14,7 +14,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/fatih/color"
 	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
@@ -404,18 +403,22 @@ func getTLSConfig() *tls.Config {
 // cols is a list of headers and printRow specifies how to print rows.
 //
 // Example:
-// type User struct {
-//     Name string
-//     Addr string
-//     Age  int
-// }
+//
+//	type User struct {
+//	    Name string
+//	    Addr string
+//	    Age  int
+//	}
+//
 // data := []*User{{"user1", "addr1", 24}, {"user2", "addr2", 42}, ...}
 // cols := []string{"Name", "Addr", "Age"}
-// printRows := func(w io.Writer, tmpl string) {
-//     for _, u := range data {
-//         fmt.Fprintf(w, tmpl, u.Name, u.Addr, u.Age)
-//     }
-// }
+//
+//	printRows := func(w io.Writer, tmpl string) {
+//	    for _, u := range data {
+//	        fmt.Fprintf(w, tmpl, u.Name, u.Addr, u.Age)
+//	    }
+//	}
+//
 // printTable(cols, printRows)
 func printTable(cols []string, printRows func(w io.Writer, tmpl string)) {
 	format := strings.Repeat("%v\t", len(cols)) + "\n"

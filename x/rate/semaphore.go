@@ -109,6 +109,7 @@ func (s *Semaphore) Close() error {
 	return s.rc.Close()
 }
 
+// TODO: change this
 func semaphoreKey(scope string) string {
 	return fmt.Sprintf("asynq:sema:%s", scope)
 }

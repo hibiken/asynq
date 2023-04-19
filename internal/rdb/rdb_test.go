@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
@@ -23,6 +22,7 @@ import (
 	"github.com/hibiken/asynq/internal/errors"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/redis/go-redis/v9"
 )
 
 // variables used for package testing.
@@ -118,8 +118,8 @@ func TestEnqueue(t *testing.T) {
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 	}
 }
@@ -199,8 +199,8 @@ func TestEnqueueUnique(t *testing.T) {
 		if diff := cmp.Diff(tc.msg, gotPending[0]); diff != "" {
 			t.Errorf("persisted data differed from the original input (-want, +got)\n%s", diff)
 		}
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 
 		// Check Pending list has task ID.
@@ -236,8 +236,8 @@ func TestEnqueueUnique(t *testing.T) {
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 
 		// Enqueue the second message, should fail.
@@ -1228,8 +1228,8 @@ func TestAddToGroup(t *testing.T) {
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 	}
 }
@@ -1272,7 +1272,6 @@ func TestAddToGroupeTaskIdConflictError(t *testing.T) {
 			continue
 		}
 	}
-
 }
 
 func TestAddToGroupUnique(t *testing.T) {
@@ -1339,8 +1338,8 @@ func TestAddToGroupUnique(t *testing.T) {
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 
 		got := r.AddToGroupUnique(ctx, tc.msg, tc.groupKey, tc.ttl)
@@ -1356,7 +1355,6 @@ func TestAddToGroupUnique(t *testing.T) {
 			continue
 		}
 	}
-
 }
 
 func TestAddToGroupUniqueTaskIdConflictError(t *testing.T) {
@@ -1398,7 +1396,6 @@ func TestAddToGroupUniqueTaskIdConflictError(t *testing.T) {
 			continue
 		}
 	}
-
 }
 
 func TestSchedule(t *testing.T) {
@@ -1453,8 +1450,8 @@ func TestSchedule(t *testing.T) {
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 	}
 }
@@ -1565,8 +1562,8 @@ func TestScheduleUnique(t *testing.T) {
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 
 		// Enqueue the second message, should fail.
@@ -2797,10 +2794,10 @@ func TestWriteServerState(t *testing.T) {
 		t.Errorf("TTL of %q was %v, want %v", skey, gotTTL, ttl)
 	}
 	// Check ServerInfo key was added to the set all server keys correctly.
-	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers, 0, -1).Val()
+	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers(), 0, -1).Val()
 	wantServerKeys := []string{skey}
 	if diff := cmp.Diff(wantServerKeys, gotServerKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllServers, gotServerKeys, wantServerKeys)
+		t.Errorf("%q contained %v, want %v", base.AllServers(), gotServerKeys, wantServerKeys)
 	}
 
 	// Check WorkersInfo was written correctly.
@@ -2810,10 +2807,10 @@ func TestWriteServerState(t *testing.T) {
 		t.Errorf("%q key exists", wkey)
 	}
 	// Check WorkersInfo key was added to the set correctly.
-	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers, 0, -1).Val()
+	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers(), 0, -1).Val()
 	wantWorkerKeys := []string{wkey}
 	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)
+		t.Errorf("%q contained %v, want %v", base.AllWorkers(), gotWorkerKeys, wantWorkerKeys)
 	}
 }
 
@@ -2887,10 +2884,10 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		t.Errorf("TTL of %q was %v, want %v", skey, gotTTL, ttl)
 	}
 	// Check ServerInfo key was added to the set correctly.
-	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers, 0, -1).Val()
+	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers(), 0, -1).Val()
 	wantServerKeys := []string{skey}
 	if diff := cmp.Diff(wantServerKeys, gotServerKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllServers, gotServerKeys, wantServerKeys)
+		t.Errorf("%q contained %v, want %v", base.AllServers(), gotServerKeys, wantServerKeys)
 	}
 
 	// Check WorkersInfo was written correctly.
@@ -2918,10 +2915,10 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		t.Errorf("TTL of %q was %v, want %v", wkey, gotTTL, ttl)
 	}
 	// Check WorkersInfo key was added to the set correctly.
-	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers, 0, -1).Val()
+	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers(), 0, -1).Val()
 	wantWorkerKeys := []string{wkey}
 	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)
+		t.Errorf("%q contained %v, want %v", base.AllWorkers(), gotWorkerKeys, wantWorkerKeys)
 	}
 }
 
@@ -3014,15 +3011,15 @@ func TestClearServerState(t *testing.T) {
 	if r.client.Exists(context.Background(), wkey).Val() != 0 {
 		t.Errorf("Redis key %q exists", wkey)
 	}
-	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers, 0, -1).Val()
+	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers(), 0, -1).Val()
 	wantServerKeys := []string{otherSKey}
 	if diff := cmp.Diff(wantServerKeys, gotServerKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllServers, gotServerKeys, wantServerKeys)
+		t.Errorf("%q contained %v, want %v", base.AllServers(), gotServerKeys, wantServerKeys)
 	}
-	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers, 0, -1).Val()
+	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers(), 0, -1).Val()
 	wantWorkerKeys := []string{otherWKey}
 	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)
+		t.Errorf("%q contained %v, want %v", base.AllWorkers(), gotWorkerKeys, wantWorkerKeys)
 	}
 }
 
@@ -3122,7 +3119,7 @@ func TestAggregationCheck(t *testing.T) {
 		desc string
 		// initial data
 		tasks     []*h.TaskSeedData
-		groups    map[string][]*redis.Z
+		groups    map[string][]redis.Z
 		allGroups map[string][]string
 
 		// args
@@ -3141,7 +3138,7 @@ func TestAggregationCheck(t *testing.T) {
 		{
 			desc:  "with an empty group",
 			tasks: []*h.TaskSeedData{},
-			groups: map[string][]*redis.Z{
+			groups: map[string][]redis.Z{
 				base.GroupKey("default", "mygroup"): {},
 			},
 			allGroups: map[string][]string{
@@ -3168,7 +3165,7 @@ func TestAggregationCheck(t *testing.T) {
 				{Msg: msg4, State: base.TaskStateAggregating},
 				{Msg: msg5, State: base.TaskStateAggregating},
 			},
-			groups: map[string][]*redis.Z{
+			groups: map[string][]redis.Z{
 				base.GroupKey("default", "mygroup"): {
 					{Member: msg1.ID, Score: float64(now.Add(-5 * time.Minute).Unix())},
 					{Member: msg2.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
@@ -3201,7 +3198,7 @@ func TestAggregationCheck(t *testing.T) {
 				{Msg: msg4, State: base.TaskStateAggregating},
 				{Msg: msg5, State: base.TaskStateAggregating},
 			},
-			groups: map[string][]*redis.Z{
+			groups: map[string][]redis.Z{
 				base.GroupKey("default", "mygroup"): {
 					{Member: msg1.ID, Score: float64(now.Add(-5 * time.Minute).Unix())},
 					{Member: msg2.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
@@ -3235,7 +3232,7 @@ func TestAggregationCheck(t *testing.T) {
 				{Msg: msg2, State: base.TaskStateAggregating},
 				{Msg: msg3, State: base.TaskStateAggregating},
 			},
-			groups: map[string][]*redis.Z{
+			groups: map[string][]redis.Z{
 				base.GroupKey("default", "mygroup"): {
 					{Member: msg1.ID, Score: float64(now.Add(-5 * time.Minute).Unix())},
 					{Member: msg2.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
@@ -3266,7 +3263,7 @@ func TestAggregationCheck(t *testing.T) {
 				{Msg: msg4, State: base.TaskStateAggregating},
 				{Msg: msg5, State: base.TaskStateAggregating},
 			},
-			groups: map[string][]*redis.Z{
+			groups: map[string][]redis.Z{
 				base.GroupKey("default", "mygroup"): {
 					{Member: msg1.ID, Score: float64(now.Add(-15 * time.Minute).Unix())},
 					{Member: msg2.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
@@ -3299,7 +3296,7 @@ func TestAggregationCheck(t *testing.T) {
 				{Msg: msg4, State: base.TaskStateAggregating},
 				{Msg: msg5, State: base.TaskStateAggregating},
 			},
-			groups: map[string][]*redis.Z{
+			groups: map[string][]redis.Z{
 				base.GroupKey("default", "mygroup"): {
 					{Member: msg1.ID, Score: float64(now.Add(-15 * time.Minute).Unix())},
 					{Member: msg2.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
@@ -3338,7 +3335,7 @@ func TestAggregationCheck(t *testing.T) {
 				{Msg: msg4, State: base.TaskStateAggregating},
 				{Msg: msg5, State: base.TaskStateAggregating},
 			},
-			groups: map[string][]*redis.Z{
+			groups: map[string][]redis.Z{
 				base.GroupKey("default", "mygroup"): {
 					{Member: msg1.ID, Score: float64(now.Add(-15 * time.Minute).Unix())},
 					{Member: msg2.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
@@ -3371,7 +3368,7 @@ func TestAggregationCheck(t *testing.T) {
 				{Msg: msg4, State: base.TaskStateAggregating},
 				{Msg: msg5, State: base.TaskStateAggregating},
 			},
-			groups: map[string][]*redis.Z{
+			groups: map[string][]redis.Z{
 				base.GroupKey("default", "mygroup"): {
 					{Member: msg1.ID, Score: float64(now.Add(-15 * time.Minute).Unix())},
 					{Member: msg2.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
@@ -3473,8 +3470,8 @@ func TestDeleteAggregationSet(t *testing.T) {
 		desc string
 		// initial data
 		tasks              []*h.TaskSeedData
-		aggregationSets    map[string][]*redis.Z
-		allAggregationSets map[string][]*redis.Z
+		aggregationSets    map[string][]redis.Z
+		allAggregationSets map[string][]redis.Z
 
 		// args
 		ctx   context.Context
@@ -3494,14 +3491,14 @@ func TestDeleteAggregationSet(t *testing.T) {
 				{Msg: m2, State: base.TaskStateAggregating},
 				{Msg: m3, State: base.TaskStateAggregating},
 			},
-			aggregationSets: map[string][]*redis.Z{
+			aggregationSets: map[string][]redis.Z{
 				base.AggregationSetKey("default", "mygroup", setID): {
 					{Member: m1.ID, Score: float64(now.Add(-5 * time.Minute).Unix())},
 					{Member: m2.ID, Score: float64(now.Add(-4 * time.Minute).Unix())},
 					{Member: m3.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
 				},
 			},
-			allAggregationSets: map[string][]*redis.Z{
+			allAggregationSets: map[string][]redis.Z{
 				base.AllAggregationSets("default"): {
 					{Member: base.AggregationSetKey("default", "mygroup", setID), Score: float64(now.Add(aggregationTimeout).Unix())},
 				},
@@ -3528,7 +3525,7 @@ func TestDeleteAggregationSet(t *testing.T) {
 				{Msg: m2, State: base.TaskStateAggregating},
 				{Msg: m3, State: base.TaskStateAggregating},
 			},
-			aggregationSets: map[string][]*redis.Z{
+			aggregationSets: map[string][]redis.Z{
 				base.AggregationSetKey("default", "mygroup", setID): {
 					{Member: m1.ID, Score: float64(now.Add(-5 * time.Minute).Unix())},
 				},
@@ -3537,7 +3534,7 @@ func TestDeleteAggregationSet(t *testing.T) {
 					{Member: m3.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
 				},
 			},
-			allAggregationSets: map[string][]*redis.Z{
+			allAggregationSets: map[string][]redis.Z{
 				base.AllAggregationSets("default"): {
 					{Member: base.AggregationSetKey("default", "mygroup", setID), Score: float64(now.Add(aggregationTimeout).Unix())},
 					{Member: base.AggregationSetKey("default", "mygroup", otherSetID), Score: float64(now.Add(aggregationTimeout).Unix())},
@@ -3602,8 +3599,8 @@ func TestDeleteAggregationSetError(t *testing.T) {
 		desc string
 		// initial data
 		tasks              []*h.TaskSeedData
-		aggregationSets    map[string][]*redis.Z
-		allAggregationSets map[string][]*redis.Z
+		aggregationSets    map[string][]redis.Z
+		allAggregationSets map[string][]redis.Z
 
 		// args
 		ctx   context.Context
@@ -3622,14 +3619,14 @@ func TestDeleteAggregationSetError(t *testing.T) {
 				{Msg: m2, State: base.TaskStateAggregating},
 				{Msg: m3, State: base.TaskStateAggregating},
 			},
-			aggregationSets: map[string][]*redis.Z{
+			aggregationSets: map[string][]redis.Z{
 				base.AggregationSetKey("default", "mygroup", setID): {
 					{Member: m1.ID, Score: float64(now.Add(-5 * time.Minute).Unix())},
 					{Member: m2.ID, Score: float64(now.Add(-4 * time.Minute).Unix())},
 					{Member: m3.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
 				},
 			},
-			allAggregationSets: map[string][]*redis.Z{
+			allAggregationSets: map[string][]redis.Z{
 				base.AllAggregationSets("default"): {
 					{Member: base.AggregationSetKey("default", "mygroup", setID), Score: float64(now.Add(aggregationTimeout).Unix())},
 				},
@@ -3688,23 +3685,23 @@ func TestReclaimStaleAggregationSets(t *testing.T) {
 	// Note: In this test, we're trying out a new way to test RDB by exactly describing how
 	// keys and values are represented in Redis.
 	tests := []struct {
-		groups                 map[string][]*redis.Z // map redis-key to redis-zset
-		aggregationSets        map[string][]*redis.Z
-		allAggregationSets     map[string][]*redis.Z
+		groups                 map[string][]redis.Z // map redis-key to redis-zset
+		aggregationSets        map[string][]redis.Z
+		allAggregationSets     map[string][]redis.Z
 		qname                  string
 		wantGroups             map[string][]redis.Z
 		wantAggregationSets    map[string][]redis.Z
 		wantAllAggregationSets map[string][]redis.Z
 	}{
 		{
-			groups: map[string][]*redis.Z{
+			groups: map[string][]redis.Z{
 				base.GroupKey("default", "foo"): {},
 				base.GroupKey("default", "bar"): {},
 				base.GroupKey("default", "qux"): {
 					{Member: m4.ID, Score: float64(now.Add(-10 * time.Second).Unix())},
 				},
 			},
-			aggregationSets: map[string][]*redis.Z{
+			aggregationSets: map[string][]redis.Z{
 				base.AggregationSetKey("default", "foo", "set1"): {
 					{Member: m1.ID, Score: float64(now.Add(-3 * time.Minute).Unix())},
 					{Member: m2.ID, Score: float64(now.Add(-4 * time.Minute).Unix())},
@@ -3713,7 +3710,7 @@ func TestReclaimStaleAggregationSets(t *testing.T) {
 					{Member: m3.ID, Score: float64(now.Add(-1 * time.Minute).Unix())},
 				},
 			},
-			allAggregationSets: map[string][]*redis.Z{
+			allAggregationSets: map[string][]redis.Z{
 				base.AllAggregationSets("default"): {
 					{Member: base.AggregationSetKey("default", "foo", "set1"), Score: float64(now.Add(-10 * time.Second).Unix())}, // set1 is expired
 					{Member: base.AggregationSetKey("default", "bar", "set2"), Score: float64(now.Add(40 * time.Second).Unix())},  // set2 is not expired
