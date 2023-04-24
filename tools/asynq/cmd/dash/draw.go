@@ -446,7 +446,7 @@ func nextTaskState(current asynq.TaskState) asynq.TaskState {
 			}
 		}
 	}
-	panic("unkown task state")
+	panic("unknown task state")
 }
 
 func prevTaskState(current asynq.TaskState) asynq.TaskState {
@@ -459,7 +459,7 @@ func prevTaskState(current asynq.TaskState) asynq.TaskState {
 			}
 		}
 	}
-	panic("unkown task state")
+	panic("unknown task state")
 }
 
 func getTaskCount(queue *asynq.QueueInfo, taskState asynq.TaskState) int {

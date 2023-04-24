@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
@@ -274,6 +274,7 @@ func (s *Scheduler) runHeartbeater() {
 		case <-s.done:
 			s.logger.Debugf("Scheduler heatbeater shutting down")
 			s.rdb.ClearSchedulerEntries(s.id)
+			ticker.Stop()
 			return
 		case <-ticker.C:
 			s.beat()

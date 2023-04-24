@@ -351,7 +351,7 @@ func initConfig() {
 // createRDB creates a RDB instance using flag values and returns it.
 func createRDB() *rdb.RDB {
 	var c redis.UniversalClient
-	if useRedisCluster {
+	if viper.GetBool("cluster") {
 		addrs := strings.Split(viper.GetString("cluster_addrs"), ",")
 		c = redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs:     addrs,
@@ -375,7 +375,7 @@ func createInspector() *asynq.Inspector {
 }
 
 func getRedisConnOpt() asynq.RedisConnOpt {
-	if useRedisCluster {
+	if viper.GetBool("cluster") {
 		addrs := strings.Split(viper.GetString("cluster_addrs"), ",")
 		return asynq.RedisClusterClientOpt{
 			Addrs:     addrs,

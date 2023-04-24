@@ -91,6 +91,7 @@ func (s *State) DebugString() string {
 type Options struct {
 	DebugMode    bool
 	PollInterval time.Duration
+	RedisConnOpt asynq.RedisConnOpt
 }
 
 func Run(opts Options) {
@@ -108,7 +109,7 @@ func Run(opts Options) {
 	var (
 		state = State{} // confined in this goroutine only; DO NOT SHARE
 
-		inspector = asynq.NewInspector(asynq.RedisClientOpt{Addr: ":6379"})
+		inspector = asynq.NewInspector(opts.RedisConnOpt)
 		ticker    = time.NewTicker(opts.PollInterval)
 
 		eventCh = make(chan tcell.Event)

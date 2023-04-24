@@ -22,7 +22,6 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
-	"github.com/test-go/testify/assert"
 )
 
 var taskCmpOpts = []cmp.Option{
@@ -955,10 +954,12 @@ func TestReturnPanicError(t *testing.T) {
 				logger:  log.NewLogger(nil),
 				handler: tc.handler,
 			}
-			err := p.perform(context.Background(), task)
-			assert.Equal(t, tc.IsPanicError, IsPanicError(err))
-			if tc.IsPanicError {
-				assert.Equal(t, true, strings.HasPrefix(err.Error(), "panic error cause by:"))
+			got := p.perform(context.Background(), task)
+			if tc.IsPanicError != IsPanicError(got) {
+				t.Errorf("%s: got=%t, want=%t", tc.name, IsPanicError(got), tc.IsPanicError)
+			}
+			if tc.IsPanicError && !strings.HasPrefix(got.Error(), "panic error cause by:") {
+				t.Error("wrong text msg for panic error")
 			}
 		})
 	}
