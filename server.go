@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/go-redis/v9"
 )
 
 // Server is responsible for task processing and task lifecycle management.
@@ -103,6 +103,15 @@ type Config struct {
 	// If BaseContext is nil, the default is context.Background().
 	// If this is defined, then it MUST return a non-nil context
 	BaseContext func() context.Context
+
+	// TaskCheckInterval specifies the interval between checks for new tasks to process when all queues are empty.
+	//
+	// Be careful not to set this value too low because it adds significant load to redis.
+	//
+	// If set to a zero or negative value, NewServer will overwrite the value with default value.
+	//
+	// By default, TaskCheckInterval is set to 1 seconds.
+	TaskCheckInterval time.Duration
 
 	// Function to calculate retry delay for a failed task.
 	//
@@ -390,6 +399,8 @@ var defaultQueueConfig = map[string]int{
 }
 
 const (
+	defaultTaskCheckInterval = 1 * time.Second
+
 	defaultShutdownTimeout = 8 * time.Second
 
 	defaultHealthCheckInterval = 15 * time.Second
@@ -414,6 +425,12 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	if n < 1 {
 		n = runtime.NumCPU()
 	}
+
+	taskCheckInterval := cfg.TaskCheckInterval
+	if taskCheckInterval <= 0 {
+		taskCheckInterval = defaultTaskCheckInterval
+	}
+
 	delayFunc := cfg.RetryDelayFunc
 	if delayFunc == nil {
 		delayFunc = DefaultRetryDelayFunc
@@ -500,20 +517,21 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		cancelations: cancels,
 	})
 	processor := newProcessor(processorParams{
-		logger:          logger,
-		broker:          rdb,
-		retryDelayFunc:  delayFunc,
-		baseCtxFn:       baseCtxFn,
-		isFailureFunc:   isFailureFunc,
-		syncCh:          syncCh,
-		cancelations:    cancels,
-		concurrency:     n,
-		queues:          queues,
-		strictPriority:  cfg.StrictPriority,
-		errHandler:      cfg.ErrorHandler,
-		shutdownTimeout: shutdownTimeout,
-		starting:        starting,
-		finished:        finished,
+		logger:            logger,
+		broker:            rdb,
+		retryDelayFunc:    delayFunc,
+		taskCheckInterval: taskCheckInterval,
+		baseCtxFn:         baseCtxFn,
+		isFailureFunc:     isFailureFunc,
+		syncCh:            syncCh,
+		cancelations:      cancels,
+		concurrency:       n,
+		queues:            queues,
+		strictPriority:    cfg.StrictPriority,
+		errHandler:        cfg.ErrorHandler,
+		shutdownTimeout:   shutdownTimeout,
+		starting:          starting,
+		finished:          finished,
 	})
 	recoverer := newRecoverer(recovererParams{
 		logger:         logger,
