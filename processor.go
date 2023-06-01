@@ -37,8 +37,9 @@ type processor struct {
 	// orderedQueues is set only in strict-priority mode.
 	orderedQueues []string
 
-	retryDelayFunc RetryDelayFunc
-	isFailureFunc  func(error) bool
+	taskCheckInterval time.Duration
+	retryDelayFunc    RetryDelayFunc
+	isFailureFunc     func(error) bool
 
 	errHandler ErrorHandler
 
@@ -73,20 +74,21 @@ type processor struct {
 }
 
 type processorParams struct {
-	logger          *log.Logger
-	broker          base.Broker
-	baseCtxFn       func() context.Context
-	retryDelayFunc  RetryDelayFunc
-	isFailureFunc   func(error) bool
-	syncCh          chan<- *syncRequest
-	cancelations    *base.Cancelations
-	concurrency     int
-	queues          map[string]int
-	strictPriority  bool
-	errHandler      ErrorHandler
-	shutdownTimeout time.Duration
-	starting        chan<- *workerInfo
-	finished        chan<- *base.TaskMessage
+	logger            *log.Logger
+	broker            base.Broker
+	baseCtxFn         func() context.Context
+	retryDelayFunc    RetryDelayFunc
+	taskCheckInterval time.Duration
+	isFailureFunc     func(error) bool
+	syncCh            chan<- *syncRequest
+	cancelations      *base.Cancelations
+	concurrency       int
+	queues            map[string]int
+	strictPriority    bool
+	errHandler        ErrorHandler
+	shutdownTimeout   time.Duration
+	starting          chan<- *workerInfo
+	finished          chan<- *base.TaskMessage
 }
 
 // newProcessor constructs a new processor.
@@ -97,26 +99,27 @@ func newProcessor(params processorParams) *processor {
 		orderedQueues = sortByPriority(queues)
 	}
 	return &processor{
-		logger:          params.logger,
-		broker:          params.broker,
-		baseCtxFn:       params.baseCtxFn,
-		clock:           timeutil.NewRealClock(),
-		queueConfig:     queues,
-		orderedQueues:   orderedQueues,
-		retryDelayFunc:  params.retryDelayFunc,
-		isFailureFunc:   params.isFailureFunc,
-		syncRequestCh:   params.syncCh,
-		cancelations:    params.cancelations,
-		errLogLimiter:   rate.NewLimiter(rate.Every(3*time.Second), 1),
-		sema:            make(chan struct{}, params.concurrency),
-		done:            make(chan struct{}),
-		quit:            make(chan struct{}),
-		abort:           make(chan struct{}),
-		errHandler:      params.errHandler,
-		handler:         HandlerFunc(func(ctx context.Context, t *Task) error { return fmt.Errorf("handler not set") }),
-		shutdownTimeout: params.shutdownTimeout,
-		starting:        params.starting,
-		finished:        params.finished,
+		logger:            params.logger,
+		broker:            params.broker,
+		baseCtxFn:         params.baseCtxFn,
+		clock:             timeutil.NewRealClock(),
+		queueConfig:       queues,
+		orderedQueues:     orderedQueues,
+		taskCheckInterval: params.taskCheckInterval,
+		retryDelayFunc:    params.retryDelayFunc,
+		isFailureFunc:     params.isFailureFunc,
+		syncRequestCh:     params.syncCh,
+		cancelations:      params.cancelations,
+		errLogLimiter:     rate.NewLimiter(rate.Every(3*time.Second), 1),
+		sema:              make(chan struct{}, params.concurrency),
+		done:              make(chan struct{}),
+		quit:              make(chan struct{}),
+		abort:             make(chan struct{}),
+		errHandler:        params.errHandler,
+		handler:           HandlerFunc(func(ctx context.Context, t *Task) error { return fmt.Errorf("handler not set") }),
+		shutdownTimeout:   params.shutdownTimeout,
+		starting:          params.starting,
+		finished:          params.finished,
 	}
 }
 
@@ -179,7 +182,7 @@ func (p *processor) exec() {
 			// Sleep to avoid slamming redis and let scheduler move tasks into queues.
 			// Note: We are not using blocking pop operation and polling queues instead.
 			// This adds significant load to redis.
-			time.Sleep(time.Second)
+			time.Sleep(p.taskCheckInterval)
 			<-p.sema // release token
 			return
 		case err != nil:

@@ -62,20 +62,21 @@ func newProcessorForTest(t *testing.T, r *rdb.RDB, h Handler) *processor {
 	go fakeHeartbeater(starting, finished, done)
 	go fakeSyncer(syncCh, done)
 	p := newProcessor(processorParams{
-		logger:          testLogger,
-		broker:          r,
-		baseCtxFn:       context.Background,
-		retryDelayFunc:  DefaultRetryDelayFunc,
-		isFailureFunc:   defaultIsFailureFunc,
-		syncCh:          syncCh,
-		cancelations:    base.NewCancelations(),
-		concurrency:     10,
-		queues:          defaultQueueConfig,
-		strictPriority:  false,
-		errHandler:      nil,
-		shutdownTimeout: defaultShutdownTimeout,
-		starting:        starting,
-		finished:        finished,
+		logger:            testLogger,
+		broker:            r,
+		baseCtxFn:         context.Background,
+		retryDelayFunc:    DefaultRetryDelayFunc,
+		taskCheckInterval: defaultTaskCheckInterval,
+		isFailureFunc:     defaultIsFailureFunc,
+		syncCh:            syncCh,
+		cancelations:      base.NewCancelations(),
+		concurrency:       10,
+		queues:            defaultQueueConfig,
+		strictPriority:    false,
+		errHandler:        nil,
+		shutdownTimeout:   defaultShutdownTimeout,
+		starting:          starting,
+		finished:          finished,
 	})
 	p.handler = h
 	return p
@@ -538,20 +539,21 @@ func TestProcessorWithExpiredLease(t *testing.T) {
 		}()
 		go fakeSyncer(syncCh, done)
 		p := newProcessor(processorParams{
-			logger:          testLogger,
-			broker:          rdbClient,
-			baseCtxFn:       context.Background,
-			retryDelayFunc:  DefaultRetryDelayFunc,
-			isFailureFunc:   defaultIsFailureFunc,
-			syncCh:          syncCh,
-			cancelations:    base.NewCancelations(),
-			concurrency:     10,
-			queues:          defaultQueueConfig,
-			strictPriority:  false,
-			errHandler:      nil,
-			shutdownTimeout: defaultShutdownTimeout,
-			starting:        starting,
-			finished:        finished,
+			logger:            testLogger,
+			broker:            rdbClient,
+			baseCtxFn:         context.Background,
+			taskCheckInterval: defaultTaskCheckInterval,
+			retryDelayFunc:    DefaultRetryDelayFunc,
+			isFailureFunc:     defaultIsFailureFunc,
+			syncCh:            syncCh,
+			cancelations:      base.NewCancelations(),
+			concurrency:       10,
+			queues:            defaultQueueConfig,
+			strictPriority:    false,
+			errHandler:        nil,
+			shutdownTimeout:   defaultShutdownTimeout,
+			starting:          starting,
+			finished:          finished,
 		})
 		p.handler = tc.handler
 		var (
@@ -692,20 +694,21 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		go fakeHeartbeater(starting, finished, done)
 		go fakeSyncer(syncCh, done)
 		p := newProcessor(processorParams{
-			logger:          testLogger,
-			broker:          rdbClient,
-			baseCtxFn:       context.Background,
-			retryDelayFunc:  DefaultRetryDelayFunc,
-			isFailureFunc:   defaultIsFailureFunc,
-			syncCh:          syncCh,
-			cancelations:    base.NewCancelations(),
-			concurrency:     1, // Set concurrency to 1 to make sure tasks are processed one at a time.
-			queues:          queueCfg,
-			strictPriority:  true,
-			errHandler:      nil,
-			shutdownTimeout: defaultShutdownTimeout,
-			starting:        starting,
-			finished:        finished,
+			logger:            testLogger,
+			broker:            rdbClient,
+			baseCtxFn:         context.Background,
+			taskCheckInterval: defaultTaskCheckInterval,
+			retryDelayFunc:    DefaultRetryDelayFunc,
+			isFailureFunc:     defaultIsFailureFunc,
+			syncCh:            syncCh,
+			cancelations:      base.NewCancelations(),
+			concurrency:       1, // Set concurrency to 1 to make sure tasks are processed one at a time.
+			queues:            queueCfg,
+			strictPriority:    true,
+			errHandler:        nil,
+			shutdownTimeout:   defaultShutdownTimeout,
+			starting:          starting,
+			finished:          finished,
 		})
 		p.handler = HandlerFunc(handler)
 
