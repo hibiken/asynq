@@ -19,7 +19,7 @@ import (
 
 func TestServer(t *testing.T) {
 	// https://github.com/go-redis/redis/issues/1029
-	ignoreOpt := goleak.IgnoreTopFunction("github.com/go-redis/redis/v8/internal/pool.(*ConnPool).reaper")
+	ignoreOpt := goleak.IgnoreTopFunction("github.com/redis/go-redis/v9/internal/pool.(*ConnPool).reaper")
 	defer goleak.VerifyNone(t, ignoreOpt)
 
 	redisConnOpt := getRedisConnOpt(t)
@@ -55,7 +55,7 @@ func TestServer(t *testing.T) {
 
 func TestServerRun(t *testing.T) {
 	// https://github.com/go-redis/redis/issues/1029
-	ignoreOpt := goleak.IgnoreTopFunction("github.com/go-redis/redis/v8/internal/pool.(*ConnPool).reaper")
+	ignoreOpt := goleak.IgnoreTopFunction("github.com/redis/go-redis/v9/internal/pool.(*ConnPool).reaper")
 	defer goleak.VerifyNone(t, ignoreOpt)
 
 	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
