@@ -343,7 +343,7 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 	}
 	usg, err := cast.ToInt64E(res)
 	if err != nil {
-		return 0, errors.E(op, errors.Internal, fmt.Sprintf("could not cast script return value to int64"))
+		return 0, errors.E(op, errors.Internal, "could not cast script return value to int64")
 	}
 	return usg, nil
 }
