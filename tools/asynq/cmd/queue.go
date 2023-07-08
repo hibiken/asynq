@@ -180,7 +180,7 @@ func printQueueInfo(info *asynq.QueueInfo) {
 		},
 	)
 	fmt.Println()
-	bold.Printf("Daily Stats %s UTC\n", info.Timestamp.UTC().Format("2006-01-02"))
+	bold.Printf("Daily Stats %s\n", info.Timestamp.In(time.Local).Format("2006-01-02"))
 	printTable(
 		[]string{"processed", "failed", "error rate"},
 		func(w io.Writer, tmpl string) {
@@ -218,7 +218,7 @@ func queueHistory(cmd *cobra.Command, args []string) {
 
 func printDailyStats(stats []*asynq.DailyStats) {
 	printTable(
-		[]string{"date (UTC)", "processed", "failed", "error rate"},
+		[]string{"date", "processed", "failed", "error rate"},
 		func(w io.Writer, tmpl string) {
 			for _, s := range stats {
 				var errRate string

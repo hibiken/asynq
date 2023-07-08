@@ -214,9 +214,9 @@ func TestProcessedKey(t *testing.T) {
 		input time.Time
 		want  string
 	}{
-		{"default", time.Date(2019, 11, 14, 10, 30, 1, 1, time.UTC), "asynq:{default}:processed:2019-11-14"},
-		{"critical", time.Date(2020, 12, 1, 1, 0, 1, 1, time.UTC), "asynq:{critical}:processed:2020-12-01"},
-		{"default", time.Date(2020, 1, 6, 15, 02, 1, 1, time.UTC), "asynq:{default}:processed:2020-01-06"},
+		{"default", time.Date(2019, 11, 14, 10, 30, 1, 1, time.Local), "asynq:{default}:processed:2019-11-14"},
+		{"critical", time.Date(2020, 12, 1, 1, 0, 1, 1, time.Local), "asynq:{critical}:processed:2020-12-01"},
+		{"default", time.Date(2020, 1, 6, 15, 02, 1, 1, time.Local), "asynq:{default}:processed:2020-01-06"},
 	}
 
 	for _, tc := range tests {
@@ -233,9 +233,9 @@ func TestFailedKey(t *testing.T) {
 		input time.Time
 		want  string
 	}{
-		{"default", time.Date(2019, 11, 14, 10, 30, 1, 1, time.UTC), "asynq:{default}:failed:2019-11-14"},
-		{"custom", time.Date(2020, 12, 1, 1, 0, 1, 1, time.UTC), "asynq:{custom}:failed:2020-12-01"},
-		{"low", time.Date(2020, 1, 6, 15, 02, 1, 1, time.UTC), "asynq:{low}:failed:2020-01-06"},
+		{"default", time.Date(2019, 11, 14, 10, 30, 1, 1, time.Local), "asynq:{default}:failed:2019-11-14"},
+		{"custom", time.Date(2020, 12, 1, 1, 0, 1, 1, time.Local), "asynq:{custom}:failed:2020-12-01"},
+		{"low", time.Date(2020, 1, 6, 15, 02, 1, 1, time.Local), "asynq:{low}:failed:2020-01-06"},
 	}
 
 	for _, tc := range tests {
@@ -336,7 +336,7 @@ func TestUniqueKey(t *testing.T) {
 		"address": map[string]string{"line": "123 Main St", "city": "Boston", "state": "MA"},
 		"names":   []string{"bob", "mike", "rob"}})
 	payload4 := toBytes(map[string]interface{}{
-		"time":     time.Date(2020, time.July, 28, 0, 0, 0, 0, time.UTC),
+		"time":     time.Date(2020, time.July, 28, 0, 0, 0, 0, time.Local),
 		"duration": time.Hour})
 
 	checksum := func(data []byte) string {
@@ -633,8 +633,8 @@ func TestSchedulerEntryEncoding(t *testing.T) {
 				Type:    "task_A",
 				Payload: toBytes(map[string]interface{}{"foo": "bar"}),
 				Opts:    []string{"Queue('email')"},
-				Next:    time.Now().Add(30 * time.Second).UTC(),
-				Prev:    time.Now().Add(-2 * time.Minute).UTC(),
+				Next:    time.Now().Add(30 * time.Second),
+				Prev:    time.Now().Add(-2 * time.Minute),
 			},
 		},
 	}
@@ -664,7 +664,7 @@ func TestSchedulerEnqueueEventEncoding(t *testing.T) {
 		{
 			event: SchedulerEnqueueEvent{
 				TaskID:     uuid.NewString(),
-				EnqueuedAt: time.Now().Add(-30 * time.Second).UTC(),
+				EnqueuedAt: time.Now().Add(-30 * time.Second),
 			},
 		},
 	}

@@ -139,7 +139,7 @@ func stats(cmd *cobra.Command, args []string) {
 	printStatsByQueue(stats)
 	fmt.Println()
 
-	bold.Printf("Daily Stats %s UTC\n", aggStats.Timestamp.UTC().Format("2006-01-02"))
+	bold.Printf("Daily Stats %s\n", aggStats.Timestamp.In(time.Local).Format("2006-01-02"))
 	printSuccessFailureStats(&aggStats)
 	fmt.Println()
 

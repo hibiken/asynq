@@ -343,7 +343,7 @@ func TestCurrentStatsWithNonExistentQueue(t *testing.T) {
 func TestHistoricalStats(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	now := time.Now().UTC()
+	now := time.Now()
 
 	tests := []struct {
 		qname string // queue of interest
@@ -5326,7 +5326,7 @@ func TestListWorkers(t *testing.T) {
 
 func TestWriteListClearSchedulerEntries(t *testing.T) {
 	r := setup(t)
-	now := time.Now().UTC()
+	now := time.Now()
 	schedulerID := "127.0.0.1:9876:abc123"
 
 	data := []*base.SchedulerEntry{

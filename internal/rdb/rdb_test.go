@@ -2767,7 +2767,7 @@ func TestWriteServerState(t *testing.T) {
 		Concurrency:       10,
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
-		Started:           time.Now().UTC(),
+		Started:           time.Now(),
 		Status:            "active",
 		ActiveWorkerCount: 0,
 	}
@@ -2857,7 +2857,7 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		Concurrency:       10,
 		Queues:            map[string]int{"default": 2, "email": 5, "low": 1},
 		StrictPriority:    false,
-		Started:           time.Now().Add(-10 * time.Minute).UTC(),
+		Started:           time.Now().Add(-10 * time.Minute),
 		Status:            "active",
 		ActiveWorkerCount: len(workers),
 	}

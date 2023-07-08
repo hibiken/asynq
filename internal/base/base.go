@@ -168,12 +168,12 @@ func FailedTotalKey(qname string) string {
 
 // ProcessedKey returns a redis key for processed count for the given day for the queue.
 func ProcessedKey(qname string, t time.Time) string {
-	return fmt.Sprintf("%sprocessed:%s", QueueKeyPrefix(qname), t.UTC().Format("2006-01-02"))
+	return fmt.Sprintf("%sprocessed:%s", QueueKeyPrefix(qname), t.In(time.Local).Format("2006-01-02"))
 }
 
 // FailedKey returns a redis key for failure count for the given day for the queue.
 func FailedKey(qname string, t time.Time) string {
-	return fmt.Sprintf("%sfailed:%s", QueueKeyPrefix(qname), t.UTC().Format("2006-01-02"))
+	return fmt.Sprintf("%sfailed:%s", QueueKeyPrefix(qname), t.In(time.Local).Format("2006-01-02"))
 }
 
 // ServerInfoKey returns a redis key for process info.
