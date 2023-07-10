@@ -158,7 +158,12 @@ func (a *aggregator) aggregate(t time.Time) {
 			for i, m := range msgs {
 				tasks[i] = NewTask(m.Type, m.Payload)
 			}
-			aggregatedTask := a.ga.Aggregate(gname, tasks)
+			aggregatedTask, err := a.ga.Aggregate(gname, tasks)
+			if err != nil {
+				a.logger.Errorf("Failed to aggregate tasks: queue=%q, group=%q, setID=%q: %v",
+					qname, gname, aggregationSetID, err)
+				continue
+			}
 			ctx, cancel := context.WithDeadline(context.Background(), deadline)
 			if _, err := a.client.EnqueueContext(ctx, aggregatedTask, Queue(qname)); err != nil {
 				a.logger.Errorf("Failed to enqueue aggregated task (queue=%q, group=%q, setID=%q): %v",

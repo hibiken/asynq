@@ -26,7 +26,7 @@ func TestAggregator(t *testing.T) {
 		gracePeriod      time.Duration
 		maxDelay         time.Duration
 		maxSize          int
-		aggregateFunc    func(gname string, tasks []*Task) *Task
+		aggregateFunc    func(gname string, tasks []*Task) (*Task, error)
 		tasks            []*Task       // tasks to enqueue
 		enqueueFrequency time.Duration // time between one enqueue event to another
 		waitTime         time.Duration // time to wait
@@ -38,8 +38,8 @@ func TestAggregator(t *testing.T) {
 			gracePeriod: 1 * time.Second,
 			maxDelay:    0, // no maxdelay limit
 			maxSize:     0, // no maxsize limit
-			aggregateFunc: func(gname string, tasks []*Task) *Task {
-				return NewTask(gname, nil, MaxRetry(len(tasks))) // use max retry to see how many tasks were aggregated
+			aggregateFunc: func(gname string, tasks []*Task) (*Task, error) {
+				return NewTask(gname, nil, MaxRetry(len(tasks))), nil // use max retry to see how many tasks were aggregated
 			},
 			tasks: []*Task{
 				NewTask("task1", nil, Group("mygroup")),
@@ -64,8 +64,8 @@ func TestAggregator(t *testing.T) {
 			gracePeriod: 2 * time.Second,
 			maxDelay:    4 * time.Second,
 			maxSize:     0, // no maxsize limit
-			aggregateFunc: func(gname string, tasks []*Task) *Task {
-				return NewTask(gname, nil, MaxRetry(len(tasks))) // use max retry to see how many tasks were aggregated
+			aggregateFunc: func(gname string, tasks []*Task) (*Task, error) {
+				return NewTask(gname, nil, MaxRetry(len(tasks))), nil // use max retry to see how many tasks were aggregated
 			},
 			tasks: []*Task{
 				NewTask("task1", nil, Group("mygroup")), // time 0
@@ -91,8 +91,8 @@ func TestAggregator(t *testing.T) {
 			gracePeriod: 1 * time.Minute,
 			maxDelay:    0, // no maxdelay limit
 			maxSize:     5,
-			aggregateFunc: func(gname string, tasks []*Task) *Task {
-				return NewTask(gname, nil, MaxRetry(len(tasks))) // use max retry to see how many tasks were aggregated
+			aggregateFunc: func(gname string, tasks []*Task) (*Task, error) {
+				return NewTask(gname, nil, MaxRetry(len(tasks))), nil // use max retry to see how many tasks were aggregated
 			},
 			tasks: []*Task{
 				NewTask("task1", nil, Group("mygroup")),
