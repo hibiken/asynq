@@ -49,6 +49,9 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 
 > ☝️ **Important Note**: Current major version is zero (`v0.x.x`) to accommodate rapid development and fast iteration while getting early feedback from users (_feedback on APIs are appreciated!_). The public API could change without a major version update before `v1.0.0` release.
 
+## Sponsoring
+If you are using this package in production, **please consider sponsoring the project to show your support!**
+
 ## Quickstart
 
 Make sure you have Go installed ([download](https://golang.org/dl/)). Version `1.14` or higher is required.
