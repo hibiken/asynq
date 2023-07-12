@@ -322,6 +322,12 @@ func (p *processor) markAsDone(l *base.Lease, msg *base.TaskMessage) {
 var SkipRetry = errors.New("skip retry for the task")
 
 func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg *base.TaskMessage, err error) {
+	if msg.Retry == 0 {
+		if errors.Is(err, SkipRetry) {
+			p.markAsDone(l, msg)
+			return
+		}
+	}
 	if p.errHandler != nil {
 		p.errHandler.HandleError(ctx, NewTask(msg.Type, msg.Payload), err)
 	}
@@ -339,7 +345,7 @@ func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg 
 }
 
 func (p *processor) retry(l *base.Lease, msg *base.TaskMessage, e error, isFailure bool) {
-	if !l.IsValid() {
+	if !l.IsValid() || msg.Retry == 0 {
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
 		return
 	}
