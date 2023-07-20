@@ -162,6 +162,16 @@ type Config struct {
 	//     })
 	//
 	//     ErrorHandler: asynq.ErrorHandlerFunc(reportError)
+
+	//    we can also handle panic error like:
+	//     func reportError(ctx context, task *asynq.Task, err error) {
+	//         if asynq.IsPanic(err) {
+	//	          errorReportingService.Notify(err)
+	// 	       }
+	//     })
+	//
+	//     ErrorHandler: asynq.ErrorHandlerFunc(reportError)
+
 	ErrorHandler ErrorHandler
 
 	// Logger specifies the logger used by the server instance.

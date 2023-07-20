@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -919,5 +920,47 @@ func TestProcessorComputeDeadline(t *testing.T) {
 		if got.Unix() != tc.want.Unix() {
 			t.Errorf("%s: got=%v, want=%v", tc.desc, got.Unix(), tc.want.Unix())
 		}
+	}
+}
+
+func TestReturnPanicError(t *testing.T) {
+
+	task := NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"}))
+
+	tests := []struct {
+		name         string
+		handler      HandlerFunc
+		IsPanicError bool
+	}{
+		{
+			name: "should return panic error when occurred panic recovery",
+			handler: func(ctx context.Context, t *Task) error {
+				panic("something went terribly wrong")
+			},
+			IsPanicError: true,
+		},
+		{
+			name: "should return normal error when don't occur panic recovery",
+			handler: func(ctx context.Context, t *Task) error {
+				return fmt.Errorf("something went terribly wrong")
+			},
+			IsPanicError: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := processor{
+				logger:  log.NewLogger(nil),
+				handler: tc.handler,
+			}
+			got := p.perform(context.Background(), task)
+			if tc.IsPanicError != IsPanicError(got) {
+				t.Errorf("%s: got=%t, want=%t", tc.name, IsPanicError(got), tc.IsPanicError)
+			}
+			if tc.IsPanicError && !strings.HasPrefix(got.Error(), "panic error cause by:") {
+				t.Error("wrong text msg for panic error")
+			}
+		})
 	}
 }
