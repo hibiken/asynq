@@ -118,8 +118,8 @@ func TestEnqueue(t *testing.T) {
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 	}
 }
@@ -199,8 +199,8 @@ func TestEnqueueUnique(t *testing.T) {
 		if diff := cmp.Diff(tc.msg, gotPending[0]); diff != "" {
 			t.Errorf("persisted data differed from the original input (-want, +got)\n%s", diff)
 		}
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 
 		// Check Pending list has task ID.
@@ -236,8 +236,8 @@ func TestEnqueueUnique(t *testing.T) {
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 
 		// Enqueue the second message, should fail.
@@ -1228,8 +1228,8 @@ func TestAddToGroup(t *testing.T) {
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 	}
 }
@@ -1338,8 +1338,8 @@ func TestAddToGroupUnique(t *testing.T) {
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 
 		got := r.AddToGroupUnique(ctx, tc.msg, tc.groupKey, tc.ttl)
@@ -1450,8 +1450,8 @@ func TestSchedule(t *testing.T) {
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 	}
 }
@@ -1562,8 +1562,8 @@ func TestScheduleUnique(t *testing.T) {
 		}
 
 		// Check queue is in the AllQueues set.
-		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
-			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		if !r.client.SIsMember(context.Background(), base.AllQueues(), tc.msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues())
 		}
 
 		// Enqueue the second message, should fail.
@@ -2794,10 +2794,10 @@ func TestWriteServerState(t *testing.T) {
 		t.Errorf("TTL of %q was %v, want %v", skey, gotTTL, ttl)
 	}
 	// Check ServerInfo key was added to the set all server keys correctly.
-	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers, 0, -1).Val()
+	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers(), 0, -1).Val()
 	wantServerKeys := []string{skey}
 	if diff := cmp.Diff(wantServerKeys, gotServerKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllServers, gotServerKeys, wantServerKeys)
+		t.Errorf("%q contained %v, want %v", base.AllServers(), gotServerKeys, wantServerKeys)
 	}
 
 	// Check WorkersInfo was written correctly.
@@ -2807,10 +2807,10 @@ func TestWriteServerState(t *testing.T) {
 		t.Errorf("%q key exists", wkey)
 	}
 	// Check WorkersInfo key was added to the set correctly.
-	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers, 0, -1).Val()
+	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers(), 0, -1).Val()
 	wantWorkerKeys := []string{wkey}
 	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)
+		t.Errorf("%q contained %v, want %v", base.AllWorkers(), gotWorkerKeys, wantWorkerKeys)
 	}
 }
 
@@ -2884,10 +2884,10 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		t.Errorf("TTL of %q was %v, want %v", skey, gotTTL, ttl)
 	}
 	// Check ServerInfo key was added to the set correctly.
-	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers, 0, -1).Val()
+	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers(), 0, -1).Val()
 	wantServerKeys := []string{skey}
 	if diff := cmp.Diff(wantServerKeys, gotServerKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllServers, gotServerKeys, wantServerKeys)
+		t.Errorf("%q contained %v, want %v", base.AllServers(), gotServerKeys, wantServerKeys)
 	}
 
 	// Check WorkersInfo was written correctly.
@@ -2915,10 +2915,10 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		t.Errorf("TTL of %q was %v, want %v", wkey, gotTTL, ttl)
 	}
 	// Check WorkersInfo key was added to the set correctly.
-	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers, 0, -1).Val()
+	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers(), 0, -1).Val()
 	wantWorkerKeys := []string{wkey}
 	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)
+		t.Errorf("%q contained %v, want %v", base.AllWorkers(), gotWorkerKeys, wantWorkerKeys)
 	}
 }
 
@@ -3011,15 +3011,15 @@ func TestClearServerState(t *testing.T) {
 	if r.client.Exists(context.Background(), wkey).Val() != 0 {
 		t.Errorf("Redis key %q exists", wkey)
 	}
-	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers, 0, -1).Val()
+	gotServerKeys := r.client.ZRange(context.Background(), base.AllServers(), 0, -1).Val()
 	wantServerKeys := []string{otherSKey}
 	if diff := cmp.Diff(wantServerKeys, gotServerKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllServers, gotServerKeys, wantServerKeys)
+		t.Errorf("%q contained %v, want %v", base.AllServers(), gotServerKeys, wantServerKeys)
 	}
-	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers, 0, -1).Val()
+	gotWorkerKeys := r.client.ZRange(context.Background(), base.AllWorkers(), 0, -1).Val()
 	wantWorkerKeys := []string{otherWKey}
 	if diff := cmp.Diff(wantWorkerKeys, gotWorkerKeys); diff != "" {
-		t.Errorf("%q contained %v, want %v", base.AllWorkers, gotWorkerKeys, wantWorkerKeys)
+		t.Errorf("%q contained %v, want %v", base.AllWorkers(), gotWorkerKeys, wantWorkerKeys)
 	}
 }
 

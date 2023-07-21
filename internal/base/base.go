@@ -31,14 +31,28 @@ const DefaultQueueName = "default"
 // DefaultQueue is the redis key for the default queue.
 var DefaultQueue = PendingKey(DefaultQueueName)
 
-// Global Redis keys.
-const (
-	AllServers    = "asynq:servers"    // ZSET
-	AllWorkers    = "asynq:workers"    // ZSET
-	AllSchedulers = "asynq:schedulers" // ZSET
-	AllQueues     = "asynq:queues"     // SET
-	CancelChannel = "asynq:cancel"     // PubSub channel
-)
+// GlobalPrefix is the prefix for all redis keys used by asynq.
+var GlobalPrefix = "asynq"
+
+func AllServers() string {
+	return fmt.Sprintf("%s:servers", GlobalPrefix) // ZSET
+}
+
+func AllWorkers() string {
+	return fmt.Sprintf("%s:workers", GlobalPrefix) // ZSET
+}
+
+func AllSchedulers() string {
+	return fmt.Sprintf("%s:schedulers", GlobalPrefix) // ZSET
+}
+
+func AllQueues() string {
+	return fmt.Sprintf("%s:queues", GlobalPrefix) // SET
+}
+
+func CancelChannel() string {
+	return fmt.Sprintf("%s:cancel", GlobalPrefix) // PubSub channel
+}
 
 // TaskState denotes the state of a task.
 type TaskState int
@@ -104,7 +118,7 @@ func ValidateQueueName(qname string) error {
 
 // QueueKeyPrefix returns a prefix for all keys in the given queue.
 func QueueKeyPrefix(qname string) string {
-	return fmt.Sprintf("asynq:{%s}:", qname)
+	return fmt.Sprintf("%s:{%s}:", GlobalPrefix, qname)
 }
 
 // TaskKeyPrefix returns a prefix for task key.
@@ -178,22 +192,22 @@ func FailedKey(qname string, t time.Time) string {
 
 // ServerInfoKey returns a redis key for process info.
 func ServerInfoKey(hostname string, pid int, serverID string) string {
-	return fmt.Sprintf("asynq:servers:{%s:%d:%s}", hostname, pid, serverID)
+	return fmt.Sprintf("%s:servers:{%s:%d:%s}", GlobalPrefix, hostname, pid, serverID)
 }
 
 // WorkersKey returns a redis key for the workers given hostname, pid, and server ID.
 func WorkersKey(hostname string, pid int, serverID string) string {
-	return fmt.Sprintf("asynq:workers:{%s:%d:%s}", hostname, pid, serverID)
+	return fmt.Sprintf("%s:workers:{%s:%d:%s}", GlobalPrefix, hostname, pid, serverID)
 }
 
 // SchedulerEntriesKey returns a redis key for the scheduler entries given scheduler ID.
 func SchedulerEntriesKey(schedulerID string) string {
-	return fmt.Sprintf("asynq:schedulers:{%s}", schedulerID)
+	return fmt.Sprintf("%s:schedulers:{%s}", GlobalPrefix, schedulerID)
 }
 
 // SchedulerHistoryKey returns a redis key for the scheduler's history for the given entry.
 func SchedulerHistoryKey(entryID string) string {
-	return fmt.Sprintf("asynq:scheduler_history:%s", entryID)
+	return fmt.Sprintf("%s:scheduler_history:%s", GlobalPrefix, entryID)
 }
 
 // UniqueKey returns a redis key with the given type, payload, and queue name.

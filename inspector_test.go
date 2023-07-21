@@ -39,7 +39,7 @@ func TestInspectorQueues(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 		for _, qname := range tc.queues {
-			if err := r.SAdd(context.Background(), base.AllQueues, qname).Err(); err != nil {
+			if err := r.SAdd(context.Background(), base.AllQueues(), qname).Err(); err != nil {
 				t.Fatalf("could not initialize all queue set: %v", err)
 			}
 		}
@@ -138,8 +138,8 @@ func TestInspectorDeleteQueue(t *testing.T) {
 				tc.qname, tc.force, err)
 			continue
 		}
-		if r.SIsMember(context.Background(), base.AllQueues, tc.qname).Val() {
-			t.Errorf("%q is a member of %q", tc.qname, base.AllQueues)
+		if r.SIsMember(context.Background(), base.AllQueues(), tc.qname).Val() {
+			t.Errorf("%q is a member of %q", tc.qname, base.AllQueues())
 		}
 	}
 }
@@ -429,7 +429,7 @@ func TestInspectorHistory(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 
-		r.SAdd(context.Background(), base.AllQueues, tc.qname)
+		r.SAdd(context.Background(), base.AllQueues(), tc.qname)
 		// populate last n days data
 		for i := 0; i < tc.n; i++ {
 			ts := now.Add(-time.Duration(i) * 24 * time.Hour)
@@ -1196,7 +1196,7 @@ func TestInspectorListAggregatingTasks(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 		h.SeedTasks(t, r, fxt.tasks)
-		h.SeedRedisSet(t, r, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSet(t, r, base.AllQueues(), fxt.allQueues)
 		h.SeedRedisSets(t, r, fxt.allGroups)
 		h.SeedRedisZSets(t, r, fxt.groups)
 

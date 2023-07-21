@@ -38,7 +38,7 @@ func TestAllQueues(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		for _, qname := range tc.queues {
-			if err := r.client.SAdd(context.Background(), base.AllQueues, qname).Err(); err != nil {
+			if err := r.client.SAdd(context.Background(), base.AllQueues(), qname).Err(); err != nil {
 				t.Fatalf("could not initialize all queue set: %v", err)
 			}
 		}
@@ -284,7 +284,7 @@ func TestCurrentStats(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		h.SeedRedisSet(t, r.client, base.AllQueues, tc.allQueues)
+		h.SeedRedisSet(t, r.client, base.AllQueues(), tc.allQueues)
 		h.SeedRedisSets(t, r.client, tc.allGroups)
 		h.SeedTasks(t, r.client, tc.tasks)
 		h.SeedRedisLists(t, r.client, tc.pending)
@@ -357,7 +357,7 @@ func TestHistoricalStats(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 
-		r.client.SAdd(context.Background(), base.AllQueues, tc.qname)
+		r.client.SAdd(context.Background(), base.AllQueues(), tc.qname)
 		// populate last n days data
 		for i := 0; i < tc.n; i++ {
 			ts := now.Add(-time.Duration(i) * 24 * time.Hour)
@@ -1637,7 +1637,7 @@ func TestListAggregating(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSet(t, r.client, base.AllQueues(), fxt.allQueues)
 		h.SeedRedisSets(t, r.client, fxt.allGroups)
 		h.SeedTasks(t, r.client, fxt.tasks)
 		h.SeedRedisZSets(t, r.client, fxt.groups)
@@ -1751,7 +1751,7 @@ func TestListAggregatingPagination(t *testing.T) {
 
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSet(t, r.client, base.AllQueues(), fxt.allQueues)
 		h.SeedRedisSets(t, r.client, fxt.allGroups)
 		h.SeedTasks(t, r.client, fxt.tasks)
 		h.SeedRedisZSets(t, r.client, fxt.groups)
@@ -2072,7 +2072,7 @@ func TestRunAggregatingTask(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSet(t, r.client, base.AllQueues(), fxt.allQueues)
 		h.SeedRedisSets(t, r.client, fxt.allGroups)
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
@@ -2764,7 +2764,7 @@ func TestRunAllAggregatingTasks(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSet(t, r.client, base.AllQueues(), fxt.allQueues)
 		h.SeedRedisSets(t, r.client, fxt.allGroups)
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
@@ -3077,7 +3077,7 @@ func TestArchiveAggregatingTask(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSet(t, r.client, base.AllQueues(), fxt.allQueues)
 		h.SeedRedisSets(t, r.client, fxt.allGroups)
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
@@ -3564,7 +3564,7 @@ func TestArchiveAllAggregatingTasks(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSet(t, r.client, base.AllQueues(), fxt.allQueues)
 		h.SeedRedisSets(t, r.client, fxt.allGroups)
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
@@ -4190,7 +4190,7 @@ func TestDeleteAggregatingTask(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSet(t, r.client, base.AllQueues(), fxt.allQueues)
 		h.SeedRedisSets(t, r.client, fxt.allGroups)
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
@@ -4825,7 +4825,7 @@ func TestDeleteAllAggregatingTasks(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r.client)
 		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSet(t, r.client, base.AllQueues(), fxt.allQueues)
 		h.SeedRedisSets(t, r.client, fxt.allGroups)
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
@@ -5013,8 +5013,8 @@ func TestRemoveQueue(t *testing.T) {
 				tc.qname, tc.force, err)
 			continue
 		}
-		if r.client.SIsMember(context.Background(), base.AllQueues, tc.qname).Val() {
-			t.Errorf("%q is a member of %q", tc.qname, base.AllQueues)
+		if r.client.SIsMember(context.Background(), base.AllQueues(), tc.qname).Val() {
+			t.Errorf("%q is a member of %q", tc.qname, base.AllQueues())
 		}
 
 		keys := []string{
