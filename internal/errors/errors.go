@@ -256,6 +256,21 @@ func IsRedisCommandError(err error) bool {
 	return As(err, &target)
 }
 
+// PanicError defines an error when occurred a panic error.
+type PanicError struct {
+	ErrMsg string
+}
+
+func (e *PanicError) Error() string {
+	return fmt.Sprintf("panic error cause by: %s", e.ErrMsg)
+}
+
+// IsPanicError reports whether any error in err's chain is of type PanicError.
+func IsPanicError(err error) bool {
+	var target *PanicError
+	return As(err, &target)
+}
+
 /*************************************************
     Standard Library errors package functions
 *************************************************/
