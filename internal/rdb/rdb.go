@@ -1305,6 +1305,9 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 			return nil, errors.E(op, errors.Internal, fmt.Sprintf("cast error: Lua script returned unexpected value: %v", res))
 		}
 		for _, s := range data {
+			if len(s) == 0 {
+				continue
+			}
 			msg, err := base.DecodeMessage([]byte(s))
 			if err != nil {
 				return nil, errors.E(op, errors.Internal, fmt.Sprintf("cannot decode message: %v", err))
