@@ -14,7 +14,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
+	"github.com/hibiken/asynq/internal/mongobroker"
 	"github.com/hibiken/asynq/internal/rdb"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // A Client is responsible for scheduling tasks.
@@ -34,6 +37,25 @@ func NewClient(r RedisConnOpt) *Client {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
 	return &Client{broker: rdb.NewRDB(c)}
+}
+
+// NewClient returns a new Client instance given a redis connection option.
+func NewMongoClient(opts *options.ClientOptions, db string) *Client {
+	if opts == nil {
+		opts = &options.ClientOptions{}
+	}
+	c, err := mongo.NewClient(opts)
+	if err != nil {
+		panic(fmt.Sprintf("asynq: could not create mongo client %s %v", err, opts))
+	}
+
+	ctx := context.Background()
+	err = c.Connect(ctx)
+	if err != nil {
+		panic(fmt.Sprintf("asynq: could not connect to mongo %s %v", err, opts))
+	}
+	mgb := mongobroker.NewBroker(c, db, &options.DatabaseOptions{}, ctx)
+	return &Client{broker: mgb}
 }
 
 type OptionType int
@@ -150,9 +172,9 @@ func (t deadlineOption) Value() interface{} { return time.Time(t) }
 // TTL duration must be greater than or equal to 1 second.
 //
 // Uniqueness of a task is based on the following properties:
-//     - Task Type
-//     - Task Payload
-//     - Queue Name
+//   - Task Type
+//   - Task Payload
+//   - Queue Name
 func Unique(ttl time.Duration) Option {
 	return uniqueOption(ttl)
 }
