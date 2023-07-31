@@ -13,6 +13,6 @@ require (
 	go.uber.org/goleak v1.1.12
 	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e
 	golang.org/x/time v0.3.0
-	google.golang.org/protobuf v1.26.0
+	google.golang.org/protobuf v1.31.0
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 )
