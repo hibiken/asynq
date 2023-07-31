@@ -3,7 +3,7 @@ module github.com/hibiken/asynq
 go 1.14
 
 require (
-	github.com/golang/protobuf v1.5.2
+	github.com/golang/protobuf v1.5.3
 	github.com/google/go-cmp v0.5.6
 	github.com/google/uuid v1.2.0
 	github.com/redis/go-redis/v9 v9.0.3
