@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/go-redis/v9"
 )
 
 // Server is responsible for task processing and task lifecycle management.
@@ -230,6 +230,17 @@ type Config struct {
 	//
 	// If unset or nil, the group aggregation feature will be disabled on the server.
 	GroupAggregator GroupAggregator
+
+	// JanitorInterval specifies the average interval of janitor checks for expired completed tasks.
+	//
+	// If unset or zero, default interval of 8 seconds is used.
+	JanitorInterval time.Duration
+
+	// JanitorBatchSize specifies the number of expired completed tasks to be deleted in one run.
+	//
+	// If unset or zero, default batch size of 100 is used.
+	// Make sure to not put a big number as the batch size to prevent a long-running script.
+	JanitorBatchSize int
 }
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
@@ -397,6 +408,10 @@ const (
 	defaultDelayedTaskCheckInterval = 5 * time.Second
 
 	defaultGroupGracePeriod = 1 * time.Minute
+
+	defaultJanitorInterval = 8 * time.Second
+
+	defaultJanitorBatchSize = 100
 )
 
 // NewServer returns a new Server given a redis connection option
@@ -529,11 +544,22 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		interval:        healthcheckInterval,
 		healthcheckFunc: cfg.HealthCheckFunc,
 	})
+
+	janitorInterval := cfg.JanitorInterval
+	if janitorInterval == 0 {
+		janitorInterval = defaultJanitorInterval
+	}
+
+	janitorBatchSize := cfg.JanitorBatchSize
+	if janitorBatchSize == 0 {
+		janitorBatchSize = defaultJanitorBatchSize
+	}
 	janitor := newJanitor(janitorParams{
-		logger:   logger,
-		broker:   rdb,
-		queues:   qnames,
-		interval: 8 * time.Second,
+		logger:    logger,
+		broker:    rdb,
+		queues:    qnames,
+		interval:  janitorInterval,
+		batchSize: janitorBatchSize,
 	})
 	aggregator := newAggregator(aggregatorParams{
 		logger:          logger,
