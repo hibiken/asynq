@@ -554,6 +554,10 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	if janitorBatchSize == 0 {
 		janitorBatchSize = defaultJanitorBatchSize
 	}
+	if janitorBatchSize > defaultJanitorBatchSize {
+		logger.Warnf("Janitor batch size of %d is greater than the recommended batch size of %d. "+
+			"This might cause a long-running script", janitorBatchSize, defaultJanitorBatchSize)
+	}
 	janitor := newJanitor(janitorParams{
 		logger:    logger,
 		broker:    rdb,
