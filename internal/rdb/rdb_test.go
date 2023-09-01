@@ -2171,6 +2171,86 @@ func TestArchive(t *testing.T) {
 	}
 }
 
+func TestArchiveTrim(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	errMsg := "SMTP server not responding"
+
+	// create 10k archived tasks
+	taskCount := maxArchiveSize - 1
+	archivedTasks := make([]base.Z, 0)
+	for i := 0; i < taskCount; i++ {
+
+		id := uuid.NewString()
+		task := base.TaskMessage{
+			ID:      id,
+			Type:    "send_email",
+			Payload: nil,
+			Queue:   "default",
+		}
+		archivedTasks = append(archivedTasks, base.Z{
+			Message: h.TaskMessageWithError(task, errMsg, now),
+			Score:   now.Add(-1 * time.Hour).Unix(),
+		})
+	}
+
+	h.FlushDB(t, r.client) // clean up db before each test case
+	h.SeedAllArchivedQueues(t, r.client, map[string][]base.Z{
+		"default": archivedTasks,
+	})
+
+	archivedEntriesBefore := h.GetArchivedEntries(t, r.client, "default")
+	if len(archivedEntriesBefore) != taskCount {
+		t.Errorf("len of archived entries before = %v, want %v", len(archivedEntriesBefore), maxArchiveSize-1)
+		return
+	}
+
+	// set up task that will cause archive queue to be trimmed
+	id := uuid.NewString()
+	target := &base.TaskMessage{
+		ID:      id,
+		Type:    "send_email",
+		Payload: nil,
+		Queue:   "default",
+	}
+
+	h.SeedAllActiveQueues(t, r.client, map[string][]*base.TaskMessage{
+		"default": {target},
+	})
+	h.SeedAllLease(t, r.client, map[string][]base.Z{
+		"default": {{Message: target, Score: now.Add(10 * time.Second).Unix()}},
+	})
+
+	err := r.Archive(context.Background(), target, errMsg)
+	if err != nil {
+		t.Errorf("(*RDB).Archive(%v, %v) = %v, want nil", target, errMsg, err)
+		return
+	}
+
+	archivedEntriesInSet := h.GetArchivedEntries(t, r.client, "default")
+	if len(archivedEntriesInSet) != taskCount {
+		t.Errorf("len of archived entries = %v, want %v", len(archivedEntriesInSet), taskCount)
+		return
+	}
+
+	// check that the target task is where we expect it
+	newestTask := archivedEntriesInSet[len(archivedEntriesInSet)-1].Message
+	if newestTask.ID != target.ID {
+		t.Errorf("newest task in archive set = %v, want %v", newestTask.ID, target.ID)
+		return
+	}
+
+	// now check if trim actually deleted the keys see if it's equal to taskCount
+	vals := r.client.Keys(context.Background(), base.TaskKeyPrefix("default")+"*").Val()
+	if len(vals) != taskCount {
+		t.Errorf("len of keys = %v, want %v", len(vals), taskCount)
+		return
+	}
+}
+
 func TestForwardIfReadyWithGroup(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
