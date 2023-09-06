@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Kua-Fu/asynq/internal/base"
 	"github.com/redis/go-redis/v9"
-	"github.com/hibiken/asynq/internal/base"
 )
 
 // Task represents a unit of work to be performed.

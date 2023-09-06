@@ -12,7 +12,7 @@ Asynq CLI is a command line tool to monitor the queues and tasks managed by `asy
 
 In order to use the tool, compile it using the following command:
 
-    go install github.com/hibiken/asynq/tools/asynq
+    go install github.com/Kua-Fu/asynq/tools/asynq
 
 This will create the asynq executable under your `$GOPATH/bin` directory.
 

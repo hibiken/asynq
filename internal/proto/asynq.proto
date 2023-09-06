@@ -7,7 +7,7 @@ package asynq;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/hibiken/asynq/internal/proto";
+option go_package = "github.com/Kua-Fu/asynq/internal/proto";
 
 // TaskMessage is the internal representation of a task with additional
 // metadata fields.

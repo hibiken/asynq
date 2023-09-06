@@ -15,13 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Kua-Fu/asynq/internal/base"
+	"github.com/Kua-Fu/asynq/internal/errors"
+	h "github.com/Kua-Fu/asynq/internal/testutil"
+	"github.com/Kua-Fu/asynq/internal/timeutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/errors"
-	h "github.com/hibiken/asynq/internal/testutil"
-	"github.com/hibiken/asynq/internal/timeutil"
 	"github.com/redis/go-redis/v9"
 )
 

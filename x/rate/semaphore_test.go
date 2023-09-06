@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Kua-Fu/asynq"
+	"github.com/Kua-Fu/asynq/internal/base"
+	asynqcontext "github.com/Kua-Fu/asynq/internal/context"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
-	"github.com/hibiken/asynq/internal/base"
-	asynqcontext "github.com/hibiken/asynq/internal/context"
 )
 
 var (

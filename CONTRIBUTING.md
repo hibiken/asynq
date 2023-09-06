@@ -5,7 +5,7 @@ We are open to, and grateful for, any contributions made by the community.
 
 ## Reporting Bugs
 
-Have a look at our [issue tracker](https://github.com/hibiken/asynq/issues). If you can't find an issue (open or closed)
+Have a look at our [issue tracker](https://github.com/Kua-Fu/asynq/issues). If you can't find an issue (open or closed)
 describing your problem (or a very similar one) there, please open a new issue with
 the following details:
 
@@ -25,7 +25,7 @@ get help. Feel free to ask there before opening a GitHub issue.
 ## Submitting Feature Requests
 
 If you can't find an issue (open or closed) describing your idea on our [issue
-tracker](https://github.com/hibiken/asynq/issues), open an issue. Adding answers to the following
+tracker](https://github.com/Kua-Fu/asynq/issues), open an issue. Adding answers to the following
 questions in your description is +1:
 
 - What do you want to do, and how do you expect Asynq to support you with that?

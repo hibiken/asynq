@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/Kua-Fu/asynq/internal/base"
+	"github.com/Kua-Fu/asynq/internal/log"
+	"github.com/Kua-Fu/asynq/internal/rdb"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/log"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/go-redis/v9"
 	"github.com/robfig/cron/v3"
 )
 

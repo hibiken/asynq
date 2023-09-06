@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Kua-Fu/asynq/internal/base"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/hibiken/asynq/internal/base"
 )
 
 func TestTaskMessageBuilder(t *testing.T) {

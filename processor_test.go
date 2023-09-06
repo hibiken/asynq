@@ -14,14 +14,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Kua-Fu/asynq/internal/base"
+	"github.com/Kua-Fu/asynq/internal/errors"
+	"github.com/Kua-Fu/asynq/internal/log"
+	"github.com/Kua-Fu/asynq/internal/rdb"
+	h "github.com/Kua-Fu/asynq/internal/testutil"
+	"github.com/Kua-Fu/asynq/internal/timeutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/errors"
-	"github.com/hibiken/asynq/internal/log"
-	"github.com/hibiken/asynq/internal/rdb"
-	h "github.com/hibiken/asynq/internal/testutil"
-	"github.com/hibiken/asynq/internal/timeutil"
 )
 
 var taskCmpOpts = []cmp.Option{
@@ -224,7 +224,7 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 	}
 }
 
-// https://github.com/hibiken/asynq/issues/166
+// https://github.com/Kua-Fu/asynq/issues/166
 func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 	r := setup(t)
 	defer r.Close()

@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/Kua-Fu/asynq/internal/base"
+	"github.com/Kua-Fu/asynq/internal/errors"
+	"github.com/Kua-Fu/asynq/internal/rdb"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/errors"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/go-redis/v9"
 )
 
 // A Client is responsible for scheduling tasks.

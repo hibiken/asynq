@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Kua-Fu/asynq/internal/base"
+	h "github.com/Kua-Fu/asynq/internal/testutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/hibiken/asynq/internal/base"
-	h "github.com/hibiken/asynq/internal/testutil"
 )
 
 func TestClientEnqueueWithProcessAtOption(t *testing.T) {

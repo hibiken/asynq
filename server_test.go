@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq/internal/rdb"
-	"github.com/hibiken/asynq/internal/testbroker"
-	"github.com/hibiken/asynq/internal/testutil"
+	"github.com/Kua-Fu/asynq/internal/rdb"
+	"github.com/Kua-Fu/asynq/internal/testbroker"
+	"github.com/Kua-Fu/asynq/internal/testutil"
 	"go.uber.org/goleak"
 )
 
