@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/redis/go-redis/v9"
 )
 
 var errRedisDown = errors.New("testutil: redis is down")
@@ -215,6 +215,15 @@ func (tb *TestBroker) WriteResult(qname, id string, data []byte) (int, error) {
 		return 0, errRedisDown
 	}
 	return tb.real.WriteResult(qname, id, data)
+}
+
+func (tb *TestBroker) Publish(qname, id string, data []byte) (int, error) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return 0, errRedisDown
+	}
+	return tb.real.Publish(qname, id, data)
 }
 
 func (tb *TestBroker) Ping() error {
