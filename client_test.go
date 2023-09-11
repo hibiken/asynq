@@ -355,7 +355,7 @@ func TestClientEnqueue(t *testing.T) {
 			desc: "With deadline option",
 			task: task,
 			opts: []Option{
-				Deadline(time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC)),
+				Deadline(time.Date(2020, time.June, 24, 0, 0, 0, 0, time.Local)),
 			},
 			wantInfo: &TaskInfo{
 				Queue:         "default",
@@ -367,7 +367,7 @@ func TestClientEnqueue(t *testing.T) {
 				LastErr:       "",
 				LastFailedAt:  time.Time{},
 				Timeout:       noTimeout,
-				Deadline:      time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC),
+				Deadline:      time.Date(2020, time.June, 24, 0, 0, 0, 0, time.Local),
 				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
@@ -378,7 +378,7 @@ func TestClientEnqueue(t *testing.T) {
 						Retry:    defaultMaxRetry,
 						Queue:    "default",
 						Timeout:  int64(noTimeout.Seconds()),
-						Deadline: time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC).Unix(),
+						Deadline: time.Date(2020, time.June, 24, 0, 0, 0, 0, time.Local).Unix(),
 					},
 				},
 			},
@@ -388,7 +388,7 @@ func TestClientEnqueue(t *testing.T) {
 			task: task,
 			opts: []Option{
 				Timeout(20 * time.Second),
-				Deadline(time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC)),
+				Deadline(time.Date(2020, time.June, 24, 0, 0, 0, 0, time.Local)),
 			},
 			wantInfo: &TaskInfo{
 				Queue:         "default",
@@ -400,7 +400,7 @@ func TestClientEnqueue(t *testing.T) {
 				LastErr:       "",
 				LastFailedAt:  time.Time{},
 				Timeout:       20 * time.Second,
-				Deadline:      time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC),
+				Deadline:      time.Date(2020, time.June, 24, 0, 0, 0, 0, time.Local),
 				NextProcessAt: now,
 			},
 			wantPending: map[string][]*base.TaskMessage{
@@ -411,7 +411,7 @@ func TestClientEnqueue(t *testing.T) {
 						Retry:    defaultMaxRetry,
 						Queue:    "default",
 						Timeout:  20,
-						Deadline: time.Date(2020, time.June, 24, 0, 0, 0, 0, time.UTC).Unix(),
+						Deadline: time.Date(2020, time.June, 24, 0, 0, 0, 0, time.Local).Unix(),
 					},
 				},
 			},

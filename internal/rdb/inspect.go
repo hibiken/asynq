@@ -373,7 +373,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	const day = 24 * time.Hour
-	now := r.clock.Now().UTC()
+	now := r.clock.Now()
 	var days []time.Time
 	var keys []string
 	for i := 0; i < n; i++ {

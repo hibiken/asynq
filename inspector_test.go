@@ -414,7 +414,7 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 func TestInspectorHistory(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	now := time.Now().UTC()
+	now := time.Now()
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	tests := []struct {
@@ -3295,7 +3295,7 @@ func TestInspectorSchedulerEntries(t *testing.T) {
 	rdbClient := rdb.NewRDB(r)
 	inspector := NewInspector(getRedisConnOpt(t))
 
-	now := time.Now().UTC()
+	now := time.Now()
 	schedulerID := "127.0.0.1:9876:abc123"
 
 	tests := []struct {

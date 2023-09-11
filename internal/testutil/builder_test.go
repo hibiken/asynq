@@ -50,7 +50,7 @@ func TestTaskMessageBuilder(t *testing.T) {
 			ops: func(b *TaskMessageBuilder) {
 				b.SetRetry(1).
 					SetTimeout(20 * time.Second).
-					SetDeadline(time.Date(2017, 3, 6, 0, 0, 0, 0, time.UTC))
+					SetDeadline(time.Date(2017, 3, 6, 0, 0, 0, 0, time.Local))
 			},
 			want: &base.TaskMessage{
 				Type:     "default_task",
@@ -58,7 +58,7 @@ func TestTaskMessageBuilder(t *testing.T) {
 				Payload:  nil,
 				Retry:    1,
 				Timeout:  20,
-				Deadline: time.Date(2017, 3, 6, 0, 0, 0, 0, time.UTC).Unix(),
+				Deadline: time.Date(2017, 3, 6, 0, 0, 0, 0, time.Local).Unix(),
 			},
 		},
 		{

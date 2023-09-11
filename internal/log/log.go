@@ -74,7 +74,7 @@ func (l *baseLogger) prefixPrint(prefix string, args ...interface{}) {
 func newBase(out io.Writer) *baseLogger {
 	prefix := fmt.Sprintf("asynq: pid=%d ", os.Getpid())
 	return &baseLogger{
-		stdlog.New(out, prefix, stdlog.Ldate|stdlog.Ltime|stdlog.Lmicroseconds|stdlog.LUTC),
+		stdlog.New(out, prefix, stdlog.Ldate|stdlog.Ltime|stdlog.Lmicroseconds),
 	}
 }
 
