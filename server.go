@@ -230,6 +230,22 @@ type Config struct {
 	//
 	// If unset or nil, the group aggregation feature will be disabled on the server.
 	GroupAggregator GroupAggregator
+
+	// HeartbeatInterval specifies the interval between heartbeats.
+	//
+	// If unset or zero, the interval is set to 5 seconds.
+	HeartbeatInterval time.Duration
+
+	// RecoverInterval specifies the interval between recovers.
+	//
+	// If unset or zero, the interval is set to 60 seconds.
+	RecoverInterval time.Duration
+
+	// JanitorInterval specifies the interval between Janitors.
+	//
+	// If unset or zero, the interval is set to 8 seconds.
+	JanitorInterval time.Duration
+
 }
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
@@ -397,6 +413,13 @@ const (
 	defaultDelayedTaskCheckInterval = 5 * time.Second
 
 	defaultGroupGracePeriod = 1 * time.Minute
+
+	defaultHeartbeatInterval = 5 * time.Second
+
+	defaultRecoverInterval = 1 * time.Minute
+
+	defaultJanitorInterval = 8 * time.Second
+
 )
 
 // NewServer returns a new Server given a redis connection option
@@ -473,10 +496,14 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		requestsCh: syncCh,
 		interval:   5 * time.Second,
 	})
+	heartbeatInterval := cfg.HeartbeatInterval
+	if heartbeatInterval == 0 {
+		heartbeatInterval = defaultHeartbeatInterval
+	}
 	heartbeater := newHeartbeater(heartbeaterParams{
 		logger:         logger,
 		broker:         rdb,
-		interval:       5 * time.Second,
+		interval:       heartbeatInterval,
 		concurrency:    n,
 		queues:         queues,
 		strictPriority: cfg.StrictPriority,
@@ -515,13 +542,17 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		starting:        starting,
 		finished:        finished,
 	})
+	recoverInterval := cfg.RecoverInterval
+	if recoverInterval == 0 {
+		recoverInterval = defaultRecoverInterval
+	}
 	recoverer := newRecoverer(recovererParams{
 		logger:         logger,
 		broker:         rdb,
 		retryDelayFunc: delayFunc,
 		isFailureFunc:  isFailureFunc,
 		queues:         qnames,
-		interval:       1 * time.Minute,
+		interval:       recoverInterval,
 	})
 	healthchecker := newHealthChecker(healthcheckerParams{
 		logger:          logger,
@@ -529,11 +560,15 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		interval:        healthcheckInterval,
 		healthcheckFunc: cfg.HealthCheckFunc,
 	})
+	janitorInterval := cfg.JanitorInterval
+	if janitorInterval == 0 {
+		janitorInterval = defaultJanitorInterval
+	}
 	janitor := newJanitor(janitorParams{
 		logger:   logger,
 		broker:   rdb,
 		queues:   qnames,
-		interval: 8 * time.Second,
+		interval: janitorInterval,
 	})
 	aggregator := newAggregator(aggregatorParams{
 		logger:          logger,
