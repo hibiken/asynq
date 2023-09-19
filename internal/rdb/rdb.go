@@ -848,9 +848,7 @@ end
 redis.call("ZADD", KEYS[4], ARGV[3], ARGV[1])
 local old = redis.call("ZRANGEBYSCORE", KEYS[4], "-inf", ARGV[4])
 if #old > 0 then
-	redis.log(redis.LOG_NOTICE, "archive: deleting old tasks", unpack(old))
 	for _, id in ipairs(old) do
-		redis.log(redis.LOG_NOTICE, "archive: deleting task", KEYS[9] .. id)
 		redis.call("DEL", KEYS[9] .. id)
 	end
 	redis.call("ZREM", KEYS[4], unpack(old))
@@ -858,9 +856,7 @@ end
 
 local extra = redis.call("ZRANGE", KEYS[4], 0, -ARGV[5])
 if #extra > 0 then
-	redis.log(redis.LOG_NOTICE, "archive: deleting extra tasks")
 	for _, id in ipairs(extra) do
-		redis.log(redis.LOG_NOTICE, "archive: deleting task", KEYS[9] .. id)
 		redis.call("DEL", KEYS[9] .. id)
 	end
 	redis.call("ZREM", KEYS[4], unpack(extra))
