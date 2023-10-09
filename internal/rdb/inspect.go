@@ -661,6 +661,7 @@ for _, id in ipairs(ids) do
 	local msg, result = unpack(redis.call("HMGET", key, "msg","result"))
 	table.insert(data, msg)
 	table.insert(data, result)
+	table.insert(data, id)
 end
 return data
 `)
@@ -690,7 +691,7 @@ func (r *RDB) listMessages(qname string, state base.TaskState, pgn Pagination) (
 		return nil, errors.E(errors.Internal, fmt.Errorf("cast error: Lua script returned unexpected value: %v", res))
 	}
 	var infos []*base.TaskInfo
-	for i := 0; i < len(data); i += 2 {
+	for i := 0; i < len(data); i += 3 {
 		m, err := base.DecodeMessage([]byte(data[i]))
 		if err != nil {
 			continue // bad data, ignore and continue
@@ -702,6 +703,9 @@ func (r *RDB) listMessages(qname string, state base.TaskState, pgn Pagination) (
 		var nextProcessAt time.Time
 		if state == base.TaskStatePending {
 			nextProcessAt = r.clock.Now()
+		}
+		if m.ID == "" {
+			m.ID = data[i+2]
 		}
 		infos = append(infos, &base.TaskInfo{
 			Message:       m,
