@@ -1,4 +1,4 @@
-// +build linux bsd darwin
+// +build linux bsd darwin freebsd
 
 package asynq
 
