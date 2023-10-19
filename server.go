@@ -103,12 +103,12 @@ type Config struct {
 	// If BaseContext is nil, the default is context.Background().
 	// If this is defined, then it MUST return a non-nil context
 	BaseContext func() context.Context
-
+	
 	// TaskCheckInterval specifies the interval between checks for new tasks to process when all queues are empty.
 	//
-	// Be careful not to set this value too low because it adds significant load to redis.
+	// If unset, zero or a negative value, the interval is set to 1 second.
 	//
-	// If set to a zero or negative value, NewServer will overwrite the value with default value.
+	// Note: Setting this value too low may add significant load to redis.
 	//
 	// By default, TaskCheckInterval is set to 1 seconds.
 	TaskCheckInterval time.Duration
