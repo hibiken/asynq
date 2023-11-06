@@ -35,6 +35,7 @@ type Task struct {
 
 func (t *Task) Type() string    { return t.typename }
 func (t *Task) Payload() []byte { return t.payload }
+func (t *Task) Options() []Option { return t.opts }
 
 // ResultWriter returns a pointer to the ResultWriter associated with the task.
 //
