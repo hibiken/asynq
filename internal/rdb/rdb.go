@@ -1451,6 +1451,7 @@ func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
 	pubsub := r.client.Subscribe(ctx, base.CancelChannel)
 	_, err := pubsub.Receive(ctx)
 	if err != nil {
+		_ = pubsub.Close()
 		return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis pubsub receive error: %v", err))
 	}
 	return pubsub, nil
