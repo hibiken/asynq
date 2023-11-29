@@ -290,9 +290,8 @@ type RedisClientOpt struct {
 }
 
 func (opt RedisClientOpt) MakeRedisClient() interface{} {
-	return redis.NewClient(&redis.Options{
-		Network:      opt.Network,
-		Addr:         opt.Addr,
+	return redis.NewUniversalClient(&redis.UniversalOptions{
+		Addrs:        []string{opt.Addr},
 		Username:     opt.Username,
 		Password:     opt.Password,
 		DB:           opt.DB,
