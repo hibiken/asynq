@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/base"
 	asynqcontext "github.com/hibiken/asynq/internal/context"
+	"github.com/redis/go-redis/v9"
 )
 
 var (
@@ -91,7 +91,7 @@ func TestNewSemaphore_Acquire(t *testing.T) {
 			maxConcurrency: 3,
 			taskIDs:        []string{uuid.NewString(), uuid.NewString()},
 			ctxFunc: func(id string) (context.Context, context.CancelFunc) {
-				return asynqcontext.New(&base.TaskMessage{
+				return asynqcontext.New(context.Background(), &base.TaskMessage{
 					ID:    id,
 					Queue: "task-1",
 				}, time.Now().Add(time.Second))
@@ -104,7 +104,7 @@ func TestNewSemaphore_Acquire(t *testing.T) {
 			maxConcurrency: 3,
 			taskIDs:        []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()},
 			ctxFunc: func(id string) (context.Context, context.CancelFunc) {
-				return asynqcontext.New(&base.TaskMessage{
+				return asynqcontext.New(context.Background(), &base.TaskMessage{
 					ID:    id,
 					Queue: "task-2",
 				}, time.Now().Add(time.Second))
@@ -211,7 +211,7 @@ func TestNewSemaphore_Acquire_StaleToken(t *testing.T) {
 
 	// adding a set member to mimic the case where token is acquired but the goroutine crashed,
 	// in which case, the token will not be explicitly removed and should be present already
-	rc.ZAdd(context.Background(), semaphoreKey("stale-token"), &redis.Z{
+	rc.ZAdd(context.Background(), semaphoreKey("stale-token"), redis.Z{
 		Score:  float64(time.Now().Add(-10 * time.Second).Unix()),
 		Member: taskID,
 	})
@@ -219,7 +219,7 @@ func TestNewSemaphore_Acquire_StaleToken(t *testing.T) {
 	sema := NewSemaphore(opt, "stale-token", 1)
 	defer sema.Close()
 
-	ctx, cancel := asynqcontext.New(&base.TaskMessage{
+	ctx, cancel := asynqcontext.New(context.Background(), &base.TaskMessage{
 		ID:    taskID,
 		Queue: "task-1",
 	}, time.Now().Add(time.Second))
@@ -248,7 +248,7 @@ func TestNewSemaphore_Release(t *testing.T) {
 			name:    "task-5",
 			taskIDs: []string{uuid.NewString()},
 			ctxFunc: func(id string) (context.Context, context.CancelFunc) {
-				return asynqcontext.New(&base.TaskMessage{
+				return asynqcontext.New(context.Background(), &base.TaskMessage{
 					ID:    id,
 					Queue: "task-3",
 				}, time.Now().Add(time.Second))
@@ -259,7 +259,7 @@ func TestNewSemaphore_Release(t *testing.T) {
 			name:    "task-6",
 			taskIDs: []string{uuid.NewString(), uuid.NewString()},
 			ctxFunc: func(id string) (context.Context, context.CancelFunc) {
-				return asynqcontext.New(&base.TaskMessage{
+				return asynqcontext.New(context.Background(), &base.TaskMessage{
 					ID:    id,
 					Queue: "task-4",
 				}, time.Now().Add(time.Second))
@@ -277,9 +277,9 @@ func TestNewSemaphore_Release(t *testing.T) {
 				t.Errorf("%s;\nredis.UniversalClient.Del() got error %v", tt.desc, err)
 			}
 
-			var members []*redis.Z
+			var members []redis.Z
 			for i := 0; i < len(tt.taskIDs); i++ {
-				members = append(members, &redis.Z{
+				members = append(members, redis.Z{
 					Score:  float64(time.Now().Add(time.Duration(i) * time.Second).Unix()),
 					Member: tt.taskIDs[i],
 				})
@@ -337,7 +337,7 @@ func TestNewSemaphore_Release_Error(t *testing.T) {
 			name:    "task-8",
 			taskIDs: []string{uuid.NewString()},
 			ctxFunc: func(_ string) (context.Context, context.CancelFunc) {
-				return asynqcontext.New(&base.TaskMessage{
+				return asynqcontext.New(context.Background(), &base.TaskMessage{
 					ID:    testID,
 					Queue: "task-4",
 				}, time.Now().Add(time.Second))
@@ -356,9 +356,9 @@ func TestNewSemaphore_Release_Error(t *testing.T) {
 				t.Errorf("%s;\nredis.UniversalClient.Del() got error %v", tt.desc, err)
 			}
 
-			var members []*redis.Z
+			var members []redis.Z
 			for i := 0; i < len(tt.taskIDs); i++ {
-				members = append(members, &redis.Z{
+				members = append(members, redis.Z{
 					Score:  float64(time.Now().Add(time.Duration(i) * time.Second).Unix()),
 					Member: tt.taskIDs[i],
 				})
