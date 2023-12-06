@@ -76,7 +76,6 @@ func (s *Semaphore) Acquire(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("provided context is missing task ID value")
 	}
 
-	fmt.Println("AAA semaphoreKey", s.scope)
 	return acquireCmd.Run(ctx, s.rc,
 		[]string{semaphoreKey(s.scope)},
 		s.maxTokens,
