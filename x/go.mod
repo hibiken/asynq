@@ -7,4 +7,5 @@ require (
 	github.com/google/uuid v1.3.1
 	github.com/hibiken/asynq v0.21.0
 	github.com/prometheus/client_golang v1.11.1
+	github.com/redis/go-redis/v9 v9.3.0 // indirect
 )
