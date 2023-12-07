@@ -54,7 +54,7 @@ If you are using this package in production, **please consider sponsoring the pr
 
 ## Quickstart
 
-Make sure you have Go installed ([download](https://golang.org/dl/)). Version `1.14` or higher is required.
+Make sure you have Go installed ([download](https://golang.org/dl/)). Latest two Go versions are supported (See https://go.dev/dl).
 
 Initialize your project by creating a folder and then running `go mod init github.com/your/repo` ([learn more](https://blog.golang.org/using-go-modules)) inside the folder. Then install Asynq library with the [`go get`](https://golang.org/cmd/go/#hdr-Add_dependencies_to_current_module_and_install_them) command:
 
