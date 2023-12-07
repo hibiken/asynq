@@ -1,6 +1,6 @@
 module github.com/hibiken/asynq/tools
 
-go 1.18
+go 1.20
 
 require (
 	github.com/MakeNowJust/heredoc/v2 v2.0.1
