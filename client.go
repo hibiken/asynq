@@ -426,3 +426,8 @@ func (c *Client) addToGroup(ctx context.Context, msg *base.TaskMessage, group st
 	}
 	return c.broker.AddToGroup(ctx, msg, group)
 }
+
+// StateChanged watchs state updates, with more customized detail
+func (c *Client) SetTaskProber(prober base.TaskProber) {
+	c.broker.SetTaskProber(prober)
+}
