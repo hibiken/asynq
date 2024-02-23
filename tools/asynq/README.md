@@ -25,7 +25,7 @@ To view details on any command, use `asynq help <command> <subcommand>`.
 - `asynq dash`
 - `asynq stats`
 - `asynq queue [ls inspect history rm pause unpause]`
-- `asynq task [ls cancel delete archive run delete-all archive-all run-all]`
+- `asynq task [ls cancel delete archive run deleteall archiveall runall]`
 - `asynq server [ls]`
 
 ### Global flags
