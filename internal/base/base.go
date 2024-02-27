@@ -294,6 +294,9 @@ type TaskMessage struct {
 	//
 	// Use zero to indicate no value.
 	CompletedAt int64
+
+	// Headers contains metadata attached to a message.
+	Headers map[string]string
 }
 
 // EncodeMessage marshals the given task message and returns an encoded bytes.
@@ -316,6 +319,7 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 		GroupKey:     msg.GroupKey,
 		Retention:    msg.Retention,
 		CompletedAt:  msg.CompletedAt,
+		Headers:      msg.Headers,
 	})
 }
 
@@ -340,6 +344,7 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 		GroupKey:     pbmsg.GetGroupKey(),
 		Retention:    pbmsg.GetRetention(),
 		CompletedAt:  pbmsg.GetCompletedAt(),
+		Headers:      pbmsg.GetHeaders(),
 	}, nil
 }
 
