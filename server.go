@@ -239,6 +239,11 @@ type Config struct {
 	//
 	// If unset or nil, the group aggregation feature will be disabled on the server.
 	GroupAggregator GroupAggregator
+
+	// JanitorInterval specifies the interval between janitor checks.
+	//
+	// If unset or zero, the interval is set to 8 seconds.
+	JanitorInterval time.Duration
 }
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
@@ -408,6 +413,8 @@ const (
 	defaultDelayedTaskCheckInterval = 5 * time.Second
 
 	defaultGroupGracePeriod = 1 * time.Minute
+
+	defaultJanitorInterval = 8 * time.Second
 )
 
 // NewServer returns a new Server given a redis connection option
@@ -462,6 +469,10 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	healthcheckInterval := cfg.HealthCheckInterval
 	if healthcheckInterval == 0 {
 		healthcheckInterval = defaultHealthCheckInterval
+	}
+	janitorInterval := cfg.JanitorInterval
+	if janitorInterval == 0 {
+		janitorInterval = defaultJanitorInterval
 	}
 	// TODO: Create a helper to check for zero value and fall back to default (e.g. getDurationOrDefault())
 	groupGracePeriod := cfg.GroupGracePeriod
@@ -551,7 +562,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		logger:   logger,
 		broker:   rdb,
 		queues:   qnames,
-		interval: 8 * time.Second,
+		interval: janitorInterval,
 	})
 	aggregator := newAggregator(aggregatorParams{
 		logger:          logger,
