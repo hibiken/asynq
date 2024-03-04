@@ -298,7 +298,6 @@ func (s *Scheduler) beat() {
 		}
 		entries = append(entries, e)
 	}
-	s.logger.Debugf("Writing entries %v", entries)
 	if err := s.rdb.WriteSchedulerEntries(s.id, entries, 5*time.Second); err != nil {
 		s.logger.Warnf("Scheduler could not write heartbeat data: %v", err)
 	}
