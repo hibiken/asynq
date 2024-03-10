@@ -93,10 +93,10 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 	m3 := h.NewTaskMessage("task3", nil)
 	m4 := h.NewTaskMessage("task4", nil)
 
-	t1 := NewTask(m1.Type, m1.Payload)
-	t2 := NewTask(m2.Type, m2.Payload)
-	t3 := NewTask(m3.Type, m3.Payload)
-	t4 := NewTask(m4.Type, m4.Payload)
+	t1 := NewTask(m1.Type, m1.Payload, nil)
+	t2 := NewTask(m2.Type, m2.Payload, nil)
+	t3 := NewTask(m3.Type, m3.Payload, nil)
+	t4 := NewTask(m4.Type, m4.Payload, nil)
 
 	tests := []struct {
 		pending       []*base.TaskMessage // initial default queue state
@@ -162,10 +162,10 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 		m3 = h.NewTaskMessageWithQueue("task3", nil, "high")
 		m4 = h.NewTaskMessageWithQueue("task4", nil, "low")
 
-		t1 = NewTask(m1.Type, m1.Payload)
-		t2 = NewTask(m2.Type, m2.Payload)
-		t3 = NewTask(m3.Type, m3.Payload)
-		t4 = NewTask(m4.Type, m4.Payload)
+		t1 = NewTask(m1.Type, m1.Payload, nil)
+		t2 = NewTask(m2.Type, m2.Payload, nil)
+		t3 = NewTask(m3.Type, m3.Payload, nil)
+		t4 = NewTask(m4.Type, m4.Payload, nil)
 	)
 	defer r.Close()
 
@@ -232,7 +232,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 	rdbClient := rdb.NewRDB(r)
 
 	m1 := h.NewTaskMessage("large_number", h.JSON(map[string]interface{}{"data": 111111111111111111}))
-	t1 := NewTask(m1.Type, m1.Payload)
+	t1 := NewTask(m1.Type, m1.Payload, nil)
 
 	tests := []struct {
 		pending       []*base.TaskMessage // initial default queue state
@@ -639,13 +639,13 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		m6 = h.NewTaskMessageWithQueue("task6", nil, "low")
 		m7 = h.NewTaskMessageWithQueue("task7", nil, "low")
 
-		t1 = NewTask(m1.Type, m1.Payload)
-		t2 = NewTask(m2.Type, m2.Payload)
-		t3 = NewTask(m3.Type, m3.Payload)
-		t4 = NewTask(m4.Type, m4.Payload)
-		t5 = NewTask(m5.Type, m5.Payload)
-		t6 = NewTask(m6.Type, m6.Payload)
-		t7 = NewTask(m7.Type, m7.Payload)
+		t1 = NewTask(m1.Type, m1.Payload, nil)
+		t2 = NewTask(m2.Type, m2.Payload, nil)
+		t3 = NewTask(m3.Type, m3.Payload, nil)
+		t4 = NewTask(m4.Type, m4.Payload, nil)
+		t5 = NewTask(m5.Type, m5.Payload, nil)
+		t6 = NewTask(m6.Type, m6.Payload, nil)
+		t7 = NewTask(m7.Type, m7.Payload, nil)
 	)
 	defer r.Close()
 
@@ -742,7 +742,7 @@ func TestProcessorPerform(t *testing.T) {
 			handler: func(ctx context.Context, t *Task) error {
 				return nil
 			},
-			task:    NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"})),
+			task:    NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"}), nil),
 			wantErr: false,
 		},
 		{
@@ -750,7 +750,7 @@ func TestProcessorPerform(t *testing.T) {
 			handler: func(ctx context.Context, t *Task) error {
 				return fmt.Errorf("something went wrong")
 			},
-			task:    NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"})),
+			task:    NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"}), nil),
 			wantErr: true,
 		},
 		{
@@ -758,7 +758,7 @@ func TestProcessorPerform(t *testing.T) {
 			handler: func(ctx context.Context, t *Task) error {
 				panic("something went terribly wrong")
 			},
-			task:    NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"})),
+			task:    NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"}), nil),
 			wantErr: true,
 		},
 	}
@@ -928,7 +928,7 @@ func TestProcessorComputeDeadline(t *testing.T) {
 
 func TestReturnPanicError(t *testing.T) {
 
-	task := NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"}))
+	task := NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"}), nil)
 
 	tests := []struct {
 		name         string

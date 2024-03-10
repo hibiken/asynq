@@ -21,7 +21,7 @@ func makeTask(n int) *Task {
 	if err != nil {
 		panic(err)
 	}
-	return NewTask(fmt.Sprintf("task%d", n), b)
+	return NewTask(fmt.Sprintf("task%d", n), b, nil)
 }
 
 // Simple E2E Benchmark testing with no scheduled tasks and retries.
@@ -222,7 +222,7 @@ func BenchmarkClientWhileServerRunning(b *testing.B) {
 		b.Log("Starting enqueueing")
 		enqueued := 0
 		for enqueued < 100000 {
-			t := NewTask(fmt.Sprintf("enqueued%d", enqueued), h.JSON(map[string]interface{}{"data": enqueued}))
+			t := NewTask(fmt.Sprintf("enqueued%d", enqueued), h.JSON(map[string]interface{}{"data": enqueued}), nil)
 			if _, err := client.Enqueue(t); err != nil {
 				b.Logf("could not enqueue task %d: %v", enqueued, err)
 				continue

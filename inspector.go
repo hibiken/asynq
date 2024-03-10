@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/go-redis/v9"
 )
 
 // Inspector is a client interface to inspect and mutate the state of
@@ -890,7 +890,7 @@ func (i *Inspector) SchedulerEntries() ([]*SchedulerEntry, error) {
 		return nil, err
 	}
 	for _, e := range res {
-		task := NewTask(e.Type, e.Payload)
+		task := NewTask(e.Type, e.Payload, nil)
 		var opts []Option
 		for _, s := range e.Opts {
 			if o, err := parseOption(s); err == nil {
