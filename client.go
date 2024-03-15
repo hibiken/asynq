@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/go-redis/v9"
 )
 
 // A Client is responsible for scheduling tasks.
@@ -25,15 +25,26 @@ import (
 // Clients are safe for concurrent use by multiple goroutines.
 type Client struct {
 	broker base.Broker
+	// When a Client has been created with an existing Redis connection, we do
+	// not want to close it.
+	sharedConnection bool
 }
 
 // NewClient returns a new Client instance given a redis connection option.
 func NewClient(r RedisConnOpt) *Client {
-	c, ok := r.MakeRedisClient().(redis.UniversalClient)
+	redisClient, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
-	return &Client{broker: rdb.NewRDB(c)}
+	client := NewClientFromRedisClient(redisClient)
+	client.sharedConnection = false
+	return client
+}
+
+// NewClientFromRedisClient returns a new Client instance given a redis client.
+// Warning: the redis client will not be closed by Asynq, you are responsible for closing.
+func NewClientFromRedisClient(c redis.UniversalClient) *Client {
+	return &Client{broker: rdb.NewRDB(c), sharedConnection: true}
 }
 
 type OptionType int
@@ -150,9 +161,9 @@ func (t deadlineOption) Value() interface{} { return time.Time(t) }
 // TTL duration must be greater than or equal to 1 second.
 //
 // Uniqueness of a task is based on the following properties:
-//     - Task Type
-//     - Task Payload
-//     - Queue Name
+//   - Task Type
+//   - Task Payload
+//   - Queue Name
 func Unique(ttl time.Duration) Option {
 	return uniqueOption(ttl)
 }
@@ -307,6 +318,9 @@ var (
 
 // Close closes the connection with redis.
 func (c *Client) Close() error {
+	if c.sharedConnection {
+		return fmt.Errorf("redis connection is shared so the Client can't be closed through asynq")
+	}
 	return c.broker.Close()
 }
 

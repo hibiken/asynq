@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"github.com/redis/go-redis/v9"
 	"sync"
 	"testing"
 	"time"
@@ -58,8 +59,31 @@ func TestSchedulerRegister(t *testing.T) {
 
 	r := setup(t)
 
+	// Tests for new redis connection.
 	for _, tc := range tests {
 		scheduler := NewScheduler(getRedisConnOpt(t), nil)
+		if _, err := scheduler.Register(tc.cronspec, tc.task, tc.opts...); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := scheduler.Start(); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(tc.wait)
+		scheduler.Shutdown()
+
+		got := testutil.GetPendingMessages(t, r, tc.queue)
+		if diff := cmp.Diff(tc.want, got, testutil.IgnoreIDOpt); diff != "" {
+			t.Errorf("mismatch found in queue %q: (-want,+got)\n%s", tc.queue, diff)
+		}
+	}
+
+	r = setup(t)
+
+	// Tests for existing redis connection.
+	for _, tc := range tests {
+		redisClient := getRedisConnOpt(t).MakeRedisClient().(redis.UniversalClient)
+		scheduler := NewSchedulerFromRedisClient(redisClient, nil)
 		if _, err := scheduler.Register(tc.cronspec, tc.task, tc.opts...); err != nil {
 			t.Fatal(err)
 		}
