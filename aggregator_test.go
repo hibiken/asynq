@@ -39,12 +39,12 @@ func TestAggregator(t *testing.T) {
 			maxDelay:    0, // no maxdelay limit
 			maxSize:     0, // no maxsize limit
 			aggregateFunc: func(gname string, tasks []*Task) *Task {
-				return NewTask(gname, nil, MaxRetry(len(tasks))) // use max retry to see how many tasks were aggregated
+				return NewTask(gname, nil, nil, MaxRetry(len(tasks))) // use max retry to see how many tasks were aggregated
 			},
 			tasks: []*Task{
-				NewTask("task1", nil, Group("mygroup")),
-				NewTask("task2", nil, Group("mygroup")),
-				NewTask("task3", nil, Group("mygroup")),
+				NewTask("task1", nil, nil, Group("mygroup")),
+				NewTask("task2", nil, nil, Group("mygroup")),
+				NewTask("task3", nil, nil, Group("mygroup")),
 			},
 			enqueueFrequency: 300 * time.Millisecond,
 			waitTime:         3 * time.Second,
@@ -65,13 +65,13 @@ func TestAggregator(t *testing.T) {
 			maxDelay:    4 * time.Second,
 			maxSize:     0, // no maxsize limit
 			aggregateFunc: func(gname string, tasks []*Task) *Task {
-				return NewTask(gname, nil, MaxRetry(len(tasks))) // use max retry to see how many tasks were aggregated
+				return NewTask(gname, nil, nil, MaxRetry(len(tasks))) // use max retry to see how many tasks were aggregated
 			},
 			tasks: []*Task{
-				NewTask("task1", nil, Group("mygroup")), // time 0
-				NewTask("task2", nil, Group("mygroup")), // time 1s
-				NewTask("task3", nil, Group("mygroup")), // time 2s
-				NewTask("task4", nil, Group("mygroup")), // time 3s
+				NewTask("task1", nil, nil, Group("mygroup")), // time 0
+				NewTask("task2", nil, nil, Group("mygroup")), // time 1s
+				NewTask("task3", nil, nil, Group("mygroup")), // time 2s
+				NewTask("task4", nil, nil, Group("mygroup")), // time 3s
 			},
 			enqueueFrequency: 1 * time.Second,
 			waitTime:         4 * time.Second,
@@ -92,14 +92,14 @@ func TestAggregator(t *testing.T) {
 			maxDelay:    0, // no maxdelay limit
 			maxSize:     5,
 			aggregateFunc: func(gname string, tasks []*Task) *Task {
-				return NewTask(gname, nil, MaxRetry(len(tasks))) // use max retry to see how many tasks were aggregated
+				return NewTask(gname, nil, nil, MaxRetry(len(tasks))) // use max retry to see how many tasks were aggregated
 			},
 			tasks: []*Task{
-				NewTask("task1", nil, Group("mygroup")),
-				NewTask("task2", nil, Group("mygroup")),
-				NewTask("task3", nil, Group("mygroup")),
-				NewTask("task4", nil, Group("mygroup")),
-				NewTask("task5", nil, Group("mygroup")),
+				NewTask("task1", nil, nil, Group("mygroup")),
+				NewTask("task2", nil, nil, Group("mygroup")),
+				NewTask("task3", nil, nil, Group("mygroup")),
+				NewTask("task4", nil, nil, Group("mygroup")),
+				NewTask("task5", nil, nil, Group("mygroup")),
 			},
 			enqueueFrequency: 300 * time.Millisecond,
 			waitTime:         defaultAggregationCheckInterval * 2,

@@ -13,6 +13,10 @@ option go_package = "github.com/hibiken/asynq/internal/proto";
 // metadata fields.
 // Next ID: 15
 message TaskMessage {
+	// Metadata holds additional data for a task.
+  // This field can be used to carry cross-cutting concerns, such as a Trace ID.
+  map<string, string> metadata = 15;
+
 	// Type indicates the kind of the task to be performed.
   string type = 1;
 

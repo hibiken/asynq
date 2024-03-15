@@ -234,6 +234,9 @@ func AllAggregationSets(qname string) string {
 // TaskMessage is the internal representation of a task with additional metadata fields.
 // Serialized data of this type gets written to redis.
 type TaskMessage struct {
+	// Metadata holds metadata of the task.
+	Metadata map[string]string
+
 	// Type indicates the kind of the task to be performed.
 	Type string
 
@@ -302,6 +305,7 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 		return nil, fmt.Errorf("cannot encode nil message")
 	}
 	return proto.Marshal(&pb.TaskMessage{
+		Metadata:     msg.Metadata,
 		Type:         msg.Type,
 		Payload:      msg.Payload,
 		Id:           msg.ID,
@@ -326,6 +330,7 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 		return nil, err
 	}
 	return &TaskMessage{
+		Metadata:     pbmsg.GetMetadata(),
 		Type:         pbmsg.GetType(),
 		Payload:      pbmsg.GetPayload(),
 		ID:           pbmsg.GetId(),

@@ -40,12 +40,12 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = c.Enqueue(NewTask("send_email", testutil.JSON(map[string]interface{}{"recipient_id": 123})))
+	_, err = c.Enqueue(NewTask("send_email", testutil.JSON(map[string]interface{}{"recipient_id": 123}), nil))
 	if err != nil {
 		t.Errorf("could not enqueue a task: %v", err)
 	}
 
-	_, err = c.Enqueue(NewTask("send_email", testutil.JSON(map[string]interface{}{"recipient_id": 456})), ProcessIn(1*time.Hour))
+	_, err = c.Enqueue(NewTask("send_email", testutil.JSON(map[string]interface{}{"recipient_id": 456}), nil), ProcessIn(1*time.Hour))
 	if err != nil {
 		t.Errorf("could not enqueue a task: %v", err)
 	}
@@ -183,15 +183,15 @@ func TestServerWithFlakyBroker(t *testing.T) {
 	}
 
 	for i := 0; i < 10; i++ {
-		_, err := c.Enqueue(NewTask("enqueued", nil), MaxRetry(i))
+		_, err := c.Enqueue(NewTask("enqueued", nil, nil), MaxRetry(i))
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = c.Enqueue(NewTask("bad_task", nil))
+		_, err = c.Enqueue(NewTask("bad_task", nil, nil))
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = c.Enqueue(NewTask("scheduled", nil), ProcessIn(time.Duration(i)*time.Second))
+		_, err = c.Enqueue(NewTask("scheduled", nil, nil), ProcessIn(time.Duration(i)*time.Second))
 		if err != nil {
 			t.Fatal(err)
 		}
