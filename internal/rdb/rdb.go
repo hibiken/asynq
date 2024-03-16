@@ -13,11 +13,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
+	"github.com/spf13/cast"
+
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/timeutil"
-	"github.com/redis/go-redis/v9"
-	"github.com/spf13/cast"
 )
 
 const statsTTL = 90 * 24 * time.Hour // 90 days
@@ -25,19 +26,32 @@ const statsTTL = 90 * 24 * time.Hour // 90 days
 // LeaseDuration is the duration used to initially create a lease and to extend it thereafter.
 const LeaseDuration = 30 * time.Second
 
+type Option func(r *RDB)
+
+func WithQueueConcurrency(queueConcurrency map[string]int) Option {
+	return func(r *RDB) {
+		r.queueConcurrency = queueConcurrency
+	}
+}
+
 // RDB is a client interface to query and mutate task queues.
 type RDB struct {
-	client          redis.UniversalClient
-	clock           timeutil.Clock
-	queuesPublished sync.Map
+	client           redis.UniversalClient
+	clock            timeutil.Clock
+	queuesPublished  sync.Map
+	queueConcurrency map[string]int
 }
 
 // NewRDB returns a new instance of RDB.
-func NewRDB(client redis.UniversalClient) *RDB {
-	return &RDB{
+func NewRDB(client redis.UniversalClient, opts ...Option) *RDB {
+	r := &RDB{
 		client: client,
 		clock:  timeutil.NewRealClock(),
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 // Close closes the connection with redis server.
@@ -217,6 +231,7 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 // --
 // ARGV[1] -> initial lease expiration Unix time
 // ARGV[2] -> task key prefix
+// ARGV[3] -> queue concurrency
 //
 // Output:
 // Returns nil if no processable task is found in the given queue.
@@ -225,15 +240,20 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 // Note: dequeueCmd checks whether a queue is paused first, before
 // calling RPOPLPUSH to pop a task from the queue.
 var dequeueCmd = redis.NewScript(`
-if redis.call("EXISTS", KEYS[2]) == 0 then
-	local id = redis.call("RPOPLPUSH", KEYS[1], KEYS[3])
-	if id then
-		local key = ARGV[2] .. id
-		redis.call("HSET", key, "state", "active")
-		redis.call("HDEL", key, "pending_since")
-		redis.call("ZADD", KEYS[4], ARGV[1], id)
-		return redis.call("HGET", key, "msg")
-	end
+if redis.call("EXISTS", KEYS[2]) > 0 then
+	return nil
+end
+local count = redis.call("ZCARD", KEYS[4])
+if (count >= tonumber(ARGV[3])) then
+     return nil
+end
+local id = redis.call("RPOPLPUSH", KEYS[1], KEYS[3])
+if id then
+	local key = ARGV[2] .. id
+	redis.call("HSET", key, "state", "active")
+	redis.call("HDEL", key, "pending_since")
+	redis.call("ZADD", KEYS[4], ARGV[1], id)
+	return redis.call("HGET", key, "msg")
 end
 return nil`)
 
@@ -251,9 +271,14 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, leaseExpirationT
 			base.LeaseKey(qname),
 		}
 		leaseExpirationTime = r.clock.Now().Add(LeaseDuration)
+		queueConcurrency, ok := r.queueConcurrency[qname]
+		if !ok || queueConcurrency <= 0 {
+			queueConcurrency = math.MaxInt
+		}
 		argv := []interface{}{
 			leaseExpirationTime.Unix(),
 			base.TaskKeyPrefix(qname),
+			queueConcurrency,
 		}
 		res, err := dequeueCmd.Run(context.Background(), r.client, keys, argv...).Result()
 		if err == redis.Nil {
