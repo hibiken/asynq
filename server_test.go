@@ -11,9 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/hibiken/asynq/internal/testbroker"
 	"github.com/hibiken/asynq/internal/testutil"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/goleak"
 )
 
@@ -51,6 +53,98 @@ func TestServer(t *testing.T) {
 	}
 
 	srv.Shutdown()
+}
+
+func TestServerWithQueueConcurrency(t *testing.T) {
+	// https://github.com/go-redis/redis/issues/1029
+	ignoreOpt := goleak.IgnoreTopFunction("github.com/redis/go-redis/v9/internal/pool.(*ConnPool).reaper")
+	defer goleak.VerifyNone(t, ignoreOpt)
+
+	redisConnOpt := getRedisConnOpt(t)
+	r, ok := redisConnOpt.MakeRedisClient().(redis.UniversalClient)
+	if !ok {
+		t.Fatalf("asynq: unsupported RedisConnOpt type %T", r)
+	}
+
+	c := NewClient(redisConnOpt)
+	defer c.Close()
+
+	const taskNum = 8
+	const serverNum = 2
+	tests := []struct {
+		name             string
+		concurrency      int
+		queueConcurrency int
+		wantActiveNum    int
+	}{
+		{
+			name:             "based on client concurrency control",
+			concurrency:      2,
+			queueConcurrency: 6,
+			wantActiveNum:    2 * serverNum,
+		},
+		{
+			name:             "no queue concurrency control",
+			concurrency:      2,
+			queueConcurrency: 0,
+			wantActiveNum:    2 * serverNum,
+		},
+		{
+			name:             "based on queue concurrency control",
+			concurrency:      6,
+			queueConcurrency: 2,
+			wantActiveNum:    2,
+		},
+	}
+
+	// no-op handler
+	handle := func(ctx context.Context, task *Task) error {
+		time.Sleep(time.Second * 2)
+		return nil
+	}
+
+	var servers [serverNum]*Server
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var err error
+			testutil.FlushDB(t, r)
+			for i := 0; i < taskNum; i++ {
+				_, err = c.Enqueue(NewTask("send_email",
+					testutil.JSON(map[string]interface{}{"recipient_id": i + 123})))
+				if err != nil {
+					t.Fatalf("could not enqueue a task: %v", err)
+				}
+			}
+
+			for i := 0; i < serverNum; i++ {
+				srv := NewServer(redisConnOpt, Config{
+					Concurrency:      tc.concurrency,
+					LogLevel:         testLogLevel,
+					QueueConcurrency: map[string]int{base.DefaultQueueName: tc.queueConcurrency},
+				})
+				err = srv.Start(HandlerFunc(handle))
+				if err != nil {
+					t.Fatal(err)
+				}
+				servers[i] = srv
+			}
+			defer func() {
+				for _, srv := range servers {
+					srv.Shutdown()
+				}
+			}()
+
+			time.Sleep(time.Second)
+			inspector := NewInspector(redisConnOpt)
+			tasks, err := inspector.ListActiveTasks(base.DefaultQueueName)
+			if err != nil {
+				t.Fatalf("could not list active tasks: %v", err)
+			}
+			if len(tasks) != tc.wantActiveNum {
+				t.Errorf("default queue has %d active tasks, want %d", len(tasks), tc.wantActiveNum)
+			}
+		})
+	}
 }
 
 func TestServerRun(t *testing.T) {
