@@ -7,6 +7,8 @@ package asynq
 import (
 	"context"
 	"fmt"
+	"os"
+	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -54,6 +56,11 @@ func TestServer(t *testing.T) {
 }
 
 func TestServerRun(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Sending Interrupt on Windows is not implemented
+		return
+	}
+
 	// https://github.com/go-redis/redis/issues/1029
 	ignoreOpt := goleak.IgnoreTopFunction("github.com/redis/go-redis/v9/internal/pool.(*ConnPool).reaper")
 	defer goleak.VerifyNone(t, ignoreOpt)
@@ -64,7 +71,16 @@ func TestServerRun(t *testing.T) {
 	// Make sure server exits when receiving TERM signal.
 	go func() {
 		time.Sleep(2 * time.Second)
-		syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+		p, err := os.FindProcess(os.Getpid())
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		err = p.Signal(syscall.SIGTERM)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 		done <- struct{}{}
 	}()
 
