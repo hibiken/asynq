@@ -7,6 +7,8 @@ package asynq
 import (
 	"context"
 	"fmt"
+	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/redis/go-redis/v9"
 	"os"
 	"runtime"
 	"syscall"
@@ -25,34 +27,94 @@ func TestServer(t *testing.T) {
 	defer goleak.VerifyNone(t, ignoreOpt)
 
 	redisConnOpt := getRedisConnOpt(t)
+	r, ok := redisConnOpt.MakeRedisClient().(redis.UniversalClient)
+	if !ok {
+		t.Fatalf("asynq: unsupported RedisConnOpt type %T", r)
+	}
+
 	c := NewClient(redisConnOpt)
 	defer c.Close()
-	srv := NewServer(redisConnOpt, Config{
-		Concurrency: 10,
-		LogLevel:    testLogLevel,
-	})
+
+	const timeSlot = time.Millisecond * 100
+	tests := []struct {
+		queue            string
+		delay            time.Duration
+		taskNum          int
+		concurrency      int
+		queueConcurrency int
+		wantActiveNum    int
+	}{
+		{
+			queue:         "test-delay",
+			delay:         timeSlot * 2,
+			taskNum:       4,
+			wantActiveNum: 0,
+		},
+		{
+			queue:         "test-concurrency",
+			taskNum:       4,
+			concurrency:   6,
+			wantActiveNum: 4,
+		},
+		{
+			queue:         "test-concurrency-max",
+			taskNum:       4,
+			concurrency:   2,
+			wantActiveNum: 2,
+		},
+		{
+			queue:            "test-queue-concurrency",
+			taskNum:          4,
+			queueConcurrency: 2,
+			wantActiveNum:    2,
+		},
+	}
 
 	// no-op handler
-	h := func(ctx context.Context, task *Task) error {
+	handle := func(ctx context.Context, task *Task) error {
+		_ = timeutil.Sleep(ctx, timeSlot*2)
 		return nil
 	}
 
-	err := srv.Start(HandlerFunc(h))
-	if err != nil {
-		t.Fatal(err)
-	}
+	for _, tc := range tests {
+		t.Run(tc.queue, func(t *testing.T) {
+			var err error
+			testutil.FlushDB(t, r)
+			for i := 0; i < tc.taskNum; i++ {
+				_, err = c.Enqueue(NewTask("send_email",
+					testutil.JSON(map[string]interface{}{"recipient_id": i + 123})),
+					Queue(tc.queue),
+					ProcessIn(tc.delay))
+				if err != nil {
+					t.Errorf("could not enqueue a task: %v", err)
+				}
+			}
 
-	_, err = c.Enqueue(NewTask("send_email", testutil.JSON(map[string]interface{}{"recipient_id": 123})))
-	if err != nil {
-		t.Errorf("could not enqueue a task: %v", err)
-	}
+			srv := NewServer(redisConnOpt, Config{
+				Concurrency:      tc.concurrency,
+				LogLevel:         testLogLevel,
+				Queues:           map[string]int{tc.queue: 1},
+				QueueConcurrency: map[string]int{tc.queue: tc.queueConcurrency},
+			})
 
-	_, err = c.Enqueue(NewTask("send_email", testutil.JSON(map[string]interface{}{"recipient_id": 456})), ProcessIn(1*time.Hour))
-	if err != nil {
-		t.Errorf("could not enqueue a task: %v", err)
-	}
+			err = srv.Start(HandlerFunc(handle))
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	srv.Shutdown()
+			time.Sleep(timeSlot)
+			inspector := NewInspector(redisConnOpt)
+			tasks, err := inspector.ListActiveTasks(tc.queue)
+			if err != nil {
+				t.Errorf("could not list active tasks: %v", err)
+			}
+			if len(tasks) != tc.wantActiveNum {
+				t.Errorf("%s queue has %d active tasks, want %d", tc.queue, len(tasks), tc.wantActiveNum)
+			}
+
+			srv.Shutdown()
+		})
+	}
 }
 
 func TestServerRun(t *testing.T) {
