@@ -85,7 +85,7 @@ func TestCurrentStats(t *testing.T) {
 		paused                          []string
 		oldestPendingMessageEnqueueTime map[string]time.Time
 		qname                           string
-		want                            *Stats
+		want                            *base.Stats
 	}{
 		{
 			tasks: []*h.TaskSeedData{
@@ -166,7 +166,7 @@ func TestCurrentStats(t *testing.T) {
 			},
 			paused: []string{},
 			qname:  "default",
-			want: &Stats{
+			want: &base.Stats{
 				Queue:          "default",
 				Paused:         false,
 				Size:           5,
@@ -255,7 +255,7 @@ func TestCurrentStats(t *testing.T) {
 			},
 			paused: []string{"critical", "low"},
 			qname:  "critical",
-			want: &Stats{
+			want: &base.Stats{
 				Queue:          "critical",
 				Paused:         true,
 				Size:           0,
@@ -321,7 +321,7 @@ func TestCurrentStats(t *testing.T) {
 			continue
 		}
 
-		ignoreMemUsg := cmpopts.IgnoreFields(Stats{}, "MemoryUsage")
+		ignoreMemUsg := cmpopts.IgnoreFields(base.Stats{}, "MemoryUsage")
 		if diff := cmp.Diff(tc.want, got, timeCmpOpt, ignoreMemUsg); diff != "" {
 			t.Errorf("r.CurrentStats(%q) = %v, %v, want %v, nil; (-want, +got)\n%s", tc.qname, got, err, tc.want, diff)
 			continue
@@ -379,7 +379,7 @@ func TestHistoricalStats(t *testing.T) {
 		}
 
 		for i := 0; i < tc.n; i++ {
-			want := &DailyStats{
+			want := &base.DailyStats{
 				Queue:     tc.qname,
 				Processed: (i + 1) * 1000,
 				Failed:    (i + 1) * 10,
@@ -467,12 +467,12 @@ func TestGroupStats(t *testing.T) {
 	tests := []struct {
 		desc  string
 		qname string
-		want  []*GroupStat
+		want  []*base.GroupStat
 	}{
 		{
 			desc:  "default queue groups",
 			qname: "default",
-			want: []*GroupStat{
+			want: []*base.GroupStat{
 				{Group: "group1", Size: 3},
 				{Group: "group2", Size: 1},
 			},
@@ -480,7 +480,7 @@ func TestGroupStats(t *testing.T) {
 		{
 			desc:  "custom queue groups",
 			qname: "custom",
-			want: []*GroupStat{
+			want: []*base.GroupStat{
 				{Group: "group1", Size: 2},
 			},
 		},
@@ -488,8 +488,8 @@ func TestGroupStats(t *testing.T) {
 
 	sortGroupStatsOpt := cmp.Transformer(
 		"SortGroupStats",
-		func(in []*GroupStat) []*GroupStat {
-			out := append([]*GroupStat(nil), in...)
+		func(in []*base.GroupStat) []*base.GroupStat {
+			out := append([]*base.GroupStat(nil), in...)
 			sort.Slice(out, func(i, j int) bool {
 				return out[i].Group < out[j].Group
 			})
@@ -795,8 +795,8 @@ func TestListPending(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllPendingQueues(t, r.client, tc.pending)
 
-		got, err := r.ListPending(tc.qname, Pagination{Size: 20, Page: 0})
-		op := fmt.Sprintf("r.ListPending(%q, Pagination{Size: 20, Page: 0})", tc.qname)
+		got, err := r.ListPending(tc.qname, base.Pagination{Size: 20, Page: 0})
+		op := fmt.Sprintf("r.ListPending(%q, base.Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
@@ -845,8 +845,8 @@ func TestListPendingPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListPending(tc.qname, Pagination{Size: tc.size, Page: tc.page})
-		op := fmt.Sprintf("r.ListPending(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
+		got, err := r.ListPending(tc.qname, base.Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListPending(%q, base.Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
 			continue
@@ -914,8 +914,8 @@ func TestListActive(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
 
-		got, err := r.ListActive(tc.qname, Pagination{Size: 20, Page: 0})
-		op := fmt.Sprintf("r.ListActive(%q, Pagination{Size: 20, Page: 0})", tc.qname)
+		got, err := r.ListActive(tc.qname, base.Pagination{Size: 20, Page: 0})
+		op := fmt.Sprintf("r.ListActive(%q, base.Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.inProgress)
 			continue
@@ -954,8 +954,8 @@ func TestListActivePagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListActive(tc.qname, Pagination{Size: tc.size, Page: tc.page})
-		op := fmt.Sprintf("r.ListActive(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
+		got, err := r.ListActive(tc.qname, base.Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListActive(%q, base.Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
 			continue
@@ -1049,8 +1049,8 @@ func TestListScheduled(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
 
-		got, err := r.ListScheduled(tc.qname, Pagination{Size: 20, Page: 0})
-		op := fmt.Sprintf("r.ListScheduled(%q, Pagination{Size: 20, Page: 0})", tc.qname)
+		got, err := r.ListScheduled(tc.qname, base.Pagination{Size: 20, Page: 0})
+		op := fmt.Sprintf("r.ListScheduled(%q, base.Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
@@ -1090,8 +1090,8 @@ func TestListScheduledPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListScheduled(tc.qname, Pagination{Size: tc.size, Page: tc.page})
-		op := fmt.Sprintf("r.ListScheduled(%q, Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
+		got, err := r.ListScheduled(tc.qname, base.Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListScheduled(%q, base.Pagination{Size: %d, Page: %d})", tc.qname, tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
 			continue
@@ -1203,8 +1203,8 @@ func TestListRetry(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllRetryQueues(t, r.client, tc.retry)
 
-		got, err := r.ListRetry(tc.qname, Pagination{Size: 20, Page: 0})
-		op := fmt.Sprintf("r.ListRetry(%q, Pagination{Size: 20, Page: 0})", tc.qname)
+		got, err := r.ListRetry(tc.qname, base.Pagination{Size: 20, Page: 0})
+		op := fmt.Sprintf("r.ListRetry(%q, base.Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
@@ -1247,8 +1247,8 @@ func TestListRetryPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListRetry(tc.qname, Pagination{Size: tc.size, Page: tc.page})
-		op := fmt.Sprintf("r.ListRetry(%q, Pagination{Size: %d, Page: %d})",
+		got, err := r.ListRetry(tc.qname, base.Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListRetry(%q, base.Pagination{Size: %d, Page: %d})",
 			tc.qname, tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
@@ -1356,8 +1356,8 @@ func TestListArchived(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllArchivedQueues(t, r.client, tc.archived)
 
-		got, err := r.ListArchived(tc.qname, Pagination{Size: 20, Page: 0})
-		op := fmt.Sprintf("r.ListArchived(%q, Pagination{Size: 20, Page: 0})", tc.qname)
+		got, err := r.ListArchived(tc.qname, base.Pagination{Size: 20, Page: 0})
+		op := fmt.Sprintf("r.ListArchived(%q, base.Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
@@ -1397,8 +1397,8 @@ func TestListArchivedPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListArchived(tc.qname, Pagination{Size: tc.size, Page: tc.page})
-		op := fmt.Sprintf("r.ListArchived(Pagination{Size: %d, Page: %d})",
+		got, err := r.ListArchived(tc.qname, base.Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListArchived(base.Pagination{Size: %d, Page: %d})",
 			tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
@@ -1496,8 +1496,8 @@ func TestListCompleted(t *testing.T) {
 		h.FlushDB(t, r.client) // clean up db before each test case
 		h.SeedAllCompletedQueues(t, r.client, tc.completed)
 
-		got, err := r.ListCompleted(tc.qname, Pagination{Size: 20, Page: 0})
-		op := fmt.Sprintf("r.ListCompleted(%q, Pagination{Size: 20, Page: 0})", tc.qname)
+		got, err := r.ListCompleted(tc.qname, base.Pagination{Size: 20, Page: 0})
+		op := fmt.Sprintf("r.ListCompleted(%q, base.Pagination{Size: 20, Page: 0})", tc.qname)
 		if err != nil {
 			t.Errorf("%s = %v, %v, want %v, nil", op, got, err, tc.want)
 			continue
@@ -1537,8 +1537,8 @@ func TestListCompletedPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := r.ListCompleted(tc.qname, Pagination{Size: tc.size, Page: tc.page})
-		op := fmt.Sprintf("r.ListCompleted(Pagination{Size: %d, Page: %d})",
+		got, err := r.ListCompleted(tc.qname, base.Pagination{Size: tc.size, Page: tc.page})
+		op := fmt.Sprintf("r.ListCompleted(base.Pagination{Size: %d, Page: %d})",
 			tc.size, tc.page)
 		if err != nil {
 			t.Errorf("%s; %s returned error %v", tc.desc, op, err)
@@ -1643,7 +1643,7 @@ func TestListAggregating(t *testing.T) {
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			got, err := r.ListAggregating(tc.qname, tc.gname, Pagination{})
+			got, err := r.ListAggregating(tc.qname, tc.gname, base.Pagination{})
 			if err != nil {
 				t.Fatalf("ListAggregating returned error: %v", err)
 			}
@@ -1757,7 +1757,7 @@ func TestListAggregatingPagination(t *testing.T) {
 		h.SeedRedisZSets(t, r.client, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			got, err := r.ListAggregating(tc.qname, tc.gname, Pagination{Page: tc.page, Size: tc.size})
+			got, err := r.ListAggregating(tc.qname, tc.gname, base.Pagination{Page: tc.page, Size: tc.size})
 			if err != nil {
 				t.Fatalf("ListAggregating returned error: %v", err)
 			}
@@ -1800,7 +1800,7 @@ func TestListTasksError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		pgn := Pagination{Page: 0, Size: 20}
+		pgn := base.Pagination{Page: 0, Size: 20}
 		if _, got := r.ListActive(tc.qname, pgn); !tc.match(got) {
 			t.Errorf("%s: ListActive returned %v", tc.desc, got)
 		}
@@ -5416,7 +5416,7 @@ loop:
 				continue loop
 			}
 		}
-		got, err := r.ListSchedulerEnqueueEvents(tc.entryID, Pagination{Size: 20, Page: 0})
+		got, err := r.ListSchedulerEnqueueEvents(tc.entryID, base.Pagination{Size: 20, Page: 0})
 		if err != nil {
 			t.Errorf("ListSchedulerEnqueueEvents(%q) failed: %v", tc.entryID, err)
 			continue
@@ -5463,7 +5463,7 @@ func TestRecordSchedulerEnqueueEventTrimsDataSet(t *testing.T) {
 	if n := r.client.ZCard(context.Background(), key).Val(); n != maxEvents {
 		t.Fatalf("unexpected number of events; got %d, want %d", n, maxEvents)
 	}
-	events, err := r.ListSchedulerEnqueueEvents(entryID, Pagination{Size: maxEvents})
+	events, err := r.ListSchedulerEnqueueEvents(entryID, base.Pagination{Size: maxEvents})
 	if err != nil {
 		t.Fatalf("ListSchedulerEnqueueEvents failed: %v", err)
 	}
