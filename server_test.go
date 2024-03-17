@@ -119,7 +119,7 @@ func TestServer(t *testing.T) {
 
 func TestServerRun(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		// Sending Interrupt on Windows is not implemented
+		// because Sending Interrupt on Windows is not implemented
 		return
 	}
 
@@ -132,7 +132,6 @@ func TestServerRun(t *testing.T) {
 	done := make(chan struct{})
 	// Make sure server exits when receiving TERM signal.
 	go func() {
-		time.Sleep(2 * time.Second)
 		p, err := os.FindProcess(os.Getpid())
 		if err != nil {
 			t.Error(err)
@@ -143,7 +142,6 @@ func TestServerRun(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		done <- struct{}{}
 	}()
 
 	go func() {
@@ -157,6 +155,53 @@ func TestServerRun(t *testing.T) {
 	mux := NewServeMux()
 	if err := srv.Run(mux); err != nil {
 		t.Fatal(err)
+	}
+	done <- struct{}{}
+}
+
+func TestServerShutdown(t *testing.T) {
+	var err error
+
+	// https://github.com/go-redis/redis/issues/1029
+	ignoreOpt := goleak.IgnoreTopFunction("github.com/redis/go-redis/v9/internal/pool.(*ConnPool).reaper")
+	defer goleak.VerifyNone(t, ignoreOpt)
+
+	redisConnOpt := getRedisConnOpt(t)
+	r, ok := redisConnOpt.MakeRedisClient().(redis.UniversalClient)
+	if !ok {
+		t.Fatalf("asynq: unsupported RedisConnOpt type %T", r)
+	}
+	testutil.FlushDB(t, r)
+
+	srv := NewServer(redisConnOpt, Config{LogLevel: testLogLevel, ShutdownTimeout: 6 * time.Second})
+	done := make(chan struct{})
+	mux := NewServeMux()
+	mux.HandleFunc("send_email", func(ctx context.Context, task *Task) error {
+		err := timeutil.Sleep(ctx, 10*time.Second)
+		time.Sleep(1 * time.Second)
+		done <- struct{}{}
+		return err
+	})
+	if err := srv.Start(mux); err != nil {
+		t.Fatal(err)
+	}
+
+	c := NewClient(redisConnOpt)
+	defer c.Close()
+	_, err = c.Enqueue(NewTask("send_email", testutil.JSON(map[string]interface{}{"recipient_id": 123})))
+	if err != nil {
+		t.Errorf("could not enqueue a task: %v", err)
+	}
+
+	// Make sure active tasks stops when server shutdown.
+	go func() {
+		time.Sleep(2 * time.Second)
+		srv.Shutdown()
+	}()
+	select {
+	case <-time.After(6 * time.Second):
+		t.Error("active tasks did not stop after server shutdown")
+	case <-done:
 	}
 }
 
