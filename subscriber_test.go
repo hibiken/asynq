@@ -70,6 +70,38 @@ func TestSubscriber(t *testing.T) {
 	}
 }
 
+func TestSubscriberWithRedisClientClosed(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("panic occurred: %v", r)
+		}
+	}()
+	redisClient := setup(t)
+	r := rdb.NewRDB(redisClient)
+	defer r.Close()
+	testBroker := testbroker.NewTestBroker(r)
+
+	cancelations := base.NewCancelations()
+	subscriber := newSubscriber(subscriberParams{
+		logger:       testLogger,
+		broker:       testBroker,
+		cancelations: cancelations,
+	})
+	subscriber.retryTimeout = 1 * time.Second // set shorter retry timeout for testing purpose.
+
+	var wg sync.WaitGroup
+	subscriber.start(&wg)
+	defer subscriber.shutdown()
+
+	time.Sleep(5 * time.Second) // allow some time for subscriber to connect
+
+	if err := redisClient.Close(); err != nil {
+		t.Fatalf("close redis client,%+v", err)
+	}
+
+	time.Sleep(1 * time.Second) // make sure client is closed
+}
+
 func TestSubscriberWithRedisDown(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
