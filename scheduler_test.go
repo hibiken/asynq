@@ -5,7 +5,11 @@
 package asynq
 
 import (
+	"log"
+	"os"
+	"runtime"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -207,4 +211,68 @@ func TestSchedulerPostAndPreEnqueueHandler(t *testing.T) {
 		t.Errorf("PostEnqueueFunc was called %d times, want 3", postCounter)
 	}
 	postMu.Unlock()
+}
+
+func TestSchedulerRun(t *testing.T) {
+	signalWindows := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		scheduler := NewScheduler(
+			RedisClientOpt{Addr: ":6379"},
+			&SchedulerOpts{Location: time.Local},
+		)
+		if _, err := scheduler.Register("* * * * *", NewTask("task1", nil)); err != nil {
+			log.Fatal(err)
+		}
+		if _, err := scheduler.Register("@every 30s", NewTask("task2", nil)); err != nil {
+			log.Fatal(err)
+		}
+
+		// Run blocks and waits for os signal to terminate the program.
+		if err := scheduler.Start(); err != nil {
+			log.Fatal(err)
+		}
+		if runtime.GOOS == "windows" {
+			<-signalWindows
+		} else {
+			scheduler.waitForSignals()
+		}
+		scheduler.Shutdown()
+		done <- struct{}{}
+	}()
+	time.Sleep(1 * time.Second)
+
+	// Make sure server exits when receiving TERM signal.
+	go func() {
+		if runtime.GOOS == "windows" {
+			// Sending Interrupt on Windows is not implemented
+			signalWindows <- struct{}{}
+			return
+		}
+
+		p, err := os.FindProcess(os.Getpid())
+		if err != nil {
+			t.Error("FindProcess:", err)
+			t.Error(err)
+			return
+		}
+		err = p.Signal(syscall.SIGTERM)
+		if err != nil {
+			t.Error("Signal:", err)
+			return
+		}
+	}()
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		select {
+		case <-time.After(10 * time.Second):
+			panic("schedule did not stop after receiving TERM signal")
+		case <-done:
+		}
+	}()
+
+	wg.Wait()
 }

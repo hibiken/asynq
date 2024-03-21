@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/hibiken/asynq/internal/timeutil"
 	"github.com/redis/go-redis/v9"
+	"log"
 	"os"
 	"runtime"
 	"sync"
@@ -119,10 +120,7 @@ func TestServer(t *testing.T) {
 }
 
 func TestServerRun(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("because Sending Interrupt on Windows is not implemented")
-		return
-	}
+	signalWindows := make(chan struct{})
 
 	// https://github.com/go-redis/redis/issues/1029
 	ignoreOpt := goleak.IgnoreTopFunction("github.com/redis/go-redis/v9/internal/pool.(*ConnPool).reaper")
@@ -132,15 +130,27 @@ func TestServerRun(t *testing.T) {
 	go func() {
 		mux := NewServeMux()
 		srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
-		if err := srv.Run(mux); err != nil {
-			t.Fatal(err)
+		if err := srv.Start(mux); err != nil {
+			log.Fatal(err)
 		}
+		if runtime.GOOS == "windows" {
+			<-signalWindows
+		} else {
+			srv.waitForSignals()
+		}
+		srv.Shutdown()
 		done <- struct{}{}
 	}()
 	time.Sleep(1 * time.Second)
 
 	// Make sure server exits when receiving TERM signal.
 	go func() {
+		if runtime.GOOS == "windows" {
+			// Sending Interrupt on Windows is not implemented
+			signalWindows <- struct{}{}
+			return
+		}
+
 		p, err := os.FindProcess(os.Getpid())
 		if err != nil {
 			t.Error("FindProcess:", err)
@@ -180,37 +190,69 @@ func TestServerShutdown(t *testing.T) {
 	if !ok {
 		t.Fatalf("asynq: unsupported RedisConnOpt type %T", r)
 	}
-	testutil.FlushDB(t, r)
 
-	srv := NewServer(redisConnOpt, Config{LogLevel: testLogLevel, ShutdownTimeout: 6 * time.Second})
-	done := make(chan struct{})
-	mux := NewServeMux()
-	mux.HandleFunc("send_email", func(ctx context.Context, task *Task) error {
-		err := timeutil.Sleep(ctx, 10*time.Second)
-		time.Sleep(1 * time.Second)
-		done <- struct{}{}
-		return err
-	})
-	if err := srv.Start(mux); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name        string
+		delay       time.Duration
+		wantTimeout bool
+	}{
+		{
+			name:        "quick task",
+			delay:       1 * time.Second,
+			wantTimeout: false,
+		},
+		{
+			name:        "slow task",
+			delay:       8 * time.Second,
+			wantTimeout: true,
+		},
 	}
 
-	c := NewClient(redisConnOpt)
-	defer c.Close()
-	_, err = c.Enqueue(NewTask("send_email", testutil.JSON(map[string]interface{}{"recipient_id": 123})))
-	if err != nil {
-		t.Errorf("could not enqueue a task: %v", err)
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			testutil.FlushDB(t, r)
 
-	// Make sure active tasks stops when server shutdown.
-	go func() {
-		time.Sleep(2 * time.Second)
-		srv.Shutdown()
-	}()
-	select {
-	case <-time.After(6 * time.Second):
-		t.Error("active tasks did not stop after server shutdown")
-	case <-done:
+			wg := sync.WaitGroup{}
+			srv := NewServer(redisConnOpt, Config{LogLevel: testLogLevel, ShutdownTimeout: 6 * time.Second})
+			done := make(chan struct{}, 1)
+			mux := NewServeMux()
+			mux.HandleFunc("send_email", func(ctx context.Context, task *Task) error {
+				defer wg.Done()
+				err := timeutil.Sleep(ctx, 10*time.Second)
+				time.Sleep(tc.delay)
+				done <- struct{}{}
+				return err
+			})
+			if err := srv.Start(mux); err != nil {
+				t.Fatal(err)
+			}
+
+			c := NewClient(redisConnOpt)
+			defer c.Close()
+			wg.Add(1)
+			_, err = c.Enqueue(NewTask("send_email", testutil.JSON(map[string]interface{}{"recipient_id": 123})))
+			if err != nil {
+				t.Errorf("could not enqueue a task: %v", err)
+			}
+
+			// Make sure active tasks stops when server shutdown.
+			go func() {
+				time.Sleep(2 * time.Second)
+				srv.Shutdown()
+			}()
+
+			select {
+			case <-time.After(6 * time.Second):
+				if !tc.wantTimeout {
+					t.Error("quick task did not stop after server shutdown")
+				}
+			case <-done:
+				if tc.wantTimeout {
+					t.Error("slow task had stopped before timeout")
+				}
+			}
+			wg.Wait()
+		})
 	}
 }
 
