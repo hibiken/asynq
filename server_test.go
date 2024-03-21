@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"os"
 	"runtime"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -119,7 +120,7 @@ func TestServer(t *testing.T) {
 
 func TestServerRun(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		// because Sending Interrupt on Windows is not implemented
+		t.Skip("because Sending Interrupt on Windows is not implemented")
 		return
 	}
 
@@ -127,24 +128,36 @@ func TestServerRun(t *testing.T) {
 	ignoreOpt := goleak.IgnoreTopFunction("github.com/redis/go-redis/v9/internal/pool.(*ConnPool).reaper")
 	defer goleak.VerifyNone(t, ignoreOpt)
 
-	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
-
 	done := make(chan struct{})
+	go func() {
+		mux := NewServeMux()
+		srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
+		if err := srv.Run(mux); err != nil {
+			t.Fatal(err)
+		}
+		done <- struct{}{}
+	}()
+	time.Sleep(1 * time.Second)
+
 	// Make sure server exits when receiving TERM signal.
 	go func() {
 		p, err := os.FindProcess(os.Getpid())
 		if err != nil {
+			t.Error("FindProcess:", err)
 			t.Error(err)
 			return
 		}
 		err = p.Signal(syscall.SIGTERM)
 		if err != nil {
-			t.Error(err)
+			t.Error("Signal:", err)
 			return
 		}
 	}()
 
+	wg := sync.WaitGroup{}
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		select {
 		case <-time.After(10 * time.Second):
 			panic("server did not stop after receiving TERM signal")
@@ -152,11 +165,7 @@ func TestServerRun(t *testing.T) {
 		}
 	}()
 
-	mux := NewServeMux()
-	if err := srv.Run(mux); err != nil {
-		t.Fatal(err)
-	}
-	done <- struct{}{}
+	wg.Wait()
 }
 
 func TestServerShutdown(t *testing.T) {
