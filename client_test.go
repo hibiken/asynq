@@ -541,11 +541,11 @@ func TestClientEnqueueWithGroupOption(t *testing.T) {
 			},
 		},
 		{
-			desc: "With Group and ProcessIn options",
+			desc: "With Group and ProcessAt options",
 			task: task,
 			opts: []Option{
 				Group("mygroup"),
-				ProcessIn(30 * time.Minute),
+				ProcessAt(now.Add(30 * time.Minute)),
 			},
 			wantInfo: &TaskInfo{
 				Queue:         "default",
