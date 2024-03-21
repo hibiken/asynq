@@ -1241,9 +1241,7 @@ return table.getn(ids)`)
 
 // DeleteExpiredCompletedTasks checks for any expired tasks in the given queue's completed set,
 // and delete all expired tasks.
-func (r *RDB) DeleteExpiredCompletedTasks(qname string) error {
-	// Note: Do this operation in fix batches to prevent long running script.
-	const batchSize = 100
+func (r *RDB) DeleteExpiredCompletedTasks(qname string, batchSize int) error {
 	for {
 		n, err := r.deleteExpiredCompletedTasks(qname, batchSize)
 		if err != nil {
