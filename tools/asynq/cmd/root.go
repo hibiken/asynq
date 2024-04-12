@@ -369,7 +369,7 @@ func createRDB() *rdb.RDB {
 	return rdb.NewRDB(c)
 }
 
-// createRDB creates a Inspector instance using flag values and returns it.
+// createInspector creates a Inspector instance using flag values and returns it.
 func createInspector() *asynq.Inspector {
 	return asynq.NewInspector(getRedisConnOpt())
 }
