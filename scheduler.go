@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/go-redis/v9"
 	"github.com/robfig/cron/v3"
 )
 
@@ -323,5 +323,11 @@ func (s *Scheduler) clearHistory() {
 
 // Ping performs a ping against the redis connection.
 func (s *Scheduler) Ping() error {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	if s.state.value == srvStateClosed {
+		return nil
+	}
+
 	return s.rdb.Ping()
 }
