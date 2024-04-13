@@ -11,11 +11,11 @@ import (
 	"math"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
 )
 
@@ -67,7 +67,7 @@ func (r *RDB) runScript(ctx context.Context, op errors.Op, script *redis.Script,
 	return nil
 }
 
-// Runs the given script with keys and args and retuns the script's return value as int64.
+// Runs the given script with keys and args and returns the script's return value as int64.
 func (r *RDB) runScriptWithErrorCode(ctx context.Context, op errors.Op, script *redis.Script, keys []string, args ...interface{}) (int64, error) {
 	res, err := script.Run(ctx, r.client, keys, args...).Result()
 	if err != nil {
@@ -152,7 +152,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 var enqueueUniqueCmd = redis.NewScript(`
 local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
 if not ok then
-  return -1 
+  return -1
 end
 if redis.call("EXISTS", KEYS[2]) == 1 then
   return 0
@@ -368,7 +368,7 @@ func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
 //
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
-// ARGV[3] -> task exipration time in unix time
+// ARGV[3] -> task expiration time in unix time
 // ARGV[4] -> task message data
 // ARGV[5] -> max int64 value
 var markAsCompleteCmd = redis.NewScript(`
@@ -379,7 +379,7 @@ if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
 if redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1]) ~= 1 then
-  redis.redis.error_reply("INTERNAL")
+  return redis.error_reply("INTERNAL")
 end
 redis.call("HSET", KEYS[4], "msg", ARGV[4], "state", "completed")
 local n = redis.call("INCR", KEYS[5])
@@ -405,7 +405,7 @@ return redis.status_reply("OK")
 //
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
-// ARGV[3] -> task exipration time in unix time
+// ARGV[3] -> task expiration time in unix time
 // ARGV[4] -> task message data
 // ARGV[5] -> max int64 value
 var markAsCompleteUniqueCmd = redis.NewScript(`
@@ -416,7 +416,7 @@ if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
 if redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1]) ~= 1 then
-  redis.redis.error_reply("INTERNAL")
+  return redis.error_reply("INTERNAL")
 end
 redis.call("HSET", KEYS[4], "msg", ARGV[4], "state", "completed")
 local n = redis.call("INCR", KEYS[5])
@@ -1086,7 +1086,7 @@ const aggregationTimeout = 2 * time.Minute
 // The time for gracePeriod and maxDelay is computed relative to the time t.
 //
 // Note: It assumes that this function is called at frequency less than or equal to the gracePeriod. In other words,
-// the function only checks the most recently added task aganist the given gracePeriod.
+// the function only checks the most recently added task against the given gracePeriod.
 func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int) (string, error) {
 	var op errors.Op = "RDB.AggregationCheck"
 	aggregationSetID := uuid.NewString()
@@ -1284,7 +1284,10 @@ local res = {}
 local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
 for _, id in ipairs(ids) do
 	local key = ARGV[2] .. id
-	table.insert(res, redis.call("HGET", key, "msg"))
+	local v = redis.call("HGET", key, "msg")
+	if v then
+		table.insert(res, v)
+	end
 end
 return res
 `)
@@ -1319,9 +1322,9 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 // It returns a new expiration time if the operation was successful.
 func (r *RDB) ExtendLease(qname string, ids ...string) (expirationTime time.Time, err error) {
 	expireAt := r.clock.Now().Add(LeaseDuration)
-	var zs []*redis.Z
+	var zs []redis.Z
 	for _, id := range ids {
-		zs = append(zs, &redis.Z{Member: id, Score: float64(expireAt.Unix())})
+		zs = append(zs, redis.Z{Member: id, Score: float64(expireAt.Unix())})
 	}
 	// Use XX option to only update elements that already exist; Don't add new elements
 	// TODO: Consider adding GT option to ensure we only "extend" the lease. Ceveat is that GT is supported from redis v6.2.0 or above.
@@ -1367,10 +1370,10 @@ func (r *RDB) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo
 	}
 	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
 	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
-	if err := r.client.ZAdd(ctx, base.AllServers, &redis.Z{Score: float64(exp.Unix()), Member: skey}).Err(); err != nil {
+	if err := r.client.ZAdd(ctx, base.AllServers, redis.Z{Score: float64(exp.Unix()), Member: skey}).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
-	if err := r.client.ZAdd(ctx, base.AllWorkers, &redis.Z{Score: float64(exp.Unix()), Member: wkey}).Err(); err != nil {
+	if err := r.client.ZAdd(ctx, base.AllWorkers, redis.Z{Score: float64(exp.Unix()), Member: wkey}).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zadd", Err: err})
 	}
 	return r.runScript(ctx, op, writeServerStateCmd, []string{skey, wkey}, args...)
@@ -1423,7 +1426,7 @@ func (r *RDB) WriteSchedulerEntries(schedulerID string, entries []*base.Schedule
 	}
 	exp := r.clock.Now().Add(ttl).UTC()
 	key := base.SchedulerEntriesKey(schedulerID)
-	err := r.client.ZAdd(ctx, base.AllSchedulers, &redis.Z{Score: float64(exp.Unix()), Member: key}).Err()
+	err := r.client.ZAdd(ctx, base.AllSchedulers, redis.Z{Score: float64(exp.Unix()), Member: key}).Err()
 	if err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zadd", Err: err})
 	}

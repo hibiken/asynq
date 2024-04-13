@@ -131,6 +131,12 @@ func TestErrorPredicates(t *testing.T) {
 			err:  E(Op("rdb.ArchiveTask"), NotFound, &QueueNotFoundError{Queue: "default"}),
 			want: true,
 		},
+		{
+			desc: "IsPanicError should detect presence of PanicError in err's chain",
+			fn:   IsPanicError,
+			err:  E(Op("unknown"), Unknown, &PanicError{ErrMsg: "Something went wrong"}),
+			want: true,
+		},
 	}
 
 	for _, tc := range tests {

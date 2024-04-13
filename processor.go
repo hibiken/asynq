@@ -37,11 +37,11 @@ type processor struct {
 	// orderedQueues is set only in strict-priority mode.
 	orderedQueues []string
 
-	retryDelayFunc RetryDelayFunc
-	isFailureFunc  func(error) bool
+	taskCheckInterval time.Duration
+	retryDelayFunc    RetryDelayFunc
+	isFailureFunc     func(error) bool
 
-	errHandler ErrorHandler
-
+	errHandler      ErrorHandler
 	shutdownTimeout time.Duration
 
 	// channel via which to send sync requests to syncer.
@@ -73,20 +73,21 @@ type processor struct {
 }
 
 type processorParams struct {
-	logger          *log.Logger
-	broker          base.Broker
-	baseCtxFn       func() context.Context
-	retryDelayFunc  RetryDelayFunc
-	isFailureFunc   func(error) bool
-	syncCh          chan<- *syncRequest
-	cancelations    *base.Cancelations
-	concurrency     int
-	queues          map[string]int
-	strictPriority  bool
-	errHandler      ErrorHandler
-	shutdownTimeout time.Duration
-	starting        chan<- *workerInfo
-	finished        chan<- *base.TaskMessage
+	logger            *log.Logger
+	broker            base.Broker
+	baseCtxFn         func() context.Context
+	retryDelayFunc    RetryDelayFunc
+	taskCheckInterval time.Duration
+	isFailureFunc     func(error) bool
+	syncCh            chan<- *syncRequest
+	cancelations      *base.Cancelations
+	concurrency       int
+	queues            map[string]int
+	strictPriority    bool
+	errHandler        ErrorHandler
+	shutdownTimeout   time.Duration
+	starting          chan<- *workerInfo
+	finished          chan<- *base.TaskMessage
 }
 
 // newProcessor constructs a new processor.
@@ -97,26 +98,27 @@ func newProcessor(params processorParams) *processor {
 		orderedQueues = sortByPriority(queues)
 	}
 	return &processor{
-		logger:          params.logger,
-		broker:          params.broker,
-		baseCtxFn:       params.baseCtxFn,
-		clock:           timeutil.NewRealClock(),
-		queueConfig:     queues,
-		orderedQueues:   orderedQueues,
-		retryDelayFunc:  params.retryDelayFunc,
-		isFailureFunc:   params.isFailureFunc,
-		syncRequestCh:   params.syncCh,
-		cancelations:    params.cancelations,
-		errLogLimiter:   rate.NewLimiter(rate.Every(3*time.Second), 1),
-		sema:            make(chan struct{}, params.concurrency),
-		done:            make(chan struct{}),
-		quit:            make(chan struct{}),
-		abort:           make(chan struct{}),
-		errHandler:      params.errHandler,
-		handler:         HandlerFunc(func(ctx context.Context, t *Task) error { return fmt.Errorf("handler not set") }),
-		shutdownTimeout: params.shutdownTimeout,
-		starting:        params.starting,
-		finished:        params.finished,
+		logger:            params.logger,
+		broker:            params.broker,
+		baseCtxFn:         params.baseCtxFn,
+		clock:             timeutil.NewRealClock(),
+		queueConfig:       queues,
+		orderedQueues:     orderedQueues,
+		taskCheckInterval: params.taskCheckInterval,
+		retryDelayFunc:    params.retryDelayFunc,
+		isFailureFunc:     params.isFailureFunc,
+		syncRequestCh:     params.syncCh,
+		cancelations:      params.cancelations,
+		errLogLimiter:     rate.NewLimiter(rate.Every(3*time.Second), 1),
+		sema:              make(chan struct{}, params.concurrency),
+		done:              make(chan struct{}),
+		quit:              make(chan struct{}),
+		abort:             make(chan struct{}),
+		errHandler:        params.errHandler,
+		handler:           HandlerFunc(func(ctx context.Context, t *Task) error { return fmt.Errorf("handler not set") }),
+		shutdownTimeout:   params.shutdownTimeout,
+		starting:          params.starting,
+		finished:          params.finished,
 	}
 }
 
@@ -179,7 +181,7 @@ func (p *processor) exec() {
 			// Sleep to avoid slamming redis and let scheduler move tasks into queues.
 			// Note: We are not using blocking pop operation and polling queues instead.
 			// This adds significant load to redis.
-			time.Sleep(time.Second)
+			time.Sleep(p.taskCheckInterval)
 			<-p.sema // release token
 			return
 		case err != nil:
@@ -413,7 +415,9 @@ func (p *processor) queues() []string {
 func (p *processor) perform(ctx context.Context, task *Task) (err error) {
 	defer func() {
 		if x := recover(); x != nil {
-			p.logger.Errorf("recovering from panic. See the stack trace below for details:\n%s", string(debug.Stack()))
+			errMsg := string(debug.Stack())
+
+			p.logger.Errorf("recovering from panic. See the stack trace below for details:\n%s", errMsg)
 			_, file, line, ok := runtime.Caller(1) // skip the first frame (panic itself)
 			if ok && strings.Contains(file, "runtime/") {
 				// The panic came from the runtime, most likely due to incorrect
@@ -426,6 +430,9 @@ func (p *processor) perform(ctx context.Context, task *Task) (err error) {
 				err = fmt.Errorf("panic [%s:%d]: %v", file, line, x)
 			} else {
 				err = fmt.Errorf("panic: %v", x)
+			}
+			err = &errors.PanicError{
+				ErrMsg: errMsg,
 			}
 		}
 	}()
@@ -520,4 +527,8 @@ func (p *processor) computeDeadline(msg *base.TaskMessage) time.Time {
 		return p.clock.Now().Add(time.Duration(msg.Timeout) * time.Second)
 	}
 	return time.Unix(msg.Deadline, 0)
+}
+
+func IsPanicError(err error) bool {
+	return errors.IsPanicError(err)
 }

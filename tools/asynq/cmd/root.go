@@ -16,10 +16,10 @@ import (
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/fatih/color"
-	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/utf8string"
@@ -351,7 +351,7 @@ func initConfig() {
 // createRDB creates a RDB instance using flag values and returns it.
 func createRDB() *rdb.RDB {
 	var c redis.UniversalClient
-	if useRedisCluster {
+	if viper.GetBool("cluster") {
 		addrs := strings.Split(viper.GetString("cluster_addrs"), ",")
 		c = redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs:     addrs,
@@ -375,7 +375,7 @@ func createInspector() *asynq.Inspector {
 }
 
 func getRedisConnOpt() asynq.RedisConnOpt {
-	if useRedisCluster {
+	if viper.GetBool("cluster") {
 		addrs := strings.Split(viper.GetString("cluster_addrs"), ",")
 		return asynq.RedisClusterClientOpt{
 			Addrs:     addrs,

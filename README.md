@@ -47,11 +47,14 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 
 **Status**: The library is currently undergoing **heavy development** with frequent, breaking API changes.
 
-> ☝️ **Important Note**: Current major version is zero (`v0.x.x`) to accomodate rapid development and fast iteration while getting early feedback from users (_feedback on APIs are appreciated!_). The public API could change without a major version update before `v1.0.0` release.
+> ☝️ **Important Note**: Current major version is zero (`v0.x.x`) to accommodate rapid development and fast iteration while getting early feedback from users (_feedback on APIs are appreciated!_). The public API could change without a major version update before `v1.0.0` release.
+
+## Sponsoring
+If you are using this package in production, **please consider sponsoring the project to show your support!**
 
 ## Quickstart
 
-Make sure you have Go installed ([download](https://golang.org/dl/)). Version `1.14` or higher is required.
+Make sure you have Go installed ([download](https://golang.org/dl/)). Latest two Go versions are supported (See https://go.dev/dl).
 
 Initialize your project by creating a folder and then running `go mod init github.com/your/repo` ([learn more](https://blog.golang.org/using-go-modules)) inside the folder. Then install Asynq library with the [`go get`](https://golang.org/cmd/go/#hdr-Add_dependencies_to_current_module_and_install_them) command:
 
@@ -292,7 +295,7 @@ Asynq ships with a command line tool to inspect the state of queues and tasks.
 To install the CLI tool, run the following command:
 
 ```sh
-go install github.com/hibiken/asynq/tools/asynq
+go install github.com/hibiken/asynq/tools/asynq@latest
 ```
 
 Here's an example of running the `asynq dash` command:

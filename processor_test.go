@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -62,20 +63,21 @@ func newProcessorForTest(t *testing.T, r *rdb.RDB, h Handler) *processor {
 	go fakeHeartbeater(starting, finished, done)
 	go fakeSyncer(syncCh, done)
 	p := newProcessor(processorParams{
-		logger:          testLogger,
-		broker:          r,
-		baseCtxFn:       context.Background,
-		retryDelayFunc:  DefaultRetryDelayFunc,
-		isFailureFunc:   defaultIsFailureFunc,
-		syncCh:          syncCh,
-		cancelations:    base.NewCancelations(),
-		concurrency:     10,
-		queues:          defaultQueueConfig,
-		strictPriority:  false,
-		errHandler:      nil,
-		shutdownTimeout: defaultShutdownTimeout,
-		starting:        starting,
-		finished:        finished,
+		logger:            testLogger,
+		broker:            r,
+		baseCtxFn:         context.Background,
+		retryDelayFunc:    DefaultRetryDelayFunc,
+		taskCheckInterval: defaultTaskCheckInterval,
+		isFailureFunc:     defaultIsFailureFunc,
+		syncCh:            syncCh,
+		cancelations:      base.NewCancelations(),
+		concurrency:       10,
+		queues:            defaultQueueConfig,
+		strictPriority:    false,
+		errHandler:        nil,
+		shutdownTimeout:   defaultShutdownTimeout,
+		starting:          starting,
+		finished:          finished,
 	})
 	p.handler = h
 	return p
@@ -538,20 +540,21 @@ func TestProcessorWithExpiredLease(t *testing.T) {
 		}()
 		go fakeSyncer(syncCh, done)
 		p := newProcessor(processorParams{
-			logger:          testLogger,
-			broker:          rdbClient,
-			baseCtxFn:       context.Background,
-			retryDelayFunc:  DefaultRetryDelayFunc,
-			isFailureFunc:   defaultIsFailureFunc,
-			syncCh:          syncCh,
-			cancelations:    base.NewCancelations(),
-			concurrency:     10,
-			queues:          defaultQueueConfig,
-			strictPriority:  false,
-			errHandler:      nil,
-			shutdownTimeout: defaultShutdownTimeout,
-			starting:        starting,
-			finished:        finished,
+			logger:            testLogger,
+			broker:            rdbClient,
+			baseCtxFn:         context.Background,
+			taskCheckInterval: defaultTaskCheckInterval,
+			retryDelayFunc:    DefaultRetryDelayFunc,
+			isFailureFunc:     defaultIsFailureFunc,
+			syncCh:            syncCh,
+			cancelations:      base.NewCancelations(),
+			concurrency:       10,
+			queues:            defaultQueueConfig,
+			strictPriority:    false,
+			errHandler:        nil,
+			shutdownTimeout:   defaultShutdownTimeout,
+			starting:          starting,
+			finished:          finished,
 		})
 		p.handler = tc.handler
 		var (
@@ -692,20 +695,21 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		go fakeHeartbeater(starting, finished, done)
 		go fakeSyncer(syncCh, done)
 		p := newProcessor(processorParams{
-			logger:          testLogger,
-			broker:          rdbClient,
-			baseCtxFn:       context.Background,
-			retryDelayFunc:  DefaultRetryDelayFunc,
-			isFailureFunc:   defaultIsFailureFunc,
-			syncCh:          syncCh,
-			cancelations:    base.NewCancelations(),
-			concurrency:     1, // Set concurrency to 1 to make sure tasks are processed one at a time.
-			queues:          queueCfg,
-			strictPriority:  true,
-			errHandler:      nil,
-			shutdownTimeout: defaultShutdownTimeout,
-			starting:        starting,
-			finished:        finished,
+			logger:            testLogger,
+			broker:            rdbClient,
+			baseCtxFn:         context.Background,
+			taskCheckInterval: defaultTaskCheckInterval,
+			retryDelayFunc:    DefaultRetryDelayFunc,
+			isFailureFunc:     defaultIsFailureFunc,
+			syncCh:            syncCh,
+			cancelations:      base.NewCancelations(),
+			concurrency:       1, // Set concurrency to 1 to make sure tasks are processed one at a time.
+			queues:            queueCfg,
+			strictPriority:    true,
+			errHandler:        nil,
+			shutdownTimeout:   defaultShutdownTimeout,
+			starting:          starting,
+			finished:          finished,
 		})
 		p.handler = HandlerFunc(handler)
 
@@ -919,5 +923,47 @@ func TestProcessorComputeDeadline(t *testing.T) {
 		if got.Unix() != tc.want.Unix() {
 			t.Errorf("%s: got=%v, want=%v", tc.desc, got.Unix(), tc.want.Unix())
 		}
+	}
+}
+
+func TestReturnPanicError(t *testing.T) {
+
+	task := NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"}))
+
+	tests := []struct {
+		name         string
+		handler      HandlerFunc
+		IsPanicError bool
+	}{
+		{
+			name: "should return panic error when occurred panic recovery",
+			handler: func(ctx context.Context, t *Task) error {
+				panic("something went terribly wrong")
+			},
+			IsPanicError: true,
+		},
+		{
+			name: "should return normal error when don't occur panic recovery",
+			handler: func(ctx context.Context, t *Task) error {
+				return fmt.Errorf("something went terribly wrong")
+			},
+			IsPanicError: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := processor{
+				logger:  log.NewLogger(nil),
+				handler: tc.handler,
+			}
+			got := p.perform(context.Background(), task)
+			if tc.IsPanicError != IsPanicError(got) {
+				t.Errorf("%s: got=%t, want=%t", tc.name, IsPanicError(got), tc.IsPanicError)
+			}
+			if tc.IsPanicError && !strings.HasPrefix(got.Error(), "panic error cause by:") {
+				t.Error("wrong text msg for panic error")
+			}
+		})
 	}
 }
