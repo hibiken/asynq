@@ -181,7 +181,8 @@ func (p *processor) exec() {
 			// Sleep to avoid slamming redis and let scheduler move tasks into queues.
 			// Note: We are not using blocking pop operation and polling queues instead.
 			// This adds significant load to redis.
-			time.Sleep(p.taskCheckInterval)
+			jitter := time.Duration(rand.Intn(int(p.taskCheckInterval)))
+			time.Sleep(p.taskCheckInterval/2 + jitter)
 			<-p.sema // release token
 			return
 		case err != nil:
