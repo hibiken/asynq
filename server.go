@@ -103,7 +103,7 @@ type Config struct {
 	// If BaseContext is nil, the default is context.Background().
 	// If this is defined, then it MUST return a non-nil context
 	BaseContext func() context.Context
-	
+
 	// TaskCheckInterval specifies the interval between checks for new tasks to process when all queues are empty.
 	//
 	// If unset, zero or a negative value, the interval is set to 1 second.
@@ -182,6 +182,11 @@ type Config struct {
 	//     ErrorHandler: asynq.ErrorHandlerFunc(reportError)
 
 	ErrorHandler ErrorHandler
+
+	// FinishedHandler handles a task that has been processed.
+	//
+	// FinishedHandler is called when the task status becomes completed or archived.
+	FinishedHandler FinishedHandler
 
 	// Logger specifies the logger used by the server instance.
 	//
@@ -273,6 +278,20 @@ type ErrorHandlerFunc func(ctx context.Context, task *Task, err error)
 // HandleError calls fn(ctx, task, err)
 func (fn ErrorHandlerFunc) HandleError(ctx context.Context, task *Task, err error) {
 	fn(ctx, task, err)
+}
+
+// An FinishedHandler handles a task that has been processed.
+type FinishedHandler interface {
+	HandleFinished(task *TaskInfo)
+}
+
+// The FinishedHandlerFunc type is an adapter to allow the use of  ordinary functions as a FinishedHandler.
+// If f is a function with the appropriate signature, FinishedHandlerFunc(f) is a FinishedHandler that calls f.
+type FinishedHandlerFunc func(task *TaskInfo)
+
+// HandleFinished calls fn(ctx, task, err)
+func (fn FinishedHandlerFunc) HandleFinished(task *TaskInfo) {
+	fn(task)
 }
 
 // RetryDelayFunc calculates the retry delay duration for a failed task given
@@ -529,6 +548,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		queues:            queues,
 		strictPriority:    cfg.StrictPriority,
 		errHandler:        cfg.ErrorHandler,
+		finishedHandler:   cfg.FinishedHandler,
 		shutdownTimeout:   shutdownTimeout,
 		starting:          starting,
 		finished:          finished,
