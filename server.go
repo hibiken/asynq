@@ -103,7 +103,7 @@ type Config struct {
 	// If BaseContext is nil, the default is context.Background().
 	// If this is defined, then it MUST return a non-nil context
 	BaseContext func() context.Context
-	
+
 	// TaskCheckInterval specifies the interval between checks for new tasks to process when all queues are empty.
 	//
 	// If unset, zero or a negative value, the interval is set to 1 second.
