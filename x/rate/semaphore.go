@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hibiken/asynq"
-	asynqcontext "github.com/hibiken/asynq/internal/context"
+	"github.com/dusty-cjh/asynq"
+	asynqcontext "github.com/dusty-cjh/asynq/internal/context"
 	"github.com/redis/go-redis/v9"
 )
 

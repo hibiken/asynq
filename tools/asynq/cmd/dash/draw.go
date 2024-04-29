@@ -13,8 +13,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/dusty-cjh/asynq"
 	"github.com/gdamore/tcell/v2"
-	"github.com/hibiken/asynq"
 	"github.com/mattn/go-runewidth"
 )
 

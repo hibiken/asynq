@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dusty-cjh/asynq/internal/base"
+	"github.com/dusty-cjh/asynq/internal/rdb"
+	h "github.com/dusty-cjh/asynq/internal/testutil"
+	"github.com/dusty-cjh/asynq/internal/timeutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/rdb"
-	h "github.com/hibiken/asynq/internal/testutil"
-	"github.com/hibiken/asynq/internal/timeutil"
 	"github.com/redis/go-redis/v9"
 )
 
