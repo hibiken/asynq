@@ -103,7 +103,7 @@ type Config struct {
 	// If BaseContext is nil, the default is context.Background().
 	// If this is defined, then it MUST return a non-nil context
 	BaseContext func() context.Context
-	
+
 	// TaskCheckInterval specifies the interval between checks for new tasks to process when all queues are empty.
 	//
 	// If unset, zero or a negative value, the interval is set to 1 second.
@@ -234,6 +234,12 @@ type Config struct {
 	//
 	// If unset or zero, no size limit is used.
 	GroupMaxSize int
+
+	//	GroupMaxMemoryUsage specifies the maximum memory usage of the tasks that can be aggregated into a single task within a group.
+	//	If GroupMaxMemoryUsage is reached, the server will aggregate the tasks into one immediately.
+	//
+	//	If unset or zero, no memory usage limit is used.
+	GroupMaxMemoryUsage int
 
 	// GroupAggregator specifies the aggregation function used to aggregate multiple tasks in a group into one task.
 	//
@@ -560,6 +566,7 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		gracePeriod:     groupGracePeriod,
 		maxDelay:        cfg.GroupMaxDelay,
 		maxSize:         cfg.GroupMaxSize,
+		maxMemoryUsage:  cfg.GroupMaxMemoryUsage,
 		groupAggregator: cfg.GroupAggregator,
 	})
 	return &Server{

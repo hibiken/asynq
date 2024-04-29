@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/redis/go-redis/v9"
 )
 
 var errRedisDown = errors.New("testutil: redis is down")
@@ -262,13 +262,13 @@ func (tb *TestBroker) ListGroups(qname string) ([]string, error) {
 	return tb.real.ListGroups(qname)
 }
 
-func (tb *TestBroker) AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int) (aggregationSetID string, err error) {
+func (tb *TestBroker) AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int, maxMemoryUsage int) (aggregationSetID string, err error) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return "", errRedisDown
 	}
-	return tb.real.AggregationCheck(qname, gname, t, gracePeriod, maxDelay, maxSize)
+	return tb.real.AggregationCheck(qname, gname, t, gracePeriod, maxDelay, maxSize, maxMemoryUsage)
 }
 
 func (tb *TestBroker) ReadAggregationSet(qname, gname, aggregationSetID string) ([]*base.TaskMessage, time.Time, error) {

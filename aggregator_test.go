@@ -126,6 +126,7 @@ func TestAggregator(t *testing.T) {
 			gracePeriod:     tc.gracePeriod,
 			maxDelay:        tc.maxDelay,
 			maxSize:         tc.maxSize,
+			maxMemoryUsage:  128 * 1024,
 			groupAggregator: GroupAggregatorFunc(tc.aggregateFunc),
 		})
 

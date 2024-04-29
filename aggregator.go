@@ -27,9 +27,10 @@ type aggregator struct {
 	queues []string
 
 	// Group configurations
-	gracePeriod time.Duration
-	maxDelay    time.Duration
-	maxSize     int
+	gracePeriod    time.Duration
+	maxDelay       time.Duration
+	maxSize        int
+	maxMemoryUsage int
 
 	// User provided group aggregator.
 	ga GroupAggregator
@@ -49,6 +50,7 @@ type aggregatorParams struct {
 	gracePeriod     time.Duration
 	maxDelay        time.Duration
 	maxSize         int
+	maxMemoryUsage  int
 	groupAggregator GroupAggregator
 }
 
@@ -67,17 +69,18 @@ func newAggregator(params aggregatorParams) *aggregator {
 		interval = params.gracePeriod
 	}
 	return &aggregator{
-		logger:      params.logger,
-		broker:      params.broker,
-		client:      &Client{broker: params.broker},
-		done:        make(chan struct{}),
-		queues:      params.queues,
-		gracePeriod: params.gracePeriod,
-		maxDelay:    params.maxDelay,
-		maxSize:     params.maxSize,
-		ga:          params.groupAggregator,
-		sema:        make(chan struct{}, maxConcurrentAggregationChecks),
-		interval:    interval,
+		logger:         params.logger,
+		broker:         params.broker,
+		client:         &Client{broker: params.broker},
+		done:           make(chan struct{}),
+		queues:         params.queues,
+		gracePeriod:    params.gracePeriod,
+		maxDelay:       params.maxDelay,
+		maxSize:        params.maxSize,
+		maxMemoryUsage: params.maxMemoryUsage,
+		ga:             params.groupAggregator,
+		sema:           make(chan struct{}, maxConcurrentAggregationChecks),
+		interval:       interval,
 	}
 }
 
@@ -137,7 +140,7 @@ func (a *aggregator) aggregate(t time.Time) {
 		}
 		for _, gname := range groups {
 			aggregationSetID, err := a.broker.AggregationCheck(
-				qname, gname, t, a.gracePeriod, a.maxDelay, a.maxSize)
+				qname, gname, t, a.gracePeriod, a.maxDelay, a.maxSize, a.maxMemoryUsage)
 			if err != nil {
 				a.logger.Errorf("Failed to run aggregation check: queue=%q group=%q", qname, gname)
 				continue

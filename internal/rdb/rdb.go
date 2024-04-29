@@ -1028,16 +1028,19 @@ if size == 0 then
 	return 0
 end
 
-local mem_usage = redis.call('MEMORY', 'USAGE', KEYS[1])
-if mem_usage > tonumber(ARGV[7]) then
-	local res = redis.call("ZRANGE", KEYS[1], 0, -1, "WITHSCORES")
-	for i=1, table.getn(res)-1, 2 do
-		redis.call("ZADD", KEYS[2], tonumber(res[i+1]), res[i])
+local maxMemoryUsage = tonumber(ARGV[7])
+if maxMemoryUsage > 0 then
+	local mem_usage = redis.call('MEMORY', 'USAGE', KEYS[1])
+	if mem_usage > maxMemoryUsage then
+		local res = redis.call("ZRANGE", KEYS[1], 0, -1, "WITHSCORES")
+		for i=1, table.getn(res)-1, 2 do
+			redis.call("ZADD", KEYS[2], tonumber(res[i+1]), res[i])
+		end
+		redis.call("ZREMRANGEBYRANK", KEYS[1], 0, -1)
+		redis.call("ZADD", KEYS[3], ARGV[4], KEYS[2])
+		redis.call("SREM", KEYS[4], ARGV[6])
+		return 1
 	end
-	redis.call("ZREMRANGEBYRANK", KEYS[1], 0, -1)
-	redis.call("ZADD", KEYS[3], ARGV[4], KEYS[2])
-	redis.call("SREM", KEYS[4], ARGV[6])
-	return 1
 end
 
 local maxSize = tonumber(ARGV[1])
@@ -1101,7 +1104,7 @@ const aggregationTimeout = 2 * time.Minute
 //
 // Note: It assumes that this function is called at frequency less than or equal to the gracePeriod. In other words,
 // the function only checks the most recently added task against the given gracePeriod.
-func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int) (string, error) {
+func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int, maxMemoryUsage int) (string, error) {
 	var op errors.Op = "RDB.AggregationCheck"
 	aggregationSetID := uuid.NewString()
 	expireTime := r.clock.Now().Add(aggregationTimeout)
@@ -1118,7 +1121,7 @@ func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, ma
 		expireTime.Unix(),
 		t.Unix(),
 		gname,
-		128 * 1024, // 128KB, around 3000 concurrency per GB
+		maxMemoryUsage,
 	}
 	n, err := r.runScriptWithErrorCode(context.Background(), op, aggregationCheckCmd, keys, argv...)
 	if err != nil {

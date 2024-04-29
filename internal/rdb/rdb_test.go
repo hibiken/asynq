@@ -3408,7 +3408,7 @@ func TestAggregationCheck(t *testing.T) {
 			h.SeedRedisZSets(t, r.client, tc.groups)
 			h.SeedRedisSets(t, r.client, tc.allGroups)
 
-			aggregationSetID, err := r.AggregationCheck(tc.qname, tc.gname, now, tc.gracePeriod, tc.maxDelay, tc.maxSize)
+			aggregationSetID, err := r.AggregationCheck(tc.qname, tc.gname, now, tc.gracePeriod, tc.maxDelay, tc.maxSize, 128*1024)
 			if err != nil {
 				t.Fatalf("AggregationCheck returned error: %v", err)
 			}
