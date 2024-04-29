@@ -1013,6 +1013,7 @@ func (r *RDB) ListGroups(qname string) ([]string, error) {
 // ARGV[4] -> aggregation set expire time
 // ARGV[5] -> current time in unix time
 // ARGV[6] -> group name
+// ARGV[7] -> max memory usage
 //
 // Output:
 // Returns 0 if no aggregation set was created
@@ -1026,6 +1027,19 @@ local size = redis.call("ZCARD", KEYS[1])
 if size == 0 then
 	return 0
 end
+
+local mem_usage = redis.call('MEMORY', 'USAGE', KEYS[1])
+if mem_usage > tonumber(ARGV[7]) then
+	local res = redis.call("ZRANGE", KEYS[1], 0, -1, "WITHSCORES")
+	for i=1, table.getn(res)-1, 2 do
+		redis.call("ZADD", KEYS[2], tonumber(res[i+1]), res[i])
+	end
+	redis.call("ZREMRANGEBYRANK", KEYS[1], 0, -1)
+	redis.call("ZADD", KEYS[3], ARGV[4], KEYS[2])
+	redis.call("SREM", KEYS[4], ARGV[6])
+	return 1
+end
+
 local maxSize = tonumber(ARGV[1])
 if maxSize ~= 0 and size >= maxSize then
 	local res = redis.call("ZRANGE", KEYS[1], 0, maxSize-1, "WITHSCORES")
@@ -1104,6 +1118,7 @@ func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, ma
 		expireTime.Unix(),
 		t.Unix(),
 		gname,
+		128 * 1024, // 128KB, around 3000 concurrency per GB
 	}
 	n, err := r.runScriptWithErrorCode(context.Background(), op, aggregationCheckCmd, keys, argv...)
 	if err != nil {
