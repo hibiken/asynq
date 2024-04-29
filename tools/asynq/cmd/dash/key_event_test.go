@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq"
+	"github.com/dusty-cjh/asynq"
 	"github.com/gdamore/tcell/v2"
 	"github.com/google/go-cmp/cmp"
 )

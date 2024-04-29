@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hibiken/asynq/internal/log"
-	h "github.com/hibiken/asynq/internal/testutil"
+	"github.com/dusty-cjh/asynq/internal/log"
+	h "github.com/dusty-cjh/asynq/internal/testutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/redis/go-redis/v9"

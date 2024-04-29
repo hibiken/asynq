@@ -17,7 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/MakeNowJust/heredoc/v2"
-	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/dusty-cjh/asynq/internal/rdb"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )

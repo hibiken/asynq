@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/hibiken/asynq"
+	"github.com/dusty-cjh/asynq"
 	"github.com/gdamore/tcell/v2"
 )
 

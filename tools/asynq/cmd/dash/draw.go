@@ -13,7 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/hibiken/asynq"
+	"github.com/dusty-cjh/asynq"
 )
 
 var (

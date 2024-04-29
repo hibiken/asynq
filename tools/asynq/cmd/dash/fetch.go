@@ -7,7 +7,7 @@ package dash
 import (
 	"sort"
 
-	"github.com/hibiken/asynq"
+	"github.com/dusty-cjh/asynq"
 )
 
 type fetcher interface {
