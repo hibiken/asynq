@@ -1,4 +1,4 @@
-module github.com/dusty-cjh/asynq
+module github.com/hibiken/asynq
 
 go 1.20
 

@@ -15,9 +15,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/MakeNowJust/heredoc/v2"
-	"github.com/dusty-cjh/asynq"
-	"github.com/dusty-cjh/asynq/internal/base"
-	"github.com/dusty-cjh/asynq/internal/rdb"
+	"github.com/hibiken/asynq"
+	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/fatih/color"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
@@ -57,7 +57,7 @@ var rootCmd = &cobra.Command{
 		$ asynq task list --queue=myqueue --state=archived`),
 	Annotations: map[string]string{
 		"help:feedback": heredoc.Doc(`
-			Open an issue at https://github.com/dusty-cjh/asynq/issues/new/choose`),
+			Open an issue at https://github.com/hibiken/asynq/issues/new/choose`),
 	},
 }
 

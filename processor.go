@@ -16,11 +16,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dusty-cjh/asynq/internal/base"
-	asynqcontext "github.com/dusty-cjh/asynq/internal/context"
-	"github.com/dusty-cjh/asynq/internal/errors"
-	"github.com/dusty-cjh/asynq/internal/log"
-	"github.com/dusty-cjh/asynq/internal/timeutil"
+	"github.com/hibiken/asynq/internal/base"
+	asynqcontext "github.com/hibiken/asynq/internal/context"
+	"github.com/hibiken/asynq/internal/errors"
+	"github.com/hibiken/asynq/internal/log"
+	"github.com/hibiken/asynq/internal/timeutil"
 	"golang.org/x/time/rate"
 )
 

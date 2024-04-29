@@ -1,10 +1,10 @@
-module github.com/dusty-cjh/asynq/x
+module github.com/hibiken/asynq/x
 
 go 1.20
 
 require (
 	github.com/google/uuid v1.4.0
-	github.com/dusty-cjh/asynq v0.24.1
+	github.com/hibiken/asynq v0.24.1
 	github.com/prometheus/client_golang v1.11.1
 	github.com/redis/go-redis/v9 v9.3.0
 )

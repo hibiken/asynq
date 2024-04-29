@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dusty-cjh/asynq/internal/base"
-	"github.com/dusty-cjh/asynq/internal/rdb"
-	"github.com/dusty-cjh/asynq/internal/testbroker"
+	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq/internal/testbroker"
 )
 
 func TestSubscriber(t *testing.T) {

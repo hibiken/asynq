@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dusty-cjh/asynq/internal/base"
-	"github.com/dusty-cjh/asynq/internal/timeutil"
+	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/timeutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"

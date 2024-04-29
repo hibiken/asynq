@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dusty-cjh/asynq/internal/base"
-	"github.com/dusty-cjh/asynq/internal/errors"
-	"github.com/dusty-cjh/asynq/internal/rdb"
+	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/errors"
+	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/redis/go-redis/v9"
 )
 

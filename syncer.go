@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dusty-cjh/asynq/internal/log"
+	"github.com/hibiken/asynq/internal/log"
 )
 
 // syncer is responsible for queuing up failed requests to redis and retry

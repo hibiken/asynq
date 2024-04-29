@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dusty-cjh/asynq"
+	"github.com/hibiken/asynq"
 	"github.com/gdamore/tcell/v2"
 )
 

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dusty-cjh/asynq/internal/base"
-	"github.com/dusty-cjh/asynq/internal/log"
+	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/log"
 )
 
 // A janitor is responsible for deleting expired completed tasks from the specified
