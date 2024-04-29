@@ -3,7 +3,7 @@ module github.com/dusty-cjh/asynq/x
 go 1.20
 
 require (
-	github.com/dusty-cjh/asynq v0.0.0-20240429083202-16c439703d45
+	github.com/dusty-cjh/asynq master
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.11.1
 	github.com/redis/go-redis/v9 v9.4.0
