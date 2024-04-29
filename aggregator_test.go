@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dusty-cjh/asynq/internal/base"
+	"github.com/dusty-cjh/asynq/internal/rdb"
+	h "github.com/dusty-cjh/asynq/internal/testutil"
 	"github.com/google/go-cmp/cmp"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/rdb"
-	h "github.com/hibiken/asynq/internal/testutil"
 )
 
 func TestAggregator(t *testing.T) {
@@ -126,6 +126,7 @@ func TestAggregator(t *testing.T) {
 			gracePeriod:     tc.gracePeriod,
 			maxDelay:        tc.maxDelay,
 			maxSize:         tc.maxSize,
+			maxMemoryUsage:  128 * 1024,
 			groupAggregator: GroupAggregatorFunc(tc.aggregateFunc),
 		})
 

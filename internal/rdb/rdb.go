@@ -11,10 +11,10 @@ import (
 	"math"
 	"time"
 
+	"github.com/dusty-cjh/asynq/internal/base"
+	"github.com/dusty-cjh/asynq/internal/errors"
+	"github.com/dusty-cjh/asynq/internal/timeutil"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/errors"
-	"github.com/hibiken/asynq/internal/timeutil"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
 )
@@ -1013,6 +1013,7 @@ func (r *RDB) ListGroups(qname string) ([]string, error) {
 // ARGV[4] -> aggregation set expire time
 // ARGV[5] -> current time in unix time
 // ARGV[6] -> group name
+// ARGV[7] -> max memory usage
 //
 // Output:
 // Returns 0 if no aggregation set was created
@@ -1026,6 +1027,22 @@ local size = redis.call("ZCARD", KEYS[1])
 if size == 0 then
 	return 0
 end
+
+local maxMemoryUsage = tonumber(ARGV[7])
+if maxMemoryUsage > 0 then
+	local mem_usage = redis.call('MEMORY', 'USAGE', KEYS[1])
+	if mem_usage > maxMemoryUsage then
+		local res = redis.call("ZRANGE", KEYS[1], 0, -1, "WITHSCORES")
+		for i=1, table.getn(res)-1, 2 do
+			redis.call("ZADD", KEYS[2], tonumber(res[i+1]), res[i])
+		end
+		redis.call("ZREMRANGEBYRANK", KEYS[1], 0, -1)
+		redis.call("ZADD", KEYS[3], ARGV[4], KEYS[2])
+		redis.call("SREM", KEYS[4], ARGV[6])
+		return 1
+	end
+end
+
 local maxSize = tonumber(ARGV[1])
 if maxSize ~= 0 and size >= maxSize then
 	local res = redis.call("ZRANGE", KEYS[1], 0, maxSize-1, "WITHSCORES")
@@ -1087,7 +1104,7 @@ const aggregationTimeout = 2 * time.Minute
 //
 // Note: It assumes that this function is called at frequency less than or equal to the gracePeriod. In other words,
 // the function only checks the most recently added task against the given gracePeriod.
-func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int) (string, error) {
+func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int, maxMemoryUsage int) (string, error) {
 	var op errors.Op = "RDB.AggregationCheck"
 	aggregationSetID := uuid.NewString()
 	expireTime := r.clock.Now().Add(aggregationTimeout)
@@ -1104,6 +1121,7 @@ func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, ma
 		expireTime.Unix(),
 		t.Unix(),
 		gname,
+		maxMemoryUsage,
 	}
 	n, err := r.runScriptWithErrorCode(context.Background(), op, aggregationCheckCmd, keys, argv...)
 	if err != nil {

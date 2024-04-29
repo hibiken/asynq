@@ -14,16 +14,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dusty-cjh/asynq/internal/errors"
+	pb "github.com/dusty-cjh/asynq/internal/proto"
+	"github.com/dusty-cjh/asynq/internal/timeutil"
 	"github.com/golang/protobuf/ptypes"
-	"github.com/hibiken/asynq/internal/errors"
-	pb "github.com/hibiken/asynq/internal/proto"
-	"github.com/hibiken/asynq/internal/timeutil"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 )
 
 // Version of asynq library and CLI.
-const Version = "0.24.1"
+const Version = "0.24.2"
 
 // DefaultQueueName is the queue name used if none are specified by user.
 const DefaultQueueName = "default"
@@ -731,7 +731,7 @@ type Broker interface {
 	AddToGroup(ctx context.Context, msg *TaskMessage, gname string) error
 	AddToGroupUnique(ctx context.Context, msg *TaskMessage, groupKey string, ttl time.Duration) error
 	ListGroups(qname string) ([]string, error)
-	AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int) (aggregationSetID string, err error)
+	AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int, maxMemoryUsage int) (aggregationSetID string, err error)
 	ReadAggregationSet(qname, gname, aggregationSetID string) ([]*TaskMessage, time.Time, error)
 	DeleteAggregationSet(ctx context.Context, qname, gname, aggregationSetID string) error
 	ReclaimStaleAggregationSets(qname string) error

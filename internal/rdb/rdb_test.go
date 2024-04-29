@@ -15,13 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dusty-cjh/asynq/internal/base"
+	"github.com/dusty-cjh/asynq/internal/errors"
+	h "github.com/dusty-cjh/asynq/internal/testutil"
+	"github.com/dusty-cjh/asynq/internal/timeutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/errors"
-	h "github.com/hibiken/asynq/internal/testutil"
-	"github.com/hibiken/asynq/internal/timeutil"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -3408,7 +3408,7 @@ func TestAggregationCheck(t *testing.T) {
 			h.SeedRedisZSets(t, r.client, tc.groups)
 			h.SeedRedisSets(t, r.client, tc.allGroups)
 
-			aggregationSetID, err := r.AggregationCheck(tc.qname, tc.gname, now, tc.gracePeriod, tc.maxDelay, tc.maxSize)
+			aggregationSetID, err := r.AggregationCheck(tc.qname, tc.gname, now, tc.gracePeriod, tc.maxDelay, tc.maxSize, 128*1024)
 			if err != nil {
 				t.Fatalf("AggregationCheck returned error: %v", err)
 			}

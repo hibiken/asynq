@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/MakeNowJust/heredoc/v2"
+	"github.com/dusty-cjh/asynq"
 	"github.com/fatih/color"
-	"github.com/hibiken/asynq"
 	"github.com/spf13/cobra"
 )
 

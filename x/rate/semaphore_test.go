@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dusty-cjh/asynq"
+	"github.com/dusty-cjh/asynq/internal/base"
+	asynqcontext "github.com/dusty-cjh/asynq/internal/context"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
-	"github.com/hibiken/asynq/internal/base"
-	asynqcontext "github.com/hibiken/asynq/internal/context"
 	"github.com/redis/go-redis/v9"
 )
 
