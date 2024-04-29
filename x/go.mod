@@ -3,10 +3,10 @@ module github.com/dusty-cjh/asynq/x
 go 1.20
 
 require (
-	github.com/google/uuid v1.4.0
-	github.com/dusty-cjh/asynq v0.24.1
+	github.com/dusty-cjh/asynq v0.0.0-20240429083202-16c439703d45
+	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.11.1
-	github.com/redis/go-redis/v9 v9.3.0
+	github.com/redis/go-redis/v9 v9.4.0
 )
 
 require (
@@ -20,7 +20,7 @@ require (
 	github.com/prometheus/procfs v0.6.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/spf13/cast v1.6.0 // indirect
-	golang.org/x/sys v0.15.0 // indirect
+	golang.org/x/sys v0.16.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 )
