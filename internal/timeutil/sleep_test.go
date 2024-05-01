@@ -2,7 +2,7 @@ package timeutil
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
+	"github.com/hibiken/asynq/internal/errors"
 	"sync"
 	"testing"
 	"time"
@@ -37,7 +37,9 @@ func TestSleep(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				err := Sleep(ctx, tc.sleep)
-				require.ErrorIs(t, tc.wantErr, err)
+				if !errors.Is(err, tc.wantErr) {
+					t.Errorf("timeutil.Sleep: got %v, want %v", err, tc.wantErr)
+				}
 			}()
 			time.Sleep(20 * time.Millisecond)
 			cancel()

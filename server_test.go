@@ -7,8 +7,6 @@ package asynq
 import (
 	"context"
 	"fmt"
-	"github.com/hibiken/asynq/internal/timeutil"
-	"github.com/redis/go-redis/v9"
 	"syscall"
 	"testing"
 	"time"
@@ -16,6 +14,8 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/hibiken/asynq/internal/testbroker"
 	"github.com/hibiken/asynq/internal/testutil"
+	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/goleak"
 )
 
