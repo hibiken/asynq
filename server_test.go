@@ -7,6 +7,8 @@ package asynq
 import (
 	"context"
 	"fmt"
+	"os"
+	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -58,27 +60,49 @@ func TestServerRun(t *testing.T) {
 	ignoreOpt := goleak.IgnoreTopFunction("github.com/redis/go-redis/v9/internal/pool.(*ConnPool).reaper")
 	defer goleak.VerifyNone(t, ignoreOpt)
 
-	srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
-
+	signalWindows := make(chan struct{})
 	done := make(chan struct{})
+	go func() {
+		defer close(done)
+
+		mux := NewServeMux()
+		srv := NewServer(RedisClientOpt{Addr: ":6379"}, Config{LogLevel: testLogLevel})
+		if err := srv.Start(mux); err != nil {
+			t.Error("start server:", err)
+		}
+		if runtime.GOOS == "windows" {
+			<-signalWindows
+		} else {
+			srv.waitForSignals()
+		}
+		srv.Shutdown()
+	}()
+	time.Sleep(1 * time.Second)
+
 	// Make sure server exits when receiving TERM signal.
 	go func() {
-		time.Sleep(2 * time.Second)
-		syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
-		done <- struct{}{}
-	}()
+		if runtime.GOOS == "windows" {
+			// It is not implemented to signal Interrupt on Windows
+			signalWindows <- struct{}{}
+			return
+		}
 
-	go func() {
-		select {
-		case <-time.After(10 * time.Second):
-			panic("server did not stop after receiving TERM signal")
-		case <-done:
+		p, err := os.FindProcess(os.Getpid())
+		if err != nil {
+			t.Error("find process:", err)
+			return
+		}
+		err = p.Signal(syscall.SIGTERM)
+		if err != nil {
+			t.Error("signal:", err)
+			return
 		}
 	}()
 
-	mux := NewServeMux()
-	if err := srv.Run(mux); err != nil {
-		t.Fatal(err)
+	select {
+	case <-time.After(10 * time.Second):
+		t.Error("stop server: server did not stop after receiving TERM signal")
+	case <-done:
 	}
 }
 
