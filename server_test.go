@@ -7,6 +7,8 @@ package asynq
 import (
 	"context"
 	"fmt"
+	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/redis/go-redis/v9"
 	"syscall"
 	"testing"
 	"time"
@@ -79,6 +81,48 @@ func TestServerRun(t *testing.T) {
 	mux := NewServeMux()
 	if err := srv.Run(mux); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestServerShutdown(t *testing.T) {
+	// https://github.com/go-redis/redis/issues/1029
+	ignoreOpt := goleak.IgnoreTopFunction("github.com/redis/go-redis/v9/internal/pool.(*ConnPool).reaper")
+	defer goleak.VerifyNone(t, ignoreOpt)
+
+	redisConnOpt := getRedisConnOpt(t)
+	r, ok := redisConnOpt.MakeRedisClient().(redis.UniversalClient)
+	if !ok {
+		t.Fatalf("asynq: unsupported RedisConnOpt type %T", r)
+	}
+	testutil.FlushDB(t, r)
+
+	c := NewClient(redisConnOpt)
+	defer c.Close()
+	_, err := c.Enqueue(NewTask("send_email", testutil.JSON(map[string]interface{}{"recipient_id": 123})))
+	if err != nil {
+		t.Fatalf("could not enqueue a task: %v", err)
+	}
+
+	srv := NewServer(redisConnOpt, Config{LogLevel: testLogLevel, ShutdownTimeout: 6 * time.Second})
+	done := make(chan struct{})
+	mux := NewServeMux()
+	mux.HandleFunc("send_email", func(ctx context.Context, task *Task) error {
+		err := timeutil.Sleep(ctx, 10*time.Second)
+		time.Sleep(1 * time.Second)
+		close(done)
+		return err
+	})
+	if err = srv.Start(mux); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1 * time.Second)
+	srv.Shutdown()
+
+	// confirm that active tasks have stopped when server is shut down.
+	select {
+	case <-done:
+	default:
+		t.Error("active tasks were not stopped when the server was shut down")
 	}
 }
 
