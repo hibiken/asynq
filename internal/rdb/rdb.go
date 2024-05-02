@@ -1217,7 +1217,7 @@ redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
 return redis.status_reply("OK")
 `)
 
-// ReclaimStateAggregationSets checks for any stale aggregation sets in the given queue, and
+// ReclaimStaleAggregationSets checks for any stale aggregation sets in the given queue, and
 // reclaim tasks in the stale aggregation set by putting them back in the group.
 func (r *RDB) ReclaimStaleAggregationSets(qname string) error {
 	var op errors.Op = "RDB.ReclaimStaleAggregationSets"
