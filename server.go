@@ -239,6 +239,55 @@ type Config struct {
 	//
 	// If unset or nil, the group aggregation feature will be disabled on the server.
 	GroupAggregator GroupAggregator
+
+	// StateChanged called when a task state changed
+	//
+	TaskStateProber *TaskStateProber
+}
+
+// TaskStateProber tell there's a state changed happening
+type TaskStateProber struct {
+	Probers map[string]string // map[state-string]data-name
+	Handler func(map[string]interface{})
+}
+
+func (p TaskStateProber) Changed(out map[string]interface{}) {
+	if p.Handler != nil {
+		p.Handler(out)
+	}
+}
+
+func (p TaskStateProber) Result(state base.TaskState, raw *base.TaskInfo) (key string, data interface{}) {
+	defer func() {
+		if len(key) == 0 {
+			key = "task"
+		}
+		if data == nil {
+			data = *newTaskInfo(raw.Message, raw.State, raw.NextProcessAt, raw.Result)
+		}
+	}()
+
+	probers := p.Probers
+	if len(probers) == 0 {
+		probers = map[string]string{"*": "task"}
+	}
+	key, ok := probers["*"]
+	if !ok {
+		key, ok = probers[state.String()]
+	}
+	if !ok {
+		return
+	}
+
+	switch key {
+	case "next":
+		data = raw.NextProcessAt
+	case "result":
+		if len(raw.Result) > 0 {
+			data = raw.Result
+		}
+	}
+	return
 }
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
@@ -485,6 +534,11 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	srvState := &serverState{value: srvStateNew}
 	cancels := base.NewCancelations()
 
+	taskStateProber := cfg.TaskStateProber
+	if taskStateProber != nil {
+		rdb.SetTaskProber(*taskStateProber)
+	}
+
 	syncer := newSyncer(syncerParams{
 		logger:     logger,
 		requestsCh: syncCh,
@@ -724,4 +778,9 @@ func (srv *Server) Stop() {
 	srv.logger.Info("Stopping processor")
 	srv.processor.stop()
 	srv.logger.Info("Processor stopped")
+}
+
+// StateChanged watch state updates, with more customized detail
+func (srv *Server) SetTaskStateProber(prober base.TaskProber) {
+	srv.broker.SetTaskProber(prober)
 }
