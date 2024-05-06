@@ -415,21 +415,19 @@ func (p *processor) queues() []string {
 func (p *processor) perform(ctx context.Context, task *Task) (err error) {
 	defer func() {
 		if x := recover(); x != nil {
-			errMsg := string(debug.Stack())
-
-			p.logger.Errorf("recovering from panic. See the stack trace below for details:\n%s", errMsg)
+			p.logger.Errorf("recovering from panic. See the stack trace below for details:\n%s", string(debug.Stack()))
 			_, file, line, ok := runtime.Caller(1) // skip the first frame (panic itself)
 			if ok && strings.Contains(file, "runtime/") {
 				// The panic came from the runtime, most likely due to incorrect
 				// map/slice usage. The parent frame should have the real trigger.
 				_, file, line, ok = runtime.Caller(2)
 			}
-
+			var errMsg string
 			// Include the file and line number info in the error, if runtime.Caller returned ok.
 			if ok {
-				err = fmt.Errorf("panic [%s:%d]: %v", file, line, x)
+				errMsg = fmt.Sprintf("panic [%s:%d]: %v", file, line, x)
 			} else {
-				err = fmt.Errorf("panic: %v", x)
+				errMsg = fmt.Sprintf("panic: %v", x)
 			}
 			err = &errors.PanicError{
 				ErrMsg: errMsg,
