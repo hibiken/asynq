@@ -103,7 +103,7 @@ type Config struct {
 	// If BaseContext is nil, the default is context.Background().
 	// If this is defined, then it MUST return a non-nil context
 	BaseContext func() context.Context
-	
+
 	// TaskCheckInterval specifies the interval between checks for new tasks to process when all queues are empty.
 	//
 	// If unset, zero or a negative value, the interval is set to 1 second.
@@ -620,6 +620,10 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 // One exception to this rule is when ProcessTask returns a SkipRetry error.
 // If the returned error is SkipRetry or an error wraps SkipRetry, retry is
 // skipped and the task will be immediately archived instead.
+//
+// One exception to this rule is when ProcessTask returns a RevokeTask error.
+// If the returned error is RevokeTask or an error wraps RevokeTask, the task
+// will not be retried or archived.
 type Handler interface {
 	ProcessTask(context.Context, *Task) error
 }
