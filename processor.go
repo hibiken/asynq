@@ -323,20 +323,23 @@ func (p *processor) markAsDone(l *base.Lease, msg *base.TaskMessage) {
 // the task should not be retried and should be archived instead.
 var SkipRetry = errors.New("skip retry for the task")
 
+// RevokeTask is used as a return value from Handler.ProcessTask to indicate that
+// the task should not be retried or archived.
+var RevokeTask = errors.New("revoke task")
+
 func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg *base.TaskMessage, err error) {
 	if p.errHandler != nil {
 		p.errHandler.HandleError(ctx, NewTask(msg.Type, msg.Payload), err)
 	}
-	if !p.isFailureFunc(err) {
-		// retry the task without marking it as failed
-		p.retry(l, msg, err, false /*isFailure*/)
-		return
-	}
-	if msg.Retried >= msg.Retry || errors.Is(err, SkipRetry) {
+	switch {
+	case errors.Is(err, RevokeTask):
+		p.logger.Warnf("revoke task id=%s", msg.ID)
+		p.markAsDone(l, msg)
+	case msg.Retried >= msg.Retry || errors.Is(err, SkipRetry):
 		p.logger.Warnf("Retry exhausted for task id=%s", msg.ID)
 		p.archive(l, msg, err)
-	} else {
-		p.retry(l, msg, err, true /*isFailure*/)
+	default:
+		p.retry(l, msg, err, p.isFailureFunc(err))
 	}
 }
 
