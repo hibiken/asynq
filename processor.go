@@ -44,6 +44,8 @@ type processor struct {
 	errHandler      ErrorHandler
 	shutdownTimeout time.Duration
 
+	finishedHandler FinishedHandler
+
 	// channel via which to send sync requests to syncer.
 	syncRequestCh chan<- *syncRequest
 
@@ -85,6 +87,7 @@ type processorParams struct {
 	queues            map[string]int
 	strictPriority    bool
 	errHandler        ErrorHandler
+	finishedHandler   FinishedHandler
 	shutdownTimeout   time.Duration
 	starting          chan<- *workerInfo
 	finished          chan<- *base.TaskMessage
@@ -115,6 +118,7 @@ func newProcessor(params processorParams) *processor {
 		quit:              make(chan struct{}),
 		abort:             make(chan struct{}),
 		errHandler:        params.errHandler,
+		finishedHandler:   params.finishedHandler,
 		handler:           HandlerFunc(func(ctx context.Context, t *Task) error { return fmt.Errorf("handler not set") }),
 		shutdownTimeout:   params.shutdownTimeout,
 		starting:          params.starting,
@@ -291,11 +295,20 @@ func (p *processor) markAsComplete(l *base.Lease, msg *base.TaskMessage) {
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.MarkAsComplete(ctx, msg)
+				if err := p.broker.MarkAsComplete(ctx, msg); err != nil {
+					return err
+				}
+				if p.finishedHandler != nil {
+					p.finishedHandler.HandleFinished(newTaskInfo(msg, base.TaskStateArchived, time.Time{}, nil))
+				}
+				return nil
 			},
 			errMsg:   errMsg,
 			deadline: l.Deadline(),
 		}
+	}
+	if p.finishedHandler != nil {
+		p.finishedHandler.HandleFinished(newTaskInfo(msg, base.TaskStateArchived, time.Time{}, nil))
 	}
 }
 
@@ -311,11 +324,20 @@ func (p *processor) markAsDone(l *base.Lease, msg *base.TaskMessage) {
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.Done(ctx, msg)
+				if err := p.broker.Done(ctx, msg); err != nil {
+					return err
+				}
+				if p.finishedHandler != nil {
+					p.finishedHandler.HandleFinished(newTaskInfo(msg, base.TaskStateArchived, time.Time{}, nil))
+				}
+				return nil
 			},
 			errMsg:   errMsg,
 			deadline: l.Deadline(),
 		}
+	}
+	if p.finishedHandler != nil {
+		p.finishedHandler.HandleFinished(newTaskInfo(msg, base.TaskStateArchived, time.Time{}, nil))
 	}
 }
 
@@ -374,11 +396,20 @@ func (p *processor) archive(l *base.Lease, msg *base.TaskMessage, e error) {
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.Archive(ctx, msg, e.Error())
+				if err := p.broker.Archive(ctx, msg, e.Error()); err != nil {
+					return err
+				}
+				if p.finishedHandler != nil {
+					p.finishedHandler.HandleFinished(newTaskInfo(msg, base.TaskStateArchived, time.Time{}, nil))
+				}
+				return nil
 			},
 			errMsg:   errMsg,
 			deadline: l.Deadline(),
 		}
+	}
+	if p.finishedHandler != nil {
+		p.finishedHandler.HandleFinished(newTaskInfo(msg, base.TaskStateArchived, time.Time{}, nil))
 	}
 }
 
