@@ -19,7 +19,7 @@ import (
 // Inspector is a client interface to inspect and mutate the state of
 // queues and tasks.
 type Inspector struct {
-	rdb *rdb.RDB
+	rdb base.QueueInspector
 }
 
 // New returns a new instance of Inspector.
@@ -304,7 +304,7 @@ func (i *Inspector) ListPendingTasks(queue string, opts ...ListOption) ([]*TaskI
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	opt := composeListOptions(opts...)
-	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
+	pgn := base.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	infos, err := i.rdb.ListPending(queue, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
@@ -332,7 +332,7 @@ func (i *Inspector) ListActiveTasks(queue string, opts ...ListOption) ([]*TaskIn
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	opt := composeListOptions(opts...)
-	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
+	pgn := base.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	infos, err := i.rdb.ListActive(queue, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
@@ -372,7 +372,7 @@ func (i *Inspector) ListAggregatingTasks(queue, group string, opts ...ListOption
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	opt := composeListOptions(opts...)
-	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
+	pgn := base.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	infos, err := i.rdb.ListAggregating(queue, group, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
@@ -401,7 +401,7 @@ func (i *Inspector) ListScheduledTasks(queue string, opts ...ListOption) ([]*Tas
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	opt := composeListOptions(opts...)
-	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
+	pgn := base.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	infos, err := i.rdb.ListScheduled(queue, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
@@ -430,7 +430,7 @@ func (i *Inspector) ListRetryTasks(queue string, opts ...ListOption) ([]*TaskInf
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	opt := composeListOptions(opts...)
-	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
+	pgn := base.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	infos, err := i.rdb.ListRetry(queue, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
@@ -459,7 +459,7 @@ func (i *Inspector) ListArchivedTasks(queue string, opts ...ListOption) ([]*Task
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	opt := composeListOptions(opts...)
-	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
+	pgn := base.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	infos, err := i.rdb.ListArchived(queue, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
@@ -488,7 +488,7 @@ func (i *Inspector) ListCompletedTasks(queue string, opts ...ListOption) ([]*Tas
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	opt := composeListOptions(opts...)
-	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
+	pgn := base.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	infos, err := i.rdb.ListCompleted(queue, pgn)
 	switch {
 	case errors.IsQueueNotFound(err):
@@ -998,7 +998,7 @@ type SchedulerEnqueueEvent struct {
 // By default, it retrieves the first 30 tasks.
 func (i *Inspector) ListSchedulerEnqueueEvents(entryID string, opts ...ListOption) ([]*SchedulerEnqueueEvent, error) {
 	opt := composeListOptions(opts...)
-	pgn := rdb.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
+	pgn := base.Pagination{Size: opt.pageSize, Page: opt.pageNum - 1}
 	data, err := i.rdb.ListSchedulerEnqueueEvents(entryID, pgn)
 	if err != nil {
 		return nil, err

@@ -21,62 +21,6 @@ func (r *RDB) AllQueues() ([]string, error) {
 	return r.client.SMembers(context.Background(), base.AllQueues).Result()
 }
 
-// Stats represents a state of queues at a certain time.
-type Stats struct {
-	// Name of the queue (e.g. "default", "critical").
-	Queue string
-	// MemoryUsage is the total number of bytes the queue and its tasks require
-	// to be stored in redis. It is an approximate memory usage value in bytes
-	// since the value is computed by sampling.
-	MemoryUsage int64
-	// Paused indicates whether the queue is paused.
-	// If true, tasks in the queue should not be processed.
-	Paused bool
-	// Size is the total number of tasks in the queue.
-	Size int
-
-	// Groups is the total number of groups in the queue.
-	Groups int
-
-	// Number of tasks in each state.
-	Pending     int
-	Active      int
-	Scheduled   int
-	Retry       int
-	Archived    int
-	Completed   int
-	Aggregating int
-
-	// Number of tasks processed within the current date.
-	// The number includes both succeeded and failed tasks.
-	Processed int
-	// Number of tasks failed within the current date.
-	Failed int
-
-	// Total number of tasks processed (both succeeded and failed) from this queue.
-	ProcessedTotal int
-	// Total number of tasks failed.
-	FailedTotal int
-
-	// Latency of the queue, measured by the oldest pending task in the queue.
-	Latency time.Duration
-	// Time this stats was taken.
-	Timestamp time.Time
-}
-
-// DailyStats holds aggregate data for a given day.
-type DailyStats struct {
-	// Name of the queue (e.g. "default", "critical").
-	Queue string
-	// Total number of tasks processed during the given day.
-	// The number includes both succeeded and failed tasks.
-	Processed int
-	// Total number of tasks failed during the given day.
-	Failed int
-	// Date this stats was taken.
-	Time time.Time
-}
-
 // KEYS[1] ->  asynq:<qname>:pending
 // KEYS[2] ->  asynq:<qname>:active
 // KEYS[3] ->  asynq:<qname>:scheduled
@@ -137,7 +81,7 @@ table.insert(res, aggregating_count)
 return res`)
 
 // CurrentStats returns a current state of the queues.
-func (r *RDB) CurrentStats(qname string) (*Stats, error) {
+func (r *RDB) CurrentStats(qname string) (*base.Stats, error) {
 	var op errors.Op = "rdb.CurrentStats"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -173,7 +117,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 	if err != nil {
 		return nil, errors.E(op, errors.Internal, "cast error: unexpected return value from Lua script")
 	}
-	stats := &Stats{
+	stats := &base.Stats{
 		Queue:     qname,
 		Timestamp: now,
 	}
@@ -360,7 +304,7 @@ end
 return res`)
 
 // HistoricalStats returns a list of stats from the last n days for the given queue.
-func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
+func (r *RDB) HistoricalStats(qname string, n int) ([]*base.DailyStats, error) {
 	var op errors.Op = "rdb.HistoricalStats"
 	if n < 1 {
 		return nil, errors.E(op, errors.FailedPrecondition, "the number of days must be positive")
@@ -390,9 +334,9 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 	if err != nil {
 		return nil, errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
 	}
-	var stats []*DailyStats
+	var stats []*base.DailyStats
 	for i := 0; i < len(data); i += 2 {
-		stats = append(stats, &DailyStats{
+		stats = append(stats, &base.DailyStats{
 			Queue:     qname,
 			Processed: data[i],
 			Failed:    data[i+1],
@@ -547,14 +491,6 @@ func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 	}, nil
 }
 
-type GroupStat struct {
-	// Name of the group.
-	Group string
-
-	// Size of the group.
-	Size int
-}
-
 // KEYS[1] -> asynq:{<qname>}:groups
 // -------
 // ARGV[1] -> group key prefix
@@ -575,7 +511,7 @@ end
 return res
 `)
 
-func (r *RDB) GroupStats(qname string) ([]*GroupStat, error) {
+func (r *RDB) GroupStats(qname string) ([]*base.GroupStat, error) {
 	var op errors.Op = "RDB.GroupStats"
 	keys := []string{base.AllGroups(qname)}
 	argv := []interface{}{base.GroupKeyPrefix(qname)}
@@ -587,9 +523,9 @@ func (r *RDB) GroupStats(qname string) ([]*GroupStat, error) {
 	if err != nil {
 		return nil, errors.E(op, errors.Internal, "cast error: unexpected return value from Lua script")
 	}
-	var stats []*GroupStat
+	var stats []*base.GroupStat
 	for i := 0; i < len(data); i += 2 {
-		stats = append(stats, &GroupStat{
+		stats = append(stats, &base.GroupStat{
 			Group: data[i].(string),
 			Size:  int(data[i+1].(int64)),
 		})
@@ -597,26 +533,8 @@ func (r *RDB) GroupStats(qname string) ([]*GroupStat, error) {
 	return stats, nil
 }
 
-// Pagination specifies the page size and page number
-// for the list operation.
-type Pagination struct {
-	// Number of items in the page.
-	Size int
-
-	// Page number starting from zero.
-	Page int
-}
-
-func (p Pagination) start() int64 {
-	return int64(p.Size * p.Page)
-}
-
-func (p Pagination) stop() int64 {
-	return int64(p.Size*p.Page + p.Size - 1)
-}
-
 // ListPending returns pending tasks that are ready to be processed.
-func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDB) ListPending(qname string, pgn base.Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListPending"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -633,7 +551,7 @@ func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskInfo, error
 }
 
 // ListActive returns all tasks that are currently being processed for the given queue.
-func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDB) ListActive(qname string, pgn base.Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListActive"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -666,7 +584,7 @@ return data
 `)
 
 // listMessages returns a list of TaskInfo in Redis list with the given key.
-func (r *RDB) listMessages(qname string, state base.TaskState, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDB) listMessages(qname string, state base.TaskState, pgn base.Pagination) ([]*base.TaskInfo, error) {
 	var key string
 	switch state {
 	case base.TaskStateActive:
@@ -677,9 +595,9 @@ func (r *RDB) listMessages(qname string, state base.TaskState, pgn Pagination) (
 		panic(fmt.Sprintf("unsupported task state: %v", state))
 	}
 	// Note: Because we use LPUSH to redis list, we need to calculate the
-	// correct range and reverse the list to get the tasks with pagination.
-	stop := -pgn.start() - 1
-	start := -pgn.stop() - 1
+	// correct range and reverse the list to get the tasks with base.Pagination.
+	stop := -pgn.Start() - 1
+	start := -pgn.Stop() - 1
 	res, err := listMessagesCmd.Run(context.Background(), r.client,
 		[]string{key}, start, stop, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
@@ -717,7 +635,7 @@ func (r *RDB) listMessages(qname string, state base.TaskState, pgn Pagination) (
 
 // ListScheduled returns all tasks from the given queue that are scheduled
 // to be processed in the future.
-func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDB) ListScheduled(qname string, pgn base.Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListScheduled"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -735,7 +653,7 @@ func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]*base.TaskInfo, err
 
 // ListRetry returns all tasks from the given queue that have failed before
 // and willl be retried in the future.
-func (r *RDB) ListRetry(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDB) ListRetry(qname string, pgn base.Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListRetry"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -752,7 +670,7 @@ func (r *RDB) ListRetry(qname string, pgn Pagination) ([]*base.TaskInfo, error) 
 }
 
 // ListArchived returns all tasks from the given queue that have exhausted its retry limit.
-func (r *RDB) ListArchived(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDB) ListArchived(qname string, pgn base.Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListArchived"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -769,7 +687,7 @@ func (r *RDB) ListArchived(qname string, pgn Pagination) ([]*base.TaskInfo, erro
 }
 
 // ListCompleted returns all tasks from the given queue that have completed successfully.
-func (r *RDB) ListCompleted(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDB) ListCompleted(qname string, pgn base.Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListCompleted"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -786,7 +704,7 @@ func (r *RDB) ListCompleted(qname string, pgn Pagination) ([]*base.TaskInfo, err
 }
 
 // ListAggregating returns all tasks from the given group.
-func (r *RDB) ListAggregating(qname, gname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDB) ListAggregating(qname, gname string, pgn base.Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListAggregating"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -831,9 +749,9 @@ return data
 
 // listZSetEntries returns a list of message and score pairs in Redis sorted-set
 // with the given key.
-func (r *RDB) listZSetEntries(qname string, state base.TaskState, key string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDB) listZSetEntries(qname string, state base.TaskState, key string, pgn base.Pagination) ([]*base.TaskInfo, error) {
 	res, err := listZSetEntriesCmd.Run(context.Background(), r.client, []string{key},
-		pgn.start(), pgn.stop(), base.TaskKeyPrefix(qname)).Result()
+		pgn.Start(), pgn.Stop(), base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
 		return nil, errors.E(errors.Unknown, err)
 	}
@@ -1947,9 +1865,9 @@ func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
 }
 
 // ListSchedulerEnqueueEvents returns the list of scheduler enqueue events.
-func (r *RDB) ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*base.SchedulerEnqueueEvent, error) {
+func (r *RDB) ListSchedulerEnqueueEvents(entryID string, pgn base.Pagination) ([]*base.SchedulerEnqueueEvent, error) {
 	key := base.SchedulerHistoryKey(entryID)
-	zs, err := r.client.ZRevRangeWithScores(context.Background(), key, pgn.start(), pgn.stop()).Result()
+	zs, err := r.client.ZRevRangeWithScores(context.Background(), key, pgn.Start(), pgn.Stop()).Result()
 	if err != nil {
 		return nil, err
 	}
