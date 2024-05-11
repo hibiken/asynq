@@ -379,7 +379,7 @@ if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
 if redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1]) ~= 1 then
-  redis.redis.error_reply("INTERNAL")
+  return redis.error_reply("INTERNAL")
 end
 redis.call("HSET", KEYS[4], "msg", ARGV[4], "state", "completed")
 local n = redis.call("INCR", KEYS[5])
@@ -416,7 +416,7 @@ if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
 if redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1]) ~= 1 then
-  redis.redis.error_reply("INTERNAL")
+  return redis.error_reply("INTERNAL")
 end
 redis.call("HSET", KEYS[4], "msg", ARGV[4], "state", "completed")
 local n = redis.call("INCR", KEYS[5])
