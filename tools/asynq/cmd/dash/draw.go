@@ -290,7 +290,7 @@ var activeTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
 	{"Retried", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.Retried) }},
-	{"Max Retry", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.MaxRetry) }},
+	{"Max Retry", alignRight, func(t *asynq.TaskInfo) string { return formatMaxRetry(t.MaxRetry) }},
 	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
 }
 
@@ -298,7 +298,7 @@ var pendingTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
 	{"Retried", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.Retried) }},
-	{"Max Retry", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.MaxRetry) }},
+	{"Max Retry", alignRight, func(t *asynq.TaskInfo) string { return formatMaxRetry(t.MaxRetry) }},
 	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
 }
 
@@ -596,6 +596,17 @@ func formatByteSlice(data []byte) string {
 		return "<non-printable>"
 	}
 	return strings.ReplaceAll(string(data), "\n", "  ")
+}
+
+const optionUnlimitedRetry = -1
+
+// formatMaxRetry is used to display the number of allowed retries or unlimited if configured with -1.
+// TODO: this is redefined in ../task.go and should be consolidated
+func formatMaxRetry(maxRetry int) string {
+	if maxRetry == optionUnlimitedRetry {
+		return "unlimited"
+	}
+	return strconv.Itoa(maxRetry)
 }
 
 type modalRowDrawer struct {
