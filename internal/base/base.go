@@ -205,6 +205,12 @@ func UniqueKey(qname, tasktype string, payload []byte) string {
 	return fmt.Sprintf("%sunique:%s:%s", QueueKeyPrefix(qname), tasktype, hex.EncodeToString(checksum[:]))
 }
 
+// CustomUniqueKey returns a redis key with the given type, custom key, and queue name.
+func CustomUniqueKey(qname, tasktype string, customKey string) string {
+	checksum := md5.Sum([]byte(customKey))
+	return fmt.Sprintf("%sunique:%s:%s", QueueKeyPrefix(qname), tasktype, hex.EncodeToString(checksum[:]))
+}
+
 // GroupKeyPrefix returns a prefix for group key.
 func GroupKeyPrefix(qname string) string {
 	return fmt.Sprintf("%sg:", QueueKeyPrefix(qname))
