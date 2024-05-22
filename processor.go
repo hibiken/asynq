@@ -62,6 +62,9 @@ type processor struct {
 	// quit channel is closed when the shutdown of the "processor" goroutine starts.
 	quit chan struct{}
 
+	// terminate channel is closed when the shutdown of the "processor" goroutine starts.
+	terminate chan struct{}
+
 	// abort channel communicates to the in-flight worker goroutines to stop.
 	abort chan struct{}
 
@@ -113,6 +116,7 @@ func newProcessor(params processorParams) *processor {
 		sema:              make(chan struct{}, params.concurrency),
 		done:              make(chan struct{}),
 		quit:              make(chan struct{}),
+		terminate:         make(chan struct{}),
 		abort:             make(chan struct{}),
 		errHandler:        params.errHandler,
 		handler:           HandlerFunc(func(ctx context.Context, t *Task) error { return fmt.Errorf("handler not set") }),
@@ -139,6 +143,7 @@ func (p *processor) stop() {
 func (p *processor) shutdown() {
 	p.stop()
 
+	close(p.terminate)
 	time.AfterFunc(p.shutdownTimeout, func() { close(p.abort) })
 
 	p.logger.Info("Waiting for all workers to finish...")
@@ -232,25 +237,38 @@ func (p *processor) exec() {
 				resCh <- p.perform(ctx, task)
 			}()
 
-			select {
-			case <-p.abort:
-				// time is up, push the message back to queue and quit this worker goroutine.
-				p.logger.Warnf("Quitting worker. task id=%s", msg.ID)
-				p.requeue(lease, msg)
-				return
-			case <-lease.Done():
-				cancel()
-				p.handleFailedMessage(ctx, lease, msg, ErrLeaseExpired)
-				return
-			case <-ctx.Done():
-				p.handleFailedMessage(ctx, lease, msg, ctx.Err())
-				return
-			case resErr := <-resCh:
-				if resErr != nil {
-					p.handleFailedMessage(ctx, lease, msg, resErr)
+			var leaseDone, terminated bool
+			for {
+				select {
+				case <-p.terminate:
+					cancel()
+				case <-lease.Done():
+					leaseDone = true
+					cancel()
+				case <-p.abort:
+					// time is up, push the message back to queue and quit this worker goroutine.
+					p.logger.Warnf("Quitting worker. task id=%s", msg.ID)
+					p.requeue(lease, msg)
+					return
+				case resErr := <-resCh:
+					switch {
+					case resErr == nil:
+						p.handleSucceededMessage(lease, msg)
+					case errors.Is(resErr, context.Canceled):
+						switch {
+						case leaseDone:
+							p.handleFailedMessage(ctx, lease, msg, ErrLeaseExpired)
+						case terminated:
+							p.logger.Warnf("Quitting worker. task id=%s", msg.ID)
+							p.requeue(lease, msg)
+						default:
+							p.handleFailedMessage(ctx, lease, msg, resErr)
+						}
+					default:
+						p.handleFailedMessage(ctx, lease, msg, resErr)
+					}
 					return
 				}
-				p.handleSucceededMessage(lease, msg)
 			}
 		}()
 	}
