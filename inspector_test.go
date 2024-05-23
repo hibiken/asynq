@@ -3324,14 +3324,14 @@ func TestInspectorSchedulerEntries(t *testing.T) {
 			want: []*SchedulerEntry{
 				{
 					Spec: "* * * * *",
-					Task: NewTask("foo", nil),
+					Task: NewTask("foo", nil, nil),
 					Opts: nil,
 					Next: now.Add(5 * time.Hour),
 					Prev: now.Add(-2 * time.Hour),
 				},
 				{
 					Spec: "@every 20m",
-					Task: NewTask("bar", h.JSON(map[string]interface{}{"fiz": "baz"})),
+					Task: NewTask("bar", h.JSON(map[string]interface{}{"fiz": "baz"}), nil),
 					Opts: []Option{Queue("bar"), MaxRetry(20)},
 					Next: now.Add(1 * time.Minute),
 					Prev: now.Add(-19 * time.Minute),
