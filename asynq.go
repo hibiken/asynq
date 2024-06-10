@@ -284,6 +284,11 @@ type RedisClientOpt struct {
 	// Default is 10 connections per every CPU as reported by runtime.NumCPU.
 	PoolSize int
 
+	// Minimum number of idle connections which is useful when establishing
+	// new connection is slow.
+	// Default is 0. the idle connections are not closed by default.
+	MinIdleConns int
+
 	// TLS Config used to connect to a server.
 	// TLS will be negotiated only if this field is set.
 	TLSConfig *tls.Config
@@ -300,6 +305,7 @@ func (opt RedisClientOpt) MakeRedisClient() interface{} {
 		ReadTimeout:  opt.ReadTimeout,
 		WriteTimeout: opt.WriteTimeout,
 		PoolSize:     opt.PoolSize,
+		MinIdleConns: opt.MinIdleConns,
 		TLSConfig:    opt.TLSConfig,
 	})
 }
