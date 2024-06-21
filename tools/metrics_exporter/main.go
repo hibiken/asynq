@@ -6,11 +6,11 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/hibiken/asynq"
-	"github.com/hibiken/asynq/x/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/summerblueskys/asynq"
+	"github.com/summerblueskys/asynq/x/metrics"
 )
 
 // Declare command-line flags.

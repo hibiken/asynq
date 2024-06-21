@@ -18,11 +18,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq/internal/base"
-	"github.com/hibiken/asynq/internal/errors"
-	h "github.com/hibiken/asynq/internal/testutil"
-	"github.com/hibiken/asynq/internal/timeutil"
-	"github.com/redis/go-redis/v9"
+	"github.com/summerblueskys/asynq/internal/base"
+	"github.com/summerblueskys/asynq/internal/errors"
+	h "github.com/summerblueskys/asynq/internal/testutil"
+	"github.com/summerblueskys/asynq/internal/timeutil"
 )
 
 // variables used for package testing.

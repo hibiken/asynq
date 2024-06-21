@@ -12,8 +12,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/hibiken/asynq/internal/base"
-	h "github.com/hibiken/asynq/internal/testutil"
+	"github.com/summerblueskys/asynq/internal/base"
+	h "github.com/summerblueskys/asynq/internal/testutil"
 )
 
 func TestClientEnqueueWithProcessAtOption(t *testing.T) {

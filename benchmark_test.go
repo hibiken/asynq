@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	h "github.com/hibiken/asynq/internal/testutil"
+	h "github.com/summerblueskys/asynq/internal/testutil"
 )
 
 // Creates a new task of type "task<n>" with payload {"data": n}.

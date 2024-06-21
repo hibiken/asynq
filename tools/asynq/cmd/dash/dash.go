@@ -11,8 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
-	"github.com/hibiken/asynq"
+	"github.com/summerblueskys/asynq"
 )
 
 // viewType is an enum for dashboard views.
