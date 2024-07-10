@@ -27,13 +27,17 @@ type janitor struct {
 
 	// average interval between checks.
 	avgInterval time.Duration
+
+	// number of tasks to be deleted when janitor runs to delete the expired completed tasks.
+	batchSize int
 }
 
 type janitorParams struct {
-	logger   *log.Logger
-	broker   base.Broker
-	queues   []string
-	interval time.Duration
+	logger    *log.Logger
+	broker    base.Broker
+	queues    []string
+	interval  time.Duration
+	batchSize int
 }
 
 func newJanitor(params janitorParams) *janitor {
@@ -43,6 +47,7 @@ func newJanitor(params janitorParams) *janitor {
 		done:        make(chan struct{}),
 		queues:      params.queues,
 		avgInterval: params.interval,
+		batchSize:   params.batchSize,
 	}
 }
 
@@ -73,7 +78,7 @@ func (j *janitor) start(wg *sync.WaitGroup) {
 
 func (j *janitor) exec() {
 	for _, qname := range j.queues {
-		if err := j.broker.DeleteExpiredCompletedTasks(qname); err != nil {
+		if err := j.broker.DeleteExpiredCompletedTasks(qname, j.batchSize); err != nil {
 			j.logger.Errorf("Failed to delete expired completed tasks from queue %q: %v",
 				qname, err)
 		}

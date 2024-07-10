@@ -145,13 +145,13 @@ func (tb *TestBroker) ForwardIfReady(qnames ...string) error {
 	return tb.real.ForwardIfReady(qnames...)
 }
 
-func (tb *TestBroker) DeleteExpiredCompletedTasks(qname string) error {
+func (tb *TestBroker) DeleteExpiredCompletedTasks(qname string, batchSize int) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return errRedisDown
 	}
-	return tb.real.DeleteExpiredCompletedTasks(qname)
+	return tb.real.DeleteExpiredCompletedTasks(qname, batchSize)
 }
 
 func (tb *TestBroker) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {

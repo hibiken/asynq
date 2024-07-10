@@ -2542,8 +2542,8 @@ func TestDeleteExpiredCompletedTasks(t *testing.T) {
 		h.FlushDB(t, r.client)
 		h.SeedAllCompletedQueues(t, r.client, tc.completed)
 
-		if err := r.DeleteExpiredCompletedTasks(tc.qname); err != nil {
-			t.Errorf("DeleteExpiredCompletedTasks(%q) failed: %v", tc.qname, err)
+		if err := r.DeleteExpiredCompletedTasks(tc.qname, 100); err != nil {
+			t.Errorf("DeleteExpiredCompletedTasks(%q, 100) failed: %v", tc.qname, err)
 			continue
 		}
 

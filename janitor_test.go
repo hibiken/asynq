@@ -26,11 +26,13 @@ func TestJanitor(t *testing.T) {
 	defer r.Close()
 	rdbClient := rdb.NewRDB(r)
 	const interval = 1 * time.Second
+	const batchSize = 100
 	janitor := newJanitor(janitorParams{
-		logger:   testLogger,
-		broker:   rdbClient,
-		queues:   []string{"default", "custom"},
-		interval: interval,
+		logger:    testLogger,
+		broker:    rdbClient,
+		queues:    []string{"default", "custom"},
+		interval:  interval,
+		batchSize: batchSize,
 	})
 
 	now := time.Now()

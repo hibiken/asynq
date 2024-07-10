@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] - 2023-01-02
+
+### Added
+- Added configuration for Janitor's Interval and Deletion Batch Size (PR: https://github.com/hibiken/asynq/pull/715)
+
+## [0.24.1] - 2023-05-01
 
 ### Changed
 - Updated package version dependency for go-redis 
@@ -14,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.24.0] - 2023-01-02
 
 ### Added
-- `PreEnqueueFunc`, `PostEnqueueFunc` is added in `Scheduler` and deprecated `EnqueueErrorHandler` (PR: https://github.com/dusty-cjh/asynq/pull/476)
+- `PreEnqueueFunc`, `PostEnqueueFunc` is added in `Scheduler` and deprecated `EnqueueErrorHandler` (PR: https://github.com/hibiken/asynq/pull/476)
 
 ### Changed
 - Removed error log when `Scheduler` failed to enqueue a task. Use `PostEnqueueFunc` to check for errors and task actions if needed.
@@ -35,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed overflow issue with 32-bit systems (For details, see https://github.com/dusty-cjh/asynq/pull/426)
+- Fixed overflow issue with 32-bit systems (For details, see https://github.com/hibiken/asynq/pull/426)
 
 ## [0.22.1] - 2022-02-20
 
@@ -60,7 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `PeriodicTaskManager` is added. Prefer using this over `Scheduler` as it has better support for dynamic periodic tasks.
 - The `asynq stats` command now supports a `--json` option, making its output a JSON object
-- Introduced new configuration for `DelayedTaskCheckInterval`. See [godoc](https://godoc.org/github.com/dusty-cjh/asynq) for more details.
+- Introduced new configuration for `DelayedTaskCheckInterval`. See [godoc](https://godoc.org/github.com/hibiken/asynq) for more details.
 
 ## [0.20.0] - 2021-12-19
 
@@ -133,7 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed latency issue around memory usage (see https://github.com/dusty-cjh/asynq/issues/309).
+- Fixed latency issue around memory usage (see https://github.com/hibiken/asynq/issues/309).
 
 ## [0.18.1] - 2021-07-04
 
@@ -166,7 +172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Free unique lock when task is deleted (https://github.com/dusty-cjh/asynq/issues/275).
+- Free unique lock when task is deleted (https://github.com/hibiken/asynq/issues/275).
 
 ## [0.17.1] - 2021-04-04
 
@@ -194,7 +200,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.15.0] - 2021-01-31
 
-**IMPORTATNT**: All `Inspector` related code are moved to subpackage "github.com/dusty-cjh/asynq/inspeq"
+**IMPORTATNT**: All `Inspector` related code are moved to subpackage "github.com/hibiken/asynq/inspeq"
 
 ### Changed
 
@@ -248,7 +254,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `Scheduler` type is added to enable periodic tasks. See the godoc for its APIs and [wiki](https://github.com/dusty-cjh/asynq/wiki/Periodic-Tasks) for the getting-started guide.
+- `Scheduler` type is added to enable periodic tasks. See the godoc for its APIs and [wiki](https://github.com/hibiken/asynq/wiki/Periodic-Tasks) for the getting-started guide.
 
 ### Changed
 
@@ -263,7 +269,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.12.0] - 2020-09-12
 
-**IMPORTANT**: If you are upgrading from a previous version, please install the latest version of the CLI `go get -u github.com/dusty-cjh/asynq/tools/asynq` and run `asynq migrate` command. No process should be writing to Redis while you run the migration command.
+**IMPORTANT**: If you are upgrading from a previous version, please install the latest version of the CLI `go get -u github.com/hibiken/asynq/tools/asynq` and run `asynq migrate` command. No process should be writing to Redis while you run the migration command.
 
 ## The semantics of queue have changed
 
@@ -355,13 +361,13 @@ To view details on any command, use `asynq help <command> <subcommand>`.
 
 ### Fixed
 
-- Fixes issue of same tasks processed by more than one worker (https://github.com/dusty-cjh/asynq/issues/90).
+- Fixes issue of same tasks processed by more than one worker (https://github.com/hibiken/asynq/issues/90).
 
 ## [0.9.3] - 2020-06-12
 
 ### Fixed
 
-- Fixes the JSON number overflow issue (https://github.com/dusty-cjh/asynq/issues/166).
+- Fixes the JSON number overflow issue (https://github.com/hibiken/asynq/issues/166).
 
 ## [0.9.2] - 2020-06-08
 
@@ -395,7 +401,7 @@ To view details on any command, use `asynq help <command> <subcommand>`.
 
 ### Fixed
 
-- [Fixed cancelfunc leak](https://github.com/dusty-cjh/asynq/pull/145)
+- [Fixed cancelfunc leak](https://github.com/hibiken/asynq/pull/145)
 
 ## [0.8.1] - 2020-04-27
 
