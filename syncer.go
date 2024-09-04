@@ -57,6 +57,8 @@ func (s *syncer) start(wg *sync.WaitGroup) {
 	go func() {
 		defer wg.Done()
 		var requests []*syncRequest
+		timer := time.NewTimer(s.interval)
+		defer timer.Stop()
 		for {
 			select {
 			case <-s.done:
@@ -70,7 +72,7 @@ func (s *syncer) start(wg *sync.WaitGroup) {
 				return
 			case req := <-s.requestsCh:
 				requests = append(requests, req)
-			case <-time.After(s.interval):
+			case <-timer.C:
 				var temp []*syncRequest
 				for _, req := range requests {
 					if req.deadline.Before(time.Now()) {
@@ -81,6 +83,7 @@ func (s *syncer) start(wg *sync.WaitGroup) {
 					}
 				}
 				requests = temp
+				timer.Reset(s.interval)
 			}
 		}
 	}()

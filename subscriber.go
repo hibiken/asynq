@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
+	"github.com/redis/go-redis/v9"
 )
 
 type subscriber struct {
@@ -58,12 +58,15 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 			err    error
 		)
 		// Try until successfully connect to Redis.
+		timer := time.NewTimer(s.retryTimeout)
+		defer timer.Stop()
 		for {
 			pubsub, err = s.broker.CancelationPubSub()
 			if err != nil {
 				s.logger.Errorf("cannot subscribe to cancelation channel: %v", err)
 				select {
-				case <-time.After(s.retryTimeout):
+				case <-timer.C:
+					timer.Reset(s.retryTimeout)
 					continue
 				case <-s.done:
 					s.logger.Debug("Subscriber done")
