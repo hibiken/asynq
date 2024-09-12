@@ -70,6 +70,9 @@ type processor struct {
 
 	starting chan<- *workerInfo
 	finished chan<- *base.TaskMessage
+
+	// queueShuffleRand holds the random source to shuffle the queues.
+	queueShuffleRand *rand.Rand
 }
 
 type processorParams struct {
@@ -119,6 +122,7 @@ func newProcessor(params processorParams) *processor {
 		shutdownTimeout:   params.shutdownTimeout,
 		starting:          params.starting,
 		finished:          params.finished,
+		queueShuffleRand:  rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -404,8 +408,8 @@ func (p *processor) queues() []string {
 			names = append(names, qname)
 		}
 	}
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	r.Shuffle(len(names), func(i, j int) { names[i], names[j] = names[j], names[i] })
+	p.queueShuffleRand.Seed(time.Now().UnixNano())
+	p.queueShuffleRand.Shuffle(len(names), func(i, j int) { names[i], names[j] = names[j], names[i] })
 	return uniq(names, len(p.queueConfig))
 }
 
