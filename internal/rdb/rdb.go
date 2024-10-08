@@ -218,7 +218,7 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 // calling RPOPLPUSH to pop a task from the queue.
 var dequeueCmd = redis.NewScript(`
 if redis.call("EXISTS", KEYS[2]) == 0 then
-	local id = redis.call("RPOPLPUSH", KEYS[1], KEYS[3])
+	local id = ARGV[3]
 	if id then
 		local key = ARGV[2] .. id
 		redis.call("HSET", key, "state", "active")
@@ -247,6 +247,12 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, leaseExpirationT
 			leaseExpirationTime.Unix(),
 			base.TaskKeyPrefix(qname),
 		}
+
+		id, _ := r.client.BRPopLPush(context.Background(), keys[0], keys[2], time.Second*10).Result()
+		if id == "" {
+			continue
+		}
+		argv = append(argv, id)
 		res, err := dequeueCmd.Run(context.Background(), r.client, keys, argv...).Result()
 		if err == redis.Nil {
 			continue
