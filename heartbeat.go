@@ -60,12 +60,18 @@ type heartbeaterParams struct {
 	state          *serverState
 	starting       <-chan *workerInfo
 	finished       <-chan *base.TaskMessage
+	workerName     string
 }
 
 func newHeartbeater(params heartbeaterParams) *heartbeater {
-	host, err := os.Hostname()
-	if err != nil {
-		host = "unknown-host"
+
+	host := params.workerName
+	if host == "" {
+		var err error
+		host, err = os.Hostname()
+		if err != nil {
+			host = "unknown-host"
+		}
 	}
 
 	return &heartbeater{
