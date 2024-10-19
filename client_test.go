@@ -14,6 +14,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/hibiken/asynq/internal/base"
 	h "github.com/hibiken/asynq/internal/testutil"
+	"github.com/redis/go-redis/v9"
 )
 
 func TestClientEnqueueWithProcessAtOption(t *testing.T) {
@@ -143,11 +144,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 	}
 }
 
-func TestClientEnqueue(t *testing.T) {
-	r := setup(t)
-	client := NewClient(getRedisConnOpt(t))
-	defer client.Close()
-
+func testClientEnqueue(t *testing.T, client *Client, r redis.UniversalClient) {
 	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 	now := time.Now()
 
@@ -475,6 +472,24 @@ func TestClientEnqueue(t *testing.T) {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.PendingKey(qname), diff)
 			}
 		}
+	}
+}
+
+func TestClientEnqueue(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+	testClientEnqueue(t, client, r)
+}
+
+func TestClientFromRedisClientEnqueue(t *testing.T) {
+	r := setup(t)
+	redisClient := getRedisConnOpt(t).MakeRedisClient().(redis.UniversalClient)
+	client := NewClientFromRedisClient(redisClient)
+	testClientEnqueue(t, client, r)
+	err := client.Close()
+	if err == nil {
+		t.Error("client.Close() should have failed because of a shared client but it didn't")
 	}
 }
 

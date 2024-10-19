@@ -37,6 +37,9 @@ type Server struct {
 	logger *log.Logger
 
 	broker base.Broker
+	// When a Server has been created with an existing Redis connection, we do
+	// not want to close it.
+	sharedConnection bool
 
 	state *serverState
 
@@ -428,10 +431,19 @@ const (
 // NewServer returns a new Server given a redis connection option
 // and server configuration.
 func NewServer(r RedisConnOpt, cfg Config) *Server {
-	c, ok := r.MakeRedisClient().(redis.UniversalClient)
+	redisClient, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
+	server := NewServerFromRedisClient(redisClient, cfg)
+	server.sharedConnection = false
+	return server
+}
+
+// NewServerFromRedisClient returns a new Server given a redis client
+// and server configuration.
+// Warning: the redis client will not be closed by Asynq, you are responsible for closing.
+func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	baseCtxFn := cfg.BaseContext
 	if baseCtxFn == nil {
 		baseCtxFn = context.Background
@@ -593,18 +605,19 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 		groupAggregator: cfg.GroupAggregator,
 	})
 	return &Server{
-		logger:        logger,
-		broker:        rdb,
-		state:         srvState,
-		forwarder:     forwarder,
-		processor:     processor,
-		syncer:        syncer,
-		heartbeater:   heartbeater,
-		subscriber:    subscriber,
-		recoverer:     recoverer,
-		healthchecker: healthchecker,
-		janitor:       janitor,
-		aggregator:    aggregator,
+		logger:           logger,
+		broker:           rdb,
+		sharedConnection: true,
+		state:            srvState,
+		forwarder:        forwarder,
+		processor:        processor,
+		syncer:           syncer,
+		heartbeater:      heartbeater,
+		subscriber:       subscriber,
+		recoverer:        recoverer,
+		healthchecker:    healthchecker,
+		janitor:          janitor,
+		aggregator:       aggregator,
 	}
 }
 
@@ -732,7 +745,9 @@ func (srv *Server) Shutdown() {
 	srv.heartbeater.shutdown()
 	srv.wg.Wait()
 
-	srv.broker.Close()
+	if !srv.sharedConnection {
+		srv.broker.Close()
+	}
 	srv.logger.Info("Exiting")
 }
 

@@ -22,11 +22,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func TestInspectorQueues(t *testing.T) {
-	r := setup(t)
-	defer r.Close()
-	inspector := NewInspector(getRedisConnOpt(t))
-
+func testInspectorQueues(t *testing.T, inspector *Inspector, r redis.UniversalClient) {
 	tests := []struct {
 		queues []string
 	}{
@@ -52,7 +48,21 @@ func TestInspectorQueues(t *testing.T) {
 			t.Errorf("Queues() = %v, want %v; (-want, +got)\n%s", got, tc.queues, diff)
 		}
 	}
+}
 
+func TestInspectorQueues(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	inspector := NewInspector(getRedisConnOpt(t))
+	testInspectorQueues(t, inspector, r)
+}
+
+func TestInspectorFromRedisClientQueues(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	redisClient := getRedisConnOpt(t).MakeRedisClient().(redis.UniversalClient)
+	inspector := NewInspectorFromRedisClient(redisClient)
+	testInspectorQueues(t, inspector, r)
 }
 
 func TestInspectorDeleteQueue(t *testing.T) {

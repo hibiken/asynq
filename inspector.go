@@ -10,16 +10,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/go-redis/v9"
 )
 
 // Inspector is a client interface to inspect and mutate the state of
 // queues and tasks.
 type Inspector struct {
 	rdb *rdb.RDB
+	// When an Inspector has been created with an existing Redis connection, we do
+	// not want to close it.
+	sharedConnection bool
 }
 
 // New returns a new instance of Inspector.
@@ -28,13 +31,25 @@ func NewInspector(r RedisConnOpt) *Inspector {
 	if !ok {
 		panic(fmt.Sprintf("inspeq: unsupported RedisConnOpt type %T", r))
 	}
+	inspector := NewInspectorFromRedisClient(c)
+	inspector.sharedConnection = false
+	return inspector
+}
+
+// NewFromRedisClient returns a new instance of Inspector.
+// Warning: the redis client will not be closed by Asynq, you are responsible for closing.
+func NewInspectorFromRedisClient(c redis.UniversalClient) *Inspector {
 	return &Inspector{
-		rdb: rdb.NewRDB(c),
+		rdb:              rdb.NewRDB(c),
+		sharedConnection: true,
 	}
 }
 
 // Close closes the connection with redis.
 func (i *Inspector) Close() error {
+	if i.sharedConnection {
+		return fmt.Errorf("redis connection is shared so the Inspector can't be closed through asynq")
+	}
 	return i.rdb.Close()
 }
 
