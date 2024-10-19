@@ -419,6 +419,11 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 	return newTaskInfo(msg, state, opt.processAt, nil), nil
 }
 
+// Ping performs a ping against the redis connection.
+func (c *Client) Ping() error {
+	return c.broker.Ping()
+}
+
 func (c *Client) enqueue(ctx context.Context, msg *base.TaskMessage, uniqueTTL time.Duration) error {
 	if uniqueTTL > 0 {
 		return c.broker.EnqueueUnique(ctx, msg, uniqueTTL)

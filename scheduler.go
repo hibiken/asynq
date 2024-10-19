@@ -336,3 +336,14 @@ func (s *Scheduler) clearHistory() {
 		}
 	}
 }
+
+// Ping performs a ping against the redis connection.
+func (s *Scheduler) Ping() error {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	if s.state.value == srvStateClosed {
+		return nil
+	}
+
+	return s.rdb.Ping()
+}

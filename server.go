@@ -759,7 +759,7 @@ func (srv *Server) Shutdown() {
 func (srv *Server) Stop() {
 	srv.state.mu.Lock()
 	if srv.state.value != srvStateActive {
-		// Invalid calll to Stop, server can only go from Active state to Stopped state.
+		// Invalid call to Stop, server can only go from Active state to Stopped state.
 		srv.state.mu.Unlock()
 		return
 	}
@@ -769,4 +769,17 @@ func (srv *Server) Stop() {
 	srv.logger.Info("Stopping processor")
 	srv.processor.stop()
 	srv.logger.Info("Processor stopped")
+}
+
+// Ping performs a ping against the redis connection.
+//
+// This is an alternative to the HealthCheckFunc available in the Config object.
+func (srv *Server) Ping() error {
+	srv.state.mu.Lock()
+	defer srv.state.mu.Unlock()
+	if srv.state.value == srvStateClosed {
+		return nil
+	}
+
+	return srv.broker.Ping()
 }
