@@ -295,6 +295,7 @@ func TestProcessorRetry(t *testing.T) {
 
 	errMsg := "something went wrong"
 	wrappedSkipRetry := fmt.Errorf("%s:%w", errMsg, SkipRetry)
+	wrappedRevokeTask := fmt.Errorf("%s:%w", errMsg, RevokeTask)
 
 	tests := []struct {
 		desc         string              // test description
@@ -345,6 +346,32 @@ func TestProcessorRetry(t *testing.T) {
 			wantRetry:    []*base.TaskMessage{},
 			wantArchived: []*base.TaskMessage{m1, m2},
 			wantErrCount: 2, // ErrorHandler should still be called with SkipRetry error
+		},
+		{
+			desc:    "Should revoke task",
+			pending: []*base.TaskMessage{m1, m2},
+			delay:   time.Minute,
+			handler: HandlerFunc(func(ctx context.Context, task *Task) error {
+				return RevokeTask // return RevokeTask without wrapping
+			}),
+			wait:         2 * time.Second,
+			wantErrMsg:   RevokeTask.Error(),
+			wantRetry:    []*base.TaskMessage{},
+			wantArchived: []*base.TaskMessage{},
+			wantErrCount: 2, // ErrorHandler should still be called with RevokeTask error
+		},
+		{
+			desc:    "Should revoke task (with error wrapping)",
+			pending: []*base.TaskMessage{m1, m2},
+			delay:   time.Minute,
+			handler: HandlerFunc(func(ctx context.Context, task *Task) error {
+				return wrappedRevokeTask
+			}),
+			wait:         2 * time.Second,
+			wantErrMsg:   wrappedRevokeTask.Error(),
+			wantRetry:    []*base.TaskMessage{},
+			wantArchived: []*base.TaskMessage{},
+			wantErrCount: 2, // ErrorHandler should still be called with RevokeTask error
 		},
 	}
 

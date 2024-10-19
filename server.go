@@ -633,6 +633,10 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 // One exception to this rule is when ProcessTask returns a SkipRetry error.
 // If the returned error is SkipRetry or an error wraps SkipRetry, retry is
 // skipped and the task will be immediately archived instead.
+//
+// One exception to this rule is when ProcessTask returns a RevokeTask error.
+// If the returned error is RevokeTask or an error wraps RevokeTask, the task
+// will not be retried or archived.
 type Handler interface {
 	ProcessTask(context.Context, *Task) error
 }
