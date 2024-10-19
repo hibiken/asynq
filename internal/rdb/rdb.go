@@ -829,6 +829,7 @@ const (
 // KEYS[6] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
 // KEYS[7] -> asynq:{<qname>}:processed
 // KEYS[8] -> asynq:{<qname>}:failed
+// KEYS[9] -> asynq:{<qname>}:t:
 // -------
 // ARGV[1] -> task ID
 // ARGV[2] -> updated base.TaskMessage value
@@ -845,8 +846,22 @@ if redis.call("ZREM", KEYS[3], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
 redis.call("ZADD", KEYS[4], ARGV[3], ARGV[1])
-redis.call("ZREMRANGEBYSCORE", KEYS[4], "-inf", ARGV[4])
-redis.call("ZREMRANGEBYRANK", KEYS[4], 0, -ARGV[5])
+local old = redis.call("ZRANGE", KEYS[4], "-inf", ARGV[4], "BYSCORE")
+if #old > 0 then
+	for _, id in ipairs(old) do
+		redis.call("DEL", KEYS[9] .. id)
+	end
+	redis.call("ZREM", KEYS[4], unpack(old))
+end
+
+local extra = redis.call("ZRANGE", KEYS[4], 0, -ARGV[5])
+if #extra > 0 then
+	for _, id in ipairs(extra) do
+		redis.call("DEL", KEYS[9] .. id)
+	end
+	redis.call("ZREM", KEYS[4], unpack(extra))
+end
+
 redis.call("HSET", KEYS[1], "msg", ARGV[2], "state", "archived")
 local n = redis.call("INCR", KEYS[5])
 if tonumber(n) == 1 then
@@ -889,6 +904,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 		base.FailedKey(msg.Queue, now),
 		base.ProcessedTotalKey(msg.Queue),
 		base.FailedTotalKey(msg.Queue),
+		base.TaskKeyPrefix(msg.Queue),
 	}
 	argv := []interface{}{
 		msg.ID,
