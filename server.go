@@ -106,7 +106,7 @@ type Config struct {
 	// If BaseContext is nil, the default is context.Background().
 	// If this is defined, then it MUST return a non-nil context
 	BaseContext func() context.Context
-	
+
 	// TaskCheckInterval specifies the interval between checks for new tasks to process when all queues are empty.
 	//
 	// If unset, zero or a negative value, the interval is set to 1 second.
@@ -440,9 +440,9 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	return server
 }
 
-// NewServerFromRedisClient returns a new Server given a redis client
-// and server configuration.
-// Warning: the redis client will not be closed by Asynq, you are responsible for closing.
+// NewServerFromRedisClient returns a new instance of Server given a redis.UniversalClient
+// and server configuration
+// Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
 func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	baseCtxFn := cfg.BaseContext
 	if baseCtxFn == nil {

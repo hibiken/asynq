@@ -41,8 +41,8 @@ func NewClient(r RedisConnOpt) *Client {
 	return client
 }
 
-// NewClientFromRedisClient returns a new Client instance given a redis client.
-// Warning: the redis client will not be closed by Asynq, you are responsible for closing.
+// NewClientFromRedisClient returns a new instance of Client given a redis.UniversalClient
+// Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
 func NewClientFromRedisClient(c redis.UniversalClient) *Client {
 	return &Client{broker: rdb.NewRDB(c), sharedConnection: true}
 }

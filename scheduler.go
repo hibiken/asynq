@@ -60,9 +60,9 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 	return scheduler
 }
 
-// NewSchedulerFromRedisClient returns a new Scheduler instance given a redis client.
+// NewSchedulerFromRedisClient returns a new instance of Scheduler given a redis.UniversalClient
 // The parameter opts is optional, defaults will be used if opts is set to nil.
-// Warning: the redis client will not be closed by Asynq, you are responsible for closing.
+// Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
 func NewSchedulerFromRedisClient(c redis.UniversalClient, opts *SchedulerOpts) *Scheduler {
 	if opts == nil {
 		opts = &SchedulerOpts{}
@@ -273,7 +273,9 @@ func (s *Scheduler) Shutdown() {
 	s.wg.Wait()
 
 	s.clearHistory()
-	s.client.Close()
+	if err := s.client.Close(); err != nil {
+		s.logger.Errorf("Failed to close redis client connection: %v", err)
+	}
 	if !s.sharedConnection {
 		s.rdb.Close()
 	}

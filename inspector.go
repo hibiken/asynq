@@ -36,8 +36,8 @@ func NewInspector(r RedisConnOpt) *Inspector {
 	return inspector
 }
 
-// NewFromRedisClient returns a new instance of Inspector.
-// Warning: the redis client will not be closed by Asynq, you are responsible for closing.
+// NewInspectorFromRedisClient returns a new instance of Inspector given a redis.UniversalClient
+// Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
 func NewInspectorFromRedisClient(c redis.UniversalClient) *Inspector {
 	return &Inspector{
 		rdb:              rdb.NewRDB(c),
