@@ -14,6 +14,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/hibiken/asynq/internal/base"
 	h "github.com/hibiken/asynq/internal/testutil"
+	"github.com/redis/go-redis/v9"
 )
 
 func TestClientEnqueueWithProcessAtOption(t *testing.T) {
@@ -143,11 +144,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 	}
 }
 
-func TestClientEnqueue(t *testing.T) {
-	r := setup(t)
-	client := NewClient(getRedisConnOpt(t))
-	defer client.Close()
-
+func testClientEnqueue(t *testing.T, client *Client, r redis.UniversalClient) {
 	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 	now := time.Now()
 
@@ -478,6 +475,24 @@ func TestClientEnqueue(t *testing.T) {
 	}
 }
 
+func TestClientEnqueue(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+	testClientEnqueue(t, client, r)
+}
+
+func TestClientFromRedisClientEnqueue(t *testing.T) {
+	r := setup(t)
+	redisClient := getRedisConnOpt(t).MakeRedisClient().(redis.UniversalClient)
+	client := NewClientFromRedisClient(redisClient)
+	testClientEnqueue(t, client, r)
+	err := client.Close()
+	if err == nil {
+		t.Error("client.Close() should have failed because of a shared client but it didn't")
+	}
+}
+
 func TestClientEnqueueWithGroupOption(t *testing.T) {
 	r := setup(t)
 	client := NewClient(getRedisConnOpt(t))
@@ -541,11 +556,11 @@ func TestClientEnqueueWithGroupOption(t *testing.T) {
 			},
 		},
 		{
-			desc: "With Group and ProcessIn options",
+			desc: "With Group and ProcessAt options",
 			task: task,
 			opts: []Option{
 				Group("mygroup"),
-				ProcessIn(30 * time.Minute),
+				ProcessAt(now.Add(30 * time.Minute)),
 			},
 			wantInfo: &TaskInfo{
 				Queue:         "default",

@@ -43,15 +43,27 @@ type Scheduler struct {
 	// to avoid using cron.EntryID as the public API of
 	// the Scheduler.
 	idmap map[string]cron.EntryID
+	// When a Scheduler has been created with an existing Redis connection, we do
+	// not want to close it.
+	sharedConnection bool
 }
 
 // NewScheduler returns a new Scheduler instance given the redis connection option.
 // The parameter opts is optional, defaults will be used if opts is set to nil
 func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
-	c, ok := r.MakeRedisClient().(redis.UniversalClient)
+	redisClient, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
+	scheduler := NewSchedulerFromRedisClient(redisClient, opts)
+	scheduler.sharedConnection = false
+	return scheduler
+}
+
+// NewSchedulerFromRedisClient returns a new instance of Scheduler given a redis.UniversalClient
+// The parameter opts is optional, defaults will be used if opts is set to nil.
+// Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
+func NewSchedulerFromRedisClient(c redis.UniversalClient, opts *SchedulerOpts) *Scheduler {
 	if opts == nil {
 		opts = &SchedulerOpts{}
 	}
@@ -72,7 +84,7 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 		id:              generateSchedulerID(),
 		state:           &serverState{value: srvStateNew},
 		logger:          logger,
-		client:          NewClient(r),
+		client:          NewClientFromRedisClient(c),
 		rdb:             rdb.NewRDB(c),
 		cron:            cron.New(cron.WithLocation(loc)),
 		location:        loc,
@@ -261,8 +273,12 @@ func (s *Scheduler) Shutdown() {
 	s.wg.Wait()
 
 	s.clearHistory()
-	s.client.Close()
-	s.rdb.Close()
+	if err := s.client.Close(); err != nil {
+		s.logger.Errorf("Failed to close redis client connection: %v", err)
+	}
+	if !s.sharedConnection {
+		s.rdb.Close()
+	}
 	s.logger.Info("Scheduler stopped")
 }
 
@@ -319,4 +335,15 @@ func (s *Scheduler) clearHistory() {
 			s.logger.Warnf("Could not clear scheduler history for entry %q: %v", job.id.String(), err)
 		}
 	}
+}
+
+// Ping performs a ping against the redis connection.
+func (s *Scheduler) Ping() error {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	if s.state.value == srvStateClosed {
+		return nil
+	}
+
+	return s.rdb.Ping()
 }
