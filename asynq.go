@@ -31,10 +31,14 @@ type Task struct {
 
 	// w is the ResultWriter for the task.
 	w *ResultWriter
+
+	// headers contains metadata attached to a message.
+	headers map[string]string
 }
 
-func (t *Task) Type() string    { return t.typename }
-func (t *Task) Payload() []byte { return t.payload }
+func (t *Task) Type() string               { return t.typename }
+func (t *Task) Payload() []byte            { return t.payload }
+func (t *Task) Headers() map[string]string { return t.headers }
 
 // ResultWriter returns a pointer to the ResultWriter associated with the task.
 //
@@ -53,11 +57,12 @@ func NewTask(typename string, payload []byte, opts ...Option) *Task {
 }
 
 // newTask creates a task with the given typename, payload and ResultWriter.
-func newTask(typename string, payload []byte, w *ResultWriter) *Task {
+func newTask(typename string, payload []byte, headers map[string]string, w *ResultWriter) *Task {
 	return &Task{
 		typename: typename,
 		payload:  payload,
 		w:        w,
+		headers:  headers,
 	}
 }
 
@@ -128,6 +133,9 @@ type TaskInfo struct {
 	// Result holds the result data associated with the task.
 	// Use ResultWriter to write result data from the Handler.
 	Result []byte
+
+	// Headers contains metadata attached to a message.
+	Headers map[string]string
 }
 
 // If t is non-zero, returns time converted from t as unix time in seconds.
@@ -156,6 +164,7 @@ func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time
 		LastFailedAt:  fromUnixTimeOrZero(msg.LastFailedAt),
 		CompletedAt:   fromUnixTimeOrZero(msg.CompletedAt),
 		Result:        result,
+		Headers:       msg.Headers,
 	}
 
 	switch state {
