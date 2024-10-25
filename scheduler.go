@@ -289,7 +289,9 @@ func (s *Scheduler) runHeartbeater() {
 		select {
 		case <-s.done:
 			s.logger.Debugf("Scheduler heatbeater shutting down")
-			s.rdb.ClearSchedulerEntries(s.id)
+			if err := s.rdb.ClearSchedulerEntries(s.id); err != nil {
+				s.logger.Errorf("Failed to clear the scheduler entries: %v", err)
+			}
 			ticker.Stop()
 			return
 		case <-ticker.C:
