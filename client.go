@@ -433,7 +433,7 @@ func (c *Client) enqueue(ctx context.Context, msg *base.TaskMessage, uniqueTTL t
 
 func (c *Client) schedule(ctx context.Context, msg *base.TaskMessage, t time.Time, uniqueTTL time.Duration) error {
 	if uniqueTTL > 0 {
-		ttl := t.Add(uniqueTTL).Sub(time.Now())
+		ttl := time.Until(t.Add(uniqueTTL))
 		return c.broker.ScheduleUnique(ctx, msg, t, ttl)
 	}
 	return c.broker.Schedule(ctx, msg, t)
