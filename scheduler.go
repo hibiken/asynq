@@ -86,7 +86,7 @@ func NewSchedulerFromRedisClient(c redis.UniversalClient, opts *SchedulerOpts) *
 		logger:          logger,
 		client:          NewClientFromRedisClient(c),
 		rdb:             rdb.NewRDB(c),
-		cron:            cron.New(cron.WithLocation(loc)),
+		cron:            cron.New(cron.WithLocation(loc), cron.WithSeconds()),
 		location:        loc,
 		done:            make(chan struct{}),
 		preEnqueueFunc:  opts.PreEnqueueFunc,
