@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/MakeNowJust/heredoc/v2 v2.0.1
-	github.com/fatih/color v1.9.0
+	github.com/fatih/color v1.18.0
 	github.com/gdamore/tcell/v2 v2.5.1
 	github.com/google/go-cmp v0.5.9
 	github.com/hibiken/asynq v0.24.1
@@ -31,8 +31,8 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
-	github.com/mattn/go-colorable v0.1.4 // indirect
-	github.com/mattn/go-isatty v0.0.11 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/mitchellh/mapstructure v1.1.2 // indirect
 	github.com/pelletier/go-toml v1.2.0 // indirect
@@ -45,7 +45,7 @@ require (
 	github.com/spf13/cast v1.5.1 // indirect
 	github.com/spf13/jwalterweatherman v1.0.0 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
-	golang.org/x/sys v0.10.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
 	golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf // indirect
 	golang.org/x/text v0.3.8 // indirect
 	golang.org/x/time v0.3.0 // indirect
