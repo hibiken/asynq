@@ -1173,7 +1173,7 @@ func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 		}
 
 		gotTTL := r.TTL(context.Background(), base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
-		wantTTL := tc.at.Add(tc.ttl).Sub(time.Now())
+		wantTTL := time.Until(tc.at.Add(tc.ttl))
 		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)
 			continue

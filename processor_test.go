@@ -313,7 +313,7 @@ func TestProcessorRetry(t *testing.T) {
 			pending: []*base.TaskMessage{m1, m2, m3, m4},
 			delay:   time.Minute,
 			handler: HandlerFunc(func(ctx context.Context, task *Task) error {
-				return fmt.Errorf(errMsg)
+				return errors.New(errMsg)
 			}),
 			wait:         2 * time.Second,
 			wantErrMsg:   errMsg,
