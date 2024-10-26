@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -369,6 +370,11 @@ func createRDB() *rdb.RDB {
 	return rdb.NewRDB(c)
 }
 
+// createClient creates a Client instance using flag values and returns it.
+func createClient() *asynq.Client {
+	return asynq.NewClient(getRedisConnOpt())
+}
+
 // createInspector creates a Inspector instance using flag values and returns it.
 func createInspector() *asynq.Inspector {
 	return asynq.NewInspector(getRedisConnOpt())
@@ -455,4 +461,38 @@ func isPrintable(data []byte) bool {
 		}
 	}
 	return !isAllSpace
+}
+
+// Helper to turn a command line flag into a duration
+func getDuration(cmd *cobra.Command, arg string) time.Duration {
+	durationStr, err := cmd.Flags().GetString(arg)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+
+	duration, err := time.ParseDuration(durationStr)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+
+	return duration
+}
+
+// Helper to turn a command line flag into a time
+func getTime(cmd *cobra.Command, arg string) time.Time {
+	timeStr, err := cmd.Flags().GetString(arg)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+
+	timeVal, err := time.Parse(time.RFC3339, timeStr)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+
+	return timeVal
 }
