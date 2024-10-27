@@ -406,6 +406,7 @@ func DecodeServerInfo(b []byte) (*ServerInfo, error) {
 	}
 	startTime := pbmsg.GetStartTime()
 
+
 	return &ServerInfo{
 		Host:              pbmsg.GetHost(),
 		PID:               int(pbmsg.GetPid()),
@@ -507,6 +508,7 @@ func EncodeSchedulerEntry(entry *SchedulerEntry) ([]byte, error) {
 	}
 	next := timestamppb.New(entry.Next)
 	prev := timestamppb.New(entry.Prev)
+
 
 	return proto.Marshal(&pb.SchedulerEntry{
 		Id:              entry.ID,

@@ -18,4 +18,7 @@ updates:
       interval: "weekly"
     labels:
       - "pr-deps"
-      
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
