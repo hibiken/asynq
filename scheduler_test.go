@@ -5,12 +5,12 @@
 package asynq
 
 import (
-	"github.com/redis/go-redis/v9"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/testutil"
@@ -114,7 +114,7 @@ func TestSchedulerWhenRedisDown(t *testing.T) {
 
 	// Connect to non-existent redis instance to simulate a redis server being down.
 	scheduler := NewScheduler(
-		RedisClientOpt{Addr: ":9876"},
+		RedisClientOpt{Addr: ":9876"}, // no Redis listening to this port.
 		&SchedulerOpts{EnqueueErrorHandler: errorHandler},
 	)
 
