@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"runtime"
 	"runtime/debug"
 	"sort"
@@ -181,7 +181,7 @@ func (p *processor) exec() {
 			// Sleep to avoid slamming redis and let scheduler move tasks into queues.
 			// Note: We are not using blocking pop operation and polling queues instead.
 			// This adds significant load to redis.
-			jitter := time.Duration(rand.Intn(int(p.taskCheckInterval)))
+			jitter := rand.N(p.taskCheckInterval)
 			time.Sleep(p.taskCheckInterval/2 + jitter)
 			<-p.sema // release token
 			return
@@ -413,8 +413,7 @@ func (p *processor) queues() []string {
 			names = append(names, qname)
 		}
 	}
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	r.Shuffle(len(names), func(i, j int) { names[i], names[j] = names[j], names[i] })
+	rand.Shuffle(len(names), func(i, j int) { names[i], names[j] = names[j], names[i] })
 	return uniq(names, len(p.queueConfig))
 }
 

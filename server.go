@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"runtime"
 	"strings"
 	"sync"
@@ -400,9 +400,8 @@ func toInternalLogLevel(l LogLevel) log.Level {
 // DefaultRetryDelayFunc is the default RetryDelayFunc used if one is not specified in Config.
 // It uses exponential back-off strategy to calculate the retry delay.
 func DefaultRetryDelayFunc(n int, e error, t *Task) time.Duration {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// Formula taken from https://github.com/mperham/sidekiq.
-	s := int(math.Pow(float64(n), 4)) + 15 + (r.Intn(30) * (n + 1))
+	s := int(math.Pow(float64(n), 4)) + 15 + (rand.IntN(30) * (n + 1))
 	return time.Duration(s) * time.Second
 }
 
