@@ -14,12 +14,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/ptypes" //nolint: staticcheck
 	"github.com/hibiken/asynq/internal/errors"
 	pb "github.com/hibiken/asynq/internal/proto"
 	"github.com/hibiken/asynq/internal/timeutil"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Version of asynq library and CLI.
@@ -379,10 +379,8 @@ func EncodeServerInfo(info *ServerInfo) ([]byte, error) {
 	for q, p := range info.Queues {
 		queues[q] = int32(p)
 	}
-	started, err := ptypes.TimestampProto(info.Started) //nolint: staticcheck
-	if err != nil {
-		return nil, err
-	}
+	started := timestamppb.New(info.Started)
+
 	return proto.Marshal(&pb.ServerInfo{
 		Host:              info.Host,
 		Pid:               int32(info.PID),
@@ -406,10 +404,8 @@ func DecodeServerInfo(b []byte) (*ServerInfo, error) {
 	for q, p := range pbmsg.GetQueues() {
 		queues[q] = int(p)
 	}
-	startTime, err := ptypes.Timestamp(pbmsg.GetStartTime()) //nolint: staticcheck
-	if err != nil {
-		return nil, err
-	}
+	startTime := pbmsg.GetStartTime()
+
 	return &ServerInfo{
 		Host:              pbmsg.GetHost(),
 		PID:               int(pbmsg.GetPid()),
@@ -418,7 +414,7 @@ func DecodeServerInfo(b []byte) (*ServerInfo, error) {
 		Queues:            queues,
 		StrictPriority:    pbmsg.GetStrictPriority(),
 		Status:            pbmsg.GetStatus(),
-		Started:           startTime,
+		Started:           startTime.AsTime(),
 		ActiveWorkerCount: int(pbmsg.GetActiveWorkerCount()),
 	}, nil
 }
@@ -441,14 +437,9 @@ func EncodeWorkerInfo(info *WorkerInfo) ([]byte, error) {
 	if info == nil {
 		return nil, fmt.Errorf("cannot encode nil worker info")
 	}
-	startTime, err := ptypes.TimestampProto(info.Started) //nolint: staticcheck
-	if err != nil {
-		return nil, err
-	}
-	deadline, err := ptypes.TimestampProto(info.Deadline) //nolint: staticcheck
-	if err != nil {
-		return nil, err
-	}
+	startTime := timestamppb.New(info.Started)
+	deadline := timestamppb.New(info.Deadline)
+
 	return proto.Marshal(&pb.WorkerInfo{
 		Host:        info.Host,
 		Pid:         int32(info.PID),
@@ -468,14 +459,9 @@ func DecodeWorkerInfo(b []byte) (*WorkerInfo, error) {
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
 		return nil, err
 	}
-	startTime, err := ptypes.Timestamp(pbmsg.GetStartTime()) //nolint: staticcheck
-	if err != nil {
-		return nil, err
-	}
-	deadline, err := ptypes.Timestamp(pbmsg.GetDeadline()) //nolint: staticcheck
-	if err != nil {
-		return nil, err
-	}
+	startTime := pbmsg.GetStartTime()
+	deadline := pbmsg.GetDeadline()
+
 	return &WorkerInfo{
 		Host:     pbmsg.GetHost(),
 		PID:      int(pbmsg.GetPid()),
@@ -484,8 +470,8 @@ func DecodeWorkerInfo(b []byte) (*WorkerInfo, error) {
 		Type:     pbmsg.GetTaskType(),
 		Payload:  pbmsg.GetTaskPayload(),
 		Queue:    pbmsg.GetQueue(),
-		Started:  startTime,
-		Deadline: deadline,
+		Started:  startTime.AsTime(),
+		Deadline: deadline.AsTime(),
 	}, nil
 }
 
@@ -519,14 +505,9 @@ func EncodeSchedulerEntry(entry *SchedulerEntry) ([]byte, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("cannot encode nil scheduler entry")
 	}
-	next, err := ptypes.TimestampProto(entry.Next) //nolint: staticcheck
-	if err != nil {
-		return nil, err
-	}
-	prev, err := ptypes.TimestampProto(entry.Prev) //nolint: staticcheck
-	if err != nil {
-		return nil, err
-	}
+	next := timestamppb.New(entry.Next)
+	prev := timestamppb.New(entry.Prev)
+
 	return proto.Marshal(&pb.SchedulerEntry{
 		Id:              entry.ID,
 		Spec:            entry.Spec,
@@ -544,22 +525,17 @@ func DecodeSchedulerEntry(b []byte) (*SchedulerEntry, error) {
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
 		return nil, err
 	}
-	next, err := ptypes.Timestamp(pbmsg.GetNextEnqueueTime()) //nolint: staticcheck
-	if err != nil {
-		return nil, err
-	}
-	prev, err := ptypes.Timestamp(pbmsg.GetPrevEnqueueTime()) //nolint: staticcheck
-	if err != nil {
-		return nil, err
-	}
+	next := pbmsg.GetNextEnqueueTime()
+	prev := pbmsg.GetPrevEnqueueTime()
+
 	return &SchedulerEntry{
 		ID:      pbmsg.GetId(),
 		Spec:    pbmsg.GetSpec(),
 		Type:    pbmsg.GetTaskType(),
 		Payload: pbmsg.GetTaskPayload(),
 		Opts:    pbmsg.GetEnqueueOptions(),
-		Next:    next,
-		Prev:    prev,
+		Next:    next.AsTime(),
+		Prev:    prev.AsTime(),
 	}, nil
 }
 
@@ -578,10 +554,7 @@ func EncodeSchedulerEnqueueEvent(event *SchedulerEnqueueEvent) ([]byte, error) {
 	if event == nil {
 		return nil, fmt.Errorf("cannot encode nil enqueue event")
 	}
-	enqueuedAt, err := ptypes.TimestampProto(event.EnqueuedAt) //nolint: staticcheck
-	if err != nil {
-		return nil, err
-	}
+	enqueuedAt := timestamppb.New(event.EnqueuedAt)
 	return proto.Marshal(&pb.SchedulerEnqueueEvent{
 		TaskId:      event.TaskID,
 		EnqueueTime: enqueuedAt,
@@ -595,13 +568,10 @@ func DecodeSchedulerEnqueueEvent(b []byte) (*SchedulerEnqueueEvent, error) {
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
 		return nil, err
 	}
-	enqueuedAt, err := ptypes.Timestamp(pbmsg.GetEnqueueTime()) //nolint: staticcheck
-	if err != nil {
-		return nil, err
-	}
+	enqueuedAt := pbmsg.GetEnqueueTime()
 	return &SchedulerEnqueueEvent{
 		TaskID:     pbmsg.GetTaskId(),
-		EnqueuedAt: enqueuedAt,
+		EnqueuedAt: enqueuedAt.AsTime(),
 	}, nil
 }
 

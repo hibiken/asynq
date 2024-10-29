@@ -3,7 +3,6 @@ module github.com/hibiken/asynq
 go 1.22
 
 require (
-	github.com/golang/protobuf v1.5.3
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.4.0
@@ -12,7 +11,7 @@ require (
 	go.uber.org/goleak v1.3.0
 	golang.org/x/sys v0.16.0
 	golang.org/x/time v0.3.0
-	google.golang.org/protobuf v1.31.0
+	google.golang.org/protobuf v1.35.1
 )
 
 require (
