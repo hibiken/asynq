@@ -5,7 +5,7 @@ go 1.22
 require (
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
-	github.com/redis/go-redis/v9 v9.4.0
+	github.com/redis/go-redis/v9 v9.7.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cast v1.5.1
 	go.uber.org/goleak v1.3.0
