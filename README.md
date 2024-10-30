@@ -45,7 +45,7 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 
 ## Stability and Compatibility
 
-**Status**: The library is currently undergoing **heavy development** with frequent, breaking API changes.
+**Status**: The library relatively stable and is currently undergoing **moderate development** with less frequent breaking API changes.
 
 > ☝️ **Important Note**: Current major version is zero (`v0.x.x`) to accommodate rapid development and fast iteration while getting early feedback from users (_feedback on APIs are appreciated!_). The public API could change without a major version update before `v1.0.0` release.
 
@@ -53,8 +53,7 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 If you are using this package in production, **please consider sponsoring the project to show your support!**
 
 ## Quickstart
-
-Make sure you have Go installed ([download](https://golang.org/dl/)). Latest two Go versions are supported (See https://go.dev/dl).
+Make sure you have Go installed ([download](https://golang.org/dl/)). The **last two** Go versions are supported (See https://go.dev/dl).
 
 Initialize your project by creating a folder and then running `go mod init github.com/your/repo` ([learn more](https://blog.golang.org/using-go-modules)) inside the folder. Then install Asynq library with the [`go get`](https://golang.org/cmd/go/#hdr-Add_dependencies_to_current_module_and_install_them) command:
 
