@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SentinelUsername` is added as a redis config option (PR: https://github.com/hibiken/asynq/pull/924)
 - Some jitter is introduced to improve latency when fetching jobs in the processor (PR: https://github.com/hibiken/asynq/pull/868)
 - Add task enqueue command to the CLI (PR: https://github.com/hibiken/asynq/pull/918)
+- Add a map cache (concurrent safe) to keep track of queues that ultimately reduces redis load when enqueuing tasks (PR: https://github.com/hibiken/asynq/pull/946)
 
 ### Fixes
 - Archived tasks that are trimmed should now be deleted (PR: https://github.com/hibiken/asynq/pull/743)
