@@ -160,6 +160,59 @@ func TestEnqueueTaskIdConflictError(t *testing.T) {
 	}
 }
 
+func TestEnqueueQueueCache(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	t1 := h.NewTaskMessageWithQueue("sync1", nil, "low")
+
+	enqueueTime := time.Now()
+	clock := timeutil.NewSimulatedClock(enqueueTime)
+	r.SetClock(clock)
+
+	err := r.Enqueue(context.Background(), t1)
+	if err != nil {
+		t.Fatalf("(*RDB).Enqueue(msg) = %v, want nil", err)
+	}
+
+	// Check queue is in the AllQueues set.
+	if !r.client.SIsMember(context.Background(), base.AllQueues, t1.Queue).Val() {
+		t.Fatalf("%q is not a member of SET %q", t1.Queue, base.AllQueues)
+	}
+
+	if _, ok := r.queuesPublished.Load(t1.Queue); !ok {
+		t.Fatalf("%q is not cached in queuesPublished", t1.Queue)
+	}
+
+	t.Run("remove-queue", func(t *testing.T) {
+		err := r.RemoveQueue(t1.Queue, true)
+		if err != nil {
+			t.Errorf("(*RDB).RemoveQueue(%q, %t) = %v, want nil", t1.Queue, true, err)
+		}
+
+		if _, ok := r.queuesPublished.Load(t1.Queue); ok {
+			t.Fatalf("%q is still cached in queuesPublished", t1.Queue)
+		}
+
+		if r.client.SIsMember(context.Background(), base.AllQueues, t1.Queue).Val() {
+			t.Fatalf("%q is a member of SET %q", t1.Queue, base.AllQueues)
+		}
+
+		err = r.Enqueue(context.Background(), t1)
+		if err != nil {
+			t.Fatalf("(*RDB).Enqueue(msg) = %v, want nil", err)
+		}
+
+		// Check queue is in the AllQueues set.
+		if !r.client.SIsMember(context.Background(), base.AllQueues, t1.Queue).Val() {
+			t.Fatalf("%q is not a member of SET %q", t1.Queue, base.AllQueues)
+		}
+
+		if _, ok := r.queuesPublished.Load(t1.Queue); !ok {
+			t.Fatalf("%q is not cached in queuesPublished", t1.Queue)
+		}
+	})
+}
+
 func TestEnqueueUnique(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
