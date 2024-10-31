@@ -41,6 +41,16 @@ func NewClient(r RedisConnOpt) *Client {
 	return client
 }
 
+// NewClientWithExistingRedisClient returns a new Client instance given a redis.UniversalClient already created
+func NewClientWithExistingRedisClient(redisClient redis.UniversalClient) *Client {
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		panic(fmt.Sprintf("asynq: failed to ping Redis: %v", err))
+	}
+	client := NewClientFromRedisClient(redisClient)
+	client.sharedConnection = false
+	return client
+}
+
 // NewClientFromRedisClient returns a new instance of Client given a redis.UniversalClient
 // Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
 func NewClientFromRedisClient(c redis.UniversalClient) *Client {

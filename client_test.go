@@ -1191,3 +1191,28 @@ func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 		}
 	}
 }
+
+func TestNewClientWithExistingRedisClient(t *testing.T) {
+	r := setup(t)
+	redisClient := getRedisConnOpt(t).MakeRedisClient().(redis.UniversalClient)
+	h.FlushDB(t, r)
+	// Test successful creation
+	client := NewClientWithExistingRedisClient(redisClient)
+	if client == nil {
+		t.Fatal("NewClientWithExistingRedisClient returned nil, want non-nil")
+	}
+	if client.sharedConnection {
+		t.Errorf("client.sharedConnection = %v, want false", client.sharedConnection)
+	}
+
+	// Test ping failure
+	invalidRedisClient := redis.NewClient(&redis.Options{
+		Addr: "invalid:6379",
+	})
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("NewClientWithExistingRedisClient did not panic with invalid Redis client")
+		}
+	}()
+	NewClientWithExistingRedisClient(invalidRedisClient)
+}
