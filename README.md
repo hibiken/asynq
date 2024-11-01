@@ -37,7 +37,6 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 - [Flexible handler interface with support for middlewares](https://github.com/hibiken/asynq/wiki/Handler-Deep-Dive)
 - [Ability to pause queue](/tools/asynq/README.md#pause) to stop processing tasks from the queue
 - [Periodic Tasks](https://github.com/hibiken/asynq/wiki/Periodic-Tasks)
-- [Support Redis Cluster](https://github.com/hibiken/asynq/wiki/Redis-Cluster) for automatic sharding and high availability
 - [Support Redis Sentinels](https://github.com/hibiken/asynq/wiki/Automatic-Failover) for high availability
 - Integration with [Prometheus](https://prometheus.io/) to collect and visualize queue metrics
 - [Web UI](#web-ui) to inspect and remote-control queues and tasks
@@ -45,16 +44,19 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 
 ## Stability and Compatibility
 
-**Status**: The library is currently undergoing **heavy development** with frequent, breaking API changes.
+**Status**: The library relatively stable and is currently undergoing **moderate development** with less frequent breaking API changes.
 
 > ☝️ **Important Note**: Current major version is zero (`v0.x.x`) to accommodate rapid development and fast iteration while getting early feedback from users (_feedback on APIs are appreciated!_). The public API could change without a major version update before `v1.0.0` release.
+
+### Redis Cluster Compatibility
+
+Some of the lua scripts in this library may not be compatible with Redis Cluster.
 
 ## Sponsoring
 If you are using this package in production, **please consider sponsoring the project to show your support!**
 
 ## Quickstart
-
-Make sure you have Go installed ([download](https://golang.org/dl/)). Latest two Go versions are supported (See https://go.dev/dl).
+Make sure you have Go installed ([download](https://golang.org/dl/)). The **last two** Go versions are supported (See https://go.dev/dl).
 
 Initialize your project by creating a folder and then running `go mod init github.com/your/repo` ([learn more](https://blog.golang.org/using-go-modules)) inside the folder. Then install Asynq library with the [`go get`](https://golang.org/cmd/go/#hdr-Add_dependencies_to_current_module_and_install_them) command:
 
