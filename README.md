@@ -37,7 +37,6 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 - [Flexible handler interface with support for middlewares](https://github.com/hibiken/asynq/wiki/Handler-Deep-Dive)
 - [Ability to pause queue](/tools/asynq/README.md#pause) to stop processing tasks from the queue
 - [Periodic Tasks](https://github.com/hibiken/asynq/wiki/Periodic-Tasks)
-- [Support Redis Cluster](https://github.com/hibiken/asynq/wiki/Redis-Cluster) for automatic sharding and high availability
 - [Support Redis Sentinels](https://github.com/hibiken/asynq/wiki/Automatic-Failover) for high availability
 - Integration with [Prometheus](https://prometheus.io/) to collect and visualize queue metrics
 - [Web UI](#web-ui) to inspect and remote-control queues and tasks
@@ -48,6 +47,10 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 **Status**: The library relatively stable and is currently undergoing **moderate development** with less frequent breaking API changes.
 
 > ☝️ **Important Note**: Current major version is zero (`v0.x.x`) to accommodate rapid development and fast iteration while getting early feedback from users (_feedback on APIs are appreciated!_). The public API could change without a major version update before `v1.0.0` release.
+
+### Redis Cluster Compatibility
+
+Some of the lua scripts in this library may not be compatible with Redis Cluster.
 
 ## Sponsoring
 If you are using this package in production, **please consider sponsoring the project to show your support!**
