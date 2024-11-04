@@ -1437,7 +1437,7 @@ func (r *RDB) ClearServerState(host string, pid int, serverID string) error {
 
 // KEYS[1]  -> asynq:schedulers:{<schedulerID>}
 // ARGV[1]  -> TTL in seconds
-// ARGV[2:] -> schedler entries
+// ARGV[2:] -> scheduler entries
 var writeSchedulerEntriesCmd = redis.NewScript(`
 redis.call("DEL", KEYS[1])
 for i = 2, #ARGV do
@@ -1468,10 +1468,10 @@ func (r *RDB) WriteSchedulerEntries(schedulerID string, entries []*base.Schedule
 }
 
 // ClearSchedulerEntries deletes scheduler entries data from redis.
-func (r *RDB) ClearSchedulerEntries(scheduelrID string) error {
+func (r *RDB) ClearSchedulerEntries(schedulerID string) error {
 	var op errors.Op = "rdb.ClearSchedulerEntries"
 	ctx := context.Background()
-	key := base.SchedulerEntriesKey(scheduelrID)
+	key := base.SchedulerEntriesKey(schedulerID)
 	if err := r.client.ZRem(ctx, base.AllSchedulers, key).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zrem", Err: err})
 	}
