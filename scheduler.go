@@ -26,16 +26,17 @@ type Scheduler struct {
 
 	state *serverState
 
-	logger          *log.Logger
-	client          *Client
-	rdb             *rdb.RDB
-	cron            *cron.Cron
-	location        *time.Location
-	done            chan struct{}
-	wg              sync.WaitGroup
-	preEnqueueFunc  func(task *Task, opts []Option)
-	postEnqueueFunc func(info *TaskInfo, err error)
-	errHandler      func(task *Task, opts []Option, err error)
+	heartbeatInterval time.Duration
+	logger            *log.Logger
+	client            *Client
+	rdb               *rdb.RDB
+	cron              *cron.Cron
+	location          *time.Location
+	done              chan struct{}
+	wg                sync.WaitGroup
+	preEnqueueFunc    func(task *Task, opts []Option)
+	postEnqueueFunc   func(info *TaskInfo, err error)
+	errHandler        func(task *Task, opts []Option, err error)
 
 	// guards idmap
 	mu sync.Mutex
@@ -47,6 +48,8 @@ type Scheduler struct {
 	// not want to close it.
 	sharedConnection bool
 }
+
+const defaultHeartbeatInterval = 10 * time.Second
 
 // NewScheduler returns a new Scheduler instance given the redis connection option.
 // The parameter opts is optional, defaults will be used if opts is set to nil
@@ -68,6 +71,11 @@ func NewSchedulerFromRedisClient(c redis.UniversalClient, opts *SchedulerOpts) *
 		opts = &SchedulerOpts{}
 	}
 
+	heartbeatInterval := opts.HeartbeatInterval
+	if heartbeatInterval <= 0 {
+		heartbeatInterval = defaultHeartbeatInterval
+	}
+
 	logger := log.NewLogger(opts.Logger)
 	loglevel := opts.LogLevel
 	if loglevel == level_unspecified {
@@ -81,18 +89,19 @@ func NewSchedulerFromRedisClient(c redis.UniversalClient, opts *SchedulerOpts) *
 	}
 
 	return &Scheduler{
-		id:              generateSchedulerID(),
-		state:           &serverState{value: srvStateNew},
-		logger:          logger,
-		client:          NewClientFromRedisClient(c),
-		rdb:             rdb.NewRDB(c),
-		cron:            cron.New(cron.WithLocation(loc)),
-		location:        loc,
-		done:            make(chan struct{}),
-		preEnqueueFunc:  opts.PreEnqueueFunc,
-		postEnqueueFunc: opts.PostEnqueueFunc,
-		errHandler:      opts.EnqueueErrorHandler,
-		idmap:           make(map[string]cron.EntryID),
+		id:                generateSchedulerID(),
+		state:             &serverState{value: srvStateNew},
+		heartbeatInterval: heartbeatInterval,
+		logger:            logger,
+		client:            NewClientFromRedisClient(c),
+		rdb:               rdb.NewRDB(c),
+		cron:              cron.New(cron.WithLocation(loc)),
+		location:          loc,
+		done:              make(chan struct{}),
+		preEnqueueFunc:    opts.PreEnqueueFunc,
+		postEnqueueFunc:   opts.PostEnqueueFunc,
+		errHandler:        opts.EnqueueErrorHandler,
+		idmap:             make(map[string]cron.EntryID),
 	}
 }
 
@@ -106,6 +115,15 @@ func generateSchedulerID() string {
 
 // SchedulerOpts specifies scheduler options.
 type SchedulerOpts struct {
+	// HeartbeatInterval specifies the interval between scheduler heartbeats.
+	//
+	// If unset, zero or a negative value, the interval is set to 10 second.
+	//
+	// Note: Setting this value too low may add significant load to redis.
+	//
+	// By default, HeartbeatInterval is set to 10 seconds.
+	HeartbeatInterval time.Duration
+
 	// Logger specifies the logger used by the scheduler instance.
 	//
 	// If unset, the default logger is used.
@@ -284,7 +302,7 @@ func (s *Scheduler) Shutdown() {
 
 func (s *Scheduler) runHeartbeater() {
 	defer s.wg.Done()
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(s.heartbeatInterval)
 	for {
 		select {
 		case <-s.done:
@@ -317,7 +335,7 @@ func (s *Scheduler) beat() {
 		entries = append(entries, e)
 	}
 	s.logger.Debugf("Writing entries %v", entries)
-	if err := s.rdb.WriteSchedulerEntries(s.id, entries, 5*time.Second); err != nil {
+	if err := s.rdb.WriteSchedulerEntries(s.id, entries, s.heartbeatInterval*2); err != nil {
 		s.logger.Warnf("Scheduler could not write heartbeat data: %v", err)
 	}
 }
