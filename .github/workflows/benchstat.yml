@@ -24,7 +24,7 @@ jobs:
       - name: Benchmark
         run: go test -run=^$ -bench=. -count=5 -timeout=60m ./... | tee -a new.txt
       - name: Upload Benchmark
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bench-incoming
           path: new.txt
@@ -48,7 +48,7 @@ jobs:
       - name: Benchmark
         run: go test -run=^$ -bench=. -count=5 -timeout=60m ./... | tee -a old.txt
       - name: Upload Benchmark
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bench-current
           path: old.txt
@@ -76,7 +76,7 @@ jobs:
       - name: Benchstat Results
         run: benchstat old.txt new.txt | tee -a benchstat.txt
       - name: Upload benchstat results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: benchstat
           path: benchstat.txt
