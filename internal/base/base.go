@@ -375,7 +375,7 @@ func EncodeServerInfo(info *ServerInfo) ([]byte, error) {
 	if info == nil {
 		return nil, fmt.Errorf("cannot encode nil server info")
 	}
-	queues := make(map[string]int32)
+	queues := make(map[string]int32, len(info.Queues))
 	for q, p := range info.Queues {
 		queues[q] = int32(p)
 	}
@@ -400,7 +400,7 @@ func DecodeServerInfo(b []byte) (*ServerInfo, error) {
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
 		return nil, err
 	}
-	queues := make(map[string]int)
+	queues := make(map[string]int, len(pbmsg.GetQueues()))
 	for q, p := range pbmsg.GetQueues() {
 		queues[q] = int(p)
 	}
