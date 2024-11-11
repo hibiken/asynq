@@ -14,16 +14,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
 	"github.com/hibiken/asynq/internal/errors"
 	pb "github.com/hibiken/asynq/internal/proto"
 	"github.com/hibiken/asynq/internal/timeutil"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Version of asynq library and CLI.
-const Version = "0.24.1"
+const Version = "0.25.0"
 
 // DefaultQueueName is the queue name used if none are specified by user.
 const DefaultQueueName = "default"
@@ -104,76 +104,76 @@ func ValidateQueueName(qname string) error {
 
 // QueueKeyPrefix returns a prefix for all keys in the given queue.
 func QueueKeyPrefix(qname string) string {
-	return fmt.Sprintf("asynq:{%s}:", qname)
+	return "asynq:{" + qname + "}:"
 }
 
 // TaskKeyPrefix returns a prefix for task key.
 func TaskKeyPrefix(qname string) string {
-	return fmt.Sprintf("%st:", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "t:"
 }
 
 // TaskKey returns a redis key for the given task message.
 func TaskKey(qname, id string) string {
-	return fmt.Sprintf("%s%s", TaskKeyPrefix(qname), id)
+	return TaskKeyPrefix(qname) + id
 }
 
 // PendingKey returns a redis key for the given queue name.
 func PendingKey(qname string) string {
-	return fmt.Sprintf("%spending", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "pending"
 }
 
 // ActiveKey returns a redis key for the active tasks.
 func ActiveKey(qname string) string {
-	return fmt.Sprintf("%sactive", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "active"
 }
 
 // ScheduledKey returns a redis key for the scheduled tasks.
 func ScheduledKey(qname string) string {
-	return fmt.Sprintf("%sscheduled", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "scheduled"
 }
 
 // RetryKey returns a redis key for the retry tasks.
 func RetryKey(qname string) string {
-	return fmt.Sprintf("%sretry", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "retry"
 }
 
 // ArchivedKey returns a redis key for the archived tasks.
 func ArchivedKey(qname string) string {
-	return fmt.Sprintf("%sarchived", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "archived"
 }
 
 // LeaseKey returns a redis key for the lease.
 func LeaseKey(qname string) string {
-	return fmt.Sprintf("%slease", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "lease"
 }
 
 func CompletedKey(qname string) string {
-	return fmt.Sprintf("%scompleted", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "completed"
 }
 
 // PausedKey returns a redis key to indicate that the given queue is paused.
 func PausedKey(qname string) string {
-	return fmt.Sprintf("%spaused", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "paused"
 }
 
 // ProcessedTotalKey returns a redis key for total processed count for the given queue.
 func ProcessedTotalKey(qname string) string {
-	return fmt.Sprintf("%sprocessed", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "processed"
 }
 
 // FailedTotalKey returns a redis key for total failure count for the given queue.
 func FailedTotalKey(qname string) string {
-	return fmt.Sprintf("%sfailed", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "failed"
 }
 
 // ProcessedKey returns a redis key for processed count for the given day for the queue.
 func ProcessedKey(qname string, t time.Time) string {
-	return fmt.Sprintf("%sprocessed:%s", QueueKeyPrefix(qname), t.UTC().Format("2006-01-02"))
+	return QueueKeyPrefix(qname) + "processed:" + t.UTC().Format("2006-01-02")
 }
 
 // FailedKey returns a redis key for failure count for the given day for the queue.
 func FailedKey(qname string, t time.Time) string {
-	return fmt.Sprintf("%sfailed:%s", QueueKeyPrefix(qname), t.UTC().Format("2006-01-02"))
+	return QueueKeyPrefix(qname) + "failed:" + t.UTC().Format("2006-01-02")
 }
 
 // ServerInfoKey returns a redis key for process info.
@@ -188,47 +188,47 @@ func WorkersKey(hostname string, pid int, serverID string) string {
 
 // SchedulerEntriesKey returns a redis key for the scheduler entries given scheduler ID.
 func SchedulerEntriesKey(schedulerID string) string {
-	return fmt.Sprintf("asynq:schedulers:{%s}", schedulerID)
+	return "asynq:schedulers:{" + schedulerID + "}"
 }
 
 // SchedulerHistoryKey returns a redis key for the scheduler's history for the given entry.
 func SchedulerHistoryKey(entryID string) string {
-	return fmt.Sprintf("asynq:scheduler_history:%s", entryID)
+	return "asynq:scheduler_history:" + entryID
 }
 
 // UniqueKey returns a redis key with the given type, payload, and queue name.
 func UniqueKey(qname, tasktype string, payload []byte) string {
 	if payload == nil {
-		return fmt.Sprintf("%sunique:%s:", QueueKeyPrefix(qname), tasktype)
+		return QueueKeyPrefix(qname) + "unique:" + tasktype + ":"
 	}
 	checksum := md5.Sum(payload)
-	return fmt.Sprintf("%sunique:%s:%s", QueueKeyPrefix(qname), tasktype, hex.EncodeToString(checksum[:]))
+	return QueueKeyPrefix(qname) + "unique:" + tasktype + ":" + hex.EncodeToString(checksum[:])
 }
 
 // GroupKeyPrefix returns a prefix for group key.
 func GroupKeyPrefix(qname string) string {
-	return fmt.Sprintf("%sg:", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "g:"
 }
 
 // GroupKey returns a redis key used to group tasks belong in the same group.
 func GroupKey(qname, gkey string) string {
-	return fmt.Sprintf("%s%s", GroupKeyPrefix(qname), gkey)
+	return GroupKeyPrefix(qname) + gkey
 }
 
 // AggregationSetKey returns a redis key used for an aggregation set.
 func AggregationSetKey(qname, gname, setID string) string {
-	return fmt.Sprintf("%s:%s", GroupKey(qname, gname), setID)
+	return GroupKey(qname, gname) + ":" + setID
 }
 
 // AllGroups return a redis key used to store all group keys used in a given queue.
 func AllGroups(qname string) string {
-	return fmt.Sprintf("%sgroups", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "groups"
 }
 
 // AllAggregationSets returns a redis key used to store all aggregation sets (set of tasks staged to be aggregated)
 // in a given queue.
 func AllAggregationSets(qname string) string {
-	return fmt.Sprintf("%saggregation_sets", QueueKeyPrefix(qname))
+	return QueueKeyPrefix(qname) + "aggregation_sets"
 }
 
 // TaskMessage is the internal representation of a task with additional metadata fields.
@@ -375,14 +375,12 @@ func EncodeServerInfo(info *ServerInfo) ([]byte, error) {
 	if info == nil {
 		return nil, fmt.Errorf("cannot encode nil server info")
 	}
-	queues := make(map[string]int32)
+	queues := make(map[string]int32, len(info.Queues))
 	for q, p := range info.Queues {
 		queues[q] = int32(p)
 	}
-	started, err := ptypes.TimestampProto(info.Started)
-	if err != nil {
-		return nil, err
-	}
+	started := timestamppb.New(info.Started)
+
 	return proto.Marshal(&pb.ServerInfo{
 		Host:              info.Host,
 		Pid:               int32(info.PID),
@@ -402,14 +400,12 @@ func DecodeServerInfo(b []byte) (*ServerInfo, error) {
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
 		return nil, err
 	}
-	queues := make(map[string]int)
+	queues := make(map[string]int, len(pbmsg.GetQueues()))
 	for q, p := range pbmsg.GetQueues() {
 		queues[q] = int(p)
 	}
-	startTime, err := ptypes.Timestamp(pbmsg.GetStartTime())
-	if err != nil {
-		return nil, err
-	}
+	startTime := pbmsg.GetStartTime()
+
 	return &ServerInfo{
 		Host:              pbmsg.GetHost(),
 		PID:               int(pbmsg.GetPid()),
@@ -418,7 +414,7 @@ func DecodeServerInfo(b []byte) (*ServerInfo, error) {
 		Queues:            queues,
 		StrictPriority:    pbmsg.GetStrictPriority(),
 		Status:            pbmsg.GetStatus(),
-		Started:           startTime,
+		Started:           startTime.AsTime(),
 		ActiveWorkerCount: int(pbmsg.GetActiveWorkerCount()),
 	}, nil
 }
@@ -441,14 +437,9 @@ func EncodeWorkerInfo(info *WorkerInfo) ([]byte, error) {
 	if info == nil {
 		return nil, fmt.Errorf("cannot encode nil worker info")
 	}
-	startTime, err := ptypes.TimestampProto(info.Started)
-	if err != nil {
-		return nil, err
-	}
-	deadline, err := ptypes.TimestampProto(info.Deadline)
-	if err != nil {
-		return nil, err
-	}
+	startTime := timestamppb.New(info.Started)
+	deadline := timestamppb.New(info.Deadline)
+
 	return proto.Marshal(&pb.WorkerInfo{
 		Host:        info.Host,
 		Pid:         int32(info.PID),
@@ -468,14 +459,9 @@ func DecodeWorkerInfo(b []byte) (*WorkerInfo, error) {
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
 		return nil, err
 	}
-	startTime, err := ptypes.Timestamp(pbmsg.GetStartTime())
-	if err != nil {
-		return nil, err
-	}
-	deadline, err := ptypes.Timestamp(pbmsg.GetDeadline())
-	if err != nil {
-		return nil, err
-	}
+	startTime := pbmsg.GetStartTime()
+	deadline := pbmsg.GetDeadline()
+
 	return &WorkerInfo{
 		Host:     pbmsg.GetHost(),
 		PID:      int(pbmsg.GetPid()),
@@ -484,8 +470,8 @@ func DecodeWorkerInfo(b []byte) (*WorkerInfo, error) {
 		Type:     pbmsg.GetTaskType(),
 		Payload:  pbmsg.GetTaskPayload(),
 		Queue:    pbmsg.GetQueue(),
-		Started:  startTime,
-		Deadline: deadline,
+		Started:  startTime.AsTime(),
+		Deadline: deadline.AsTime(),
 	}, nil
 }
 
@@ -519,14 +505,9 @@ func EncodeSchedulerEntry(entry *SchedulerEntry) ([]byte, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("cannot encode nil scheduler entry")
 	}
-	next, err := ptypes.TimestampProto(entry.Next)
-	if err != nil {
-		return nil, err
-	}
-	prev, err := ptypes.TimestampProto(entry.Prev)
-	if err != nil {
-		return nil, err
-	}
+	next := timestamppb.New(entry.Next)
+	prev := timestamppb.New(entry.Prev)
+
 	return proto.Marshal(&pb.SchedulerEntry{
 		Id:              entry.ID,
 		Spec:            entry.Spec,
@@ -544,22 +525,17 @@ func DecodeSchedulerEntry(b []byte) (*SchedulerEntry, error) {
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
 		return nil, err
 	}
-	next, err := ptypes.Timestamp(pbmsg.GetNextEnqueueTime())
-	if err != nil {
-		return nil, err
-	}
-	prev, err := ptypes.Timestamp(pbmsg.GetPrevEnqueueTime())
-	if err != nil {
-		return nil, err
-	}
+	next := pbmsg.GetNextEnqueueTime()
+	prev := pbmsg.GetPrevEnqueueTime()
+
 	return &SchedulerEntry{
 		ID:      pbmsg.GetId(),
 		Spec:    pbmsg.GetSpec(),
 		Type:    pbmsg.GetTaskType(),
 		Payload: pbmsg.GetTaskPayload(),
 		Opts:    pbmsg.GetEnqueueOptions(),
-		Next:    next,
-		Prev:    prev,
+		Next:    next.AsTime(),
+		Prev:    prev.AsTime(),
 	}, nil
 }
 
@@ -578,10 +554,7 @@ func EncodeSchedulerEnqueueEvent(event *SchedulerEnqueueEvent) ([]byte, error) {
 	if event == nil {
 		return nil, fmt.Errorf("cannot encode nil enqueue event")
 	}
-	enqueuedAt, err := ptypes.TimestampProto(event.EnqueuedAt)
-	if err != nil {
-		return nil, err
-	}
+	enqueuedAt := timestamppb.New(event.EnqueuedAt)
 	return proto.Marshal(&pb.SchedulerEnqueueEvent{
 		TaskId:      event.TaskID,
 		EnqueueTime: enqueuedAt,
@@ -595,13 +568,10 @@ func DecodeSchedulerEnqueueEvent(b []byte) (*SchedulerEnqueueEvent, error) {
 	if err := proto.Unmarshal(b, &pbmsg); err != nil {
 		return nil, err
 	}
-	enqueuedAt, err := ptypes.Timestamp(pbmsg.GetEnqueueTime())
-	if err != nil {
-		return nil, err
-	}
+	enqueuedAt := pbmsg.GetEnqueueTime()
 	return &SchedulerEnqueueEvent{
 		TaskID:     pbmsg.GetTaskId(),
-		EnqueuedAt: enqueuedAt,
+		EnqueuedAt: enqueuedAt.AsTime(),
 	}, nil
 }
 
@@ -737,7 +707,7 @@ type Broker interface {
 	ReclaimStaleAggregationSets(qname string) error
 
 	// Task retention related method
-	DeleteExpiredCompletedTasks(qname string) error
+	DeleteExpiredCompletedTasks(qname string, batchSize int) error
 
 	// Lease related methods
 	ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*TaskMessage, error)

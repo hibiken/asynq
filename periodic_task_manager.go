@@ -7,7 +7,6 @@ package asynq
 import (
 	"crypto/sha256"
 	"fmt"
-	"io"
 	"sort"
 	"sync"
 	"time"
@@ -79,13 +78,13 @@ type PeriodicTaskConfig struct {
 
 func (c *PeriodicTaskConfig) hash() string {
 	h := sha256.New()
-	io.WriteString(h, c.Cronspec)
-	io.WriteString(h, c.Task.Type())
+	_, _ = h.Write([]byte(c.Cronspec))
+	_, _ = h.Write([]byte(c.Task.Type()))
 	h.Write(c.Task.Payload())
 	opts := stringifyOptions(c.Opts)
 	sort.Strings(opts)
 	for _, opt := range opts {
-		io.WriteString(h, opt)
+		_, _ = h.Write([]byte(opt))
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }

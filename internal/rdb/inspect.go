@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
 )
 
@@ -343,7 +343,7 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 	}
 	usg, err := cast.ToInt64E(res)
 	if err != nil {
-		return 0, errors.E(op, errors.Internal, fmt.Sprintf("could not cast script return value to int64"))
+		return 0, errors.E(op, errors.Internal, "could not cast script return value to int64")
 	}
 	return usg, nil
 }
@@ -1832,6 +1832,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 		if err := r.client.SRem(context.Background(), base.AllQueues, qname).Err(); err != nil {
 			return errors.E(op, errors.Unknown, err)
 		}
+		r.queuesPublished.Delete(qname)
 		return nil
 	case -1:
 		return errors.E(op, errors.NotFound, &errors.QueueNotEmptyError{Queue: qname})

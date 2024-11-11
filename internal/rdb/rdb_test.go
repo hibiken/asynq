@@ -160,6 +160,59 @@ func TestEnqueueTaskIdConflictError(t *testing.T) {
 	}
 }
 
+func TestEnqueueQueueCache(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	t1 := h.NewTaskMessageWithQueue("sync1", nil, "low")
+
+	enqueueTime := time.Now()
+	clock := timeutil.NewSimulatedClock(enqueueTime)
+	r.SetClock(clock)
+
+	err := r.Enqueue(context.Background(), t1)
+	if err != nil {
+		t.Fatalf("(*RDB).Enqueue(msg) = %v, want nil", err)
+	}
+
+	// Check queue is in the AllQueues set.
+	if !r.client.SIsMember(context.Background(), base.AllQueues, t1.Queue).Val() {
+		t.Fatalf("%q is not a member of SET %q", t1.Queue, base.AllQueues)
+	}
+
+	if _, ok := r.queuesPublished.Load(t1.Queue); !ok {
+		t.Fatalf("%q is not cached in queuesPublished", t1.Queue)
+	}
+
+	t.Run("remove-queue", func(t *testing.T) {
+		err := r.RemoveQueue(t1.Queue, true)
+		if err != nil {
+			t.Errorf("(*RDB).RemoveQueue(%q, %t) = %v, want nil", t1.Queue, true, err)
+		}
+
+		if _, ok := r.queuesPublished.Load(t1.Queue); ok {
+			t.Fatalf("%q is still cached in queuesPublished", t1.Queue)
+		}
+
+		if r.client.SIsMember(context.Background(), base.AllQueues, t1.Queue).Val() {
+			t.Fatalf("%q is a member of SET %q", t1.Queue, base.AllQueues)
+		}
+
+		err = r.Enqueue(context.Background(), t1)
+		if err != nil {
+			t.Fatalf("(*RDB).Enqueue(msg) = %v, want nil", err)
+		}
+
+		// Check queue is in the AllQueues set.
+		if !r.client.SIsMember(context.Background(), base.AllQueues, t1.Queue).Val() {
+			t.Fatalf("%q is not a member of SET %q", t1.Queue, base.AllQueues)
+		}
+
+		if _, ok := r.queuesPublished.Load(t1.Queue); !ok {
+			t.Fatalf("%q is not cached in queuesPublished", t1.Queue)
+		}
+	})
+}
+
 func TestEnqueueUnique(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -2002,7 +2055,6 @@ func TestArchive(t *testing.T) {
 	}
 	errMsg := "SMTP server not responding"
 
-	// TODO(hibiken): add test cases for trimming
 	tests := []struct {
 		active       map[string][]*base.TaskMessage
 		lease        map[string][]base.Z
@@ -2167,6 +2219,163 @@ func TestArchive(t *testing.T) {
 		gotFailedTotal := r.client.Get(context.Background(), failedTotalKey).Val()
 		if gotFailedTotal != "1" {
 			t.Errorf("GET %q = %q, want 1", failedTotalKey, gotFailedTotal)
+		}
+	}
+}
+
+func TestArchiveTrim(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	t1 := &base.TaskMessage{
+		ID:      uuid.NewString(),
+		Type:    "send_email",
+		Payload: nil,
+		Queue:   "default",
+		Retry:   25,
+		Retried: 25,
+		Timeout: 1800,
+	}
+	t2 := &base.TaskMessage{
+		ID:      uuid.NewString(),
+		Type:    "reindex",
+		Payload: nil,
+		Queue:   "default",
+		Retry:   25,
+		Retried: 0,
+		Timeout: 3000,
+	}
+	errMsg := "SMTP server not responding"
+
+	maxArchiveSet := make([]base.Z, 0)
+	for i := 0; i < maxArchiveSize-1; i++ {
+		maxArchiveSet = append(maxArchiveSet, base.Z{Message: &base.TaskMessage{
+			ID:      uuid.NewString(),
+			Type:    "generate_csv",
+			Payload: nil,
+			Queue:   "default",
+			Retry:   25,
+			Retried: 0,
+			Timeout: 60,
+		}, Score: now.Add(-time.Hour + -time.Second*time.Duration(i)).Unix()})
+	}
+
+	wantMaxArchiveSet := make([]base.Z, 0)
+	// newly archived task should be at the front
+	wantMaxArchiveSet = append(wantMaxArchiveSet, base.Z{Message: h.TaskMessageWithError(*t1, errMsg, now), Score: now.Unix()})
+	// oldest task should be dropped from the set
+	wantMaxArchiveSet = append(wantMaxArchiveSet, maxArchiveSet[:len(maxArchiveSet)-1]...)
+
+	tests := []struct {
+		toArchive    map[string][]*base.TaskMessage
+		lease        map[string][]base.Z
+		archived     map[string][]base.Z
+		wantArchived map[string][]base.Z
+	}{
+		{ // simple, 1 to be archived, 1 already archived, both are in the archive set
+			toArchive: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			lease: map[string][]base.Z{
+				"default": {
+					{Message: t1, Score: now.Add(10 * time.Second).Unix()},
+				},
+			},
+			archived: map[string][]base.Z{
+				"default": {
+					{Message: t2, Score: now.Add(-time.Hour).Unix()},
+				},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {
+					{Message: h.TaskMessageWithError(*t1, errMsg, now), Score: now.Unix()},
+					{Message: t2, Score: now.Add(-time.Hour).Unix()},
+				},
+			},
+		},
+		{ // 1 to be archived, 1 already archived but past expiry, only the newly archived task should be left
+			toArchive: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			lease: map[string][]base.Z{
+				"default": {
+					{Message: t1, Score: now.Add(10 * time.Second).Unix()},
+				},
+			},
+			archived: map[string][]base.Z{
+				"default": {
+					{Message: t2, Score: now.Add(-time.Hour * 24 * (archivedExpirationInDays + 1)).Unix()},
+				},
+			},
+			wantArchived: map[string][]base.Z{
+				"default": {
+					{Message: h.TaskMessageWithError(*t1, errMsg, now), Score: now.Unix()},
+				},
+			},
+		},
+		{ // 1 to be archived, maxArchiveSize in archive set, archive set should be trimmed back to maxArchiveSize and newly archived task should be in the set
+			toArchive: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			lease: map[string][]base.Z{
+				"default": {
+					{Message: t1, Score: now.Add(10 * time.Second).Unix()},
+				},
+			},
+			archived: map[string][]base.Z{
+				"default": maxArchiveSet,
+			},
+			wantArchived: map[string][]base.Z{
+				"default": wantMaxArchiveSet,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllActiveQueues(t, r.client, tc.toArchive)
+		h.SeedAllLease(t, r.client, tc.lease)
+		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+
+		for _, tasks := range tc.toArchive {
+			for _, target := range tasks {
+				err := r.Archive(context.Background(), target, errMsg)
+				if err != nil {
+					t.Errorf("(*RDB).Archive(%v, %v) = %v, want nil", target, errMsg, err)
+					continue
+				}
+			}
+		}
+
+		for queue, want := range tc.wantArchived {
+			gotArchived := h.GetArchivedEntries(t, r.client, queue)
+
+			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt, timeCmpOpt); diff != "" {
+				t.Errorf("mismatch found in %q after calling (*RDB).Archive: (-want, +got):\n%s", base.ArchivedKey(queue), diff)
+			}
+
+			// check that only keys present in the archived set are in rdb
+			vals := r.client.Keys(context.Background(), base.TaskKeyPrefix(queue)+"*").Val()
+			if len(vals) != len(gotArchived) {
+				t.Errorf("len of keys = %v, want %v", len(vals), len(gotArchived))
+				return
+			}
+
+			for _, val := range vals {
+				found := false
+				for _, entry := range gotArchived {
+					if strings.Contains(val, entry.Message.ID) {
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					t.Errorf("key %v not found in archived set (it was orphaned by the archive trim)", val)
+				}
+			}
 		}
 	}
 }
@@ -2542,8 +2751,8 @@ func TestDeleteExpiredCompletedTasks(t *testing.T) {
 		h.FlushDB(t, r.client)
 		h.SeedAllCompletedQueues(t, r.client, tc.completed)
 
-		if err := r.DeleteExpiredCompletedTasks(tc.qname); err != nil {
-			t.Errorf("DeleteExpiredCompletedTasks(%q) failed: %v", tc.qname, err)
+		if err := r.DeleteExpiredCompletedTasks(tc.qname, 100); err != nil {
+			t.Errorf("DeleteExpiredCompletedTasks(%q, 100) failed: %v", tc.qname, err)
 			continue
 		}
 
@@ -3050,7 +3259,7 @@ func TestCancelationPubSub(t *testing.T) {
 	publish := []string{"one", "two", "three"}
 
 	for _, msg := range publish {
-		r.PublishCancelation(msg)
+		_ = r.PublishCancelation(msg)
 	}
 
 	// allow for message to reach subscribers.

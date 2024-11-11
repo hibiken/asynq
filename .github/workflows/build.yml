@@ -7,20 +7,21 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        go-version: [1.14.x, 1.15.x, 1.16.x, 1.17.x, 1.18.x]
+        go-version: [1.22.x, 1.23.x]
     runs-on: ${{ matrix.os }}
     services:
       redis:
-        image: redis
+        image: redis:7
         ports:
           - 6379:6379
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+          cache: false
 
       - name: Build core module
         run: go build -v ./...
@@ -38,26 +39,27 @@ jobs:
         run: go test -run=^$ -bench=. -loglevel=debug ./...
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v4
 
   build-tool:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        go-version: [1.18.x]
+        go-version: [1.22.x, 1.23.x]
     runs-on: ${{ matrix.os }}
     services:
       redis:
-        image: redis
+        image: redis:7
         ports:
           - 6379:6379
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+          cache: false
 
       - name: Build tools module
         run: cd tools && go build -v ./... && cd ..
@@ -65,3 +67,17 @@ jobs:
       - name: Test tools module
         run: cd tools && go test -race -v ./... && cd ..
 
+  golangci:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.61

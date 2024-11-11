@@ -11,15 +11,16 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/fatih/color"
-	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/utf8string"
@@ -369,7 +370,12 @@ func createRDB() *rdb.RDB {
 	return rdb.NewRDB(c)
 }
 
-// createRDB creates a Inspector instance using flag values and returns it.
+// createClient creates a Client instance using flag values and returns it.
+func createClient() *asynq.Client {
+	return asynq.NewClient(getRedisConnOpt())
+}
+
+// createInspector creates a Inspector instance using flag values and returns it.
 func createInspector() *asynq.Inspector {
 	return asynq.NewInspector(getRedisConnOpt())
 }
@@ -455,4 +461,38 @@ func isPrintable(data []byte) bool {
 		}
 	}
 	return !isAllSpace
+}
+
+// Helper to turn a command line flag into a duration
+func getDuration(cmd *cobra.Command, arg string) time.Duration {
+	durationStr, err := cmd.Flags().GetString(arg)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+
+	duration, err := time.ParseDuration(durationStr)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+
+	return duration
+}
+
+// Helper to turn a command line flag into a time
+func getTime(cmd *cobra.Command, arg string) time.Time {
+	timeStr, err := cmd.Flags().GetString(arg)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+
+	timeVal, err := time.Parse(time.RFC3339, timeStr)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+		os.Exit(1)
+	}
+
+	return timeVal
 }

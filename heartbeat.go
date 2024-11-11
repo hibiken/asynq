@@ -120,7 +120,9 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-h.done:
-				h.broker.ClearServerState(h.host, h.pid, h.serverID)
+				if err := h.broker.ClearServerState(h.host, h.pid, h.serverID); err != nil {
+					h.logger.Errorf("Failed to clear server state: %v", err)
+				}
 				h.logger.Debug("Heartbeater done")
 				timer.Stop()
 				return

@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"runtime"
 	"runtime/debug"
 	"sort"
@@ -37,11 +37,11 @@ type processor struct {
 	// orderedQueues is set only in strict-priority mode.
 	orderedQueues []string
 
-	retryDelayFunc RetryDelayFunc
-	isFailureFunc  func(error) bool
+	taskCheckInterval time.Duration
+	retryDelayFunc    RetryDelayFunc
+	isFailureFunc     func(error) bool
 
-	errHandler ErrorHandler
-
+	errHandler      ErrorHandler
 	shutdownTimeout time.Duration
 
 	// channel via which to send sync requests to syncer.
@@ -73,20 +73,21 @@ type processor struct {
 }
 
 type processorParams struct {
-	logger          *log.Logger
-	broker          base.Broker
-	baseCtxFn       func() context.Context
-	retryDelayFunc  RetryDelayFunc
-	isFailureFunc   func(error) bool
-	syncCh          chan<- *syncRequest
-	cancelations    *base.Cancelations
-	concurrency     int
-	queues          map[string]int
-	strictPriority  bool
-	errHandler      ErrorHandler
-	shutdownTimeout time.Duration
-	starting        chan<- *workerInfo
-	finished        chan<- *base.TaskMessage
+	logger            *log.Logger
+	broker            base.Broker
+	baseCtxFn         func() context.Context
+	retryDelayFunc    RetryDelayFunc
+	taskCheckInterval time.Duration
+	isFailureFunc     func(error) bool
+	syncCh            chan<- *syncRequest
+	cancelations      *base.Cancelations
+	concurrency       int
+	queues            map[string]int
+	strictPriority    bool
+	errHandler        ErrorHandler
+	shutdownTimeout   time.Duration
+	starting          chan<- *workerInfo
+	finished          chan<- *base.TaskMessage
 }
 
 // newProcessor constructs a new processor.
@@ -97,26 +98,27 @@ func newProcessor(params processorParams) *processor {
 		orderedQueues = sortByPriority(queues)
 	}
 	return &processor{
-		logger:          params.logger,
-		broker:          params.broker,
-		baseCtxFn:       params.baseCtxFn,
-		clock:           timeutil.NewRealClock(),
-		queueConfig:     queues,
-		orderedQueues:   orderedQueues,
-		retryDelayFunc:  params.retryDelayFunc,
-		isFailureFunc:   params.isFailureFunc,
-		syncRequestCh:   params.syncCh,
-		cancelations:    params.cancelations,
-		errLogLimiter:   rate.NewLimiter(rate.Every(3*time.Second), 1),
-		sema:            make(chan struct{}, params.concurrency),
-		done:            make(chan struct{}),
-		quit:            make(chan struct{}),
-		abort:           make(chan struct{}),
-		errHandler:      params.errHandler,
-		handler:         HandlerFunc(func(ctx context.Context, t *Task) error { return fmt.Errorf("handler not set") }),
-		shutdownTimeout: params.shutdownTimeout,
-		starting:        params.starting,
-		finished:        params.finished,
+		logger:            params.logger,
+		broker:            params.broker,
+		baseCtxFn:         params.baseCtxFn,
+		clock:             timeutil.NewRealClock(),
+		queueConfig:       queues,
+		orderedQueues:     orderedQueues,
+		taskCheckInterval: params.taskCheckInterval,
+		retryDelayFunc:    params.retryDelayFunc,
+		isFailureFunc:     params.isFailureFunc,
+		syncRequestCh:     params.syncCh,
+		cancelations:      params.cancelations,
+		errLogLimiter:     rate.NewLimiter(rate.Every(3*time.Second), 1),
+		sema:              make(chan struct{}, params.concurrency),
+		done:              make(chan struct{}),
+		quit:              make(chan struct{}),
+		abort:             make(chan struct{}),
+		errHandler:        params.errHandler,
+		handler:           HandlerFunc(func(ctx context.Context, t *Task) error { return fmt.Errorf("handler not set") }),
+		shutdownTimeout:   params.shutdownTimeout,
+		starting:          params.starting,
+		finished:          params.finished,
 	}
 }
 
@@ -179,7 +181,8 @@ func (p *processor) exec() {
 			// Sleep to avoid slamming redis and let scheduler move tasks into queues.
 			// Note: We are not using blocking pop operation and polling queues instead.
 			// This adds significant load to redis.
-			time.Sleep(time.Second)
+			jitter := rand.N(p.taskCheckInterval)
+			time.Sleep(p.taskCheckInterval/2 + jitter)
 			<-p.sema // release token
 			return
 		case err != nil:
@@ -259,7 +262,8 @@ func (p *processor) requeue(l *base.Lease, msg *base.TaskMessage) {
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
 		return
 	}
-	ctx, _ := context.WithDeadline(context.Background(), l.Deadline())
+	ctx, cancel := context.WithDeadline(context.Background(), l.Deadline())
+	defer cancel()
 	err := p.broker.Requeue(ctx, msg)
 	if err != nil {
 		p.logger.Errorf("Could not push task id=%s back to queue: %v", msg.ID, err)
@@ -281,7 +285,8 @@ func (p *processor) markAsComplete(l *base.Lease, msg *base.TaskMessage) {
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
 		return
 	}
-	ctx, _ := context.WithDeadline(context.Background(), l.Deadline())
+	ctx, cancel := context.WithDeadline(context.Background(), l.Deadline())
+	defer cancel()
 	err := p.broker.MarkAsComplete(ctx, msg)
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s type=%q from %q to %q:  %+v",
@@ -302,7 +307,8 @@ func (p *processor) markAsDone(l *base.Lease, msg *base.TaskMessage) {
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
 		return
 	}
-	ctx, _ := context.WithDeadline(context.Background(), l.Deadline())
+	ctx, cancel := context.WithDeadline(context.Background(), l.Deadline())
+	defer cancel()
 	err := p.broker.Done(ctx, msg)
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not remove task id=%s type=%q from %q err: %+v", msg.ID, msg.Type, base.ActiveKey(msg.Queue), err)
@@ -321,20 +327,23 @@ func (p *processor) markAsDone(l *base.Lease, msg *base.TaskMessage) {
 // the task should not be retried and should be archived instead.
 var SkipRetry = errors.New("skip retry for the task")
 
+// RevokeTask is used as a return value from Handler.ProcessTask to indicate that
+// the task should not be retried or archived.
+var RevokeTask = errors.New("revoke task")
+
 func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg *base.TaskMessage, err error) {
 	if p.errHandler != nil {
 		p.errHandler.HandleError(ctx, NewTask(msg.Type, msg.Payload), err)
 	}
-	if !p.isFailureFunc(err) {
-		// retry the task without marking it as failed
-		p.retry(l, msg, err, false /*isFailure*/)
-		return
-	}
-	if msg.Retried >= msg.Retry || errors.Is(err, SkipRetry) {
+	switch {
+	case errors.Is(err, RevokeTask):
+		p.logger.Warnf("revoke task id=%s", msg.ID)
+		p.markAsDone(l, msg)
+	case msg.Retried >= msg.Retry || errors.Is(err, SkipRetry):
 		p.logger.Warnf("Retry exhausted for task id=%s", msg.ID)
 		p.archive(l, msg, err)
-	} else {
-		p.retry(l, msg, err, true /*isFailure*/)
+	default:
+		p.retry(l, msg, err, p.isFailureFunc(err))
 	}
 }
 
@@ -343,7 +352,8 @@ func (p *processor) retry(l *base.Lease, msg *base.TaskMessage, e error, isFailu
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
 		return
 	}
-	ctx, _ := context.WithDeadline(context.Background(), l.Deadline())
+	ctx, cancel := context.WithDeadline(context.Background(), l.Deadline())
+	defer cancel()
 	d := p.retryDelayFunc(msg.Retried, e, NewTask(msg.Type, msg.Payload))
 	retryAt := time.Now().Add(d)
 	err := p.broker.Retry(ctx, msg, retryAt, e.Error(), isFailure)
@@ -365,7 +375,8 @@ func (p *processor) archive(l *base.Lease, msg *base.TaskMessage, e error) {
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
 		return
 	}
-	ctx, _ := context.WithDeadline(context.Background(), l.Deadline())
+	ctx, cancel := context.WithDeadline(context.Background(), l.Deadline())
+	defer cancel()
 	err := p.broker.Archive(ctx, msg, e.Error())
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.ActiveKey(msg.Queue), base.ArchivedKey(msg.Queue))
@@ -402,8 +413,7 @@ func (p *processor) queues() []string {
 			names = append(names, qname)
 		}
 	}
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	r.Shuffle(len(names), func(i, j int) { names[i], names[j] = names[j], names[i] })
+	rand.Shuffle(len(names), func(i, j int) { names[i], names[j] = names[j], names[i] })
 	return uniq(names, len(p.queueConfig))
 }
 
@@ -420,12 +430,15 @@ func (p *processor) perform(ctx context.Context, task *Task) (err error) {
 				// map/slice usage. The parent frame should have the real trigger.
 				_, file, line, ok = runtime.Caller(2)
 			}
-
+			var errMsg string
 			// Include the file and line number info in the error, if runtime.Caller returned ok.
 			if ok {
-				err = fmt.Errorf("panic [%s:%d]: %v", file, line, x)
+				errMsg = fmt.Sprintf("panic [%s:%d]: %v", file, line, x)
 			} else {
-				err = fmt.Errorf("panic: %v", x)
+				errMsg = fmt.Sprintf("panic: %v", x)
+			}
+			err = &errors.PanicError{
+				ErrMsg: errMsg,
 			}
 		}
 	}()
@@ -520,4 +533,8 @@ func (p *processor) computeDeadline(msg *base.TaskMessage) time.Time {
 		return p.clock.Now().Add(time.Duration(msg.Timeout) * time.Second)
 	}
 	return time.Unix(msg.Deadline, 0)
+}
+
+func IsPanicError(err error) bool {
+	return errors.IsPanicError(err)
 }

@@ -32,6 +32,7 @@ func (p *FakeConfigProvider) GetConfigs() ([]*PeriodicTaskConfig, error) {
 }
 
 func TestNewPeriodicTaskManager(t *testing.T) {
+	redisConnOpt := getRedisConnOpt(t)
 	cfgs := []*PeriodicTaskConfig{
 		{Cronspec: "* * * * *", Task: NewTask("foo", nil)},
 		{Cronspec: "* * * * *", Task: NewTask("bar", nil)},
@@ -43,14 +44,14 @@ func TestNewPeriodicTaskManager(t *testing.T) {
 		{
 			desc: "with provider and redisConnOpt",
 			opts: PeriodicTaskManagerOpts{
-				RedisConnOpt:               RedisClientOpt{Addr: ":6379"},
+				RedisConnOpt:               redisConnOpt,
 				PeriodicTaskConfigProvider: &FakeConfigProvider{cfgs: cfgs},
 			},
 		},
 		{
 			desc: "with sync option",
 			opts: PeriodicTaskManagerOpts{
-				RedisConnOpt:               RedisClientOpt{Addr: ":6379"},
+				RedisConnOpt:               redisConnOpt,
 				PeriodicTaskConfigProvider: &FakeConfigProvider{cfgs: cfgs},
 				SyncInterval:               5 * time.Minute,
 			},
@@ -58,7 +59,7 @@ func TestNewPeriodicTaskManager(t *testing.T) {
 		{
 			desc: "with scheduler option",
 			opts: PeriodicTaskManagerOpts{
-				RedisConnOpt:               RedisClientOpt{Addr: ":6379"},
+				RedisConnOpt:               redisConnOpt,
 				PeriodicTaskConfigProvider: &FakeConfigProvider{cfgs: cfgs},
 				SyncInterval:               5 * time.Minute,
 				SchedulerOpts: &SchedulerOpts{
@@ -74,37 +75,33 @@ func TestNewPeriodicTaskManager(t *testing.T) {
 			t.Errorf("%s; NewPeriodicTaskManager returned error: %v", tc.desc, err)
 		}
 	}
-}
 
-func TestNewPeriodicTaskManagerError(t *testing.T) {
-	cfgs := []*PeriodicTaskConfig{
-		{Cronspec: "* * * * *", Task: NewTask("foo", nil)},
-		{Cronspec: "* * * * *", Task: NewTask("bar", nil)},
-	}
-	tests := []struct {
-		desc string
-		opts PeriodicTaskManagerOpts
-	}{
-		{
-			desc: "without provider",
-			opts: PeriodicTaskManagerOpts{
-				RedisConnOpt: RedisClientOpt{Addr: ":6379"},
+	t.Run("error", func(t *testing.T) {
+		tests := []struct {
+			desc string
+			opts PeriodicTaskManagerOpts
+		}{
+			{
+				desc: "without provider",
+				opts: PeriodicTaskManagerOpts{
+					RedisConnOpt: redisConnOpt,
+				},
 			},
-		},
-		{
-			desc: "without redisConOpt",
-			opts: PeriodicTaskManagerOpts{
-				PeriodicTaskConfigProvider: &FakeConfigProvider{cfgs: cfgs},
+			{
+				desc: "without redisConOpt",
+				opts: PeriodicTaskManagerOpts{
+					PeriodicTaskConfigProvider: &FakeConfigProvider{cfgs: cfgs},
+				},
 			},
-		},
-	}
-
-	for _, tc := range tests {
-		_, err := NewPeriodicTaskManager(tc.opts)
-		if err == nil {
-			t.Errorf("%s; NewPeriodicTaskManager did not return error", tc.desc)
 		}
-	}
+
+		for _, tc := range tests {
+			_, err := NewPeriodicTaskManager(tc.opts)
+			if err == nil {
+				t.Errorf("%s; NewPeriodicTaskManager did not return error", tc.desc)
+			}
+		}
+	})
 }
 
 func TestPeriodicTaskConfigHash(t *testing.T) {

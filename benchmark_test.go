@@ -55,7 +55,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 		}
 		b.StartTimer() // end setup
 
-		srv.Start(HandlerFunc(handler))
+		_ = srv.Start(HandlerFunc(handler))
 		wg.Wait()
 
 		b.StopTimer() // begin teardown
@@ -117,7 +117,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 		}
 		b.StartTimer() // end setup
 
-		srv.Start(HandlerFunc(handler))
+		_ = srv.Start(HandlerFunc(handler))
 		wg.Wait()
 
 		b.StopTimer() // begin teardown
@@ -174,7 +174,7 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 		}
 		b.StartTimer() // end setup
 
-		srv.Start(HandlerFunc(handler))
+		_ = srv.Start(HandlerFunc(handler))
 		wg.Wait()
 
 		b.StopTimer() // begin teardown
@@ -215,7 +215,7 @@ func BenchmarkClientWhileServerRunning(b *testing.B) {
 		handler := func(ctx context.Context, t *Task) error {
 			return nil
 		}
-		srv.Start(HandlerFunc(handler))
+		_ = srv.Start(HandlerFunc(handler))
 
 		b.StartTimer() // end setup
 

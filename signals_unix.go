@@ -1,4 +1,4 @@
-// +build linux bsd darwin
+//go:build linux || dragonfly || freebsd || netbsd || openbsd || darwin
 
 package asynq
 
