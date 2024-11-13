@@ -10,6 +10,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // PeriodicTaskManager manages scheduling of periodic tasks.
@@ -27,8 +29,11 @@ type PeriodicTaskManagerOpts struct {
 	// Required: must be non nil
 	PeriodicTaskConfigProvider PeriodicTaskConfigProvider
 
-	// Required: must be non nil
+	// Optional: if RedisUniversalClient is nil must be non nil
 	RedisConnOpt RedisConnOpt
+
+	// Optional: if RedisUniversalClient is non nil, RedisConnOpt is ignored.
+	RedisUniversalClient redis.UniversalClient
 
 	// Optional: scheduler options
 	*SchedulerOpts
@@ -45,10 +50,16 @@ func NewPeriodicTaskManager(opts PeriodicTaskManagerOpts) (*PeriodicTaskManager,
 	if opts.PeriodicTaskConfigProvider == nil {
 		return nil, fmt.Errorf("PeriodicTaskConfigProvider cannot be nil")
 	}
-	if opts.RedisConnOpt == nil {
-		return nil, fmt.Errorf("RedisConnOpt cannot be nil")
+	if opts.RedisConnOpt == nil && opts.RedisUniversalClient == nil {
+		return nil, fmt.Errorf("RedisConnOpt/RedisUniversalClient cannot be nil")
 	}
-	scheduler := NewScheduler(opts.RedisConnOpt, opts.SchedulerOpts)
+	var scheduler *Scheduler
+	if opts.RedisUniversalClient != nil {
+		scheduler = NewSchedulerFromRedisClient(opts.RedisUniversalClient, opts.SchedulerOpts)
+	} else {
+		scheduler = NewScheduler(opts.RedisConnOpt, opts.SchedulerOpts)
+	}
+
 	syncInterval := opts.SyncInterval
 	if syncInterval == 0 {
 		syncInterval = defaultSyncInterval
