@@ -60,6 +60,7 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 	}
 	scheduler := NewSchedulerFromRedisClient(redisClient, opts)
 	scheduler.sharedConnection = false
+	scheduler.client.sharedConnection = false
 	return scheduler
 }
 
