@@ -92,9 +92,6 @@ func TestServerWithQueueConcurrency(t *testing.T) {
 		t.Fatalf("asynq: unsupported RedisConnOpt type %T", r)
 	}
 
-	c := NewClient(redisConnOpt)
-	defer c.Close()
-
 	const taskNum = 8
 	const serverNum = 2
 	tests := []struct {
@@ -134,6 +131,8 @@ func TestServerWithQueueConcurrency(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var err error
 			testutil.FlushDB(t, r)
+			c := NewClient(redisConnOpt)
+			defer c.Close()
 			for i := 0; i < taskNum; i++ {
 				_, err = c.Enqueue(NewTask("send_email",
 					testutil.JSON(map[string]interface{}{"recipient_id": i + 123})))
@@ -173,6 +172,106 @@ func TestServerWithQueueConcurrency(t *testing.T) {
 	}
 }
 
+func TestServerWithDynamicQueue(t *testing.T) {
+	// https://github.com/go-redis/redis/issues/1029
+	ignoreOpt := goleak.IgnoreTopFunction("github.com/redis/go-redis/v9/internal/pool.(*ConnPool).reaper")
+	defer goleak.VerifyNone(t, ignoreOpt)
+
+	redisConnOpt := getRedisConnOpt(t)
+	r, ok := redisConnOpt.MakeRedisClient().(redis.UniversalClient)
+	if !ok {
+		t.Fatalf("asynq: unsupported RedisConnOpt type %T", r)
+	}
+
+	const taskNum = 8
+	const serverNum = 2
+	tests := []struct {
+		name             string
+		concurrency      int
+		queueConcurrency int
+		wantActiveNum    int
+	}{
+		{
+			name:             "based on client concurrency control",
+			concurrency:      2,
+			queueConcurrency: 6,
+			wantActiveNum:    2 * serverNum,
+		},
+		{
+			name:             "no queue concurrency control",
+			concurrency:      2,
+			queueConcurrency: 0,
+			wantActiveNum:    2 * serverNum,
+		},
+		{
+			name:             "based on queue concurrency control",
+			concurrency:      6,
+			queueConcurrency: 2,
+			wantActiveNum:    2 * serverNum,
+		},
+	}
+
+	// no-op handler
+	handle := func(ctx context.Context, task *Task) error {
+		time.Sleep(time.Second * 2)
+		return nil
+	}
+
+	var DynamicQueueNameFmt = "dynamic:%d:%d"
+	var servers [serverNum]*Server
+	for tcn, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var err error
+			testutil.FlushDB(t, r)
+			c := NewClient(redisConnOpt)
+			defer c.Close()
+			for i := 0; i < taskNum; i++ {
+				_, err = c.Enqueue(NewTask("send_email",
+					testutil.JSON(map[string]interface{}{"recipient_id": i + 123})),
+					Queue(fmt.Sprintf(DynamicQueueNameFmt, tcn, i%2)))
+				if err != nil {
+					t.Fatalf("could not enqueue a task: %v", err)
+				}
+			}
+
+			for i := 0; i < serverNum; i++ {
+				srv := NewServer(redisConnOpt, Config{
+					Concurrency:      tc.concurrency,
+					LogLevel:         testLogLevel,
+					QueueConcurrency: map[string]int{base.DefaultQueueName: tc.queueConcurrency},
+				})
+				err = srv.Start(HandlerFunc(handle))
+				if err != nil {
+					t.Fatal(err)
+				}
+				srv.AddQueue(fmt.Sprintf(DynamicQueueNameFmt, tcn, i), 1, tc.queueConcurrency)
+				servers[i] = srv
+			}
+			defer func() {
+				for _, srv := range servers {
+					srv.Shutdown()
+				}
+			}()
+
+			time.Sleep(time.Second)
+			inspector := NewInspector(redisConnOpt)
+
+			var tasks []*TaskInfo
+
+			for i := range servers {
+				qtasks, err := inspector.ListActiveTasks(fmt.Sprintf(DynamicQueueNameFmt, tcn, i))
+				if err != nil {
+					t.Fatalf("could not list active tasks: %v", err)
+				}
+				tasks = append(tasks, qtasks...)
+			}
+
+			if len(tasks) != tc.wantActiveNum {
+				t.Errorf("dynamic queue has %d active tasks, want %d", len(tasks), tc.wantActiveNum)
+			}
+		})
+	}
+}
 
 func TestServerRun(t *testing.T) {
 	// https://github.com/go-redis/redis/issues/1029

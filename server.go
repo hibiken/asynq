@@ -44,6 +44,10 @@ type Server struct {
 
 	state *serverState
 
+	mu             sync.RWMutex
+	queues         map[string]int
+	strictPriority bool
+
 	// wait group to wait for all goroutines to finish.
 	wg            sync.WaitGroup
 	forwarder     *forwarder
@@ -481,7 +485,9 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		}
 	}
 	if len(queues) == 0 {
-		queues = defaultQueueConfig
+		for qname, p := range defaultQueueConfig {
+			queues[qname] = p
+		}
 	}
 	var qnames []string
 	for q := range queues {
@@ -610,6 +616,8 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		groupAggregator: cfg.GroupAggregator,
 	})
 	return &Server{
+		queues:           queues,
+		strictPriority:   cfg.StrictPriority,
 		logger:           logger,
 		broker:           rdb,
 		sharedConnection: true,
@@ -791,4 +799,79 @@ func (srv *Server) Ping() error {
 	}
 
 	return srv.broker.Ping()
+}
+
+func (srv *Server) AddQueue(qname string, priority, concurrency int) {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	if _, ok := srv.queues[qname]; ok {
+		srv.logger.Warnf("queue %s already exists, skipping", qname)
+		return
+	}
+
+	srv.queues[qname] = priority
+
+	srv.state.mu.Lock()
+	state := srv.state.value
+	srv.state.mu.Unlock()
+	if state == srvStateNew || state == srvStateClosed {
+		srv.queues[qname] = priority
+		return
+	}
+
+	srv.logger.Info("restart server...")
+	srv.forwarder.shutdown()
+	srv.processor.shutdown()
+	srv.recoverer.shutdown()
+	srv.syncer.shutdown()
+	srv.subscriber.shutdown()
+	srv.janitor.shutdown()
+	srv.aggregator.shutdown()
+	srv.healthchecker.shutdown()
+	srv.heartbeater.shutdown()
+	srv.wg.Wait()
+
+	qnames := make([]string, 0, len(srv.queues))
+	for q := range srv.queues {
+		qnames = append(qnames, q)
+	}
+	srv.broker.SetQueueConcurrency(qname, concurrency)
+	srv.heartbeater.queues = srv.queues
+	srv.recoverer.queues = qnames
+	srv.forwarder.queues = qnames
+	srv.processor.resetState()
+	queues := normalizeQueues(srv.queues)
+	orderedQueues := []string(nil)
+	if srv.strictPriority {
+		orderedQueues = sortByPriority(queues)
+	}
+	srv.processor.queueConfig = srv.queues
+	srv.processor.orderedQueues = orderedQueues
+	srv.janitor.queues = qnames
+	srv.aggregator.resetState()
+	srv.aggregator.queues = qnames
+
+	srv.heartbeater.start(&srv.wg)
+	srv.healthchecker.start(&srv.wg)
+	srv.subscriber.start(&srv.wg)
+	srv.syncer.start(&srv.wg)
+	srv.recoverer.start(&srv.wg)
+	srv.forwarder.start(&srv.wg)
+	srv.processor.start(&srv.wg)
+	srv.janitor.start(&srv.wg)
+	srv.aggregator.start(&srv.wg)
+
+	srv.logger.Info("server restarted")
+}
+
+func (srv *Server) HasQueue(qname string) bool {
+	srv.mu.RLock()
+	defer srv.mu.RUnlock()
+	_, ok := srv.queues[qname]
+	return ok
+}
+
+func (srv *Server) SetQueueConcurrency(queue string, concurrency int) {
+	srv.broker.SetQueueConcurrency(queue, concurrency)
 }

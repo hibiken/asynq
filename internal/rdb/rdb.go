@@ -30,7 +30,9 @@ type Option func(r *RDB)
 
 func WithQueueConcurrency(queueConcurrency map[string]int) Option {
 	return func(r *RDB) {
-		r.queueConcurrency = queueConcurrency
+		for qname, concurrency := range queueConcurrency {
+			r.queueConcurrency.Store(qname, concurrency)
+		}
 	}
 }
 
@@ -39,7 +41,7 @@ type RDB struct {
 	client           redis.UniversalClient
 	clock            timeutil.Clock
 	queuesPublished  sync.Map
-	queueConcurrency map[string]int
+	queueConcurrency sync.Map
 }
 
 // NewRDB returns a new instance of RDB.
@@ -271,8 +273,8 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, leaseExpirationT
 			base.LeaseKey(qname),
 		}
 		leaseExpirationTime = r.clock.Now().Add(LeaseDuration)
-		queueConcurrency, ok := r.queueConcurrency[qname]
-		if !ok || queueConcurrency <= 0 {
+		queueConcurrency, ok := r.queueConcurrency.Load(qname)
+		if !ok || queueConcurrency.(int) <= 0 {
 			queueConcurrency = math.MaxInt
 		}
 		argv := []interface{}{
@@ -1580,4 +1582,8 @@ func (r *RDB) WriteResult(qname, taskID string, data []byte) (int, error) {
 		return 0, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "hset", Err: err})
 	}
 	return len(data), nil
+}
+
+func (r *RDB) SetQueueConcurrency(qname string, concurrency int) {
+	r.queueConcurrency.Store(qname, concurrency)
 }

@@ -11,8 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hibiken/asynq/internal/base"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/hibiken/asynq/internal/base"
 )
 
 var errRedisDown = errors.New("testutil: redis is down")
@@ -296,4 +297,8 @@ func (tb *TestBroker) ReclaimStaleAggregationSets(qname string) error {
 		return errRedisDown
 	}
 	return tb.real.ReclaimStaleAggregationSets(qname)
+}
+
+func (tb *TestBroker) SetQueueConcurrency(qname string, concurrency int) {
+	tb.real.SetQueueConcurrency(qname, concurrency)
 }
