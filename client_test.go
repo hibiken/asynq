@@ -1191,3 +1191,46 @@ func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 		}
 	}
 }
+
+func TestClientEnqueueUniqueWithUniqueKeyOption(t *testing.T) {
+	r := setup(t)
+	c := NewClient(getRedisConnOpt(t))
+	defer c.Close()
+
+	tests := []struct {
+		task *Task
+		ttl  time.Duration
+	}{
+		{
+			NewTask("email", h.JSON(map[string]interface{}{"user_id": 123})),
+			time.Hour,
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r) // clean up db before each test case.
+
+		// Enqueue the task first. It should succeed.
+		_, err := c.Enqueue(tc.task, Unique(tc.ttl), UniqueKey("custom_unique_key"))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		gotTTL := r.TTL(context.Background(), base.CustomUniqueKey(base.DefaultQueueName, tc.task.Type(), "custom_unique_key")).Val()
+		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
+			t.Errorf("TTL = %v, want %v", gotTTL, tc.ttl)
+			continue
+		}
+
+		// Enqueue the task again. It should fail.
+		_, err = c.Enqueue(tc.task, Unique(tc.ttl), UniqueKey("custom_unique_key"))
+		if err == nil {
+			t.Errorf("Enqueueing %+v did not return an error", tc.task)
+			continue
+		}
+		if !errors.Is(err, ErrDuplicateTask) {
+			t.Errorf("Enqueueing %+v returned an error that is not ErrDuplicateTask", tc.task)
+			continue
+		}
+	}
+}
