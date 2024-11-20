@@ -144,9 +144,7 @@ func (mux *ServeMux) HandleFunc(pattern string, handler func(context.Context, *T
 func (mux *ServeMux) Use(mws ...MiddlewareFunc) {
 	mux.mu.Lock()
 	defer mux.mu.Unlock()
-	for _, fn := range mws {
-		mux.mws = append(mux.mws, fn)
-	}
+	mux.mws = append(mux.mws, mws...)
 }
 
 // NotFound returns an error indicating that the handler was not found for the given task.

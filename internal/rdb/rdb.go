@@ -9,13 +9,14 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
 )
 
@@ -26,8 +27,9 @@ const LeaseDuration = 30 * time.Second
 
 // RDB is a client interface to query and mutate task queues.
 type RDB struct {
-	client redis.UniversalClient
-	clock  timeutil.Clock
+	client          redis.UniversalClient
+	clock           timeutil.Clock
+	queuesPublished sync.Map
 }
 
 // NewRDB returns a new instance of RDB.
@@ -67,7 +69,7 @@ func (r *RDB) runScript(ctx context.Context, op errors.Op, script *redis.Script,
 	return nil
 }
 
-// Runs the given script with keys and args and retuns the script's return value as int64.
+// Runs the given script with keys and args and returns the script's return value as int64.
 func (r *RDB) runScriptWithErrorCode(ctx context.Context, op errors.Op, script *redis.Script, keys []string, args ...interface{}) (int64, error) {
 	res, err := script.Run(ctx, r.client, keys, args...).Result()
 	if err != nil {
@@ -112,8 +114,11 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	if _, found := r.queuesPublished.Load(msg.Queue); !found {
+		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+		}
+		r.queuesPublished.Store(msg.Queue, true)
 	}
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
@@ -152,7 +157,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 var enqueueUniqueCmd = redis.NewScript(`
 local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
 if not ok then
-  return -1 
+  return -1
 end
 if redis.call("EXISTS", KEYS[2]) == 1 then
   return 0
@@ -174,8 +179,11 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 	if err != nil {
 		return errors.E(op, errors.Internal, "cannot encode task message: %v", err)
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	if _, found := r.queuesPublished.Load(msg.Queue); !found {
+		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+		}
+		r.queuesPublished.Store(msg.Queue, true)
 	}
 	keys := []string{
 		msg.UniqueKey,
@@ -368,7 +376,7 @@ func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
 //
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
-// ARGV[3] -> task exipration time in unix time
+// ARGV[3] -> task expiration time in unix time
 // ARGV[4] -> task message data
 // ARGV[5] -> max int64 value
 var markAsCompleteCmd = redis.NewScript(`
@@ -379,7 +387,7 @@ if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
 if redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1]) ~= 1 then
-  redis.redis.error_reply("INTERNAL")
+  return redis.error_reply("INTERNAL")
 end
 redis.call("HSET", KEYS[4], "msg", ARGV[4], "state", "completed")
 local n = redis.call("INCR", KEYS[5])
@@ -405,7 +413,7 @@ return redis.status_reply("OK")
 //
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
-// ARGV[3] -> task exipration time in unix time
+// ARGV[3] -> task expiration time in unix time
 // ARGV[4] -> task message data
 // ARGV[5] -> max int64 value
 var markAsCompleteUniqueCmd = redis.NewScript(`
@@ -416,7 +424,7 @@ if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
 if redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1]) ~= 1 then
-  redis.redis.error_reply("INTERNAL")
+  return redis.error_reply("INTERNAL")
 end
 redis.call("HSET", KEYS[4], "msg", ARGV[4], "state", "completed")
 local n = redis.call("INCR", KEYS[5])
@@ -529,8 +537,11 @@ func (r *RDB) AddToGroup(ctx context.Context, msg *base.TaskMessage, groupKey st
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	if _, found := r.queuesPublished.Load(msg.Queue); !found {
+		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+		}
+		r.queuesPublished.Store(msg.Queue, true)
 	}
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
@@ -591,8 +602,11 @@ func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, group
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	if _, found := r.queuesPublished.Load(msg.Queue); !found {
+		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+		}
+		r.queuesPublished.Store(msg.Queue, true)
 	}
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
@@ -648,8 +662,11 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	if _, found := r.queuesPublished.Load(msg.Queue); !found {
+		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+		}
+		r.queuesPublished.Store(msg.Queue, true)
 	}
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
@@ -707,8 +724,11 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 	if err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode task message: %v", err))
 	}
-	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+	if _, found := r.queuesPublished.Load(msg.Queue); !found {
+		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
+		}
+		r.queuesPublished.Store(msg.Queue, true)
 	}
 	keys := []string{
 		msg.UniqueKey,
@@ -829,6 +849,7 @@ const (
 // KEYS[6] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
 // KEYS[7] -> asynq:{<qname>}:processed
 // KEYS[8] -> asynq:{<qname>}:failed
+// KEYS[9] -> asynq:{<qname>}:t:
 // -------
 // ARGV[1] -> task ID
 // ARGV[2] -> updated base.TaskMessage value
@@ -845,8 +866,22 @@ if redis.call("ZREM", KEYS[3], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
 redis.call("ZADD", KEYS[4], ARGV[3], ARGV[1])
-redis.call("ZREMRANGEBYSCORE", KEYS[4], "-inf", ARGV[4])
-redis.call("ZREMRANGEBYRANK", KEYS[4], 0, -ARGV[5])
+local old = redis.call("ZRANGE", KEYS[4], "-inf", ARGV[4], "BYSCORE")
+if #old > 0 then
+	for _, id in ipairs(old) do
+		redis.call("DEL", KEYS[9] .. id)
+	end
+	redis.call("ZREM", KEYS[4], unpack(old))
+end
+
+local extra = redis.call("ZRANGE", KEYS[4], 0, -ARGV[5])
+if #extra > 0 then
+	for _, id in ipairs(extra) do
+		redis.call("DEL", KEYS[9] .. id)
+	end
+	redis.call("ZREM", KEYS[4], unpack(extra))
+end
+
 redis.call("HSET", KEYS[1], "msg", ARGV[2], "state", "archived")
 local n = redis.call("INCR", KEYS[5])
 if tonumber(n) == 1 then
@@ -889,6 +924,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 		base.FailedKey(msg.Queue, now),
 		base.ProcessedTotalKey(msg.Queue),
 		base.FailedTotalKey(msg.Queue),
+		base.TaskKeyPrefix(msg.Queue),
 	}
 	argv := []interface{}{
 		msg.ID,
@@ -1086,7 +1122,7 @@ const aggregationTimeout = 2 * time.Minute
 // The time for gracePeriod and maxDelay is computed relative to the time t.
 //
 // Note: It assumes that this function is called at frequency less than or equal to the gracePeriod. In other words,
-// the function only checks the most recently added task aganist the given gracePeriod.
+// the function only checks the most recently added task against the given gracePeriod.
 func (r *RDB) AggregationCheck(qname, gname string, t time.Time, gracePeriod, maxDelay time.Duration, maxSize int) (string, error) {
 	var op errors.Op = "RDB.AggregationCheck"
 	aggregationSetID := uuid.NewString()
@@ -1217,7 +1253,7 @@ redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
 return redis.status_reply("OK")
 `)
 
-// ReclaimStateAggregationSets checks for any stale aggregation sets in the given queue, and
+// ReclaimStaleAggregationSets checks for any stale aggregation sets in the given queue, and
 // reclaim tasks in the stale aggregation set by putting them back in the group.
 func (r *RDB) ReclaimStaleAggregationSets(qname string) error {
 	var op errors.Op = "RDB.ReclaimStaleAggregationSets"
@@ -1241,9 +1277,7 @@ return table.getn(ids)`)
 
 // DeleteExpiredCompletedTasks checks for any expired tasks in the given queue's completed set,
 // and delete all expired tasks.
-func (r *RDB) DeleteExpiredCompletedTasks(qname string) error {
-	// Note: Do this operation in fix batches to prevent long running script.
-	const batchSize = 100
+func (r *RDB) DeleteExpiredCompletedTasks(qname string, batchSize int) error {
 	for {
 		n, err := r.deleteExpiredCompletedTasks(qname, batchSize)
 		if err != nil {
@@ -1284,7 +1318,10 @@ local res = {}
 local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
 for _, id in ipairs(ids) do
 	local key = ARGV[2] .. id
-	table.insert(res, redis.call("HGET", key, "msg"))
+	local v = redis.call("HGET", key, "msg")
+	if v then
+		table.insert(res, v)
+	end
 end
 return res
 `)
@@ -1319,9 +1356,9 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 // It returns a new expiration time if the operation was successful.
 func (r *RDB) ExtendLease(qname string, ids ...string) (expirationTime time.Time, err error) {
 	expireAt := r.clock.Now().Add(LeaseDuration)
-	var zs []*redis.Z
+	var zs []redis.Z
 	for _, id := range ids {
-		zs = append(zs, &redis.Z{Member: id, Score: float64(expireAt.Unix())})
+		zs = append(zs, redis.Z{Member: id, Score: float64(expireAt.Unix())})
 	}
 	// Use XX option to only update elements that already exist; Don't add new elements
 	// TODO: Consider adding GT option to ensure we only "extend" the lease. Ceveat is that GT is supported from redis v6.2.0 or above.
@@ -1367,10 +1404,10 @@ func (r *RDB) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo
 	}
 	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
 	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
-	if err := r.client.ZAdd(ctx, base.AllServers, &redis.Z{Score: float64(exp.Unix()), Member: skey}).Err(); err != nil {
+	if err := r.client.ZAdd(ctx, base.AllServers, redis.Z{Score: float64(exp.Unix()), Member: skey}).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
-	if err := r.client.ZAdd(ctx, base.AllWorkers, &redis.Z{Score: float64(exp.Unix()), Member: wkey}).Err(); err != nil {
+	if err := r.client.ZAdd(ctx, base.AllWorkers, redis.Z{Score: float64(exp.Unix()), Member: wkey}).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zadd", Err: err})
 	}
 	return r.runScript(ctx, op, writeServerStateCmd, []string{skey, wkey}, args...)
@@ -1400,7 +1437,7 @@ func (r *RDB) ClearServerState(host string, pid int, serverID string) error {
 
 // KEYS[1]  -> asynq:schedulers:{<schedulerID>}
 // ARGV[1]  -> TTL in seconds
-// ARGV[2:] -> schedler entries
+// ARGV[2:] -> scheduler entries
 var writeSchedulerEntriesCmd = redis.NewScript(`
 redis.call("DEL", KEYS[1])
 for i = 2, #ARGV do
@@ -1423,7 +1460,7 @@ func (r *RDB) WriteSchedulerEntries(schedulerID string, entries []*base.Schedule
 	}
 	exp := r.clock.Now().Add(ttl).UTC()
 	key := base.SchedulerEntriesKey(schedulerID)
-	err := r.client.ZAdd(ctx, base.AllSchedulers, &redis.Z{Score: float64(exp.Unix()), Member: key}).Err()
+	err := r.client.ZAdd(ctx, base.AllSchedulers, redis.Z{Score: float64(exp.Unix()), Member: key}).Err()
 	if err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zadd", Err: err})
 	}
@@ -1431,10 +1468,10 @@ func (r *RDB) WriteSchedulerEntries(schedulerID string, entries []*base.Schedule
 }
 
 // ClearSchedulerEntries deletes scheduler entries data from redis.
-func (r *RDB) ClearSchedulerEntries(scheduelrID string) error {
+func (r *RDB) ClearSchedulerEntries(schedulerID string) error {
 	var op errors.Op = "rdb.ClearSchedulerEntries"
 	ctx := context.Background()
-	key := base.SchedulerEntriesKey(scheduelrID)
+	key := base.SchedulerEntriesKey(schedulerID)
 	if err := r.client.ZRem(ctx, base.AllSchedulers, key).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zrem", Err: err})
 	}

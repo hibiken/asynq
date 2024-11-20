@@ -7,10 +7,11 @@ package asynq
 import (
 	"crypto/sha256"
 	"fmt"
-	"io"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 // PeriodicTaskManager manages scheduling of periodic tasks.
@@ -28,8 +29,11 @@ type PeriodicTaskManagerOpts struct {
 	// Required: must be non nil
 	PeriodicTaskConfigProvider PeriodicTaskConfigProvider
 
-	// Required: must be non nil
+	// Optional: if RedisUniversalClient is nil must be non nil
 	RedisConnOpt RedisConnOpt
+
+	// Optional: if RedisUniversalClient is non nil, RedisConnOpt is ignored.
+	RedisUniversalClient redis.UniversalClient
 
 	// Optional: scheduler options
 	*SchedulerOpts
@@ -46,10 +50,16 @@ func NewPeriodicTaskManager(opts PeriodicTaskManagerOpts) (*PeriodicTaskManager,
 	if opts.PeriodicTaskConfigProvider == nil {
 		return nil, fmt.Errorf("PeriodicTaskConfigProvider cannot be nil")
 	}
-	if opts.RedisConnOpt == nil {
-		return nil, fmt.Errorf("RedisConnOpt cannot be nil")
+	if opts.RedisConnOpt == nil && opts.RedisUniversalClient == nil {
+		return nil, fmt.Errorf("RedisConnOpt/RedisUniversalClient cannot be nil")
 	}
-	scheduler := NewScheduler(opts.RedisConnOpt, opts.SchedulerOpts)
+	var scheduler *Scheduler
+	if opts.RedisUniversalClient != nil {
+		scheduler = NewSchedulerFromRedisClient(opts.RedisUniversalClient, opts.SchedulerOpts)
+	} else {
+		scheduler = NewScheduler(opts.RedisConnOpt, opts.SchedulerOpts)
+	}
+
 	syncInterval := opts.SyncInterval
 	if syncInterval == 0 {
 		syncInterval = defaultSyncInterval
@@ -79,13 +89,13 @@ type PeriodicTaskConfig struct {
 
 func (c *PeriodicTaskConfig) hash() string {
 	h := sha256.New()
-	io.WriteString(h, c.Cronspec)
-	io.WriteString(h, c.Task.Type())
+	_, _ = h.Write([]byte(c.Cronspec))
+	_, _ = h.Write([]byte(c.Task.Type()))
 	h.Write(c.Task.Payload())
 	opts := stringifyOptions(c.Opts)
 	sort.Strings(opts)
 	for _, opt := range opts {
-		io.WriteString(h, opt)
+		_, _ = h.Write([]byte(opt))
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
@@ -173,8 +183,8 @@ func (mgr *PeriodicTaskManager) add(configs []*PeriodicTaskConfig) {
 	for _, c := range configs {
 		entryID, err := mgr.s.Register(c.Cronspec, c.Task, c.Opts...)
 		if err != nil {
-			mgr.s.logger.Errorf("Failed to register periodic task: cronspec=%q task=%q",
-				c.Cronspec, c.Task.Type())
+			mgr.s.logger.Errorf("Failed to register periodic task: cronspec=%q task=%q err=%v",
+				c.Cronspec, c.Task.Type(), err)
 			continue
 		}
 		mgr.m[c.hash()] = entryID

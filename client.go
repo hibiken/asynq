@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/go-redis/v9"
 )
 
 // A Client is responsible for scheduling tasks.
@@ -25,15 +25,26 @@ import (
 // Clients are safe for concurrent use by multiple goroutines.
 type Client struct {
 	broker base.Broker
+	// When a Client has been created with an existing Redis connection, we do
+	// not want to close it.
+	sharedConnection bool
 }
 
 // NewClient returns a new Client instance given a redis connection option.
 func NewClient(r RedisConnOpt) *Client {
-	c, ok := r.MakeRedisClient().(redis.UniversalClient)
+	redisClient, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
-	return &Client{broker: rdb.NewRDB(c)}
+	client := NewClientFromRedisClient(redisClient)
+	client.sharedConnection = false
+	return client
+}
+
+// NewClientFromRedisClient returns a new instance of Client given a redis.UniversalClient
+// Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
+func NewClientFromRedisClient(c redis.UniversalClient) *Client {
+	return &Client{broker: rdb.NewRDB(c), sharedConnection: true}
 }
 
 type OptionType int
@@ -152,9 +163,9 @@ func (t deadlineOption) Value() interface{} { return time.Time(t) }
 // TTL duration must be greater than or equal to 1 second.
 //
 // By default, the uniqueness of a task is based on the following properties:
-//     - Task Type
-//     - Task Payload
-//     - Queue Name
+//   - Task Type
+//   - Task Payload
+//   - Queue Name
 // UniqueKey can be used to specify a custom string for calculating uniqueness, instead of task payload.
 func Unique(ttl time.Duration) Option {
 	return uniqueOption(ttl)
@@ -166,9 +177,9 @@ func (ttl uniqueOption) Value() interface{} { return time.Duration(ttl) }
 
 // UniqueKey returns an option to define the custom uniqueness of a task.
 // If uniqueKey is not empty, the uniqueness of a task is based on the following properties:
-//     - Task Type
-//     - UniqueKey
-//     - Queue Name
+//   - Task Type
+//   - UniqueKey
+//   - Queue Name
 // Otherwise, task payload will be used, see Unique.
 //
 // UniqueKey should be used together with Unique.
@@ -331,6 +342,9 @@ var (
 
 // Close closes the connection with redis.
 func (c *Client) Close() error {
+	if c.sharedConnection {
+		return fmt.Errorf("redis connection is shared so the Client can't be closed through asynq")
+	}
 	return c.broker.Close()
 }
 
@@ -433,6 +447,11 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 	return newTaskInfo(msg, state, opt.processAt, nil), nil
 }
 
+// Ping performs a ping against the redis connection.
+func (c *Client) Ping() error {
+	return c.broker.Ping()
+}
+
 func (c *Client) enqueue(ctx context.Context, msg *base.TaskMessage, uniqueTTL time.Duration) error {
 	if uniqueTTL > 0 {
 		return c.broker.EnqueueUnique(ctx, msg, uniqueTTL)
@@ -442,7 +461,7 @@ func (c *Client) enqueue(ctx context.Context, msg *base.TaskMessage, uniqueTTL t
 
 func (c *Client) schedule(ctx context.Context, msg *base.TaskMessage, t time.Time, uniqueTTL time.Duration) error {
 	if uniqueTTL > 0 {
-		ttl := t.Add(uniqueTTL).Sub(time.Now())
+		ttl := time.Until(t.Add(uniqueTTL))
 		return c.broker.ScheduleUnique(ctx, msg, t, ttl)
 	}
 	return c.broker.Schedule(ctx, msg, t)

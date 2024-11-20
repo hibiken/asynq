@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
@@ -20,13 +19,10 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/redis/go-redis/v9"
 )
 
-func TestInspectorQueues(t *testing.T) {
-	r := setup(t)
-	defer r.Close()
-	inspector := NewInspector(getRedisConnOpt(t))
-
+func testInspectorQueues(t *testing.T, inspector *Inspector, r redis.UniversalClient) {
 	tests := []struct {
 		queues []string
 	}{
@@ -52,7 +48,21 @@ func TestInspectorQueues(t *testing.T) {
 			t.Errorf("Queues() = %v, want %v; (-want, +got)\n%s", got, tc.queues, diff)
 		}
 	}
+}
 
+func TestInspectorQueues(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	inspector := NewInspector(getRedisConnOpt(t))
+	testInspectorQueues(t, inspector, r)
+}
+
+func TestInspectorFromRedisClientQueues(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	redisClient := getRedisConnOpt(t).MakeRedisClient().(redis.UniversalClient)
+	inspector := NewInspectorFromRedisClient(redisClient)
+	testInspectorQueues(t, inspector, r)
 }
 
 func TestInspectorDeleteQueue(t *testing.T) {
@@ -1138,7 +1148,7 @@ func TestInspectorListAggregatingTasks(t *testing.T) {
 		tasks     []*h.TaskSeedData
 		allQueues []string
 		allGroups map[string][]string
-		groups    map[string][]*redis.Z
+		groups    map[string][]redis.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -1152,7 +1162,7 @@ func TestInspectorListAggregatingTasks(t *testing.T) {
 			base.AllGroups("default"): {"group1", "group2"},
 			base.AllGroups("custom"):  {"group1"},
 		},
-		groups: map[string][]*redis.Z{
+		groups: map[string][]redis.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-30 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
@@ -3445,7 +3455,7 @@ func TestInspectorGroups(t *testing.T) {
 	fixtures := struct {
 		tasks     []*h.TaskSeedData
 		allGroups map[string][]string
-		groups    map[string][]*redis.Z
+		groups    map[string][]redis.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -3458,7 +3468,7 @@ func TestInspectorGroups(t *testing.T) {
 			base.AllGroups("default"): {"group1", "group2"},
 			base.AllGroups("custom"):  {"group1"},
 		},
-		groups: map[string][]*redis.Z{
+		groups: map[string][]redis.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-10 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-20 * time.Second).Unix())},

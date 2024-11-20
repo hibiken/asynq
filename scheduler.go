@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/go-redis/v9"
 	"github.com/robfig/cron/v3"
 )
 
@@ -26,16 +26,17 @@ type Scheduler struct {
 
 	state *serverState
 
-	logger          *log.Logger
-	client          *Client
-	rdb             *rdb.RDB
-	cron            *cron.Cron
-	location        *time.Location
-	done            chan struct{}
-	wg              sync.WaitGroup
-	preEnqueueFunc  func(task *Task, opts []Option)
-	postEnqueueFunc func(info *TaskInfo, err error)
-	errHandler      func(task *Task, opts []Option, err error)
+	heartbeatInterval time.Duration
+	logger            *log.Logger
+	client            *Client
+	rdb               *rdb.RDB
+	cron              *cron.Cron
+	location          *time.Location
+	done              chan struct{}
+	wg                sync.WaitGroup
+	preEnqueueFunc    func(task *Task, opts []Option)
+	postEnqueueFunc   func(info *TaskInfo, err error)
+	errHandler        func(task *Task, opts []Option, err error)
 
 	// guards idmap
 	mu sync.Mutex
@@ -43,17 +44,36 @@ type Scheduler struct {
 	// to avoid using cron.EntryID as the public API of
 	// the Scheduler.
 	idmap map[string]cron.EntryID
+	// When a Scheduler has been created with an existing Redis connection, we do
+	// not want to close it.
+	sharedConnection bool
 }
+
+const defaultHeartbeatInterval = 10 * time.Second
 
 // NewScheduler returns a new Scheduler instance given the redis connection option.
 // The parameter opts is optional, defaults will be used if opts is set to nil
 func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
-	c, ok := r.MakeRedisClient().(redis.UniversalClient)
+	redisClient, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
+	scheduler := NewSchedulerFromRedisClient(redisClient, opts)
+	scheduler.sharedConnection = false
+	return scheduler
+}
+
+// NewSchedulerFromRedisClient returns a new instance of Scheduler given a redis.UniversalClient
+// The parameter opts is optional, defaults will be used if opts is set to nil.
+// Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
+func NewSchedulerFromRedisClient(c redis.UniversalClient, opts *SchedulerOpts) *Scheduler {
 	if opts == nil {
 		opts = &SchedulerOpts{}
+	}
+
+	heartbeatInterval := opts.HeartbeatInterval
+	if heartbeatInterval <= 0 {
+		heartbeatInterval = defaultHeartbeatInterval
 	}
 
 	logger := log.NewLogger(opts.Logger)
@@ -69,18 +89,19 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 	}
 
 	return &Scheduler{
-		id:              generateSchedulerID(),
-		state:           &serverState{value: srvStateNew},
-		logger:          logger,
-		client:          NewClient(r),
-		rdb:             rdb.NewRDB(c),
-		cron:            cron.New(cron.WithLocation(loc)),
-		location:        loc,
-		done:            make(chan struct{}),
-		preEnqueueFunc:  opts.PreEnqueueFunc,
-		postEnqueueFunc: opts.PostEnqueueFunc,
-		errHandler:      opts.EnqueueErrorHandler,
-		idmap:           make(map[string]cron.EntryID),
+		id:                generateSchedulerID(),
+		state:             &serverState{value: srvStateNew},
+		heartbeatInterval: heartbeatInterval,
+		logger:            logger,
+		client:            NewClientFromRedisClient(c),
+		rdb:               rdb.NewRDB(c),
+		cron:              cron.New(cron.WithLocation(loc)),
+		location:          loc,
+		done:              make(chan struct{}),
+		preEnqueueFunc:    opts.PreEnqueueFunc,
+		postEnqueueFunc:   opts.PostEnqueueFunc,
+		errHandler:        opts.EnqueueErrorHandler,
+		idmap:             make(map[string]cron.EntryID),
 	}
 }
 
@@ -94,6 +115,15 @@ func generateSchedulerID() string {
 
 // SchedulerOpts specifies scheduler options.
 type SchedulerOpts struct {
+	// HeartbeatInterval specifies the interval between scheduler heartbeats.
+	//
+	// If unset, zero or a negative value, the interval is set to 10 second.
+	//
+	// Note: Setting this value too low may add significant load to redis.
+	//
+	// By default, HeartbeatInterval is set to 10 seconds.
+	HeartbeatInterval time.Duration
+
 	// Logger specifies the logger used by the scheduler instance.
 	//
 	// If unset, the default logger is used.
@@ -261,19 +291,26 @@ func (s *Scheduler) Shutdown() {
 	s.wg.Wait()
 
 	s.clearHistory()
-	s.client.Close()
-	s.rdb.Close()
+	if err := s.client.Close(); err != nil {
+		s.logger.Errorf("Failed to close redis client connection: %v", err)
+	}
+	if !s.sharedConnection {
+		s.rdb.Close()
+	}
 	s.logger.Info("Scheduler stopped")
 }
 
 func (s *Scheduler) runHeartbeater() {
 	defer s.wg.Done()
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(s.heartbeatInterval)
 	for {
 		select {
 		case <-s.done:
 			s.logger.Debugf("Scheduler heatbeater shutting down")
-			s.rdb.ClearSchedulerEntries(s.id)
+			if err := s.rdb.ClearSchedulerEntries(s.id); err != nil {
+				s.logger.Errorf("Failed to clear the scheduler entries: %v", err)
+			}
+			ticker.Stop()
 			return
 		case <-ticker.C:
 			s.beat()
@@ -297,8 +334,7 @@ func (s *Scheduler) beat() {
 		}
 		entries = append(entries, e)
 	}
-	s.logger.Debugf("Writing entries %v", entries)
-	if err := s.rdb.WriteSchedulerEntries(s.id, entries, 5*time.Second); err != nil {
+	if err := s.rdb.WriteSchedulerEntries(s.id, entries, s.heartbeatInterval*2); err != nil {
 		s.logger.Warnf("Scheduler could not write heartbeat data: %v", err)
 	}
 }
@@ -318,4 +354,15 @@ func (s *Scheduler) clearHistory() {
 			s.logger.Warnf("Could not clear scheduler history for entry %q: %v", job.id.String(), err)
 		}
 	}
+}
+
+// Ping performs a ping against the redis connection.
+func (s *Scheduler) Ping() error {
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	if s.state.value == srvStateClosed {
+		return nil
+	}
+
+	return s.rdb.Ping()
 }

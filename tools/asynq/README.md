@@ -12,7 +12,7 @@ Asynq CLI is a command line tool to monitor the queues and tasks managed by `asy
 
 In order to use the tool, compile it using the following command:
 
-    go install github.com/hibiken/asynq/tools/asynq
+    go install github.com/hibiken/asynq/tools/asynq@latest
 
 This will create the asynq executable under your `$GOPATH/bin` directory.
 
@@ -25,7 +25,7 @@ To view details on any command, use `asynq help <command> <subcommand>`.
 - `asynq dash`
 - `asynq stats`
 - `asynq queue [ls inspect history rm pause unpause]`
-- `asynq task [ls cancel delete archive run delete-all archive-all run-all]`
+- `asynq task [ls cancel delete archive run deleteall archiveall runall]`
 - `asynq server [ls]`
 
 ### Global flags

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
 )
 
@@ -316,6 +316,9 @@ type RedisFailoverClientOpt struct {
 	// https://redis.io/topics/sentinel.
 	SentinelAddrs []string
 
+	// Redis sentinel username.
+	SentinelUsername string
+
 	// Redis sentinel password.
 	SentinelPassword string
 
@@ -364,6 +367,7 @@ func (opt RedisFailoverClientOpt) MakeRedisClient() interface{} {
 	return redis.NewFailoverClient(&redis.FailoverOptions{
 		MasterName:       opt.MasterName,
 		SentinelAddrs:    opt.SentinelAddrs,
+		SentinelUsername: opt.SentinelUsername,
 		SentinelPassword: opt.SentinelPassword,
 		Username:         opt.Username,
 		Password:         opt.Password,
@@ -519,7 +523,7 @@ func parseRedisSentinelURI(u *url.URL) (RedisConnOpt, error) {
 	if v, ok := u.User.Password(); ok {
 		password = v
 	}
-	return RedisFailoverClientOpt{MasterName: master, SentinelAddrs: addrs, Password: password}, nil
+	return RedisFailoverClientOpt{MasterName: master, SentinelAddrs: addrs, SentinelPassword: password}, nil
 }
 
 // ResultWriter is a client interface to write result data for a task.

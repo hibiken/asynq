@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
 	asynqcontext "github.com/hibiken/asynq/internal/context"
+	"github.com/redis/go-redis/v9"
 )
 
 // NewSemaphore creates a counting Semaphore for the given scope with the given number of tokens.
@@ -110,5 +110,5 @@ func (s *Semaphore) Close() error {
 }
 
 func semaphoreKey(scope string) string {
-	return fmt.Sprintf("asynq:sema:%s", scope)
+	return "asynq:sema:" + scope
 }
