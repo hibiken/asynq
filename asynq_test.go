@@ -110,20 +110,48 @@ func TestParseRedisURI(t *testing.T) {
 			RedisClientOpt{Addr: "localhost:6379", DB: 3},
 		},
 		{
+			"redis://:@localhost:6379",
+			RedisClientOpt{Addr: "localhost:6379"},
+		},
+		{
+			"redis://myusername:@localhost:6379",
+			RedisClientOpt{Addr: "localhost:6379", Username: "myusername"},
+		},
+		{
 			"redis://:mypassword@localhost:6379",
 			RedisClientOpt{Addr: "localhost:6379", Password: "mypassword"},
+		},
+		{
+			"redis://myusername:mypassword@localhost:6379",
+			RedisClientOpt{Addr: "localhost:6379", Username: "myusername", Password: "mypassword"},
 		},
 		{
 			"redis://:mypassword@127.0.0.1:6379/11",
 			RedisClientOpt{Addr: "127.0.0.1:6379", Password: "mypassword", DB: 11},
 		},
 		{
+			"redis://myusername:mypassword@localhost:6379/11",
+			RedisClientOpt{Addr: "localhost:6379", Username: "myusername", Password: "mypassword", DB: 11},
+		},
+		{
 			"redis-socket:///var/run/redis/redis.sock",
 			RedisClientOpt{Network: "unix", Addr: "/var/run/redis/redis.sock"},
 		},
 		{
+			"redis-socket://:@/var/run/redis/redis.sock",
+			RedisClientOpt{Network: "unix", Addr: "/var/run/redis/redis.sock"},
+		},
+		{
+			"redis-socket://myusername:@/var/run/redis/redis.sock",
+			RedisClientOpt{Network: "unix", Addr: "/var/run/redis/redis.sock", Username: "myusername"},
+		},
+		{
 			"redis-socket://:mypassword@/var/run/redis/redis.sock",
 			RedisClientOpt{Network: "unix", Addr: "/var/run/redis/redis.sock", Password: "mypassword"},
+		},
+		{
+			"redis-socket://myusername:mypassword@/var/run/redis/redis.sock",
+			RedisClientOpt{Network: "unix", Addr: "/var/run/redis/redis.sock", Username: "myusername", Password: "mypassword"},
 		},
 		{
 			"redis-socket:///var/run/redis/redis.sock?db=7",
