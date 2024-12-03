@@ -32,6 +32,8 @@ type RDB struct {
 	queuesPublished sync.Map
 }
 
+var _ base.Broker = &RDB{}
+
 // NewRDB returns a new instance of RDB.
 func NewRDB(client redis.UniversalClient) *RDB {
 	return &RDB{
@@ -1481,8 +1483,31 @@ func (r *RDB) ClearSchedulerEntries(schedulerID string) error {
 	return nil
 }
 
-// CancelationPubSub returns a pubsub for cancelation messages.
-func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
+// cancelationSubscription is a wrapper for redis pubsub.
+type cancellationSubscription struct {
+	pubsub *redis.PubSub
+}
+
+func (c *cancellationSubscription) Channel() <-chan string {
+	channelSize := 100 // same as redis defaults
+	ch := make(chan string, channelSize)
+
+	go func() {
+		for msg := range c.pubsub.Channel(redis.WithChannelSize(channelSize)) {
+			ch <- msg.Payload
+		}
+		close(ch)
+	}()
+
+	return ch
+}
+
+func (c *cancellationSubscription) Close() error {
+	return c.pubsub.Close()
+}
+
+// SubscribeCancellation returns a subscription for cancelation messages.
+func (r *RDB) SubscribeCancellation() (base.CancellationSubscription, error) {
 	var op errors.Op = "rdb.CancelationPubSub"
 	ctx := context.Background()
 	pubsub := r.client.Subscribe(ctx, base.CancelChannel)
@@ -1490,7 +1515,7 @@ func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis pubsub receive error: %v", err))
 	}
-	return pubsub, nil
+	return &cancellationSubscription{pubsub: pubsub}, nil
 }
 
 // PublishCancelation publish cancelation message to all subscribers.
