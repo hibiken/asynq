@@ -44,9 +44,6 @@ type Scheduler struct {
 	// to avoid using cron.EntryID as the public API of
 	// the Scheduler.
 	idmap map[string]cron.EntryID
-	// When a Scheduler has been created with an existing Redis connection, we do
-	// not want to close it.
-	sharedConnection bool
 }
 
 const defaultHeartbeatInterval = 10 * time.Second
@@ -65,7 +62,6 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 
 	scheduler.rdb = rdb
 	scheduler.client = &Client{broker: rdb, sharedConnection: false}
-	scheduler.sharedConnection = false
 
 	return scheduler
 }
@@ -78,7 +74,6 @@ func NewSchedulerFromRedisClient(c redis.UniversalClient, opts *SchedulerOpts) *
 
 	scheduler.rdb = rdb.NewRDB(c)
 	scheduler.client = NewClientFromRedisClient(c)
-	scheduler.sharedConnection = true
 
 	return scheduler
 }
@@ -308,9 +303,6 @@ func (s *Scheduler) Shutdown() {
 	s.clearHistory()
 	if err := s.client.Close(); err != nil {
 		s.logger.Errorf("Failed to close redis client connection: %v", err)
-	}
-	if !s.sharedConnection {
-		s.rdb.Close()
 	}
 	s.logger.Info("Scheduler stopped")
 }
