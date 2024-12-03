@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq/broker"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/rdb"
@@ -49,7 +50,7 @@ func NewClientFromRedisClient(c redis.UniversalClient) *Client {
 
 // NewClientFromBroker returns a new instance of Client given a broker.
 // Warning: The underlying broker will not be closed by Asynq, you are responsible for closing it.
-func NewClientFromBroker(b base.Broker) *Client {
+func NewClientFromBroker(b broker.Broker) *Client {
 	return &Client{broker: b, sharedConnection: true}
 }
 

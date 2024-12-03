@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hibiken/asynq/broker"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
@@ -449,7 +450,7 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 
 // NewServerFromBroker returns a new instance of Server given a Broker and server configuration.
 // Warning: The underlying broker will not be closed by Asynq, you are responsible for closing it.
-func NewServerFromBroker(b base.Broker, cfg Config) *Server {
+func NewServerFromBroker(b broker.Broker, cfg Config) *Server {
 	baseCtxFn := cfg.BaseContext
 	if baseCtxFn == nil {
 		baseCtxFn = context.Background
