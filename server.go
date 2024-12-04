@@ -254,7 +254,7 @@ type Config struct {
 	// Make sure to not put a big number as the batch size to prevent a long-running script.
 	JanitorBatchSize int
 
-	// If unset the DefaultMaxArchiveSize is used.  If set to a zero or a negative value, nothing will be archived.
+	// If unset or below 1, the DefaultMaxArchiveSize is used.
 	MaxArchiveSize *int
 
 	// ArchivedExpirationInDays specifies the number of days after which archived tasks are deleted.
@@ -437,6 +437,10 @@ const (
 
 func validateConfig(cfg *Config) {
 	if cfg.MaxArchiveSize == nil {
+		value := base.DefaultMaxArchiveSize
+		cfg.MaxArchiveSize = &value
+	}
+	if *(cfg.MaxArchiveSize) < 0 {
 		value := base.DefaultMaxArchiveSize
 		cfg.MaxArchiveSize = &value
 	}
