@@ -25,15 +25,49 @@ type Inspector struct {
 	sharedConnection bool
 }
 
-// New returns a new instance of Inspector.
-func NewInspector(r RedisConnOpt) *Inspector {
+type InspectorConfig struct {
+	MaxArchiveSize           *int
+	ArchivedExpirationInDays *int
+}
+
+func validateInspectorConfig(cfg *InspectorConfig) {
+	if cfg.MaxArchiveSize == nil {
+		value := base.DefaultMaxArchiveSize
+		cfg.MaxArchiveSize = &value
+	}
+	if *(cfg.MaxArchiveSize) <= 0 {
+		value := base.DefaultMaxArchiveSize
+		cfg.MaxArchiveSize = &value
+	}
+	if cfg.ArchivedExpirationInDays == nil {
+		value := base.DefaultArchivedExpirationInDays
+		cfg.ArchivedExpirationInDays = &value
+	}
+	if *(cfg.ArchivedExpirationInDays) < 0 {
+		value := 1
+		cfg.ArchivedExpirationInDays = &value
+	}
+}
+
+// NewInspectorWithConfig returns a new instance of Inspector.
+func NewInspectorWithConfig(r RedisConnOpt, cfg InspectorConfig) *Inspector {
+	validateInspectorConfig(&cfg)
+
 	c, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("inspeq: unsupported RedisConnOpt type %T", r))
 	}
-	inspector := NewInspectorFromRedisClient(c)
-	inspector.sharedConnection = false
-	return inspector
+	return &Inspector{
+		rdb: rdb.NewRDBWithConfig(c, rdb.RDBConfig{
+			MaxArchiveSize:           cfg.MaxArchiveSize,
+			ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+		}),
+	}
+}
+
+// NewInspector returns a new instance of Inspector.
+func NewInspector(r RedisConnOpt) *Inspector {
+	return NewInspectorWithConfig(r, InspectorConfig{})
 }
 
 // NewInspectorFromRedisClient returns a new instance of Inspector given a redis.UniversalClient

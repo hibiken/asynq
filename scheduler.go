@@ -94,14 +94,17 @@ func NewSchedulerFromRedisClient(c redis.UniversalClient, opts *SchedulerOpts) *
 		heartbeatInterval: heartbeatInterval,
 		logger:            logger,
 		client:            NewClientFromRedisClient(c),
-		rdb:               rdb.NewRDB(c),
-		cron:              cron.New(cron.WithLocation(loc)),
-		location:          loc,
-		done:              make(chan struct{}),
-		preEnqueueFunc:    opts.PreEnqueueFunc,
-		postEnqueueFunc:   opts.PostEnqueueFunc,
-		errHandler:        opts.EnqueueErrorHandler,
-		idmap:             make(map[string]cron.EntryID),
+		rdb: rdb.NewRDBWithConfig(c, rdb.RDBConfig{
+			MaxArchiveSize:           opts.MaxArchiveSize,
+			ArchivedExpirationInDays: opts.ArchivedExpirationInDays,
+		}),
+		cron:            cron.New(cron.WithLocation(loc)),
+		location:        loc,
+		done:            make(chan struct{}),
+		preEnqueueFunc:  opts.PreEnqueueFunc,
+		postEnqueueFunc: opts.PostEnqueueFunc,
+		errHandler:      opts.EnqueueErrorHandler,
+		idmap:           make(map[string]cron.EntryID),
 	}
 }
 
@@ -151,6 +154,16 @@ type SchedulerOpts struct {
 	// EnqueueErrorHandler gets called when scheduler cannot enqueue a registered task
 	// due to an error.
 	EnqueueErrorHandler func(task *Task, opts []Option, err error)
+
+	// MaxArchiveSize specifies the maximum size of the archive that can be created by the server.
+	//
+	// If unset or below 1, the DefaultMaxArchiveSize is used
+	MaxArchiveSize *int
+
+	// ArchivedExpirationInDays specifies the number of days after which archived tasks are deleted.
+	//
+	// If unset, DefaultArchivedExpirationInDays is used.  The value must be greater than zero.
+	ArchivedExpirationInDays *int
 }
 
 // enqueueJob encapsulates the job of enqueuing a task and recording the event.
