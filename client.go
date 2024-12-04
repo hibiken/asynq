@@ -58,21 +58,18 @@ func NewClientWithConfig(r RedisConnOpt, cfg ClientConfig) *Client {
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
-	return &Client{broker: rdb.NewRDBWithConfig(c, rdb.RDBConfig{
-		MaxArchiveSize:           cfg.MaxArchiveSize,
-		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
-	})}
+	return &Client{
+		broker: rdb.NewRDBWithConfig(c, rdb.RDBConfig{
+			MaxArchiveSize:           cfg.MaxArchiveSize,
+			ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+		}),
+		sharedConnection: false,
+	}
 }
 
 // NewClient returns a new Client instance given a redis connection option.
 func NewClient(r RedisConnOpt) *Client {
-	redisClient, ok := r.MakeRedisClient().(redis.UniversalClient)
-	if !ok {
-		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
-	}
-	client := NewClientFromRedisClient(redisClient)
-	client.sharedConnection = false
-	return client
+	return NewClientWithConfig(r, ClientConfig{})
 }
 
 // NewClientFromRedisClient returns a new instance of Client given a redis.UniversalClient
