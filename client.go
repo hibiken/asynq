@@ -40,6 +40,10 @@ func validateClientConfig(cfg *ClientConfig) {
 		value := base.DefaultMaxArchiveSize
 		cfg.MaxArchiveSize = &value
 	}
+	if *(cfg.MaxArchiveSize) <= 0 {
+		value := base.DefaultMaxArchiveSize
+		cfg.MaxArchiveSize = &value
+	}
 	if cfg.ArchivedExpirationInDays == nil {
 		value := base.DefaultArchivedExpirationInDays
 		cfg.ArchivedExpirationInDays = &value

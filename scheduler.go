@@ -157,7 +157,7 @@ type SchedulerOpts struct {
 
 	// MaxArchiveSize specifies the maximum size of the archive that can be created by the server.
 	//
-	// If unset the DefaultMaxArchiveSize is used.  If set to a zero or a negative value, nothing will be archived.
+	// If unset or below 1, the DefaultMaxArchiveSize is used
 	MaxArchiveSize *int
 
 	// ArchivedExpirationInDays specifies the number of days after which archived tasks are deleted.
