@@ -30,14 +30,42 @@ type RDB struct {
 	client          redis.UniversalClient
 	clock           timeutil.Clock
 	queuesPublished sync.Map
+	config          RDBConfig
+}
+type RDBConfig struct {
+	MaxArchiveSize           *int
+	ArchivedExpirationInDays *int
+}
+
+func validateRDBConfig(cfg *RDBConfig) {
+	if cfg.MaxArchiveSize == nil {
+		value := base.DefaultMaxArchiveSize
+		cfg.MaxArchiveSize = &value
+	}
+	if cfg.ArchivedExpirationInDays == nil {
+		value := base.DefaultArchivedExpirationInDays
+		cfg.ArchivedExpirationInDays = &value
+	}
+	if *(cfg.ArchivedExpirationInDays) < 0 {
+		value := 1
+		cfg.ArchivedExpirationInDays = &value
+	}
+}
+
+// NewRDBWithConfig returns a new instance of RDB.
+func NewRDBWithConfig(client redis.UniversalClient, cfg RDBConfig) *RDB {
+	validateRDBConfig(&cfg)
+
+	return &RDB{
+		client: client,
+		clock:  timeutil.NewRealClock(),
+		config: cfg,
+	}
 }
 
 // NewRDB returns a new instance of RDB.
 func NewRDB(client redis.UniversalClient) *RDB {
-	return &RDB{
-		client: client,
-		clock:  timeutil.NewRealClock(),
-	}
+	return NewRDBWithConfig(client, RDBConfig{})
 }
 
 // Close closes the connection with redis server.
@@ -836,11 +864,6 @@ func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.T
 	return r.runScript(ctx, op, retryCmd, keys, argv...)
 }
 
-const (
-	maxArchiveSize           = 10000 // maximum number of tasks in archive
-	archivedExpirationInDays = 90    // number of days before an archived task gets deleted permanently
-)
-
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:active
 // KEYS[3] -> asynq:{<qname>}:lease
@@ -904,6 +927,10 @@ return redis.status_reply("OK")`)
 // Archive sends the given task to archive, attaching the error message to the task.
 // It also trims the archive by timestamp and set size.
 func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string) error {
+	if *(r.config.MaxArchiveSize) <= 0 {
+		return nil
+	}
+
 	var op errors.Op = "rdb.Archive"
 	now := r.clock.Now()
 	modified := *msg
@@ -913,7 +940,8 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 	if err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	cutoff := now.AddDate(0, 0, -archivedExpirationInDays)
+	cutoff := now.AddDate(0, 0, -(*r.config.ArchivedExpirationInDays))
+
 	expireAt := now.Add(statsTTL)
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
@@ -931,7 +959,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 		encoded,
 		now.Unix(),
 		cutoff.Unix(),
-		maxArchiveSize,
+		*r.config.MaxArchiveSize,
 		expireAt.Unix(),
 		int64(math.MaxInt64),
 	}

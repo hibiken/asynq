@@ -31,6 +31,11 @@ const DefaultQueueName = "default"
 // DefaultQueue is the redis key for the default queue.
 var DefaultQueue = PendingKey(DefaultQueueName)
 
+const (
+	DefaultMaxArchiveSize           = 10000 // maximum number of tasks in archive
+	DefaultArchivedExpirationInDays = 90    // number of days before an archived task gets deleted permanently
+)
+
 // Global Redis keys.
 const (
 	AllServers    = "asynq:servers"    // ZSET

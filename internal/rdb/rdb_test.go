@@ -2250,7 +2250,7 @@ func TestArchiveTrim(t *testing.T) {
 	errMsg := "SMTP server not responding"
 
 	maxArchiveSet := make([]base.Z, 0)
-	for i := 0; i < maxArchiveSize-1; i++ {
+	for i := 0; i < base.DefaultMaxArchiveSize-1; i++ {
 		maxArchiveSet = append(maxArchiveSet, base.Z{Message: &base.TaskMessage{
 			ID:      uuid.NewString(),
 			Type:    "generate_csv",
@@ -2306,7 +2306,7 @@ func TestArchiveTrim(t *testing.T) {
 			},
 			archived: map[string][]base.Z{
 				"default": {
-					{Message: t2, Score: now.Add(-time.Hour * 24 * (archivedExpirationInDays + 1)).Unix()},
+					{Message: t2, Score: now.Add(-time.Hour * 24 * (base.DefaultArchivedExpirationInDays + 1)).Unix()},
 				},
 			},
 			wantArchived: map[string][]base.Z{
