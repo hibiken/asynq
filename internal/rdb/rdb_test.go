@@ -18,11 +18,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
+
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
-	"github.com/redis/go-redis/v9"
 )
 
 // variables used for package testing.
@@ -553,8 +554,14 @@ func TestDequeueWithQueueConcurrency(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h.FlushDB(t, r.client) // clean up db before each test case
 			h.SeedAllPendingQueues(t, r.client, tc.pending)
+			r.queueConcurrency.Range(func(key, value interface{}) bool {
+				r.queueConcurrency.Delete(key)
+				return true
+			})
+			for queue, n := range tc.queueConcurrency {
+				r.queueConcurrency.Store(queue, n)
+			}
 
-			r.queueConcurrency = tc.queueConcurrency
 			gotMsgs := make([]*base.TaskMessage, 0, len(msgs))
 			for i := 0; i < len(msgs); i++ {
 				msg, _, err := r.Dequeue(tc.qnames...)
