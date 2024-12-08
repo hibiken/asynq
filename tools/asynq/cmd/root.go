@@ -40,6 +40,7 @@ var (
 	useRedisCluster bool
 	clusterAddrs    string
 	tlsServerName   string
+	insecure        bool
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -314,6 +315,8 @@ func init() {
 		"List of comma-separated redis server addresses")
 	rootCmd.PersistentFlags().StringVar(&tlsServerName, "tls_server",
 		"", "Server name for TLS validation")
+	rootCmd.PersistentFlags().BoolVar(&insecure, "insecure",
+		false, "Allow insecure TLS connection by skipping cert validation")
 	// Bind flags with config.
 	viper.BindPFlag("uri", rootCmd.PersistentFlags().Lookup("uri"))
 	viper.BindPFlag("db", rootCmd.PersistentFlags().Lookup("db"))
@@ -321,6 +324,7 @@ func init() {
 	viper.BindPFlag("cluster", rootCmd.PersistentFlags().Lookup("cluster"))
 	viper.BindPFlag("cluster_addrs", rootCmd.PersistentFlags().Lookup("cluster_addrs"))
 	viper.BindPFlag("tls_server", rootCmd.PersistentFlags().Lookup("tls_server"))
+	viper.BindPFlag("insecure", rootCmd.PersistentFlags().Lookup("insecure"))
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -402,7 +406,7 @@ func getTLSConfig() *tls.Config {
 	if tlsServer == "" {
 		return nil
 	}
-	return &tls.Config{ServerName: tlsServer}
+	return &tls.Config{ServerName: tlsServer, InsecureSkipVerify: viper.GetBool("insecure")}
 }
 
 // printTable is a helper function to print data in table format.
