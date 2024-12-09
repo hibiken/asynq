@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
-	"github.com/redis/go-redis/v9"
 )
 
 var errRedisDown = errors.New("testutil: redis is down")
@@ -190,13 +189,13 @@ func (tb *TestBroker) ClearServerState(host string, pid int, serverID string) er
 	return tb.real.ClearServerState(host, pid, serverID)
 }
 
-func (tb *TestBroker) CancelationPubSub() (*redis.PubSub, error) {
+func (tb *TestBroker) SubscribeCancellation() (base.CancellationSubscription, error) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
 		return nil, errRedisDown
 	}
-	return tb.real.CancelationPubSub()
+	return tb.real.SubscribeCancellation()
 }
 
 func (tb *TestBroker) PublishCancelation(id string) error {
