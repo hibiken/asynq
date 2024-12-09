@@ -14,12 +14,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hibiken/asynq/internal/errors"
-	pb "github.com/hibiken/asynq/internal/proto"
-	"github.com/hibiken/asynq/internal/timeutil"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/hibiken/asynq/internal/errors"
+	pb "github.com/hibiken/asynq/internal/proto"
+	"github.com/hibiken/asynq/internal/timeutil"
 )
 
 // Version of asynq library and CLI.
@@ -722,4 +723,5 @@ type Broker interface {
 	PublishCancelation(id string) error
 
 	WriteResult(qname, id string, data []byte) (n int, err error)
+	SetQueueConcurrency(qname string, concurrency int)
 }
