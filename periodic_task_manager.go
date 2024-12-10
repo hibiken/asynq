@@ -22,7 +22,7 @@ type PeriodicTaskManager struct {
 	syncInterval time.Duration
 	done         chan (struct{})
 	wg           sync.WaitGroup
-	m            map[string]struct{} // map[hash]entryID
+	M            map[string]struct{} // map[hash]entryID
 }
 
 type PeriodicTaskManagerOpts struct {
@@ -69,7 +69,7 @@ func NewPeriodicTaskManager(opts PeriodicTaskManagerOpts) (*PeriodicTaskManager,
 		p:            opts.PeriodicTaskConfigProvider,
 		syncInterval: syncInterval,
 		done:         make(chan struct{}),
-		m:            make(map[string]struct{}),
+		M:            make(map[string]struct{}),
 	}, nil
 }
 
@@ -188,7 +188,7 @@ func (mgr *PeriodicTaskManager) add(configs []*PeriodicTaskConfig) {
 				c.Cronspec, c.Task.Type(), err)
 			continue
 		}
-		mgr.m[entryID] = struct{}{} //  ? m[string]struct{}
+		mgr.M[entryID] = struct{}{} //   m[string]struct{}
 		mgr.s.logger.Infof("Successfully registered periodic task: cronspec=%q task=%q, entryID=%s",
 			c.Cronspec, c.Task.Type(), entryID)
 	}
@@ -200,7 +200,7 @@ func (mgr *PeriodicTaskManager) remove(removed map[string]struct{}) {
 			mgr.s.logger.Errorf("Failed to unregister periodic task: %v", err)
 			continue
 		}
-		delete(mgr.m, entryID)
+		delete(mgr.M, entryID)
 		mgr.s.logger.Infof("Successfully unregistered periodic task: entryID=%s", entryID)
 	}
 }
@@ -232,7 +232,7 @@ func (mgr *PeriodicTaskManager) diffRemoved(configs []*PeriodicTaskConfig) map[s
 		newConfigs[c.ID] = struct{}{} // empty value since we don't have entryID yet
 	}
 	removed := make(map[string]struct{})
-	for k, _ := range mgr.m {
+	for k, _ := range mgr.M {
 		// test whether existing config is present in the incoming configs
 		if _, found := newConfigs[k]; !found {
 			removed[k] = struct{}{}
@@ -246,7 +246,7 @@ func (mgr *PeriodicTaskManager) diffRemoved(configs []*PeriodicTaskConfig) map[s
 func (mgr *PeriodicTaskManager) diffAdded(configs []*PeriodicTaskConfig) []*PeriodicTaskConfig {
 	var added []*PeriodicTaskConfig
 	for _, c := range configs {
-		if _, found := mgr.m[c.ID]; !found {
+		if _, found := mgr.M[c.ID]; !found {
 			added = append(added, c)
 		}
 	}
