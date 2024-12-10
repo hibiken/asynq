@@ -22,7 +22,7 @@ type PeriodicTaskManager struct {
 	syncInterval time.Duration
 	done         chan (struct{})
 	wg           sync.WaitGroup
-	m            map[string]string // map[hash]entryID
+	m            map[string]struct{} // map[hash]entryID
 }
 
 type PeriodicTaskManagerOpts struct {
@@ -69,7 +69,7 @@ func NewPeriodicTaskManager(opts PeriodicTaskManagerOpts) (*PeriodicTaskManager,
 		p:            opts.PeriodicTaskConfigProvider,
 		syncInterval: syncInterval,
 		done:         make(chan struct{}),
-		m:            make(map[string]string),
+		m:            make(map[string]struct{}),
 	}, nil
 }
 
@@ -82,6 +82,7 @@ type PeriodicTaskConfigProvider interface {
 
 // PeriodicTaskConfig specifies the details of a periodic task.
 type PeriodicTaskConfig struct {
+	ID       string
 	Cronspec string   // required: must be non empty string
 	Task     *Task    // required: must be non nil
 	Opts     []Option // optional: can be nil
@@ -181,25 +182,25 @@ func (mgr *PeriodicTaskManager) initialSync() error {
 
 func (mgr *PeriodicTaskManager) add(configs []*PeriodicTaskConfig) {
 	for _, c := range configs {
-		entryID, err := mgr.s.Register(c.Cronspec, c.Task, c.Opts...)
+		entryID, err := mgr.s.Register(c.ID, c.Cronspec, c.Task, c.Opts...)
 		if err != nil {
 			mgr.s.logger.Errorf("Failed to register periodic task: cronspec=%q task=%q err=%v",
 				c.Cronspec, c.Task.Type(), err)
 			continue
 		}
-		mgr.m[c.hash()] = entryID
+		mgr.m[entryID] = struct{}{} //  ? m[string]struct{}
 		mgr.s.logger.Infof("Successfully registered periodic task: cronspec=%q task=%q, entryID=%s",
 			c.Cronspec, c.Task.Type(), entryID)
 	}
 }
 
-func (mgr *PeriodicTaskManager) remove(removed map[string]string) {
-	for hash, entryID := range removed {
+func (mgr *PeriodicTaskManager) remove(removed map[string]struct{}) {
+	for entryID, _ := range removed {
 		if err := mgr.s.Unregister(entryID); err != nil {
 			mgr.s.logger.Errorf("Failed to unregister periodic task: %v", err)
 			continue
 		}
-		delete(mgr.m, hash)
+		delete(mgr.m, entryID)
 		mgr.s.logger.Infof("Successfully unregistered periodic task: entryID=%s", entryID)
 	}
 }
@@ -225,16 +226,16 @@ func (mgr *PeriodicTaskManager) sync() {
 
 // diffRemoved diffs the incoming configs with the registered config and returns
 // a map containing hash and entryID of each config that was removed.
-func (mgr *PeriodicTaskManager) diffRemoved(configs []*PeriodicTaskConfig) map[string]string {
-	newConfigs := make(map[string]string)
+func (mgr *PeriodicTaskManager) diffRemoved(configs []*PeriodicTaskConfig) map[string]struct{} {
+	newConfigs := make(map[string]struct{})
 	for _, c := range configs {
-		newConfigs[c.hash()] = "" // empty value since we don't have entryID yet
+		newConfigs[c.ID] = struct{}{} // empty value since we don't have entryID yet
 	}
-	removed := make(map[string]string)
-	for k, v := range mgr.m {
+	removed := make(map[string]struct{})
+	for k, _ := range mgr.m {
 		// test whether existing config is present in the incoming configs
 		if _, found := newConfigs[k]; !found {
-			removed[k] = v
+			removed[k] = struct{}{}
 		}
 	}
 	return removed
@@ -245,7 +246,7 @@ func (mgr *PeriodicTaskManager) diffRemoved(configs []*PeriodicTaskConfig) map[s
 func (mgr *PeriodicTaskManager) diffAdded(configs []*PeriodicTaskConfig) []*PeriodicTaskConfig {
 	var added []*PeriodicTaskConfig
 	for _, c := range configs {
-		if _, found := mgr.m[c.hash()]; !found {
+		if _, found := mgr.m[c.ID]; !found {
 			added = append(added, c)
 		}
 	}
