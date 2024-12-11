@@ -81,6 +81,11 @@ func newAggregator(params aggregatorParams) *aggregator {
 	}
 }
 
+func (a *aggregator) resetState() {
+	a.done = make(chan struct{})
+	a.sema = make(chan struct{}, maxConcurrentAggregationChecks)
+}
+
 func (a *aggregator) shutdown() {
 	if a.ga == nil {
 		return
