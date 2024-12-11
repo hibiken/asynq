@@ -810,15 +810,14 @@ func (srv *Server) AddQueue(qname string, priority, concurrency int) {
 		return
 	}
 
-	srv.queues[qname] = priority
-
 	srv.state.mu.Lock()
 	state := srv.state.value
-	srv.state.mu.Unlock()
 	if state == srvStateNew || state == srvStateClosed {
 		srv.queues[qname] = priority
+		srv.state.mu.Unlock()
 		return
 	}
+	srv.state.mu.Unlock()
 
 	srv.logger.Info("restart server...")
 	srv.forwarder.shutdown()
@@ -831,6 +830,8 @@ func (srv *Server) AddQueue(qname string, priority, concurrency int) {
 	srv.healthchecker.shutdown()
 	srv.heartbeater.shutdown()
 	srv.wg.Wait()
+
+	srv.queues[qname] = priority
 
 	qnames := make([]string, 0, len(srv.queues))
 	for q := range srv.queues {
