@@ -24,8 +24,10 @@ func (srv *Server) waitForSignals() {
 		if sig == unix.SIGTSTP {
 			srv.Stop()
 			continue
+		} else {
+			srv.Stop()
+			break
 		}
-		break
 	}
 }
 
