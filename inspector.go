@@ -960,6 +960,12 @@ func parseOption(s string) (Option, error) {
 			return nil, err
 		}
 		return Unique(d), nil
+	case "UniqueKey":
+		key, err := strconv.Unquote(arg)
+		if err != nil {
+			return nil, err
+		}
+		return UniqueKey(key), nil
 	case "ProcessAt":
 		t, err := time.Parse(time.UnixDate, arg)
 		if err != nil {
