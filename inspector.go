@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -248,6 +249,13 @@ func (i *Inspector) GetTaskInfo(queue, id string) (*TaskInfo, error) {
 		return nil, fmt.Errorf("asynq: %v", err)
 	}
 	return newTaskInfo(info.Message, info.State, info.NextProcessAt, info.Result), nil
+}
+
+// GetTaskPubSub returns a pubsub instance for the given task.
+func (i *Inspector) GetTaskPubSub(queue, id string) *redis.PubSub {
+	taskKey := base.TaskKey(queue, id)
+	ctx := context.Background()
+	return i.rdb.Client().Subscribe(ctx, taskKey)
 }
 
 // ListOption specifies behavior of list operation.

@@ -1556,3 +1556,14 @@ func (r *RDB) WriteResult(qname, taskID string, data []byte) (int, error) {
 	}
 	return len(data), nil
 }
+
+// Publish publishes the given task message to the specified channel.
+func (r *RDB) Publish(qname, taskID string, data []byte) (int, error) {
+	var op errors.Op = "rdb.Publish"
+	ctx := context.Background()
+	taskKey := base.TaskKey(qname, taskID)
+	if err := r.client.Publish(ctx, taskKey, data).Err(); err != nil {
+		return 0, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "publish", Err: err})
+	}
+	return len(data), nil
+}
