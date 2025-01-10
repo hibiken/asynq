@@ -866,7 +866,7 @@ if redis.call("ZREM", KEYS[3], ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
 redis.call("ZADD", KEYS[4], ARGV[3], ARGV[1])
-local old = redis.call("ZRANGE", KEYS[4], "-inf", ARGV[4], "BYSCORE")
+local old = redis.call("ZRANGEBYSCORE", KEYS[4], "-inf", ARGV[4])
 if #old > 0 then
 	for _, id in ipairs(old) do
 		redis.call("DEL", KEYS[9] .. id)
