@@ -177,7 +177,7 @@ type Config struct {
 
 	//    we can also handle panic error like:
 	//     func reportError(ctx context, task *asynq.Task, err error) {
-	//         if asynq.IsPanic(err) {
+	//         if asynq.IsPanicError(err) {
 	//	          errorReportingService.Notify(err)
 	// 	       }
 	//     })
