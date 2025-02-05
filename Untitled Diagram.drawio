@@ -1,9 +1,30 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132.0.0.0" version="26.0.11">
   <diagram name="Page-1" id="6fKOZFrr65FuS0PxDWEK">
-    <mxGraphModel>
+    <mxGraphModel dx="907" dy="643" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
+        <mxCell id="2kl8HcV31ofFmPxRBDZs-1" value="" style="rounded=0;whiteSpace=wrap;html=1;flipH=1;flipV=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="80" width="780" height="440" as="geometry" />
+        </mxCell>
+        <mxCell id="2kl8HcV31ofFmPxRBDZs-4" value="" style="endArrow=none;html=1;rounded=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;exitX=0.25;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="2kl8HcV31ofFmPxRBDZs-1" target="2kl8HcV31ofFmPxRBDZs-1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="390" y="360" as="sourcePoint" />
+            <mxPoint x="440" y="310" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="2kl8HcV31ofFmPxRBDZs-5" value="button1" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="220" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="2kl8HcV31ofFmPxRBDZs-6" value="button2" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="320" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="2kl8HcV31ofFmPxRBDZs-7" value="button3" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="410" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="2kl8HcV31ofFmPxRBDZs-8" value="layout1" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="90" y="130" width="60" height="30" as="geometry" />
+        </mxCell>
       </root>
     </mxGraphModel>
   </diagram>
