@@ -2369,6 +2369,148 @@ func TestInspectorRunAllArchivedTasks(t *testing.T) {
 	}
 }
 
+func TestInspectorUpdateTaskPayloadUpdatesScheduledTaskPayload(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1_old := h.NewTaskMessage("task1", []byte("m1_old"))
+	m1_new := h.NewTaskMessage("task1", nil)
+	m1_new.ID = m1_old.ID
+	m2_old := h.NewTaskMessage("task2", nil)
+	m2_new := h.NewTaskMessage("task2", []byte("m2_new"))
+	m2_new.ID = m2_old.ID
+	m3_old := h.NewTaskMessageWithQueue("task3", []byte("m3_old"), "custom")
+	m3_new := h.NewTaskMessageWithQueue("task3", []byte("m3_new"), "custom")
+	m3_new.ID = m3_old.ID
+
+	now := time.Now()
+	z1_old := base.Z{Message: m1_old, Score: now.Add(5 * time.Minute).Unix()}
+	z1_new := base.Z{Message: m1_new, Score: now.Add(5 * time.Minute).Unix()}
+	z2_old := base.Z{Message: m2_old, Score: now.Add(15 * time.Minute).Unix()}
+	z2_new := base.Z{Message: m2_new, Score: now.Add(15 * time.Minute).Unix()}
+	z3_old := base.Z{Message: m3_old, Score: now.Add(2 * time.Minute).Unix()}
+	z3_new := base.Z{Message: m3_new, Score: now.Add(2 * time.Minute).Unix()}
+
+	inspector := NewInspector(getRedisConnOpt(t))
+
+	tests := []struct {
+		scheduled     map[string][]base.Z
+		qname         string
+		id            string
+		newPayload    []byte
+		wantScheduled map[string][]base.Z
+	}{
+		{
+			scheduled: map[string][]base.Z{
+				"default": {z1_old, z2_old},
+				"custom":  {z3_old},
+			},
+			qname:      "default",
+			id:         createScheduledTask(z2_old).ID,
+			newPayload: m2_new.Payload,
+			wantScheduled: map[string][]base.Z{
+				"default": {z1_old, z2_new},
+				"custom":  {z3_old},
+			},
+		},
+		{
+			scheduled: map[string][]base.Z{
+				"default": {z1_old, z2_old},
+				"custom":  {z3_old},
+			},
+			qname:      "default",
+			id:         createScheduledTask(z1_old).ID,
+			newPayload: m1_new.Payload,
+			wantScheduled: map[string][]base.Z{
+				"default": {z1_new, z2_old},
+				"custom":  {z3_old},
+			},
+		},
+		{
+			scheduled: map[string][]base.Z{
+				"default": {z1_old, z2_old},
+				"custom":  {z3_old},
+			},
+			qname:      "custom",
+			id:         createScheduledTask(z3_old).ID,
+			newPayload: m3_new.Payload,
+			wantScheduled: map[string][]base.Z{
+				"default": {z1_old, z2_old},
+				"custom":  {z3_new},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		h.SeedAllScheduledQueues(t, r, tc.scheduled)
+
+		if err := inspector.UpdateTaskPayload(tc.qname, tc.id, tc.newPayload); err != nil {
+			t.Errorf("UpdateTask(%q, %q) returned error: %v", tc.qname, tc.id, err)
+		}
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := h.GetScheduledEntries(t, r, qname)
+			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("unexpected scheduled tasks in queue %q: (-want, +got)\n%s", qname, diff)
+			}
+
+		}
+	}
+}
+
+func TestInspectorUpdateTaskPayloadError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	m1 := h.NewTaskMessage("task1", nil)
+	m2 := h.NewTaskMessage("task2", nil)
+	m3 := h.NewTaskMessageWithQueue("task3", nil, "custom")
+
+	now := time.Now()
+	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
+	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
+	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
+
+	inspector := NewInspector(getRedisConnOpt(t))
+
+	tests := []struct {
+		tasks      map[string][]base.Z
+		qname      string
+		id         string
+		newPayload []byte
+		wantErr    error
+	}{
+		{
+			tasks: map[string][]base.Z{
+				"default": {z1, z2},
+				"custom":  {z3},
+			},
+			qname:      "nonexistent",
+			id:         createScheduledTask(z2).ID,
+			newPayload: nil,
+			wantErr:    ErrQueueNotFound,
+		},
+		{
+			tasks: map[string][]base.Z{
+				"default": {z1, z2},
+				"custom":  {z3},
+			},
+			qname:      "default",
+			id:         uuid.NewString(),
+			newPayload: nil,
+			wantErr:    ErrTaskNotFound,
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		h.SeedAllScheduledQueues(t, r, tc.tasks)
+
+		if err := inspector.UpdateTaskPayload(tc.qname, tc.id, tc.newPayload); !errors.Is(err, tc.wantErr) {
+			t.Errorf("UpdateTask(%q, %q) = %v, want %v", tc.qname, tc.id, err, tc.wantErr)
+			continue
+		}
+	}
+}
+
 func TestInspectorDeleteTaskDeletesPendingTask(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
