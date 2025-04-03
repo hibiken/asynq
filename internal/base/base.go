@@ -722,4 +722,6 @@ type Broker interface {
 	PublishCancelation(id string) error
 
 	WriteResult(qname, id string, data []byte) (n int, err error)
+
+	Publish(qname, id string, data []byte) (n int, err error)
 }
