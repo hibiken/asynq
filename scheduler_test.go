@@ -232,3 +232,50 @@ func TestSchedulerPostAndPreEnqueueHandler(t *testing.T) {
 	}
 	postMu.Unlock()
 }
+
+func TestSchedulerWithCustomEntryIDOpt(t *testing.T) {
+	tests := []struct {
+		cronspec string
+		task     *Task
+		opts     []Option
+		wait     time.Duration
+		queue    string
+		want     []*base.TaskMessage
+	}{
+		{
+			cronspec: "@every 3s",
+			task:     NewTask("task1", nil),
+			opts: []Option{
+				MaxRetry(10),
+				SchedulerEntryID("entry1"),
+			},
+			wait:  10 * time.Second,
+			queue: "default",
+			want: []*base.TaskMessage{
+				{
+					Type:    "task1",
+					Payload: nil,
+					Retry:   10,
+					Timeout: int64(defaultTimeout.Seconds()),
+					Queue:   "default",
+					ID:      "entry1",
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		scheduler := NewScheduler(getRedisConnOpt(t), nil)
+		entryID, err := scheduler.Register(tc.cronspec, tc.task, tc.opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		time.Sleep(tc.wait)
+		scheduler.Shutdown()
+
+		if entryID != "entry1" {
+			t.Errorf("entryID = %q, want %q", entryID, "entry1")
+		}
+	}
+}
