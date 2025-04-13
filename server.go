@@ -185,6 +185,11 @@ type Config struct {
 	//     ErrorHandler: asynq.ErrorHandlerFunc(reportError)
 	ErrorHandler ErrorHandler
 
+	// FinishedHandler handles a task that has been processed.
+	//
+	// FinishedHandler is called when the task status becomes completed or archived.
+	FinishedHandler FinishedHandler
+
 	// Logger specifies the logger used by the server instance.
 	//
 	// If unset, default logger is used.
@@ -286,6 +291,20 @@ type ErrorHandlerFunc func(ctx context.Context, task *Task, err error)
 // HandleError calls fn(ctx, task, err)
 func (fn ErrorHandlerFunc) HandleError(ctx context.Context, task *Task, err error) {
 	fn(ctx, task, err)
+}
+
+// An FinishedHandler handles a task that has been processed.
+type FinishedHandler interface {
+	HandleFinished(task *TaskInfo)
+}
+
+// The FinishedHandlerFunc type is an adapter to allow the use of  ordinary functions as a FinishedHandler.
+// If f is a function with the appropriate signature, FinishedHandlerFunc(f) is a FinishedHandler that calls f.
+type FinishedHandlerFunc func(task *TaskInfo)
+
+// HandleFinished calls fn(ctx, task, err)
+func (fn FinishedHandlerFunc) HandleFinished(task *TaskInfo) {
+	fn(task)
 }
 
 // RetryDelayFunc calculates the retry delay duration for a failed task given
@@ -554,6 +573,7 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		queues:            queues,
 		strictPriority:    cfg.StrictPriority,
 		errHandler:        cfg.ErrorHandler,
+		finishedHandler:   cfg.FinishedHandler,
 		shutdownTimeout:   shutdownTimeout,
 		starting:          starting,
 		finished:          finished,
