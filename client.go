@@ -55,6 +55,7 @@ const (
 	TimeoutOpt
 	DeadlineOpt
 	UniqueOpt
+	UniqueKeyOpt
 	ProcessAtOpt
 	ProcessInOpt
 	TaskIDOpt
@@ -82,6 +83,7 @@ type (
 	timeoutOption   time.Duration
 	deadlineOption  time.Time
 	uniqueOption    time.Duration
+	uniqueKeyOption string
 	processAtOption time.Time
 	processInOption time.Duration
 	retentionOption time.Duration
@@ -160,10 +162,11 @@ func (t deadlineOption) Value() interface{} { return time.Time(t) }
 // ErrDuplicateTask error is returned when enqueueing a duplicate task.
 // TTL duration must be greater than or equal to 1 second.
 //
-// Uniqueness of a task is based on the following properties:
+// By default, the uniqueness of a task is based on the following properties:
 //   - Task Type
 //   - Task Payload
 //   - Queue Name
+// UniqueKey can be used to specify a custom string for calculating uniqueness, instead of task payload.
 func Unique(ttl time.Duration) Option {
 	return uniqueOption(ttl)
 }
@@ -171,6 +174,24 @@ func Unique(ttl time.Duration) Option {
 func (ttl uniqueOption) String() string     { return fmt.Sprintf("Unique(%v)", time.Duration(ttl)) }
 func (ttl uniqueOption) Type() OptionType   { return UniqueOpt }
 func (ttl uniqueOption) Value() interface{} { return time.Duration(ttl) }
+
+// UniqueKey returns an option to define the custom uniqueness of a task.
+// If uniqueKey is not empty, the uniqueness of a task is based on the following properties:
+//   - Task Type
+//   - UniqueKey
+//   - Queue Name
+// Otherwise, task payload will be used, see Unique.
+//
+// UniqueKey should be used together with Unique.
+func UniqueKey(uniqueKey string) Option {
+	return uniqueKeyOption(uniqueKey)
+}
+
+func (uniqueKey uniqueKeyOption) String() string {
+	return fmt.Sprintf("UniqueKey(%q)", string(uniqueKey))
+}
+func (uniqueKey uniqueKeyOption) Type() OptionType   { return UniqueKeyOpt }
+func (uniqueKey uniqueKeyOption) Value() interface{} { return string(uniqueKey) }
 
 // ProcessAt returns an option to specify when to process the given task.
 //
@@ -234,6 +255,7 @@ type option struct {
 	timeout   time.Duration
 	deadline  time.Time
 	uniqueTTL time.Duration
+	uniqueKey string
 	processAt time.Time
 	retention time.Duration
 	group     string
@@ -278,6 +300,8 @@ func composeOptions(opts ...Option) (option, error) {
 				return option{}, errors.New("Unique TTL cannot be less than 1s")
 			}
 			res.uniqueTTL = ttl
+		case uniqueKeyOption:
+			res.uniqueKey = string(opt)
 		case processAtOption:
 			res.processAt = time.Time(opt)
 		case processInOption:
@@ -379,7 +403,11 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 	}
 	var uniqueKey string
 	if opt.uniqueTTL > 0 {
-		uniqueKey = base.UniqueKey(opt.queue, task.Type(), task.Payload())
+		if opt.uniqueKey != "" {
+			uniqueKey = base.CustomUniqueKey(opt.queue, task.Type(), opt.uniqueKey)
+		} else {
+			uniqueKey = base.UniqueKey(opt.queue, task.Type(), task.Payload())
+		}
 	}
 	msg := &base.TaskMessage{
 		ID:        opt.taskID,
