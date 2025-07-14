@@ -2,6 +2,8 @@ module github.com/hibiken/asynq/x
 
 go 1.22
 
+replace github.com/hibiken/asynq => ../
+
 require (
 	github.com/google/uuid v1.6.0
 	github.com/hibiken/asynq v0.25.0
@@ -19,7 +21,7 @@ require (
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/spf13/cast v1.7.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
-	golang.org/x/time v0.7.0 // indirect
-	google.golang.org/protobuf v1.35.1 // indirect
+	golang.org/x/sys v0.27.0 // indirect
+	golang.org/x/time v0.8.0 // indirect
+	google.golang.org/protobuf v1.35.2 // indirect
 )
