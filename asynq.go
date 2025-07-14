@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/redis/go-redis/v9"
 )
 
 // Task represents a unit of work to be performed.
@@ -260,6 +260,12 @@ type RedisClientOpt struct {
 	// See: https://redis.io/commands/select.
 	DB int
 
+	// KeyPrefix is the Redis key prefix for all Asynq operations.
+	// This allows you to namespace Asynq keys for different environments.
+	// If empty, the default prefix "asynq" will be used.
+	// Examples: "asynq-prod", "asynq-dev", "asynq-staging"
+	KeyPrefix string
+
 	// Dial timeout for establishing new connections.
 	// Default is 5 seconds.
 	DialTimeout time.Duration
@@ -290,6 +296,9 @@ type RedisClientOpt struct {
 }
 
 func (opt RedisClientOpt) MakeRedisClient() interface{} {
+	// Apply key prefix if specified (preserves existing behavior if not specified)
+	base.ApplyKeyPrefix(opt.KeyPrefix)
+
 	return redis.NewClient(&redis.Options{
 		Network:      opt.Network,
 		Addr:         opt.Addr,
@@ -334,6 +343,12 @@ type RedisFailoverClientOpt struct {
 	// See: https://redis.io/commands/select.
 	DB int
 
+	// KeyPrefix is the Redis key prefix for all Asynq operations.
+	// This allows you to namespace Asynq keys for different environments.
+	// If empty, the default prefix "asynq" will be used.
+	// Examples: "asynq-prod", "asynq-dev", "asynq-staging"
+	KeyPrefix string
+
 	// Dial timeout for establishing new connections.
 	// Default is 5 seconds.
 	DialTimeout time.Duration
@@ -364,6 +379,9 @@ type RedisFailoverClientOpt struct {
 }
 
 func (opt RedisFailoverClientOpt) MakeRedisClient() interface{} {
+	// Apply key prefix if specified (preserves existing behavior if not specified)
+	base.ApplyKeyPrefix(opt.KeyPrefix)
+
 	return redis.NewFailoverClient(&redis.FailoverOptions{
 		MasterName:       opt.MasterName,
 		SentinelAddrs:    opt.SentinelAddrs,
@@ -422,9 +440,18 @@ type RedisClusterClientOpt struct {
 	// TLS Config used to connect to a server.
 	// TLS will be negotiated only if this field is set.
 	TLSConfig *tls.Config
+
+	// KeyPrefix is the Redis key prefix for all Asynq operations.
+	// If empty, the default prefix "asynq" will be used.
+	// This allows you to namespace Asynq keys for different environments
+	// (e.g., "asynq-prod", "asynq-dev", "asynq-staging").
+	KeyPrefix string
 }
 
 func (opt RedisClusterClientOpt) MakeRedisClient() interface{} {
+	// Apply key prefix if specified (preserves existing behavior if not specified)
+	base.ApplyKeyPrefix(opt.KeyPrefix)
+	
 	return redis.NewClusterClient(&redis.ClusterOptions{
 		Addrs:        opt.Addrs,
 		MaxRedirects: opt.MaxRedirects,
@@ -442,10 +469,11 @@ func (opt RedisClusterClientOpt) MakeRedisClient() interface{} {
 //
 // Three URI schemes are supported, which are redis:, rediss:, redis-socket:, and redis-sentinel:.
 // Supported formats are:
-//     redis://[:password@]host[:port][/dbnumber]
-//     rediss://[:password@]host[:port][/dbnumber]
-//     redis-socket://[:password@]path[?db=dbnumber]
-//     redis-sentinel://[:password@]host1[:port][,host2:[:port]][,hostN:[:port]][?master=masterName]
+//
+//	redis://[:password@]host[:port][/dbnumber]
+//	rediss://[:password@]host[:port][/dbnumber]
+//	redis-socket://[:password@]path[?db=dbnumber]
+//	redis-sentinel://[:password@]host1[:port][,host2:[:port]][,hostN:[:port]][?master=masterName]
 func ParseRedisURI(uri string) (RedisConnOpt, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
