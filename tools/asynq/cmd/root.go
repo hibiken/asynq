@@ -101,7 +101,7 @@ func (l *displayLine) String() string {
 type displayLines []*displayLine
 
 func (dls displayLines) String() string {
-	var lines []string
+	lines := make([]string, 0, len(dls))
 	for _, dl := range dls {
 		lines = append(lines, dl.String())
 	}
@@ -414,24 +414,28 @@ func getTLSConfig() *tls.Config {
 // cols is a list of headers and printRow specifies how to print rows.
 //
 // Example:
-// type User struct {
-//     Name string
-//     Addr string
-//     Age  int
-// }
+//
+//	type User struct {
+//	    Name string
+//	    Addr string
+//	    Age  int
+//	}
+//
 // data := []*User{{"user1", "addr1", 24}, {"user2", "addr2", 42}, ...}
 // cols := []string{"Name", "Addr", "Age"}
-// printRows := func(w io.Writer, tmpl string) {
-//     for _, u := range data {
-//         fmt.Fprintf(w, tmpl, u.Name, u.Addr, u.Age)
-//     }
-// }
+//
+//	printRows := func(w io.Writer, tmpl string) {
+//	    for _, u := range data {
+//	        fmt.Fprintf(w, tmpl, u.Name, u.Addr, u.Age)
+//	    }
+//	}
+//
 // printTable(cols, printRows)
 func printTable(cols []string, printRows func(w io.Writer, tmpl string)) {
 	format := strings.Repeat("%v\t", len(cols)) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	var headers []interface{}
-	var seps []interface{}
+	headers := make([]interface{}, 0, len(cols))
+	seps := make([]interface{}, 0, len(cols))
 	for _, name := range cols {
 		headers = append(headers, name)
 		seps = append(seps, strings.Repeat("-", len(name)))

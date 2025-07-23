@@ -465,12 +465,12 @@ func uniq(names []string, l int) []string {
 // sortByPriority returns a list of queue names sorted by
 // their priority level in descending order.
 func sortByPriority(qcfg map[string]int) []string {
-	var queues []*queue
+	queues := make([]*queue, 0, len(qcfg))
 	for qname, n := range qcfg {
 		queues = append(queues, &queue{qname, n})
 	}
 	sort.Sort(sort.Reverse(byPriority(queues)))
-	var res []string
+	res := make([]string, 0, len(queues))
 	for _, q := range queues {
 		res = append(res, q.name)
 	}
@@ -490,7 +490,7 @@ func (x byPriority) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 
 // normalizeQueues divides priority numbers by their greatest common divisor.
 func normalizeQueues(queues map[string]int) map[string]int {
-	var xs []int
+	xs := make([]int, 0, len(queues))
 	for _, x := range queues {
 		xs = append(xs, x)
 	}
