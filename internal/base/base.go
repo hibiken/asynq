@@ -28,6 +28,10 @@ const Version = "0.25.1"
 // DefaultQueueName is the queue name used if none are specified by user.
 const DefaultQueueName = "default"
 
+// DefaultQueuePriority is the default priority for tasks in the default queue.
+// Also used as default priority for unmatched dynamic queues.
+const DefaultQueuePriority = 1
+
 // DefaultQueue is the redis key for the default queue.
 var DefaultQueue = PendingKey(DefaultQueueName)
 
@@ -365,6 +369,7 @@ type ServerInfo struct {
 	Concurrency       int
 	Queues            map[string]int
 	StrictPriority    bool
+	DynamicQueues     bool
 	Status            string
 	Started           time.Time
 	ActiveWorkerCount int
@@ -696,6 +701,7 @@ type Broker interface {
 	Retry(ctx context.Context, msg *TaskMessage, processAt time.Time, errMsg string, isFailure bool) error
 	Archive(ctx context.Context, msg *TaskMessage, errMsg string) error
 	ForwardIfReady(qnames ...string) error
+	SetOfQueues(ctx context.Context) (map[string]struct{}, error)
 
 	// Group aggregation related methods
 	AddToGroup(ctx context.Context, msg *TaskMessage, gname string) error

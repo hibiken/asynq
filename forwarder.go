@@ -15,14 +15,12 @@ import (
 // A forwarder is responsible for moving scheduled and retry tasks to pending state
 // so that the tasks get processed by the workers.
 type forwarder struct {
-	logger *log.Logger
-	broker base.Broker
+	logger   *log.Logger
+	broker   base.Broker
+	queueMgr *queueManager
 
 	// channel to communicate back to the long running "forwarder" goroutine.
 	done chan struct{}
-
-	// list of queue names to check and enqueue.
-	queues []string
 
 	// poll interval on average
 	avgInterval time.Duration
@@ -31,7 +29,7 @@ type forwarder struct {
 type forwarderParams struct {
 	logger   *log.Logger
 	broker   base.Broker
-	queues   []string
+	queueMgr *queueManager
 	interval time.Duration
 }
 
@@ -40,7 +38,7 @@ func newForwarder(params forwarderParams) *forwarder {
 		logger:      params.logger,
 		broker:      params.broker,
 		done:        make(chan struct{}),
-		queues:      params.queues,
+		queueMgr:    params.queueMgr,
 		avgInterval: params.interval,
 	}
 }
@@ -71,7 +69,8 @@ func (f *forwarder) start(wg *sync.WaitGroup) {
 }
 
 func (f *forwarder) exec() {
-	if err := f.broker.ForwardIfReady(f.queues...); err != nil {
+	queues := f.queueMgr.GetUnorderedQueueNames()
+	if err := f.broker.ForwardIfReady(queues...); err != nil {
 		f.logger.Errorf("Failed to forward scheduled tasks: %v", err)
 	}
 }

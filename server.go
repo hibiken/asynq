@@ -158,6 +158,32 @@ type Config struct {
 	// higher priorities are empty.
 	StrictPriority bool
 
+	// DynamicQueues indicates whether the server should support dynamic queues.
+	//
+	// Dynamic queues are queues that can be created on-the-fly and queue name is not know at startup time.
+	//
+	// Can be true only if StrictPriority is also true.
+	//
+	// If DynamicQueues is true, Queues priorities can be set using wildcards (*):
+	//
+	// Example:
+	//
+	//     Queues: map[string]int{
+	//         "my-queue-name":    7, // exact queue name
+	//         "other-queue-name": 7, // exact queue name. Same priority as "my-queue-name"
+	//         "my-queue-*":       6, // matches any queue name that starts with "my-queue-"
+	//         "my-queue-low-*":   5, // matches any queue name that starts with "my-queue-low-"
+	//                                // longest common prefix will be used.
+	//         "*-my-queue":       4, // matches any queue name that ends with "-my-queue"
+	//         "*-my-queue-*":     3, // matches any queue name that contains "-my-queue-" in the middle
+	//         "my-*-queue":       2, // matches any queue name starting with "my-" and ending with "-queue"
+	//         "*":                1, // default priority. Will match any queue name if set.
+	//                                // if default priority is not set, asynq will use the default priority of 1 for unknown queues. See: internal/base/DefaultQueuePriority
+	//     },
+	//     DynamicQueues: true,
+	//     StrictPriority: true,
+	DynamicQueues bool
+
 	// ErrorHandler handles errors returned by the task handler.
 	//
 	// HandleError is invoked only if the task handler returns a non-nil error.
@@ -407,11 +433,13 @@ func DefaultRetryDelayFunc(n int, e error, t *Task) time.Duration {
 func defaultIsFailureFunc(err error) bool { return err != nil }
 
 var defaultQueueConfig = map[string]int{
-	base.DefaultQueueName: 1,
+	base.DefaultQueueName: base.DefaultQueuePriority,
 }
 
 const (
 	defaultTaskCheckInterval = 1 * time.Second
+
+	defaultDynamicQueueUpdateInterval = 5 * time.Second
 
 	defaultShutdownTimeout = 8 * time.Second
 
@@ -510,21 +538,28 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	srvState := &serverState{value: srvStateNew}
 	cancels := base.NewCancelations()
 
+	queueManager := newQueueManager(queueManagerParams{
+		logger:         logger,
+		broker:         rdb,
+		interval:       defaultDynamicQueueUpdateInterval,
+		queues:         queues,
+		strictPriority: cfg.StrictPriority,
+		dynamicQueues:  cfg.DynamicQueues,
+	})
 	syncer := newSyncer(syncerParams{
 		logger:     logger,
 		requestsCh: syncCh,
 		interval:   5 * time.Second,
 	})
 	heartbeater := newHeartbeater(heartbeaterParams{
-		logger:         logger,
-		broker:         rdb,
-		interval:       5 * time.Second,
-		concurrency:    n,
-		queues:         queues,
-		strictPriority: cfg.StrictPriority,
-		state:          srvState,
-		starting:       starting,
-		finished:       finished,
+		logger:      logger,
+		broker:      rdb,
+		interval:    5 * time.Second,
+		concurrency: n,
+		queueMgr:    queueManager,
+		state:       srvState,
+		starting:    starting,
+		finished:    finished,
 	})
 	delayedTaskCheckInterval := cfg.DelayedTaskCheckInterval
 	if delayedTaskCheckInterval == 0 {
@@ -533,7 +568,7 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	forwarder := newForwarder(forwarderParams{
 		logger:   logger,
 		broker:   rdb,
-		queues:   qnames,
+		queueMgr: queueManager,
 		interval: delayedTaskCheckInterval,
 	})
 	subscriber := newSubscriber(subscriberParams{
@@ -551,20 +586,20 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		syncCh:            syncCh,
 		cancelations:      cancels,
 		concurrency:       n,
-		queues:            queues,
-		strictPriority:    cfg.StrictPriority,
-		errHandler:        cfg.ErrorHandler,
-		shutdownTimeout:   shutdownTimeout,
-		starting:          starting,
-		finished:          finished,
+		// queues:            queues,
+		// strictPriority:  cfg.StrictPriority,
+		errHandler:      cfg.ErrorHandler,
+		shutdownTimeout: shutdownTimeout,
+		starting:        starting,
+		finished:        finished,
 	})
 	recoverer := newRecoverer(recovererParams{
 		logger:         logger,
 		broker:         rdb,
 		retryDelayFunc: delayFunc,
 		isFailureFunc:  isFailureFunc,
-		queues:         qnames,
-		interval:       1 * time.Minute,
+		// queues:         qnames,
+		interval: 1 * time.Minute,
 	})
 	healthchecker := newHealthChecker(healthcheckerParams{
 		logger:          logger,
@@ -587,16 +622,16 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 			"This might cause a long-running script", janitorBatchSize, defaultJanitorBatchSize)
 	}
 	janitor := newJanitor(janitorParams{
-		logger:    logger,
-		broker:    rdb,
-		queues:    qnames,
+		logger: logger,
+		broker: rdb,
+		// queues:    qnames,
 		interval:  janitorInterval,
 		batchSize: janitorBatchSize,
 	})
 	aggregator := newAggregator(aggregatorParams{
-		logger:          logger,
-		broker:          rdb,
-		queues:          qnames,
+		logger: logger,
+		broker: rdb,
+		// queues:          qnames,
 		gracePeriod:     groupGracePeriod,
 		maxDelay:        cfg.GroupMaxDelay,
 		maxSize:         cfg.GroupMaxSize,
