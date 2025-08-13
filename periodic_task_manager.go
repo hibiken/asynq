@@ -7,6 +7,7 @@ package asynq
 import (
 	"crypto/sha256"
 	"fmt"
+	"github.com/google/uuid"
 	"sort"
 	"sync"
 	"time"
@@ -82,6 +83,7 @@ type PeriodicTaskConfigProvider interface {
 
 // PeriodicTaskConfig specifies the details of a periodic task.
 type PeriodicTaskConfig struct {
+	ID       uuid.UUID
 	Cronspec string   // required: must be non empty string
 	Task     *Task    // required: must be non nil
 	Opts     []Option // optional: can be nil
@@ -181,7 +183,7 @@ func (mgr *PeriodicTaskManager) initialSync() error {
 
 func (mgr *PeriodicTaskManager) add(configs []*PeriodicTaskConfig) {
 	for _, c := range configs {
-		entryID, err := mgr.s.Register(c.Cronspec, c.Task, c.Opts...)
+		entryID, err := mgr.s.Register(c.ID, c.Cronspec, c.Task, c.Opts...)
 		if err != nil {
 			mgr.s.logger.Errorf("Failed to register periodic task: cronspec=%q task=%q err=%v",
 				c.Cronspec, c.Task.Type(), err)

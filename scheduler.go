@@ -205,9 +205,13 @@ func (j *enqueueJob) Run() {
 
 // Register registers a task to be enqueued on the given schedule specified by the cronspec.
 // It returns an ID of the newly registered entry.
-func (s *Scheduler) Register(cronspec string, task *Task, opts ...Option) (entryID string, err error) {
+func (s *Scheduler) Register(id uuid.UUID, cronspec string, task *Task, opts ...Option) (entryID string, err error) {
+	if id == uuid.Nil {
+		id = uuid.New()
+	}
+
 	job := &enqueueJob{
-		id:              uuid.New(),
+		id:              id,
 		cronspec:        cronspec,
 		task:            task,
 		opts:            opts,
