@@ -83,7 +83,6 @@ type PeriodicTaskConfigProvider interface {
 
 // PeriodicTaskConfig specifies the details of a periodic task.
 type PeriodicTaskConfig struct {
-	ID       uuid.UUID
 	Cronspec string   // required: must be non empty string
 	Task     *Task    // required: must be non nil
 	Opts     []Option // optional: can be nil

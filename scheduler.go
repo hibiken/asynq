@@ -300,7 +300,7 @@ func (s *Scheduler) Shutdown() {
 	<-ctx.Done()
 	s.wg.Wait()
 
-	s.clearHistory()
+	//s.clearHistory()
 	if err := s.client.Close(); err != nil {
 		s.logger.Errorf("Failed to close redis client connection: %v", err)
 	}
