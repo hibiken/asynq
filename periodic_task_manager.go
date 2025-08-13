@@ -183,7 +183,7 @@ func (mgr *PeriodicTaskManager) initialSync() error {
 
 func (mgr *PeriodicTaskManager) add(configs []*PeriodicTaskConfig) {
 	for _, c := range configs {
-		entryID, err := mgr.s.Register(c.ID, c.Cronspec, c.Task, c.Opts...)
+		entryID, err := mgr.s.Register(c.hash(), c.Cronspec, c.Task, c.Opts...)
 		if err != nil {
 			mgr.s.logger.Errorf("Failed to register periodic task: cronspec=%q task=%q err=%v",
 				c.Cronspec, c.Task.Type(), err)
