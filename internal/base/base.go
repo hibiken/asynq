@@ -686,7 +686,9 @@ type Broker interface {
 	Ping() error
 	Close() error
 	Enqueue(ctx context.Context, msg *TaskMessage) error
+	EnqueueBatch(ctx context.Context, msgs []*TaskMessage) ([]int64, error)
 	EnqueueUnique(ctx context.Context, msg *TaskMessage, ttl time.Duration) error
+	EnqueueUniqueBatch(ctx context.Context, msgs []*TaskMessage, ttl time.Duration) ([]int64, error)
 	Dequeue(qnames ...string) (*TaskMessage, time.Time, error)
 	Done(ctx context.Context, msg *TaskMessage) error
 	MarkAsComplete(ctx context.Context, msg *TaskMessage) error

@@ -337,7 +337,11 @@ func (c *Client) Close() error {
 //
 // Enqueue uses context.Background internally; to specify the context, use EnqueueContext.
 func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
-	return c.EnqueueContext(context.Background(), task, opts...)
+	results, err := c.EnqueueBatch([]*Task{task}, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return results[0], nil
 }
 
 // EnqueueContext enqueues the given task to a queue.
@@ -417,6 +421,244 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 		return nil, err
 	}
 	return newTaskInfo(msg, state, opt.processAt, nil), nil
+}
+
+// EnqueueBatch enqueues multiple tasks to their respective queues atomically.
+//
+// EnqueueBatch returns a slice of TaskInfo and nil error if all tasks are enqueued successfully.
+// If any task fails to enqueue, the function returns the partial results and an error.
+// The order of the returned TaskInfo slice matches the order of the input tasks.
+//
+// The argument opts specifies the behavior of task processing and applies to all tasks in the batch.
+// If there are conflicting Option values, the last one overrides others.
+// Any options provided to NewTask can be overridden by options passed to EnqueueBatch.
+// By default, max retry is set to 25 and timeout is set to 30 minutes.
+//
+// If no ProcessAt or ProcessIn options are provided, the tasks will be pending immediately.
+//
+// EnqueueBatch uses context.Background internally; to specify the context, use EnqueueBatchContext.
+func (c *Client) EnqueueBatch(tasks []*Task, opts ...Option) ([]*TaskInfo, error) {
+	return c.EnqueueBatchContext(context.Background(), tasks, opts...)
+}
+
+// EnqueueBatchContext enqueues multiple tasks to their respective queues atomically with the given context.
+//
+// EnqueueBatchContext returns a slice of TaskInfo and nil error if all tasks are enqueued successfully.
+// If any task fails to enqueue, the function returns the partial results and an error.
+// The order of the returned TaskInfo slice matches the order of the input tasks.
+//
+// The argument opts specifies the behavior of task processing and applies to all tasks in the batch.
+// If there are conflicting Option values, the last one overrides others.
+// Any options provided to NewTask can be overridden by options passed to EnqueueBatchContext.
+// By default, max retry is set to 25 and timeout is set to 30 minutes.
+//
+// The context argument applies to the enqueue operation. To specify task timeout and deadline,
+// use Timeout and Deadline options instead.
+func (c *Client) EnqueueBatchContext(ctx context.Context, tasks []*Task, opts ...Option) ([]*TaskInfo, error) {
+	if len(tasks) == 0 {
+		return nil, nil
+	}
+
+	// Validate all tasks first
+	for i, task := range tasks {
+		if task == nil {
+			return nil, fmt.Errorf("task at index %d is nil", i)
+		}
+		if strings.TrimSpace(task.Type()) == "" {
+			return nil, fmt.Errorf("task type at index %d cannot be empty", i)
+		}
+	}
+
+	// Compose options once for all tasks
+	opt, err := composeOptions(opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prepare task messages and their corresponding options
+	var msgs []*base.TaskMessage
+	var taskOpts []option
+	now := time.Now()
+
+	for _, task := range tasks {
+		// Merge task-specific options with the batch options
+		taskOpt := opt
+		if len(task.opts) > 0 {
+			taskOpt, err = composeOptions(append(task.opts, opts...)...)
+			if err != nil {
+				return nil, fmt.Errorf("invalid options for task %q: %v", task.Type(), err)
+			}
+		}
+
+		// Set default values if not specified
+		deadline := noDeadline
+		if !taskOpt.deadline.IsZero() {
+			deadline = taskOpt.deadline
+		}
+
+		timeout := noTimeout
+		if taskOpt.timeout != 0 {
+			timeout = taskOpt.timeout
+		}
+		if deadline.Equal(noDeadline) && timeout == noTimeout {
+			timeout = defaultTimeout
+		}
+
+		// Generate unique key if needed
+		var uniqueKey string
+		if taskOpt.uniqueTTL > 0 {
+			uniqueKey = base.UniqueKey(taskOpt.queue, task.Type(), task.Payload())
+		}
+
+		// Create task message
+		msg := &base.TaskMessage{
+			ID:        taskOpt.taskID,
+			Type:      task.Type(),
+			Payload:   task.Payload(),
+			Queue:     taskOpt.queue,
+			Retry:     taskOpt.retry,
+			Deadline:  deadline.Unix(),
+			Timeout:   int64(timeout.Seconds()),
+			UniqueKey: uniqueKey,
+			GroupKey:  taskOpt.group,
+			Retention: int64(taskOpt.retention.Seconds()),
+		}
+
+		msgs = append(msgs, msg)
+		taskOpts = append(taskOpts, taskOpt)
+	}
+
+	// Enqueue all tasks in a batch
+	var results []*TaskInfo
+	var enqueueErrs []error
+
+	// Group messages by their target (regular, scheduled, or group)
+	var regularMsgs, groupMsgs []*base.TaskMessage
+	var scheduledMsgs []*scheduledTask
+
+	for i, msg := range msgs {
+		opt := taskOpts[i]
+		if !opt.processAt.IsZero() && opt.processAt.After(now) {
+			scheduledMsgs = append(scheduledMsgs, &scheduledTask{msg: msg, processAt: opt.processAt})
+		} else if opt.group != "" {
+			groupMsgs = append(groupMsgs, msg)
+		} else {
+			regularMsgs = append(regularMsgs, msg)
+		}
+	}
+
+	// Process regular messages
+	if len(regularMsgs) > 0 {
+		// Check if we need to use unique enqueue
+		if taskOpts[0].uniqueTTL > 0 {
+			// Use batch unique enqueue
+			uniqueResults, err := c.broker.EnqueueUniqueBatch(ctx, regularMsgs, taskOpts[0].uniqueTTL)
+			if err != nil {
+				enqueueErrs = append(enqueueErrs, fmt.Errorf("failed to enqueue unique batch: %v", err))
+			} else {
+				for i, n := range uniqueResults {
+					msg := regularMsgs[i]
+					switch n {
+					case 1: // Success
+						results = append(results, newTaskInfo(msg, base.TaskStatePending, now, nil))
+					case 0: // ID conflict
+						enqueueErrs = append(enqueueErrs, fmt.Errorf("task %s: %w", msg.ID, ErrTaskIDConflict))
+					case -1: // Unique key conflict
+						enqueueErrs = append(enqueueErrs, fmt.Errorf("task %s: %w", msg.ID, ErrDuplicateTask))
+					}
+				}
+			}
+		} else {
+			// Use regular batch enqueue
+			batchResults, err := c.broker.EnqueueBatch(ctx, regularMsgs)
+			if err != nil {
+				enqueueErrs = append(enqueueErrs, fmt.Errorf("failed to enqueue batch: %v", err))
+			} else {
+				for i, n := range batchResults {
+					msg := regularMsgs[i]
+					switch n {
+					case 1: // Success
+						results = append(results, newTaskInfo(msg, base.TaskStatePending, now, nil))
+					case 0: // ID conflict
+						enqueueErrs = append(enqueueErrs, fmt.Errorf("task %s: %w", msg.ID, ErrTaskIDConflict))
+					}
+				}
+			}
+		}
+	}
+
+	// Process scheduled messages
+	for _, st := range scheduledMsgs {
+		var err error
+		if st.msg.UniqueKey != "" {
+			ttl := time.Until(st.processAt.Add(taskOpts[0].uniqueTTL))
+			err = c.broker.ScheduleUnique(ctx, st.msg, st.processAt, ttl)
+		} else {
+			err = c.broker.Schedule(ctx, st.msg, st.processAt)
+		}
+
+		if err != nil {
+			enqueueErrs = append(enqueueErrs, fmt.Errorf("failed to schedule task %s: %v", st.msg.ID, err))
+		} else {
+			results = append(results, newTaskInfo(st.msg, base.TaskStateScheduled, st.processAt, nil))
+		}
+	}
+
+	// Process group messages
+	for _, msg := range groupMsgs {
+		var err error
+		if msg.UniqueKey != "" {
+			err = c.broker.AddToGroupUnique(ctx, msg, msg.GroupKey, taskOpts[0].uniqueTTL)
+		} else {
+			err = c.broker.AddToGroup(ctx, msg, msg.GroupKey)
+		}
+
+		if err != nil {
+			enqueueErrs = append(enqueueErrs, fmt.Errorf("failed to add task %s to group: %v", msg.ID, err))
+		} else {
+			results = append(results, newTaskInfo(msg, base.TaskStateAggregating, time.Time{}, nil))
+		}
+	}
+
+	// Sort results to match the input order
+	orderedResults := make([]*TaskInfo, len(tasks))
+	resultMap := make(map[string]*TaskInfo)
+	for _, res := range results {
+		resultMap[res.ID] = res
+	}
+
+	// Create a map of task message IDs by their index
+	taskMsgIDs := make(map[int]string, len(msgs))
+	for i, msg := range msgs {
+		taskMsgIDs[i] = msg.ID
+	}
+
+	// Match results with original task order
+	for i := range tasks {
+		if msgID, ok := taskMsgIDs[i]; ok {
+			if res, ok := resultMap[msgID]; ok {
+				orderedResults[i] = res
+			}
+		}
+	}
+
+	// If there were any errors, return them along with the partial results
+	if len(enqueueErrs) > 0 {
+		var errMsgs []string
+		for _, err := range enqueueErrs {
+			errMsgs = append(errMsgs, err.Error())
+		}
+		return orderedResults, fmt.Errorf("batch enqueue completed with %d errors: %s",
+			len(enqueueErrs), strings.Join(errMsgs, "; "))
+	}
+
+	return orderedResults, nil
+}
+
+// scheduledTask represents a task that is scheduled to be processed in the future.
+type scheduledTask struct {
+	msg       *base.TaskMessage
+	processAt time.Time
 }
 
 // Ping performs a ping against the redis connection.

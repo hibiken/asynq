@@ -41,6 +41,74 @@ func init() {
 	flag.StringVar(&redisClusterAddrs, "redis_cluster_addrs", "localhost:7000,localhost:7001,localhost:7002", "comma separated list of redis server addresses")
 }
 
+func TestEnqueueBatch(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	t1 := h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"to": "user1@example.com"}))
+	t2 := h.NewTaskMessageWithQueue("generate_csv", h.JSON(map[string]interface{}{}), "csv")
+	t3 := h.NewTaskMessageWithQueue("send_notification", nil, "low")
+
+	enqueueTime := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(enqueueTime))
+
+	msgs := []*base.TaskMessage{t1, t2, t3}
+
+	h.FlushDB(t, r.client) // clean up db before test case.
+
+	results, err := r.EnqueueBatch(context.Background(), msgs)
+	if err != nil {
+		t.Fatalf("(*RDB).EnqueueBatch(msgs) = %v, want nil", err)
+	}
+	if len(results) != len(msgs) {
+		t.Fatalf("(*RDB).EnqueueBatch returned %d results, want %d", len(results), len(msgs))
+	}
+
+	for _, msg := range msgs {
+		// Check Pending list has task ID.
+		pendingKey := base.PendingKey(msg.Queue)
+		pendingIDs := r.client.LRange(context.Background(), pendingKey, 0, -1).Val()
+		if n := len(pendingIDs); n != 1 {
+			t.Errorf("Redis LIST %q contains %d IDs, want 1", pendingKey, n)
+			continue
+		}
+		if pendingIDs[0] != msg.ID {
+			t.Errorf("Redis LIST %q: got %v, want %v", pendingKey, pendingIDs, []string{msg.ID})
+			continue
+		}
+
+		// Check the value under the task key.
+		taskKey := base.TaskKey(msg.Queue, msg.ID)
+		encoded := r.client.HGet(context.Background(), taskKey, "msg").Val() // "msg" field
+		decoded := h.MustUnmarshal(t, encoded)
+		if diff := cmp.Diff(msg, decoded); diff != "" {
+			t.Errorf("persisted message was %v, want %v; (-want, +got)\n%s", decoded, msg, diff)
+		}
+		state := r.client.HGet(context.Background(), taskKey, "state").Val() // "state" field
+		if state != "pending" {
+			t.Errorf("state field under task-key is set to %q, want %q", state, "pending")
+		}
+		pendingSince := r.client.HGet(context.Background(), taskKey, "pending_since").Val() // "pending_since" field
+		if want := strconv.Itoa(int(enqueueTime.UnixNano())); pendingSince != want {
+			t.Errorf("pending_since field under task-key is set to %v, want %v", pendingSince, want)
+		}
+
+		// Check queue is in the AllQueues set.
+		if !r.client.SIsMember(context.Background(), base.AllQueues, msg.Queue).Val() {
+			t.Errorf("%q is not a member of SET %q", msg.Queue, base.AllQueues)
+		}
+	}
+
+	// Edge case: empty slice
+	results, err = r.EnqueueBatch(context.Background(), []*base.TaskMessage{})
+	if err != nil {
+		t.Errorf("EnqueueBatch with empty slice returned error: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("EnqueueBatch with empty slice returned %d results, want 0", len(results))
+	}
+}
+
 func setup(tb testing.TB) (r *RDB) {
 	tb.Helper()
 	if useRedisCluster {

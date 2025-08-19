@@ -27,6 +27,15 @@ type TestBroker struct {
 	real base.Broker
 }
 
+func (tb *TestBroker) EnqueueUniqueBatch(ctx context.Context, msgs []*base.TaskMessage, ttl time.Duration) ([]int64, error) {
+    tb.mu.Lock()
+    defer tb.mu.Unlock()
+    if tb.sleeping {
+        return nil, errRedisDown
+    }
+    return tb.real.EnqueueUniqueBatch(ctx, msgs, ttl)
+}
+
 // Make sure TestBroker implements Broker interface at compile time.
 var _ base.Broker = (*TestBroker)(nil)
 
@@ -53,6 +62,15 @@ func (tb *TestBroker) Enqueue(ctx context.Context, msg *base.TaskMessage) error 
 		return errRedisDown
 	}
 	return tb.real.Enqueue(ctx, msg)
+}
+
+func (tb *TestBroker) EnqueueBatch(ctx context.Context, msgs []*base.TaskMessage) ([]int64, error) {
+    tb.mu.Lock()
+    defer tb.mu.Unlock()
+    if tb.sleeping {
+        return nil, errRedisDown
+    }
+    return tb.real.EnqueueBatch(ctx, msgs)
 }
 
 func (tb *TestBroker) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time.Duration) error {

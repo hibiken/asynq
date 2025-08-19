@@ -139,6 +139,73 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 	return nil
 }
 
+// EnqueueBatch enqueues multiple tasks using Redis pipelining.
+// Returns per-task results: 1 = enqueued, 0 = task ID conflict.
+// Only fatal Redis errors abort the batch and return a non-nil error.
+// Queue registration (SADD) is performed once per queue per batch.
+func (r *RDB) EnqueueBatch(ctx context.Context, msgs []*base.TaskMessage) ([]int64, error) {
+	if len(msgs) == 0 {
+		return []int64{}, nil
+	}
+
+	var op errors.Op = "rdb.EnqueueBatch"
+	now := r.clock.Now().UnixNano()
+	seenQueues := make(map[string]bool)
+	var cmds []*redis.Cmd
+	results := make([]int64, len(msgs))
+
+	// Use pipeline for reduced roundtrips
+	pipe := r.client.Pipeline()
+	defer pipe.Discard()
+
+	// First, register all unique queues
+	for _, msg := range msgs {
+		if _, exists := seenQueues[msg.Queue]; !exists {
+			if _, found := r.queuesPublished.Load(msg.Queue); !found {
+				pipe.SAdd(ctx, base.AllQueues, msg.Queue)
+			}
+			seenQueues[msg.Queue] = true
+		}
+	}
+
+	// Then enqueue all tasks
+	for _, msg := range msgs {
+		encoded, err := base.EncodeMessage(msg)
+		if err != nil {
+			return nil, errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
+		}
+		keys := []string{
+			base.TaskKey(msg.Queue, msg.ID),
+			base.PendingKey(msg.Queue),
+		}
+		argv := []interface{}{
+			encoded,
+			msg.ID,
+			now,
+		}
+		cmds = append(cmds, enqueueCmd.Run(ctx, pipe, keys, argv...))
+	}
+
+	// Execute all commands in a single roundtrip
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis pipeline error: %v", err))
+	}
+
+	// Collect results and update queue published cache
+	for i, cmd := range cmds {
+		n, err := cmd.Int64()
+		if err != nil {
+			return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis command error: %v", err))
+		}
+		results[i] = n // 1 success, 0 id conflict
+		if n == 1 {
+			r.queuesPublished.Store(msgs[i].Queue, true)
+		}
+	}
+
+	return results, nil
+}
+
 // enqueueUniqueCmd enqueues the task message if the task is unique.
 //
 // KEYS[1] -> unique key
@@ -200,13 +267,83 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 	if err != nil {
 		return err
 	}
-	if n == -1 {
+	switch n {
+	case -1:
 		return errors.E(op, errors.AlreadyExists, errors.ErrDuplicateTask)
-	}
-	if n == 0 {
+	case 0:
 		return errors.E(op, errors.AlreadyExists, errors.ErrTaskIdConflict)
+	default:
+		return nil
 	}
-	return nil
+}
+
+// EnqueueUniqueBatch enqueues multiple unique tasks using Redis pipelining.
+// Returns per-task results: 1 = enqueued, 0 = task ID conflict, -1 = uniqueness conflict.
+// Only fatal Redis errors abort the batch and return a non-nil error.
+// Queue registration (SADD) is performed once per queue per batch.
+func (r *RDB) EnqueueUniqueBatch(ctx context.Context, msgs []*base.TaskMessage, ttl time.Duration) ([]int64, error) {
+	if len(msgs) == 0 {
+		return []int64{}, nil
+	}
+
+	var op errors.Op = "rdb.EnqueueUniqueBatch"
+	now := r.clock.Now().UnixNano()
+	seenQueues := make(map[string]bool)
+	var cmds []*redis.Cmd
+	results := make([]int64, len(msgs))
+
+	// Use pipeline for reduced roundtrips
+	pipe := r.client.Pipeline()
+	defer pipe.Discard()
+
+	// First, register all unique queues
+	for _, msg := range msgs {
+		if _, exists := seenQueues[msg.Queue]; !exists {
+			if _, found := r.queuesPublished.Load(msg.Queue); !found {
+				pipe.SAdd(ctx, base.AllQueues, msg.Queue)
+			}
+			seenQueues[msg.Queue] = true
+		}
+	}
+
+	// Then enqueue all tasks with uniqueness
+	for _, msg := range msgs {
+		encoded, err := base.EncodeMessage(msg)
+		if err != nil {
+			return nil, errors.E(op, errors.Internal, fmt.Sprintf("cannot encode task message: %v", err))
+		}
+		keys := []string{
+			msg.UniqueKey,
+			base.TaskKey(msg.Queue, msg.ID),
+			base.PendingKey(msg.Queue),
+		}
+		argv := []interface{}{
+			msg.ID,
+			int(ttl.Seconds()),
+			encoded,
+			now,
+		}
+		cmds = append(cmds, enqueueUniqueCmd.Run(ctx, pipe, keys, argv...))
+	}
+
+	// Execute all commands in a single roundtrip
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis pipeline error: %v", err))
+	}
+
+	// Collect results and update queue published cache
+	for i, cmd := range cmds {
+		n, err := cmd.Int64()
+		if err != nil {
+			return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis command error: %v", err))
+		}
+		results[i] = n // 1 success, 0 id conflict, -1 uniqueness conflict
+		if n == 1 {
+			r.queuesPublished.Store(msgs[i].Queue, true)
+		}
+	}
+
+	return results, nil
 }
 
 // Input:
