@@ -122,7 +122,7 @@ func TestAggregator(t *testing.T) {
 		aggregator := newAggregator(aggregatorParams{
 			logger:          testLogger,
 			broker:          rdbClient,
-			queues:          []string{"default"},
+			queueMgr:        newStaticQueueManagerForTest(map[string]int{"default": 1}, false),
 			gracePeriod:     tc.gracePeriod,
 			maxDelay:        tc.maxDelay,
 			maxSize:         tc.maxSize,

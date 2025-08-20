@@ -28,9 +28,12 @@ func TestJanitor(t *testing.T) {
 	const interval = 1 * time.Second
 	const batchSize = 100
 	janitor := newJanitor(janitorParams{
-		logger:    testLogger,
-		broker:    rdbClient,
-		queues:    []string{"default", "custom"},
+		logger: testLogger,
+		broker: rdbClient,
+		queueMrg: newStaticQueueManagerForTest(map[string]int{
+			"default": 1,
+			"custom":  2,
+		}, false),
 		interval:  interval,
 		batchSize: batchSize,
 	})

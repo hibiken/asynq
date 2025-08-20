@@ -778,6 +778,7 @@ func (i *Inspector) Servers() ([]*ServerInfo, error) {
 			Concurrency:    s.Concurrency,
 			Queues:         s.Queues,
 			StrictPriority: s.StrictPriority,
+			DynamicQueues:  s.DynamicQueues,
 			Started:        s.Started,
 			Status:         s.Status,
 			ActiveWorkers:  make([]*WorkerInfo, 0),
@@ -819,6 +820,7 @@ type ServerInfo struct {
 	Concurrency    int
 	Queues         map[string]int
 	StrictPriority bool
+	DynamicQueues  bool
 
 	// Time the server started.
 	Started time.Time

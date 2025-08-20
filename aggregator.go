@@ -23,8 +23,7 @@ type aggregator struct {
 	// channel to communicate back to the long running "aggregator" goroutine.
 	done chan struct{}
 
-	// list of queue names to check and aggregate.
-	queues []string
+	queueMgr *queueManager
 
 	// Group configurations
 	gracePeriod time.Duration
@@ -45,7 +44,7 @@ type aggregator struct {
 type aggregatorParams struct {
 	logger          *log.Logger
 	broker          base.Broker
-	queues          []string
+	queueMgr        *queueManager
 	gracePeriod     time.Duration
 	maxDelay        time.Duration
 	maxSize         int
@@ -71,7 +70,7 @@ func newAggregator(params aggregatorParams) *aggregator {
 		broker:      params.broker,
 		client:      &Client{broker: params.broker},
 		done:        make(chan struct{}),
-		queues:      params.queues,
+		queueMgr:    params.queueMgr,
 		gracePeriod: params.gracePeriod,
 		maxDelay:    params.maxDelay,
 		maxSize:     params.maxSize,
@@ -129,7 +128,8 @@ func (a *aggregator) exec(t time.Time) {
 
 func (a *aggregator) aggregate(t time.Time) {
 	defer func() { <-a.sema /* release token */ }()
-	for _, qname := range a.queues {
+	queues := a.queueMgr.GetUnorderedQueueNames()
+	for _, qname := range queues {
 		groups, err := a.broker.ListGroups(qname)
 		if err != nil {
 			a.logger.Errorf("Failed to list groups in queue: %q", qname)

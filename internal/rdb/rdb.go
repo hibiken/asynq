@@ -1556,3 +1556,16 @@ func (r *RDB) WriteResult(qname, taskID string, data []byte) (int, error) {
 	}
 	return len(data), nil
 }
+
+// SetOfQueues returns all queues known to the RDB instance.
+func (r *RDB) SetOfQueues(ctx context.Context) (map[string]struct{}, error) {
+	var op errors.Op = "rdb.SetOfQueues"
+	result, err := r.client.SMembersMap(ctx, base.AllQueues).Result()
+	if err == redis.Nil {
+		return map[string]struct{}{}, nil // No queues found, return empty set
+	}
+	if err != nil {
+		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "smembers", Err: err})
+	}
+	return result, nil
+}

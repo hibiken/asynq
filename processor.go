@@ -32,10 +32,7 @@ type processor struct {
 	handler   Handler
 	baseCtxFn func() context.Context
 
-	queueConfig map[string]int
-
-	// orderedQueues is set only in strict-priority mode.
-	orderedQueues []string
+	queueMgr *queueManager
 
 	taskCheckInterval time.Duration
 	retryDelayFunc    RetryDelayFunc
@@ -82,8 +79,7 @@ type processorParams struct {
 	syncCh            chan<- *syncRequest
 	cancelations      *base.Cancelations
 	concurrency       int
-	queues            map[string]int
-	strictPriority    bool
+	queueMgr          *queueManager
 	errHandler        ErrorHandler
 	shutdownTimeout   time.Duration
 	starting          chan<- *workerInfo
@@ -92,18 +88,12 @@ type processorParams struct {
 
 // newProcessor constructs a new processor.
 func newProcessor(params processorParams) *processor {
-	queues := normalizeQueues(params.queues)
-	orderedQueues := []string(nil)
-	if params.strictPriority {
-		orderedQueues = sortByPriority(queues)
-	}
 	return &processor{
 		logger:            params.logger,
 		broker:            params.broker,
 		baseCtxFn:         params.baseCtxFn,
 		clock:             timeutil.NewRealClock(),
-		queueConfig:       queues,
-		orderedQueues:     orderedQueues,
+		queueMgr:          params.queueMgr,
 		taskCheckInterval: params.taskCheckInterval,
 		retryDelayFunc:    params.retryDelayFunc,
 		isFailureFunc:     params.isFailureFunc,
@@ -172,7 +162,7 @@ func (p *processor) exec() {
 	case <-p.quit:
 		return
 	case p.sema <- struct{}{}: // acquire token
-		qnames := p.queues()
+		qnames := p.queueMgr.GetQueuesInDequeueOrder()
 		msg, leaseExpirationTime, err := p.broker.Dequeue(qnames...)
 		switch {
 		case errors.Is(err, errors.ErrNoProcessableTask):
@@ -389,32 +379,6 @@ func (p *processor) archive(l *base.Lease, msg *base.TaskMessage, e error) {
 			deadline: l.Deadline(),
 		}
 	}
-}
-
-// queues returns a list of queues to query.
-// Order of the queue names is based on the priority of each queue.
-// Queue names is sorted by their priority level if strict-priority is true.
-// If strict-priority is false, then the order of queue names are roughly based on
-// the priority level but randomized in order to avoid starving low priority queues.
-func (p *processor) queues() []string {
-	// skip the overhead of generating a list of queue names
-	// if we are processing one queue.
-	if len(p.queueConfig) == 1 {
-		for qname := range p.queueConfig {
-			return []string{qname}
-		}
-	}
-	if p.orderedQueues != nil {
-		return p.orderedQueues
-	}
-	var names []string
-	for qname, priority := range p.queueConfig {
-		for i := 0; i < priority; i++ {
-			names = append(names, qname)
-		}
-	}
-	rand.Shuffle(len(names), func(i, j int) { names[i], names[j] = names[j], names[i] })
-	return uniq(names, len(p.queueConfig))
 }
 
 // perform calls the handler with the given task.
