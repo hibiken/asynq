@@ -337,11 +337,7 @@ func (c *Client) Close() error {
 //
 // Enqueue uses context.Background internally; to specify the context, use EnqueueContext.
 func (c *Client) Enqueue(task *Task, opts ...Option) (*TaskInfo, error) {
-	results, err := c.EnqueueBatch([]*Task{task}, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return results[0], nil
+	return c.EnqueueContext(context.Background(), task, opts...)
 }
 
 // EnqueueContext enqueues the given task to a queue.
