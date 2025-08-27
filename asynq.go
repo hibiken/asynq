@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/redis/go-redis/v9"
 )
 
 // Task represents a unit of work to be performed.
@@ -26,6 +26,9 @@ type Task struct {
 	// payload holds data needed to perform the task.
 	payload []byte
 
+	// headers holds additional metadata for the task.
+	headers map[string]string
+
 	// opts holds options for the task.
 	opts []Option
 
@@ -33,8 +36,9 @@ type Task struct {
 	w *ResultWriter
 }
 
-func (t *Task) Type() string    { return t.typename }
-func (t *Task) Payload() []byte { return t.payload }
+func (t *Task) Type() string               { return t.typename }
+func (t *Task) Payload() []byte            { return t.payload }
+func (t *Task) Headers() map[string]string { return t.headers }
 
 // ResultWriter returns a pointer to the ResultWriter associated with the task.
 //
@@ -48,6 +52,25 @@ func NewTask(typename string, payload []byte, opts ...Option) *Task {
 	return &Task{
 		typename: typename,
 		payload:  payload,
+		headers:  make(map[string]string),
+		opts:     opts,
+	}
+}
+
+// NewTaskWithHeaders returns a new Task given a type name, payload data, and headers.
+// Options can be passed to configure task processing behavior.
+// TODO: In the next major (breaking) release, fold this functionality into NewTask
+//
+//	so that headers are supported directly. After that, remove this method.
+func NewTaskWithHeaders(typename string, payload []byte, headers map[string]string, opts ...Option) *Task {
+	h := make(map[string]string)
+	for k, v := range headers {
+		h[k] = v
+	}
+	return &Task{
+		typename: typename,
+		payload:  payload,
+		headers:  h,
 		opts:     opts,
 	}
 }
@@ -57,6 +80,7 @@ func newTask(typename string, payload []byte, w *ResultWriter) *Task {
 	return &Task{
 		typename: typename,
 		payload:  payload,
+		headers:  make(map[string]string),
 		w:        w,
 	}
 }
@@ -74,6 +98,9 @@ type TaskInfo struct {
 
 	// Payload is the payload data of the task.
 	Payload []byte
+
+	// Headers holds additional metadata for the task.
+	Headers map[string]string
 
 	// State indicates the task state.
 	State TaskState
@@ -145,6 +172,7 @@ func newTaskInfo(msg *base.TaskMessage, state base.TaskState, nextProcessAt time
 		Queue:         msg.Queue,
 		Type:          msg.Type,
 		Payload:       msg.Payload, // Do we need to make a copy?
+		Headers:       msg.Headers,
 		MaxRetry:      msg.Retry,
 		Retried:       msg.Retried,
 		LastErr:       msg.ErrorMsg,
@@ -442,10 +470,11 @@ func (opt RedisClusterClientOpt) MakeRedisClient() interface{} {
 //
 // Three URI schemes are supported, which are redis:, rediss:, redis-socket:, and redis-sentinel:.
 // Supported formats are:
-//     redis://[:password@]host[:port][/dbnumber]
-//     rediss://[:password@]host[:port][/dbnumber]
-//     redis-socket://[:password@]path[?db=dbnumber]
-//     redis-sentinel://[:password@]host1[:port][,host2:[:port]][,hostN:[:port]][?master=masterName]
+//
+//	redis://[:password@]host[:port][/dbnumber]
+//	rediss://[:password@]host[:port][/dbnumber]
+//	redis-socket://[:password@]path[?db=dbnumber]
+//	redis-sentinel://[:password@]host1[:port][,host2:[:port]][,hostN:[:port]][?master=masterName]
 func ParseRedisURI(uri string) (RedisConnOpt, error) {
 	u, err := url.Parse(uri)
 	if err != nil {

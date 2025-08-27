@@ -11,13 +11,16 @@ option go_package = "github.com/hibiken/asynq/internal/proto";
 
 // TaskMessage is the internal representation of a task with additional
 // metadata fields.
-// Next ID: 15
+// Next ID: 16
 message TaskMessage {
 	// Type indicates the kind of the task to be performed.
   string type = 1;
 
 	// Payload holds data needed to process the task.
   bytes payload = 2;
+
+	// Headers holds additional metadata for the task.
+  map<string, string> headers = 15;
 
 	// Unique identifier for the task.
   string id = 3;
