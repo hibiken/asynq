@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"maps"
 	"net"
 	"net/url"
 	"strconv"
@@ -63,14 +64,10 @@ func NewTask(typename string, payload []byte, opts ...Option) *Task {
 //
 //	so that headers are supported directly. After that, remove this method.
 func NewTaskWithHeaders(typename string, payload []byte, headers map[string]string, opts ...Option) *Task {
-	h := make(map[string]string)
-	for k, v := range headers {
-		h[k] = v
-	}
 	return &Task{
 		typename: typename,
 		payload:  payload,
-		headers:  h,
+		headers:  maps.Clone(headers),
 		opts:     opts,
 	}
 }
