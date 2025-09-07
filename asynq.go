@@ -53,7 +53,7 @@ func NewTask(typename string, payload []byte, opts ...Option) *Task {
 	return &Task{
 		typename: typename,
 		payload:  payload,
-		headers:  make(map[string]string),
+		headers:  nil,
 		opts:     opts,
 	}
 }
