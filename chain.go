@@ -71,6 +71,9 @@ func serializeTask(task *Task) chainTaskInfo {
 	}
 
 	// Extract Options, using OptionType directly as the key
+	// Note: time.Time and time.Duration will be automatically converted
+	// by JSON marshaling (time.Time -> string, time.Duration -> int64)
+	// and will be float64 after JSON unmarshaling
 	for _, opt := range task.opts {
 		info.Options[opt.Type()] = opt.Value()
 	}

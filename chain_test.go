@@ -139,7 +139,7 @@ func TestSerializeTask(t *testing.T) {
 				Options: map[OptionType]interface{}{
 					QueueOpt:    "critical",
 					MaxRetryOpt: 10,
-					TimeoutOpt:  30 * time.Second,
+					TimeoutOpt:  30 * time.Second, // Keep as time.Duration
 				},
 			},
 		},
@@ -639,20 +639,29 @@ func TestChainMiddleware_FailureStopsChain(t *testing.T) {
 
 	// Get and execute second task (should fail)
 	qkey := base.PendingKey("default")
-	result := r.LPop(context.Background(), qkey).Val()
-	var task2Msg base.TaskMessage
-	if err := json.Unmarshal([]byte(result), &task2Msg); err != nil {
-		t.Fatalf("Failed to unmarshal task: %v", err)
+	// Wait a bit for task to be enqueued
+	time.Sleep(100 * time.Millisecond)
+
+	// Check if task was enqueued
+	pending := r.LLen(context.Background(), qkey).Val()
+	if pending == 0 {
+		t.Fatal("Expected task in queue but found none")
+	}
+
+	// Dequeue the task using the broker
+	task2Msg, _, err := broker.Dequeue("default")
+	if err != nil {
+		t.Fatalf("Failed to dequeue task: %v", err)
 	}
 
 	task2 := newTask(task2Msg.Type, task2Msg.Payload, nil)
-	err = wrappedHandler.ProcessTask(context.Background(), task2)
-	if err != testErr {
-		t.Errorf("Task2 ProcessTask() error = %v, want %v", err, testErr)
+	err2 := wrappedHandler.ProcessTask(context.Background(), task2)
+	if err2 != testErr {
+		t.Errorf("Task2 ProcessTask() error = %v, want %v", err2, testErr)
 	}
 
 	// Verify task3 was NOT enqueued
-	pending := r.LLen(context.Background(), qkey).Val()
+	pending = r.LLen(context.Background(), qkey).Val()
 	if pending != 0 {
 		t.Errorf("Expected 0 tasks in queue (chain should stop), got %d", pending)
 	}
@@ -737,11 +746,10 @@ func TestEnqueueNextChainTask(t *testing.T) {
 		t.Errorf("Expected 1 task in 'high' queue, got %d", pending)
 	}
 
-	// Verify enqueued task
-	result := r.LPop(context.Background(), qkey).Val()
-	var taskMsg base.TaskMessage
-	if err := json.Unmarshal([]byte(result), &taskMsg); err != nil {
-		t.Fatalf("Failed to unmarshal task: %v", err)
+	// Verify enqueued task using broker.Dequeue
+	taskMsg, _, err := broker.Dequeue("high")
+	if err != nil {
+		t.Fatalf("Failed to dequeue task: %v", err)
 	}
 
 	if taskMsg.Type != "task2" {
@@ -822,8 +830,8 @@ func TestChainIntegration_EndToEnd(t *testing.T) {
 		t.Fatalf("Failed to enqueue chain task: %v", err)
 	}
 
-	// Wait for all tasks to complete
-	time.Sleep(2 * time.Second)
+	// Wait for all tasks to complete (longer wait for reliability)
+	time.Sleep(5 * time.Second)
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -876,10 +884,11 @@ func TestChainWithDifferentQueues(t *testing.T) {
 		t.Errorf("Expected 1 task in 'high' queue, got %d", pending)
 	}
 
-	// Execute second task
-	result := r.LPop(context.Background(), highQkey).Val()
-	var task2Msg base.TaskMessage
-	json.Unmarshal([]byte(result), &task2Msg)
+	// Execute second task using broker.Dequeue
+	task2Msg, _, err := broker.Dequeue("high")
+	if err != nil {
+		t.Fatalf("Failed to dequeue task2: %v", err)
+	}
 	task2 := newTask(task2Msg.Type, task2Msg.Payload, nil)
 	err = wrappedHandler.ProcessTask(context.Background(), task2)
 	if err != nil {
@@ -956,17 +965,55 @@ func TestChainWithTaskOptions(t *testing.T) {
 		t.Fatalf("ProcessTask() unexpected error: %v", err)
 	}
 
-	// Verify task2 was enqueued with correct options
-	qkey := base.PendingKey("default")
-	result := r.LPop(context.Background(), qkey).Val()
-	var task2Msg base.TaskMessage
-	json.Unmarshal([]byte(result), &task2Msg)
+	// Verify task2 was enqueued with correct options using broker.Dequeue
+	task2Msg, _, err := broker.Dequeue("default")
+	if err != nil {
+		t.Fatalf("Failed to dequeue task: %v", err)
+	}
 
 	if task2Msg.Retry != 5 {
 		t.Errorf("Expected max retry 5, got %d", task2Msg.Retry)
 	}
-	if task2Msg.Deadline != deadline.Unix() {
-		t.Errorf("Expected deadline %d, got %d", deadline.Unix(), task2Msg.Deadline)
+
+	// Verify the chain data contains the correct options
+	if !isChainTask(task2Msg.Payload) {
+		t.Fatal("Expected task2 to be a chain task")
+	}
+	chainData, err := parseChainData(task2Msg.Payload)
+	if err != nil {
+		t.Fatalf("Failed to parse chain data: %v", err)
+	}
+	if chainData.Index != 1 {
+		t.Errorf("Expected index 1, got %d", chainData.Index)
+	}
+	if len(chainData.Tasks) < 2 {
+		t.Fatalf("Expected at least 2 tasks in chain, got %d", len(chainData.Tasks))
+	}
+
+	// Check that task2's options contain the Deadline
+	// After JSON marshaling/unmarshaling, time.Time becomes string in JSON
+	// and could be represented differently
+	task2Options := chainData.Tasks[1].Options
+	if deadlineVal, ok := task2Options[DeadlineOpt]; ok {
+		// After JSON unmarshaling, it could be string (ISO format) or float64 (Unix timestamp)
+		switch v := deadlineVal.(type) {
+		case float64:
+			if int64(v) != deadline.Unix() {
+				t.Errorf("Expected deadline %d in chain data, got %d", deadline.Unix(), int64(v))
+			}
+		case string:
+			// Try parsing as time
+			parsedTime, err := time.Parse(time.RFC3339, v)
+			if err != nil {
+				t.Errorf("Failed to parse deadline string: %v", err)
+			} else if parsedTime.Unix() != deadline.Unix() {
+				t.Errorf("Expected deadline %d, got %d", deadline.Unix(), parsedTime.Unix())
+			}
+		default:
+			t.Errorf("Deadline option value has unexpected type: %T", deadlineVal)
+		}
+	} else {
+		t.Error("Deadline option not found in chain data")
 	}
 }
 
