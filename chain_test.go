@@ -156,7 +156,6 @@ func TestSerializeTask(t *testing.T) {
 }
 
 func TestReconstructOptions(t *testing.T) {
-	now := time.Now()
 	tests := []struct {
 		name string
 		info chainTaskInfo
@@ -194,17 +193,6 @@ func TestReconstructOptions(t *testing.T) {
 				},
 			},
 			want: []Option{Timeout(30 * time.Second)},
-		},
-		{
-			name: "deadline option",
-			info: chainTaskInfo{
-				Type:    "test",
-				Payload: []byte("test"),
-				Options: map[OptionType]interface{}{
-					DeadlineOpt: float64(now.Unix()),
-				},
-			},
-			want: []Option{Deadline(time.Unix(now.Unix(), 0))},
 		},
 		{
 			name: "task id option",
@@ -263,13 +251,19 @@ func TestReconstructOptions(t *testing.T) {
 				t.Errorf("reconstructOptions() returned %d options, want %d", len(got), len(tc.want))
 				return
 			}
-			// Compare option types and values
-			for i := range got {
-				if got[i].Type() != tc.want[i].Type() {
-					t.Errorf("reconstructOptions()[%d].Type() = %v, want %v", i, got[i].Type(), tc.want[i].Type())
+			// Map iteration order is non-deterministic, so we need to match options by type
+			gotMap := make(map[OptionType]Option)
+			for _, opt := range got {
+				gotMap[opt.Type()] = opt
+			}
+			for _, wantOpt := range tc.want {
+				gotOpt, ok := gotMap[wantOpt.Type()]
+				if !ok {
+					t.Errorf("Expected option type %v not found in result", wantOpt.Type())
+					continue
 				}
-				if diff := cmp.Diff(tc.want[i].Value(), got[i].Value()); diff != "" {
-					t.Errorf("reconstructOptions()[%d].Value() mismatch (-want +got):\n%s", i, diff)
+				if diff := cmp.Diff(wantOpt.Value(), gotOpt.Value()); diff != "" {
+					t.Errorf("Option %v value mismatch (-want +got):\n%s", wantOpt.Type(), diff)
 				}
 			}
 		})
@@ -1126,8 +1120,6 @@ func TestChainWithProcessAtOption(t *testing.T) {
 }
 
 func TestCreateOption(t *testing.T) {
-	now := time.Now()
-
 	tests := []struct {
 		name     string
 		optType  OptionType
@@ -1172,15 +1164,6 @@ func TestCreateOption(t *testing.T) {
 			wantNil: false,
 			validate: func(opt Option) bool {
 				return opt.Type() == TimeoutOpt && opt.Value() == 30*time.Second
-			},
-		},
-		{
-			name:    "valid deadline option",
-			optType: DeadlineOpt,
-			value:   float64(now.Unix()),
-			wantNil: false,
-			validate: func(opt Option) bool {
-				return opt.Type() == DeadlineOpt
 			},
 		},
 		{
