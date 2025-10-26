@@ -1017,6 +1017,114 @@ func TestChainWithTaskOptions(t *testing.T) {
 	}
 }
 
+func TestChainWithDeadlineOption(t *testing.T) {
+	// This test verifies that Deadline option is correctly preserved through chain execution
+	r := setup(t)
+	defer r.Close()
+
+	broker := rdb.NewRDB(r)
+	client := &Client{
+		broker:           broker,
+		sharedConnection: true,
+	}
+
+	handler := HandlerFunc(func(ctx context.Context, task *Task) error {
+		return nil
+	})
+
+	middleware := chainMiddleware(client)
+	wrappedHandler := middleware(handler)
+
+	deadline := time.Now().Add(1 * time.Hour)
+
+	// Create chain with Deadline option on task2
+	chainTask := NewChainTask(
+		NewTask("task1", []byte("p1")),
+		NewTask("task2", []byte("p2"), Deadline(deadline)),
+		NewTask("task3", []byte("p3")),
+	)
+
+	// Execute first task
+	task := newTask(chainTask.Type(), chainTask.Payload(), nil)
+	err := wrappedHandler.ProcessTask(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ProcessTask() unexpected error: %v", err)
+	}
+
+	// Dequeue task2 and verify Deadline was preserved
+	task2Msg, _, err := broker.Dequeue("default")
+	if err != nil {
+		t.Fatalf("Failed to dequeue task2: %v", err)
+	}
+
+	// This should pass but will FAIL before the fix
+	expectedDeadline := deadline.Unix()
+	if task2Msg.Deadline != expectedDeadline {
+		t.Errorf("Deadline not preserved! Expected %d (%v), got %d (%v)",
+			expectedDeadline, deadline.Format(time.RFC3339),
+			task2Msg.Deadline, time.Unix(task2Msg.Deadline, 0).Format(time.RFC3339))
+	}
+}
+
+func TestChainWithProcessAtOption(t *testing.T) {
+	// This test verifies that ProcessAt option is correctly preserved through chain execution
+	r := setup(t)
+	defer r.Close()
+
+	broker := rdb.NewRDB(r)
+	client := &Client{
+		broker:           broker,
+		sharedConnection: true,
+	}
+
+	handler := HandlerFunc(func(ctx context.Context, task *Task) error {
+		return nil
+	})
+
+	middleware := chainMiddleware(client)
+	wrappedHandler := middleware(handler)
+
+	processAt := time.Now().Add(30 * time.Minute)
+
+	// Create chain with ProcessAt option on task2
+	chainTask := NewChainTask(
+		NewTask("task1", []byte("p1")),
+		NewTask("task2", []byte("p2"), ProcessAt(processAt)),
+	)
+
+	// Execute first task
+	task := newTask(chainTask.Type(), chainTask.Payload(), nil)
+	err := wrappedHandler.ProcessTask(context.Background(), task)
+	if err != nil {
+		t.Fatalf("ProcessTask() unexpected error: %v", err)
+	}
+
+	// Verify task2 was scheduled with correct ProcessAt time
+	// Task should be in scheduled queue, not pending
+	qkey := base.ScheduledKey("default")
+	count := r.ZCard(context.Background(), qkey).Val()
+	if count != 1 {
+		t.Fatalf("Expected 1 task in scheduled queue, got %d", count)
+	}
+
+	// Get the task from scheduled queue
+	results := r.ZRangeWithScores(context.Background(), qkey, 0, 0).Val()
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 result, got %d", len(results))
+	}
+
+	// The score in sorted set should be the processAt timestamp
+	actualProcessAt := int64(results[0].Score)
+	expectedProcessAt := processAt.Unix()
+
+	// Allow 1 second tolerance due to potential timing issues
+	if actualProcessAt < expectedProcessAt-1 || actualProcessAt > expectedProcessAt+1 {
+		t.Errorf("ProcessAt not preserved! Expected %d (%v), got %d (%v)",
+			expectedProcessAt, processAt.Format(time.RFC3339),
+			actualProcessAt, time.Unix(actualProcessAt, 0).Format(time.RFC3339))
+	}
+}
+
 func TestCreateOption(t *testing.T) {
 	now := time.Now()
 

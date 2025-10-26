@@ -71,9 +71,9 @@ func serializeTask(task *Task) chainTaskInfo {
 	}
 
 	// Extract Options, using OptionType directly as the key
-	// Note: time.Time and time.Duration will be automatically converted
-	// by JSON marshaling (time.Time -> string, time.Duration -> int64)
-	// and will be float64 after JSON unmarshaling
+	// Note: JSON marshaling converts types as follows:
+	//   - time.Time -> RFC3339 string (remains string after unmarshaling)
+	//   - time.Duration -> int64 number (becomes float64 after unmarshaling)
 	for _, opt := range task.opts {
 		info.Options[opt.Type()] = opt.Value()
 	}
@@ -110,12 +110,18 @@ func createOption(optType OptionType, value interface{}) Option {
 			return Timeout(time.Duration(v))
 		}
 	case DeadlineOpt:
-		if v, ok := value.(float64); ok {
-			return Deadline(time.Unix(int64(v), 0))
+		// time.Time is marshaled to RFC3339 string by JSON
+		if v, ok := value.(string); ok {
+			if t, err := time.Parse(time.RFC3339, v); err == nil {
+				return Deadline(t)
+			}
 		}
 	case ProcessAtOpt:
-		if v, ok := value.(float64); ok {
-			return ProcessAt(time.Unix(int64(v), 0))
+		// time.Time is marshaled to RFC3339 string by JSON
+		if v, ok := value.(string); ok {
+			if t, err := time.Parse(time.RFC3339, v); err == nil {
+				return ProcessAt(t)
+			}
 		}
 	case ProcessInOpt:
 		if v, ok := value.(float64); ok {
