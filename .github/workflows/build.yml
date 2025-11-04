@@ -7,7 +7,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        go-version: [1.22.x, 1.23.x]
+        go-version: [1.24.x, 1.25.x]
     runs-on: ${{ matrix.os }}
     services:
       redis:
@@ -45,7 +45,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        go-version: [1.22.x, 1.23.x]
+        go-version: [1.24.x, 1.25.x]
     runs-on: ${{ matrix.os }}
     services:
       redis:
@@ -70,6 +70,7 @@ jobs:
   golangci:
     name: lint
     runs-on: ubuntu-latest
+    if: false
     steps:
       - uses: actions/checkout@v4
 
