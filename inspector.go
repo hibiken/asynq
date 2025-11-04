@@ -583,6 +583,30 @@ func (i *Inspector) DeleteAllAggregatingTasks(queue, group string) (int, error) 
 	return int(n), err
 }
 
+// UpdateTaskPayload updates a task with the given id from the given queue with given payload.
+// The task needs to be in scheduled state,
+// otherwise UpdateTaskPayload will return an error.
+//
+// If a queue with the given name doesn't exist, it returns an error wrapping ErrQueueNotFound.
+// If a task with the given id doesn't exist in the queue, it returns an error wrapping ErrTaskNotFound.
+// If the task is not in scheduled state, it returns a non-nil error.
+func (i *Inspector) UpdateTaskPayload(queue, id string, payload []byte) error {
+	if err := base.ValidateQueueName(queue); err != nil {
+		return fmt.Errorf("asynq: %v", err)
+	}
+	err := i.rdb.UpdateTaskPayload(queue, id, payload)
+	switch {
+	case errors.IsQueueNotFound(err):
+		return fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	case errors.IsTaskNotFound(err):
+		return fmt.Errorf("asynq: %w", ErrTaskNotFound)
+	case err != nil:
+		return fmt.Errorf("asynq: %v", err)
+	}
+	return nil
+
+}
+
 // DeleteTask deletes a task with the given id from the given queue.
 // The task needs to be in pending, scheduled, retry, or archived state,
 // otherwise DeleteTask will return an error.
