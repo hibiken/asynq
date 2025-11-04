@@ -122,10 +122,10 @@ func (mgr *PeriodicTaskManager) Start() error {
 		panic("asynq: cannot start uninitialized PeriodicTaskManager; use NewPeriodicTaskManager to initialize")
 	}
 	if err := mgr.initialSync(); err != nil {
-		return fmt.Errorf("asynq: %v", err)
+		return fmt.Errorf("asynq: %w", err)
 	}
 	if err := mgr.s.Start(); err != nil {
-		return fmt.Errorf("asynq: %v", err)
+		return fmt.Errorf("asynq: %w", err)
 	}
 	mgr.wg.Add(1)
 	go func() {
@@ -168,11 +168,11 @@ func (mgr *PeriodicTaskManager) Run() error {
 func (mgr *PeriodicTaskManager) initialSync() error {
 	configs, err := mgr.p.GetConfigs()
 	if err != nil {
-		return fmt.Errorf("initial call to GetConfigs failed: %v", err)
+		return fmt.Errorf("initial call to GetConfigs failed: %w", err)
 	}
 	for _, c := range configs {
 		if err := validatePeriodicTaskConfig(c); err != nil {
-			return fmt.Errorf("initial call to GetConfigs contained an invalid config: %v", err)
+			return fmt.Errorf("initial call to GetConfigs contained an invalid config: %w", err)
 		}
 	}
 	mgr.add(configs)

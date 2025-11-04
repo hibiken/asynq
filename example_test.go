@@ -123,7 +123,7 @@ func ExampleResultWriter() {
 		res := []byte("task result data")
 		n, err := task.ResultWriter().Write(res) // implements io.Writer
 		if err != nil {
-			return fmt.Errorf("failed to write task result: %v", err)
+			return fmt.Errorf("failed to write task result: %w", err)
 		}
 		log.Printf(" %d bytes written", n)
 		return nil

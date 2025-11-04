@@ -25,13 +25,13 @@ type QueueMetricsCollector struct {
 func (qmc *QueueMetricsCollector) collectQueueInfo() ([]*asynq.QueueInfo, error) {
 	qnames, err := qmc.inspector.Queues()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get queue names: %v", err)
+		return nil, fmt.Errorf("failed to get queue names: %w", err)
 	}
 	infos := make([]*asynq.QueueInfo, len(qnames))
 	for i, qname := range qnames {
 		qinfo, err := qmc.inspector.GetQueueInfo(qname)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get queue info: %v", err)
+			return nil, fmt.Errorf("failed to get queue info: %w", err)
 		}
 		infos[i] = qinfo
 	}
