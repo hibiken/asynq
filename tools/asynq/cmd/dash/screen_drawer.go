@@ -16,11 +16,12 @@ import (
 // ScreenDrawer is used to draw contents on screen.
 //
 // Usage example:
-//    d := NewScreenDrawer(s)
-//    d.Println("Hello world", mystyle)
-//    d.NL() // adds newline
-//    d.Print("foo", mystyle.Bold(true))
-//    d.Print("bar", mystyle.Italic(true))
+//
+//	d := NewScreenDrawer(s)
+//	d.Println("Hello world", mystyle)
+//	d.NL() // adds newline
+//	d.Print("foo", mystyle.Bold(true))
+//	d.Print("bar", mystyle.Italic(true))
 type ScreenDrawer struct {
 	l *LineDrawer
 }

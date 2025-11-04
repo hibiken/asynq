@@ -107,6 +107,7 @@ type Op string
 // only the last one is recorded.
 //
 // The types are:
+//
 //	errors.Op
 //		The operation being performed, usually the method
 //		being invoked (Get, Put, etc.).
