@@ -385,6 +385,7 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 		ID:        opt.taskID,
 		Type:      task.Type(),
 		Payload:   task.Payload(),
+		Headers:   task.Headers(),
 		Queue:     opt.queue,
 		Retry:     opt.retry,
 		Deadline:  deadline.Unix(),

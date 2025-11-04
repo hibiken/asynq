@@ -156,7 +156,7 @@ func (a *aggregator) aggregate(t time.Time) {
 			}
 			tasks := make([]*Task, len(msgs))
 			for i, m := range msgs {
-				tasks[i] = NewTask(m.Type, m.Payload)
+				tasks[i] = NewTaskWithHeaders(m.Type, m.Payload, m.Headers)
 			}
 			aggregatedTask := a.ga.Aggregate(gname, tasks)
 			ctx, cancel := context.WithDeadline(context.Background(), deadline)
