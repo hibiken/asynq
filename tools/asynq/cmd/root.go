@@ -43,6 +43,7 @@ var (
 	clusterAddrs    string
 	tlsServerName   string
 	insecure        bool
+	keyPrefix       string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -319,6 +320,7 @@ func init() {
 		"", "Server name for TLS validation")
 	rootCmd.PersistentFlags().BoolVar(&insecure, "insecure",
 		false, "Allow insecure TLS connection by skipping cert validation")
+	rootCmd.PersistentFlags().StringVar(&keyPrefix, "key_prefix", "", "Redis key prefix for namespacing (default is 'asynq')")
 	// Bind flags with config.
 	viper.BindPFlag("uri", rootCmd.PersistentFlags().Lookup("uri"))
 	viper.BindPFlag("db", rootCmd.PersistentFlags().Lookup("db"))
@@ -328,6 +330,7 @@ func init() {
 	viper.BindPFlag("cluster_addrs", rootCmd.PersistentFlags().Lookup("cluster_addrs"))
 	viper.BindPFlag("tls_server", rootCmd.PersistentFlags().Lookup("tls_server"))
 	viper.BindPFlag("insecure", rootCmd.PersistentFlags().Lookup("insecure"))
+	viper.BindPFlag("key_prefix", rootCmd.PersistentFlags().Lookup("key_prefix"))
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -358,6 +361,10 @@ func initConfig() {
 
 // createRDB creates a RDB instance using flag values and returns it.
 func createRDB() *rdb.RDB {
+	// Apply the key prefix if provided to ensure consistency
+	keyPrefix := viper.GetString("key_prefix")
+	base.ApplyKeyPrefix(keyPrefix)
+	
 	var c redis.UniversalClient
 	if viper.GetBool("cluster") {
 		addrs := strings.Split(viper.GetString("cluster_addrs"), ",")
@@ -397,6 +404,7 @@ func getRedisConnOpt() asynq.RedisConnOpt {
 			Password:  viper.GetString("password"),
 			Username:  viper.GetString("username"),
 			TLSConfig: getTLSConfig(),
+			KeyPrefix: viper.GetString("key_prefix"),
 		}
 	}
 	return asynq.RedisClientOpt{
@@ -405,6 +413,7 @@ func getRedisConnOpt() asynq.RedisConnOpt {
 		Password:  viper.GetString("password"),
 		Username:  viper.GetString("username"),
 		TLSConfig: getTLSConfig(),
+		KeyPrefix: viper.GetString("key_prefix"),
 	}
 }
 
