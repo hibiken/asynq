@@ -259,7 +259,7 @@ func printClusterInfo(info map[string]string) {
 }
 
 func toInterfaceSlice(strs []string) []interface{} {
-	var res []interface{}
+	res := make([]interface{}, 0, len(strs))
 	for _, s := range strs {
 		res = append(res, s)
 	}

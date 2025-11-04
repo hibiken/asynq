@@ -374,8 +374,8 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 	}
 	const day = 24 * time.Hour
 	now := r.clock.Now().UTC()
-	var days []time.Time
-	var keys []string
+	days := make([]time.Time, 0, n)
+	keys := make([]string, 0, n*2)
 	for i := 0; i < n; i++ {
 		ts := now.Add(-time.Duration(i) * day)
 		days = append(days, ts)
