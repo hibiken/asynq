@@ -450,7 +450,7 @@ func (opt RedisClusterClientOpt) MakeRedisClient() interface{} {
 func ParseRedisURI(uri string) (RedisConnOpt, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
-		return nil, fmt.Errorf("asynq: could not parse redis uri: %v", err)
+		return nil, fmt.Errorf("asynq: could not parse redis uri: %w", err)
 	}
 	switch u.Scheme {
 	case "redis", "rediss":
@@ -540,7 +540,7 @@ type ResultWriter struct {
 func (w *ResultWriter) Write(data []byte) (n int, err error) {
 	select {
 	case <-w.ctx.Done():
-		return 0, fmt.Errorf("failed to write task result: %v", w.ctx.Err())
+		return 0, fmt.Errorf("failed to write task result: %w", w.ctx.Err())
 	default:
 	}
 	return w.broker.WriteResult(w.qname, w.id, data)

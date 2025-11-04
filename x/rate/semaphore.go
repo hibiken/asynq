@@ -94,7 +94,7 @@ func (s *Semaphore) Release(ctx context.Context) error {
 
 	n, err := s.rc.ZRem(ctx, semaphoreKey(s.scope), taskID).Result()
 	if err != nil {
-		return fmt.Errorf("redis command failed: %v", err)
+		return fmt.Errorf("redis command failed: %w", err)
 	}
 
 	if n == 0 {
