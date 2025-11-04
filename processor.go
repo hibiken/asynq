@@ -230,6 +230,7 @@ func (p *processor) exec() {
 						ctx:    ctx,
 					},
 				)
+				task.headers = msg.Headers
 				resCh <- p.perform(ctx, task)
 			}()
 
@@ -333,7 +334,7 @@ var RevokeTask = errors.New("revoke task")
 
 func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg *base.TaskMessage, err error) {
 	if p.errHandler != nil {
-		p.errHandler.HandleError(ctx, NewTask(msg.Type, msg.Payload), err)
+		p.errHandler.HandleError(ctx, NewTaskWithHeaders(msg.Type, msg.Payload, msg.Headers), err)
 	}
 	switch {
 	case errors.Is(err, RevokeTask):
@@ -354,7 +355,7 @@ func (p *processor) retry(l *base.Lease, msg *base.TaskMessage, e error, isFailu
 	}
 	ctx, cancel := context.WithDeadline(context.Background(), l.Deadline())
 	defer cancel()
-	d := p.retryDelayFunc(msg.Retried, e, NewTask(msg.Type, msg.Payload))
+	d := p.retryDelayFunc(msg.Retried, e, NewTaskWithHeaders(msg.Type, msg.Payload, msg.Headers))
 	retryAt := time.Now().Add(d)
 	err := p.broker.Retry(ctx, msg, retryAt, e.Error(), isFailure)
 	if err != nil {

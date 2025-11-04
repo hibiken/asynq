@@ -1191,3 +1191,473 @@ func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 		}
 	}
 }
+
+func TestClientEnqueueWithHeaders(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	now := time.Now()
+	headers := map[string]string{
+		"user-id":    "123",
+		"request-id": "abc-def-ghi",
+		"priority":   "high",
+	}
+
+	tests := []struct {
+		desc        string
+		task        *Task
+		opts        []Option
+		wantInfo    *TaskInfo
+		wantPending map[string][]*base.TaskMessage
+	}{
+		{
+			desc: "Task with headers",
+			task: NewTaskWithHeaders("send_email", h.JSON(map[string]interface{}{"to": "user@example.com"}), headers),
+			opts: []Option{},
+			wantInfo: &TaskInfo{
+				Queue:         "default",
+				Type:          "send_email",
+				Payload:       h.JSON(map[string]interface{}{"to": "user@example.com"}),
+				Headers:       headers,
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {
+					{
+						Type:     "send_email",
+						Payload:  h.JSON(map[string]interface{}{"to": "user@example.com"}),
+						Headers:  headers,
+						Retry:    defaultMaxRetry,
+						Queue:    "default",
+						Timeout:  int64(defaultTimeout.Seconds()),
+						Deadline: noDeadline.Unix(),
+					},
+				},
+			},
+		},
+		{
+			desc: "Task with empty headers",
+			task: NewTaskWithHeaders("process_data", []byte("data"), map[string]string{}),
+			opts: []Option{},
+			wantInfo: &TaskInfo{
+				Queue:         "default",
+				Type:          "process_data",
+				Payload:       []byte("data"),
+				Headers:       map[string]string{},
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {
+					{
+						Type:     "process_data",
+						Payload:  []byte("data"),
+						Headers:  nil,
+						Retry:    defaultMaxRetry,
+						Queue:    "default",
+						Timeout:  int64(defaultTimeout.Seconds()),
+						Deadline: noDeadline.Unix(),
+					},
+				},
+			},
+		},
+		{
+			desc: "Task with nil headers",
+			task: NewTaskWithHeaders("cleanup", nil, nil),
+			opts: []Option{},
+			wantInfo: &TaskInfo{
+				Queue:         "default",
+				Type:          "cleanup",
+				Payload:       nil,
+				Headers:       nil,
+				State:         TaskStatePending,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {
+					{
+						Type:     "cleanup",
+						Payload:  nil,
+						Headers:  nil,
+						Retry:    defaultMaxRetry,
+						Queue:    "default",
+						Timeout:  int64(defaultTimeout.Seconds()),
+						Deadline: noDeadline.Unix(),
+					},
+				},
+			},
+		},
+		{
+			desc: "Task with headers and custom options",
+			task: NewTaskWithHeaders("notify", []byte("notification"), map[string]string{"channel": "email"}),
+			opts: []Option{MaxRetry(5), Queue("notifications")},
+			wantInfo: &TaskInfo{
+				Queue:         "notifications",
+				Type:          "notify",
+				Payload:       []byte("notification"),
+				Headers:       map[string]string{"channel": "email"},
+				State:         TaskStatePending,
+				MaxRetry:      5,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"notifications": {
+					{
+						Type:     "notify",
+						Payload:  []byte("notification"),
+						Headers:  map[string]string{"channel": "email"},
+						Retry:    5,
+						Queue:    "notifications",
+						Timeout:  int64(defaultTimeout.Seconds()),
+						Deadline: noDeadline.Unix(),
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+
+		gotInfo, err := client.Enqueue(tc.task, tc.opts...)
+		if err != nil {
+			t.Errorf("%s: Enqueue failed: %v", tc.desc, err)
+			continue
+		}
+
+		cmpOptions := []cmp.Option{
+			cmpopts.IgnoreFields(TaskInfo{}, "ID"),
+			cmpopts.EquateApproxTime(500 * time.Millisecond),
+		}
+		if diff := cmp.Diff(tc.wantInfo, gotInfo, cmpOptions...); diff != "" {
+			t.Errorf("%s;\nEnqueue(task) returned %v, want %v; (-want,+got)\n%s",
+				tc.desc, gotInfo, tc.wantInfo, diff)
+		}
+
+		for qname, want := range tc.wantPending {
+			got := h.GetPendingMessages(t, r, qname)
+			if diff := cmp.Diff(want, got, h.IgnoreIDOpt); diff != "" {
+				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.PendingKey(qname), diff)
+			}
+		}
+	}
+}
+
+func TestClientEnqueueWithHeadersScheduled(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	now := time.Now()
+	oneHourLater := now.Add(time.Hour)
+	headers := map[string]string{
+		"correlation-id": "xyz-123",
+		"source":         "api",
+	}
+
+	tests := []struct {
+		desc          string
+		task          *Task
+		processAt     time.Time
+		opts          []Option
+		wantInfo      *TaskInfo
+		wantScheduled map[string][]base.Z
+	}{
+		{
+			desc:      "Schedule task with headers",
+			task:      NewTaskWithHeaders("scheduled_task", []byte("payload"), headers),
+			processAt: oneHourLater,
+			opts:      []Option{},
+			wantInfo: &TaskInfo{
+				Queue:         "default",
+				Type:          "scheduled_task",
+				Payload:       []byte("payload"),
+				Headers:       headers,
+				State:         TaskStateScheduled,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: oneHourLater,
+			},
+			wantScheduled: map[string][]base.Z{
+				"default": {
+					{
+						Message: &base.TaskMessage{
+							Type:     "scheduled_task",
+							Payload:  []byte("payload"),
+							Headers:  headers,
+							Retry:    defaultMaxRetry,
+							Queue:    "default",
+							Timeout:  int64(defaultTimeout.Seconds()),
+							Deadline: noDeadline.Unix(),
+						},
+						Score: oneHourLater.Unix(),
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+
+		opts := append(tc.opts, ProcessAt(tc.processAt))
+		gotInfo, err := client.Enqueue(tc.task, opts...)
+		if err != nil {
+			t.Errorf("%s: Enqueue failed: %v", tc.desc, err)
+			continue
+		}
+
+		cmpOptions := []cmp.Option{
+			cmpopts.IgnoreFields(TaskInfo{}, "ID"),
+			cmpopts.EquateApproxTime(500 * time.Millisecond),
+		}
+		if diff := cmp.Diff(tc.wantInfo, gotInfo, cmpOptions...); diff != "" {
+			t.Errorf("%s;\nEnqueue(task, ProcessAt(%v)) returned %v, want %v; (-want,+got)\n%s",
+				tc.desc, tc.processAt, gotInfo, tc.wantInfo, diff)
+		}
+
+		for qname, want := range tc.wantScheduled {
+			gotScheduled := h.GetScheduledEntries(t, r, qname)
+			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledKey(qname), diff)
+			}
+		}
+	}
+}
+
+func TestNewTaskWithHeaders(t *testing.T) {
+	tests := []struct {
+		desc     string
+		typename string
+		payload  []byte
+		headers  map[string]string
+		opts     []Option
+		want     *Task
+	}{
+		{
+			desc:     "Task with headers",
+			typename: "test_task",
+			payload:  []byte("test payload"),
+			headers:  map[string]string{"key1": "value1", "key2": "value2"},
+			opts:     []Option{MaxRetry(3)},
+			want: &Task{
+				typename: "test_task",
+				payload:  []byte("test payload"),
+				headers:  map[string]string{"key1": "value1", "key2": "value2"},
+				opts:     []Option{MaxRetry(3)},
+			},
+		},
+		{
+			desc:     "Task with empty headers",
+			typename: "empty_headers",
+			payload:  nil,
+			headers:  map[string]string{},
+			opts:     nil,
+			want: &Task{
+				typename: "empty_headers",
+				payload:  nil,
+				headers:  map[string]string{},
+				opts:     nil,
+			},
+		},
+		{
+			desc:     "Task with nil headers",
+			typename: "nil_headers",
+			payload:  []byte("data"),
+			headers:  nil,
+			opts:     []Option{Queue("test")},
+			want: &Task{
+				typename: "nil_headers",
+				payload:  []byte("data"),
+				headers:  nil,
+				opts:     []Option{Queue("test")},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		got := NewTaskWithHeaders(tc.typename, tc.payload, tc.headers, tc.opts...)
+
+		if got.Type() != tc.want.typename {
+			t.Errorf("%s: Type() = %q, want %q", tc.desc, got.Type(), tc.want.typename)
+		}
+
+		if diff := cmp.Diff(tc.want.payload, got.Payload()); diff != "" {
+			t.Errorf("%s: Payload() mismatch (-want,+got)\n%s", tc.desc, diff)
+		}
+
+		if diff := cmp.Diff(tc.want.headers, got.Headers()); diff != "" {
+			t.Errorf("%s: Headers() mismatch (-want,+got)\n%s", tc.desc, diff)
+		}
+
+		if tc.headers != nil && got.Headers() != nil {
+			tc.headers["modified"] = "test"
+			if _, exists := got.Headers()["modified"]; exists {
+				t.Errorf("%s: Headers should be cloned, but modification affected task headers", tc.desc)
+			}
+		}
+	}
+}
+
+func TestTaskHeadersMethod(t *testing.T) {
+	tests := []struct {
+		desc    string
+		task    *Task
+		want    map[string]string
+		wantNil bool
+	}{
+		{
+			desc:    "Task created with NewTask has nil headers",
+			task:    NewTask("test", []byte("data")),
+			want:    nil,
+			wantNil: true,
+		},
+		{
+			desc: "Task created with NewTaskWithHeaders has headers",
+			task: NewTaskWithHeaders("test", []byte("data"), map[string]string{"key": "value"}),
+			want: map[string]string{"key": "value"},
+		},
+		{
+			desc: "Task created with empty headers",
+			task: NewTaskWithHeaders("test", []byte("data"), map[string]string{}),
+			want: map[string]string{},
+		},
+		{
+			desc:    "Task created with nil headers",
+			task:    NewTaskWithHeaders("test", []byte("data"), nil),
+			want:    nil,
+			wantNil: true,
+		},
+	}
+
+	for _, tc := range tests {
+		got := tc.task.Headers()
+
+		if tc.wantNil {
+			if got != nil {
+				t.Errorf("%s: Headers() = %v, want nil", tc.desc, got)
+			}
+		} else {
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("%s: Headers() mismatch (-want,+got)\n%s", tc.desc, diff)
+			}
+		}
+	}
+}
+
+func TestClientEnqueueWithHeadersAndGroup(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	now := time.Now()
+	headers := map[string]string{
+		"batch-id": "batch-123",
+		"priority": "high",
+	}
+
+	tests := []struct {
+		desc       string
+		task       *Task
+		opts       []Option
+		wantInfo   *TaskInfo
+		wantGroups map[string]map[string][]base.Z
+	}{
+		{
+			desc: "Task with headers and group",
+			task: NewTaskWithHeaders("batch_process", []byte("item1"), headers),
+			opts: []Option{Group("batch-123")},
+			wantInfo: &TaskInfo{
+				Queue:         "default",
+				Group:         "batch-123",
+				Type:          "batch_process",
+				Payload:       []byte("item1"),
+				Headers:       headers,
+				State:         TaskStateAggregating,
+				MaxRetry:      defaultMaxRetry,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: time.Time{},
+			},
+			wantGroups: map[string]map[string][]base.Z{
+				"default": {
+					"batch-123": {
+						{
+							Message: &base.TaskMessage{
+								Type:     "batch_process",
+								Payload:  []byte("item1"),
+								Headers:  headers,
+								Retry:    defaultMaxRetry,
+								Queue:    "default",
+								Timeout:  int64(defaultTimeout.Seconds()),
+								Deadline: noDeadline.Unix(),
+								GroupKey: "batch-123",
+							},
+							Score: now.Unix(),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+
+		gotInfo, err := client.Enqueue(tc.task, tc.opts...)
+		if err != nil {
+			t.Errorf("%s: Enqueue failed: %v", tc.desc, err)
+			continue
+		}
+
+		cmpOptions := []cmp.Option{
+			cmpopts.IgnoreFields(TaskInfo{}, "ID"),
+			cmpopts.EquateApproxTime(500 * time.Millisecond),
+		}
+		if diff := cmp.Diff(tc.wantInfo, gotInfo, cmpOptions...); diff != "" {
+			t.Errorf("%s;\nEnqueue(task) returned %v, want %v; (-want,+got)\n%s",
+				tc.desc, gotInfo, tc.wantInfo, diff)
+		}
+
+		for qname, groups := range tc.wantGroups {
+			for groupKey, want := range groups {
+				got := h.GetGroupEntries(t, r, qname, groupKey)
+				if diff := cmp.Diff(want, got, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
+					t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.GroupKey(qname, groupKey), diff)
+				}
+			}
+		}
+	}
+}
