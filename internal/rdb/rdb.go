@@ -114,12 +114,10 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 	if err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	if _, found := r.queuesPublished.Load(msg.Queue); !found {
-		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
-			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
-		}
-		r.queuesPublished.Store(msg.Queue, true)
+	if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
+	r.queuesPublished.Store(msg.Queue, true)
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
 		base.PendingKey(msg.Queue),
