@@ -405,13 +405,13 @@ func getRedisConnOpt() asynq.RedisConnOpt {
 }
 
 func getTLSConfig() *tls.Config {
-	if viper.GetBool("tls") {
-		return &tls.Config{InsecureSkipVerify: viper.GetBool("insecure")}
-	}
-
 	tlsServer := viper.GetString("tls_server")
 	if tlsServer != "" {
 		return &tls.Config{ServerName: tlsServer, InsecureSkipVerify: viper.GetBool("insecure")}
+	}
+
+	if viper.GetBool("tls") {
+		return &tls.Config{InsecureSkipVerify: viper.GetBool("insecure")}
 	}
 
 	return nil
