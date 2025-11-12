@@ -1,6 +1,6 @@
 <img src="https://user-images.githubusercontent.com/11155743/114697792-ffbfa580-9d26-11eb-8e5b-33bef69476dc.png" alt="Asynq logo" width="360px" />
 
-# Simple, reliable & efficient distributed task queue in Go
+# 一个用GO编写的 简单, 可靠 , 高性能 分布式任务队列
 
 [![GoDoc](https://godoc.org/github.com/hibiken/asynq?status.svg)](https://godoc.org/github.com/hibiken/asynq)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hibiken/asynq)](https://goreportcard.com/report/github.com/hibiken/asynq)
@@ -8,67 +8,61 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Gitter chat](https://badges.gitter.im/go-asynq/gitter.svg)](https://gitter.im/go-asynq/community)
 
-[[中文文档]](/docs/i18n/zh_CN/README.md)
+Asynq 是一个 Go 编写的库，提供任务队列能力，使Worker可以异步处理任务。Asynq 由 [Redis](https://redis.io/) 驱动，旨在方便扩展，容易上手。
 
-Asynq is a Go library for queueing tasks and processing them asynchronously with workers. It's backed by [Redis](https://redis.io/) and is designed to be scalable yet easy to get started.
+Asynq 的工作原理简述:
 
-Highlevel overview of how Asynq works:
+- 客户端推送任务到队列
+- 服务端从队列拉取任务，并为每个任务启动一个 goroutine 去处理它
+- 任务可以被并行处理
 
-- Client puts tasks on a queue
-- Server pulls tasks off queues and starts a worker goroutine for each task
-- Tasks are processed concurrently by multiple workers
+任务队列常被用来跨多机器调度任务。队列可以有多个Worker, Server和Broker，以实现高可用和水平扩展。
 
-Task queues are used as a mechanism to distribute work across multiple machines. A system can consist of multiple worker servers and brokers, giving way to high availability and horizontal scaling.
-
-**Example use case**
+**典型用例**
 
 ![Task Queue Diagram](https://user-images.githubusercontent.com/11155743/116358505-656f5f80-a806-11eb-9c16-94e49dab0f99.jpg)
 
-## Features
+## 特性
 
-- Guaranteed [at least one execution](https://www.cloudcomputingpatterns.org/at_least_once_delivery/) of a task
-- Scheduling of tasks
-- [Retries](https://github.com/hibiken/asynq/wiki/Task-Retry) of failed tasks
-- Automatic recovery of tasks in the event of a worker crash
-- [Weighted priority queues](https://github.com/hibiken/asynq/wiki/Queue-Priority#weighted-priority)
-- [Strict priority queues](https://github.com/hibiken/asynq/wiki/Queue-Priority#strict-priority)
-- Low latency to add a task since writes are fast in Redis
-- De-duplication of tasks using [unique option](https://github.com/hibiken/asynq/wiki/Unique-Tasks)
-- Allow [timeout and deadline per task](https://github.com/hibiken/asynq/wiki/Task-Timeout-and-Cancelation)
-- Allow [aggregating group of tasks](https://github.com/hibiken/asynq/wiki/Task-aggregation) to batch multiple successive operations
-- [Flexible handler interface with support for middlewares](https://github.com/hibiken/asynq/wiki/Handler-Deep-Dive)
-- [Ability to pause queue](/tools/asynq/README.md#pause) to stop processing tasks from the queue
-- [Periodic Tasks](https://github.com/hibiken/asynq/wiki/Periodic-Tasks)
-- [Support Redis Sentinels](https://github.com/hibiken/asynq/wiki/Automatic-Failover) for high availability
-- Integration with [Prometheus](https://prometheus.io/) to collect and visualize queue metrics
-- [Web UI](#web-ui) to inspect and remote-control queues and tasks
-- [CLI](#command-line-tool) to inspect and remote-control queues and tasks
+- 可靠消费[保证任务至少被消费一次](https://www.cloudcomputingpatterns.org/at_least_once_delivery/)
+- 支持调度任务
+- 支持失败任务[重试](https://github.com/hibiken/asynq/wiki/Task-Retry)
+- Worker崩溃时的任务自动恢复
+- 支持[加权优先级队列](https://github.com/hibiken/asynq/wiki/Queue-Priority#weighted-priority)
+- 支持[严格优先级队列](https://github.com/hibiken/asynq/wiki/Queue-Priority#strict-priority)
+- 低延迟添加任务
+- 支持[unique选项]（https://github.com/hibiken/asynq/wiki/Unique-Tasks）保证任务不重复
+- 支持[单个任务设置超时和截止时间](https://github.com/hibiken/asynq/wiki/Task-Timeout-and-Cancelation)
+- 支持[任务聚合编组](https://github.com/hibiken/asynq/wiki/Task-aggregation) 用于一次批量处理多个连续操作
+- 支持[中间件](https://github.com/hibiken/asynq/wiki/Handler-Deep-Dive)，我们有灵活的handler接口
+- 支持[队列暂停](/tools/asynq/README.md#pause) 即暂停分发任务
+- 支持[定时任务](https://github.com/hibiken/asynq/wiki/Periodic-Tasks)
+- 支持[Redis Cluster](https://github.com/hibiken/asynq/wiki/Redis-Cluster) 实现自动分片和高可用
+- 支持[Redis Sentinel](https://github.com/hibiken/asynq/wiki/Automatic-Failover) 实现高可用性
+- 与[Prometheus](https://prometheus.io/) 集成，以收集和可视化队列运行情况
+- 支持[Web UI](#web-ui) 检查和控制队列/任务
+- 支持[CLI](#command-line-tool) 检查和控制队列/任务
 
-## Stability and Compatibility
 
-**Status**: The library relatively stable and is currently undergoing **moderate development** with less frequent breaking API changes.
+## 稳定性和兼容性
 
-> ☝️ **Important Note**: Current major version is zero (`v0.x.x`) to accommodate rapid development and fast iteration while getting early feedback from users (_feedback on APIs are appreciated!_). The public API could change without a major version update before `v1.0.0` release.
+**状态**：该库目前正在处于**深度开发中**，API可能随时发生大的变化
 
-### Redis Cluster Compatibility
+> ☝️ **重要提示**：当前主要版本为 v0 版本（`v0.x.x`），以适应快速开发和快速迭代，同时获得用户的早期反馈（感谢您的使用反馈！_）。在 `v1.0.0` 发布之前，公共 API 可能会在没有主要版本更新的情况下发生变化。
 
-Some of the lua scripts in this library may not be compatible with Redis Cluster.
+## 快速开始
 
-## Sponsoring
-If you are using this package in production, **please consider sponsoring the project to show your support!**
+确保([Go1.14+](https://golang.org/dl/))已安装.
 
-## Quickstart
-Make sure you have Go installed ([download](https://golang.org/dl/)). The **last two** Go versions are supported (See https://go.dev/dl).
-
-Initialize your project by creating a folder and then running `go mod init github.com/your/repo` ([learn more](https://blog.golang.org/using-go-modules)) inside the folder. Then install Asynq library with the [`go get`](https://golang.org/cmd/go/#hdr-Add_dependencies_to_current_module_and_install_them) command:
+通过创建一个文件夹然后在该文件夹中运行`go mod init github.com/your/repo`（[了解更多](https://blog.golang.org/using-go-modules)）来初始化您的项目。然后使用 [`go get`](https://golang.org/cmd/go/#hdr-Add_dependencies_to_current_module_and_install_them) 命令安装 Asynq 库：
 
 ```sh
 go get -u github.com/hibiken/asynq
 ```
 
-Make sure you're running a Redis server locally or from a [Docker](https://hub.docker.com/_/redis) container. Version `4.0` or higher is required.
+确保Redis服务器4.0+在本地或[Docker](https://hub.docker.com/_/redis)
 
-Next, write a package that encapsulates task creation and task handling.
+然后写一个封装任务创建和任务处理的包（定义任务和处理方式）。
 
 ```go
 package tasks
@@ -157,7 +151,7 @@ func NewImageProcessor() *ImageProcessor {
 }
 ```
 
-In your application code, import the above package and use [`Client`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Client) to put tasks on queues.
+在您的项目中，导入上述包并使用 [`Client`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Client) 将任务推送至队列中。
 
 ```go
 package main
@@ -221,9 +215,9 @@ func main() {
 }
 ```
 
-Next, start a worker server to process these tasks in the background. To start the background workers, use [`Server`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Server) and provide your [`Handler`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Handler) to process the tasks.
+然后启动一个worker消费这些任务。您可以使用 [`Server`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#Server) 提供的 [`Handler`](https:// pkg.go.dev/github.com/hibiken/asynq?tab=doc#Handler) 来处理任务。
 
-You can optionally use [`ServeMux`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#ServeMux) to create a handler, just as you would with [`net/http`](https://golang.org/pkg/net/http/) Handler.
+推荐使用 [`ServeMux`](https://pkg.go.dev/github.com/hibiken/asynq?tab=doc#ServeMux) 来创建handler，当然你也可以用标准库的 [`net/http` ](https://golang.org/pkg/net/http/) 。
 
 ```go
 package main
@@ -265,55 +259,54 @@ func main() {
 }
 ```
 
-For a more detailed walk-through of the library, see our [Getting Started](https://github.com/hibiken/asynq/wiki/Getting-Started) guide.
+有关该库的更详细的说明，可以参阅 [Getting Started](https://github.com/hibiken/asynq/wiki/Getting-Started).
 
-To learn more about `asynq` features and APIs, see the package [godoc](https://godoc.org/github.com/hibiken/asynq).
+要了解有关 `asynq` 特性和 API 的更多信息，请参阅包注释文档 [godoc](https://godoc.org/github.com/hibiken/asynq)。
 
 ## Web UI
 
-[Asynqmon](https://github.com/hibiken/asynqmon) is a web based tool for monitoring and administrating Asynq queues and tasks.
+[Asynqmon](https://github.com/hibiken/asynqmon) 是一个基于 Web ，可以用来监控和管理 Asynq 队列/任务的工具.
 
-Here's a few screenshots of the Web UI:
+以下是 Asynqmon 的一些截图：
 
-**Queues view**
+**队列**
 
 ![Web UI Queues View](https://user-images.githubusercontent.com/11155743/114697016-07327f00-9d26-11eb-808c-0ac841dc888e.png)
 
-**Tasks view**
+**任务**
 
 ![Web UI TasksView](https://user-images.githubusercontent.com/11155743/114697070-1f0a0300-9d26-11eb-855c-d3ec263865b7.png)
 
-**Metrics view**
+**指标**
 <img width="1532" alt="Screen Shot 2021-12-19 at 4 37 19 PM" src="https://user-images.githubusercontent.com/10953044/146777420-cae6c476-bac6-469c-acce-b2f6584e8707.png">
 
-**Settings and adaptive dark mode**
+**支持自适应的夜间模式**
 
-![Web UI Settings and adaptive dark mode](https://user-images.githubusercontent.com/11155743/114697149-3517c380-9d26-11eb-9f7a-ae2dd00aad5b.png)
+![Web UI设置支持自适应的夜晚模式](https://user-images.githubusercontent.com/11155743/114697149-3517c380-9d26-11eb-9f7a-ae2dd00aad5b.png)
+该工具的更多信息，请参阅该 [README](https://github.com/hibiken/asynqmon#readme)。
 
-For details on how to use the tool, refer to the tool's [README](https://github.com/hibiken/asynqmon#readme).
+## CLI工具
 
-## Command Line Tool
+Asynq 提供了一个命令行工具来检查队列/任务的运行状态
 
-Asynq ships with a command line tool to inspect the state of queues and tasks.
-
-To install the CLI tool, run the following command:
+安装Asynq CLI工具:
 
 ```sh
-go install github.com/hibiken/asynq/tools/asynq@latest
+go install github.com/hibiken/asynq/tools/asynq
 ```
 
-Here's an example of running the `asynq dash` command:
+下面是 `asynq dash` 命令的示例：
 
 ![Gif](/docs/assets/dash.gif)
 
-For details on how to use the tool, refer to the tool's [README](/tools/asynq/README.md).
+更多信息请参阅 [README](/tools/asynq/README.md)
 
-## Contributing
+## 一起参与进来
 
-We are open to, and grateful for, any contributions (GitHub issues/PRs, feedback on [Gitter channel](https://gitter.im/go-asynq/community), etc) made by the community.
+我们欢迎并感谢来自社区的（GitHub 问题/PR、 [Gitter 频道](https://gitter.im/go-asynq/community) 反馈）
 
-Please see the [Contribution Guide](/CONTRIBUTING.md) before contributing.
+贡献前请参阅[贡献指南](/CONTRIBUTING.md)
 
-## License
+## 许可
 
 Copyright (c) 2019-present [Ken Hibino](https://github.com/hibiken) and [Contributors](https://github.com/hibiken/asynq/graphs/contributors). `Asynq` is free and open-source software licensed under the [MIT License](https://github.com/hibiken/asynq/blob/master/LICENSE). Official logo was created by [Vic Shóstak](https://github.com/koddr) and distributed under [Creative Commons](https://creativecommons.org/publicdomain/zero/1.0/) license (CC0 1.0 Universal).
