@@ -21,9 +21,12 @@ func TestForwarder(t *testing.T) {
 	rdbClient := rdb.NewRDB(r)
 	const pollInterval = time.Second
 	s := newForwarder(forwarderParams{
-		logger:   testLogger,
-		broker:   rdbClient,
-		queues:   []string{"default", "critical"},
+		logger: testLogger,
+		broker: rdbClient,
+		queueMgr: newStaticQueueManagerForTest(map[string]int{
+			"default":  1,
+			"critical": 2,
+		}, false),
 		interval: pollInterval,
 	})
 	t1 := h.NewTaskMessageWithQueue("gen_thumbnail", nil, "default")

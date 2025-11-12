@@ -297,3 +297,12 @@ func (tb *TestBroker) ReclaimStaleAggregationSets(qname string) error {
 	}
 	return tb.real.ReclaimStaleAggregationSets(qname)
 }
+
+func (tb *TestBroker) SetOfQueues(ctx context.Context) (map[string]struct{}, error) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return nil, errRedisDown
+	}
+	return tb.real.SetOfQueues(ctx)
+}

@@ -370,6 +370,7 @@ type ServerInfo struct {
 	Concurrency       int
 	Queues            map[string]int
 	StrictPriority    bool
+	DynamicQueues     bool
 	Status            string
 	Started           time.Time
 	ActiveWorkerCount int
@@ -701,6 +702,7 @@ type Broker interface {
 	Retry(ctx context.Context, msg *TaskMessage, processAt time.Time, errMsg string, isFailure bool) error
 	Archive(ctx context.Context, msg *TaskMessage, errMsg string) error
 	ForwardIfReady(qnames ...string) error
+	SetOfQueues(ctx context.Context) (map[string]struct{}, error)
 
 	// Group aggregation related methods
 	AddToGroup(ctx context.Context, msg *TaskMessage, gname string) error

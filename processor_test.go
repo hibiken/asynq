@@ -72,8 +72,7 @@ func newProcessorForTest(t *testing.T, r *rdb.RDB, h Handler) *processor {
 		syncCh:            syncCh,
 		cancelations:      base.NewCancelations(),
 		concurrency:       10,
-		queues:            defaultQueueConfig,
-		strictPriority:    false,
+		queueMgr:          newStaticQueueManagerForTest(defaultQueueConfig, false),
 		errHandler:        nil,
 		shutdownTimeout:   defaultShutdownTimeout,
 		starting:          starting,
@@ -186,42 +185,54 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		// Set up test case.
-		h.FlushDB(t, r)
-		h.SeedAllPendingQueues(t, r, tc.pending)
+		queueTypes := map[string]*queueManager{
+			"static": newStaticQueueManagerForTest(map[string]int{
+				"default": 2,
+				"high":    3,
+				"low":     1,
+			}, false),
+			"dynamic": newDynamicQueueManagerForTest(t, rdbClient, map[string]int{
+				"d*": 2,
+				"h*": 3,
+				"l*": 1,
+			}),
+		}
+		for name, qm := range queueTypes {
+			t.Run(name, func(t *testing.T) {
+				// Set up test case.
+				h.FlushDB(t, r)
+				h.SeedAllPendingQueues(t, r, tc.pending)
 
-		// Instantiate a new processor.
-		var mu sync.Mutex
-		var processed []*Task
-		handler := func(ctx context.Context, task *Task) error {
-			mu.Lock()
-			defer mu.Unlock()
-			processed = append(processed, task)
-			return nil
-		}
-		p := newProcessorForTest(t, rdbClient, HandlerFunc(handler))
-		p.queueConfig = map[string]int{
-			"default": 2,
-			"high":    3,
-			"low":     1,
-		}
+				// Instantiate a new processor.
+				var mu sync.Mutex
+				var processed []*Task
+				handler := func(ctx context.Context, task *Task) error {
+					mu.Lock()
+					defer mu.Unlock()
+					processed = append(processed, task)
+					return nil
+				}
+				p := newProcessorForTest(t, rdbClient, HandlerFunc(handler))
+				p.queueMgr = qm
 
-		p.start(&sync.WaitGroup{})
-		// Wait for two second to allow all pending tasks to be processed.
-		time.Sleep(2 * time.Second)
-		// Make sure no messages are stuck in active list.
-		for _, qname := range tc.queues {
-			if l := r.LLen(context.Background(), base.ActiveKey(qname)).Val(); l != 0 {
-				t.Errorf("%q has %d tasks, want 0", base.ActiveKey(qname), l)
-			}
-		}
-		p.shutdown()
+				p.start(&sync.WaitGroup{})
+				// Wait for two second to allow all pending tasks to be processed.
+				time.Sleep(2 * time.Second)
+				// Make sure no messages are stuck in active list.
+				for _, qname := range tc.queues {
+					if l := r.LLen(context.Background(), base.ActiveKey(qname)).Val(); l != 0 {
+						t.Errorf("%q has %d tasks, want 0", base.ActiveKey(qname), l)
+					}
+				}
+				p.shutdown()
 
-		mu.Lock()
-		if diff := cmp.Diff(tc.wantProcessed, processed, taskCmpOpts...); diff != "" {
-			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
+				mu.Lock()
+				if diff := cmp.Diff(tc.wantProcessed, processed, taskCmpOpts...); diff != "" {
+					t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
+				}
+				mu.Unlock()
+			})
 		}
-		mu.Unlock()
 	}
 }
 
@@ -490,7 +501,7 @@ func TestProcessorMarkAsComplete(t *testing.T) {
 		h.SeedAllCompletedQueues(t, r, tc.completed)
 
 		p := newProcessorForTest(t, rdbClient, HandlerFunc(handler))
-		p.queueConfig = tc.queueCfg
+		p.queueMgr = newStaticQueueManagerForTest(tc.queueCfg, false)
 
 		p.start(&sync.WaitGroup{})
 		runTime := time.Now() // time when processor is running
@@ -576,8 +587,7 @@ func TestProcessorWithExpiredLease(t *testing.T) {
 			syncCh:            syncCh,
 			cancelations:      base.NewCancelations(),
 			concurrency:       10,
-			queues:            defaultQueueConfig,
-			strictPriority:    false,
+			queueMgr:          newStaticQueueManagerForTest(defaultQueueConfig, false),
 			errHandler:        nil,
 			shutdownTimeout:   defaultShutdownTimeout,
 			starting:          starting,
@@ -642,9 +652,9 @@ func TestProcessorQueues(t *testing.T) {
 	for _, tc := range tests {
 		// Note: rdb and handler not needed for this test.
 		p := newProcessorForTest(t, nil, nil)
-		p.queueConfig = tc.queueCfg
+		p.queueMgr = newStaticQueueManagerForTest(tc.queueCfg, false)
 
-		got := p.queues()
+		got := p.queueMgr.GetQueuesInDequeueOrder()
 		if diff := cmp.Diff(tc.want, got, sortOpt); diff != "" {
 			t.Errorf("with queue config: %v\n(*processor).queues() = %v, want %v\n(-want,+got):\n%s",
 				tc.queueCfg, got, tc.want, diff)
@@ -695,65 +705,74 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r) // clean up db before each test case.
-		for qname, msgs := range tc.pending {
-			h.SeedPendingQueue(t, r, msgs, qname)
+		queueTypes := map[string]*queueManager{
+			"static": newStaticQueueManagerForTest(map[string]int{
+				base.DefaultQueueName: 2,
+				"critical":            3,
+				"low":                 1,
+			}, true),
+			"dynamic": newDynamicQueueManagerForTest(t, rdbClient, map[string]int{
+				base.DefaultQueueName: 2,
+				"c*":                  3,
+				"l*":                  1,
+			}),
 		}
+		for name, qm := range queueTypes {
+			t.Run(name, func(t *testing.T) {
+				h.FlushDB(t, r) // clean up db before each test case.
+				for qname, msgs := range tc.pending {
+					h.SeedPendingQueue(t, r, msgs, qname)
+				}
 
-		// instantiate a new processor
-		var mu sync.Mutex
-		var processed []*Task
-		handler := func(ctx context.Context, task *Task) error {
-			mu.Lock()
-			defer mu.Unlock()
-			processed = append(processed, task)
-			return nil
-		}
-		queueCfg := map[string]int{
-			base.DefaultQueueName: 2,
-			"critical":            3,
-			"low":                 1,
-		}
-		starting := make(chan *workerInfo)
-		finished := make(chan *base.TaskMessage)
-		syncCh := make(chan *syncRequest)
-		done := make(chan struct{})
-		defer func() { close(done) }()
-		go fakeHeartbeater(starting, finished, done)
-		go fakeSyncer(syncCh, done)
-		p := newProcessor(processorParams{
-			logger:            testLogger,
-			broker:            rdbClient,
-			baseCtxFn:         context.Background,
-			taskCheckInterval: defaultTaskCheckInterval,
-			retryDelayFunc:    DefaultRetryDelayFunc,
-			isFailureFunc:     defaultIsFailureFunc,
-			syncCh:            syncCh,
-			cancelations:      base.NewCancelations(),
-			concurrency:       1, // Set concurrency to 1 to make sure tasks are processed one at a time.
-			queues:            queueCfg,
-			strictPriority:    true,
-			errHandler:        nil,
-			shutdownTimeout:   defaultShutdownTimeout,
-			starting:          starting,
-			finished:          finished,
-		})
-		p.handler = HandlerFunc(handler)
+				// instantiate a new processor
+				var mu sync.Mutex
+				var processed []*Task
+				handler := func(ctx context.Context, task *Task) error {
+					mu.Lock()
+					defer mu.Unlock()
+					processed = append(processed, task)
+					return nil
+				}
+				starting := make(chan *workerInfo)
+				finished := make(chan *base.TaskMessage)
+				syncCh := make(chan *syncRequest)
+				done := make(chan struct{})
+				defer func() { close(done) }()
+				go fakeHeartbeater(starting, finished, done)
+				go fakeSyncer(syncCh, done)
+				p := newProcessor(processorParams{
+					logger:            testLogger,
+					broker:            rdbClient,
+					baseCtxFn:         context.Background,
+					taskCheckInterval: defaultTaskCheckInterval,
+					retryDelayFunc:    DefaultRetryDelayFunc,
+					isFailureFunc:     defaultIsFailureFunc,
+					syncCh:            syncCh,
+					cancelations:      base.NewCancelations(),
+					concurrency:       1, // Set concurrency to 1 to make sure tasks are processed one at a time.
+					queueMgr:          qm,
+					errHandler:        nil,
+					shutdownTimeout:   defaultShutdownTimeout,
+					starting:          starting,
+					finished:          finished,
+				})
+				p.handler = HandlerFunc(handler)
 
-		p.start(&sync.WaitGroup{})
-		time.Sleep(tc.wait)
-		// Make sure no tasks are stuck in active list.
-		for _, qname := range tc.queues {
-			if l := r.LLen(context.Background(), base.ActiveKey(qname)).Val(); l != 0 {
-				t.Errorf("%q has %d tasks, want 0", base.ActiveKey(qname), l)
-			}
-		}
-		p.shutdown()
+				p.start(&sync.WaitGroup{})
+				time.Sleep(tc.wait)
+				// Make sure no tasks are stuck in active list.
+				for _, qname := range tc.queues {
+					if l := r.LLen(context.Background(), base.ActiveKey(qname)).Val(); l != 0 {
+						t.Errorf("%q has %d tasks, want 0", base.ActiveKey(qname), l)
+					}
+				}
+				p.shutdown()
 
-		if diff := cmp.Diff(tc.wantProcessed, processed, taskCmpOpts...); diff != "" {
-			t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
+				if diff := cmp.Diff(tc.wantProcessed, processed, taskCmpOpts...); diff != "" {
+					t.Errorf("mismatch found in processed tasks; (-want, +got)\n%s", diff)
+				}
+			})
 		}
-
 	}
 }
 

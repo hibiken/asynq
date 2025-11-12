@@ -170,15 +170,14 @@ func TestHeartbeater(t *testing.T) {
 		startingCh := make(chan *workerInfo)
 		finishedCh := make(chan *base.TaskMessage)
 		hb := newHeartbeater(heartbeaterParams{
-			logger:         testLogger,
-			broker:         rdbClient,
-			interval:       tc.interval,
-			concurrency:    tc.concurrency,
-			queues:         tc.queues,
-			strictPriority: false,
-			state:          srvState,
-			starting:       startingCh,
-			finished:       finishedCh,
+			logger:      testLogger,
+			broker:      rdbClient,
+			interval:    tc.interval,
+			concurrency: tc.concurrency,
+			queueMgr:    newStaticQueueManagerForTest(tc.queues, false),
+			state:       srvState,
+			starting:    startingCh,
+			finished:    finishedCh,
 		})
 		hb.clock = clock
 
@@ -325,15 +324,14 @@ func TestHeartbeaterWithRedisDown(t *testing.T) {
 	testBroker := testbroker.NewTestBroker(r)
 	state := &serverState{value: srvStateActive}
 	hb := newHeartbeater(heartbeaterParams{
-		logger:         testLogger,
-		broker:         testBroker,
-		interval:       time.Second,
-		concurrency:    10,
-		queues:         map[string]int{"default": 1},
-		strictPriority: false,
-		state:          state,
-		starting:       make(chan *workerInfo),
-		finished:       make(chan *base.TaskMessage),
+		logger:      testLogger,
+		broker:      testBroker,
+		interval:    time.Second,
+		concurrency: 10,
+		queueMgr:    newStaticQueueManagerForTest(map[string]int{"default": 1}, false),
+		state:       state,
+		starting:    make(chan *workerInfo),
+		finished:    make(chan *base.TaskMessage),
 	})
 
 	testBroker.Sleep()

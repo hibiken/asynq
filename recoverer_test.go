@@ -227,7 +227,7 @@ func TestRecoverer(t *testing.T) {
 		recoverer := newRecoverer(recovererParams{
 			logger:         testLogger,
 			broker:         rdbClient,
-			queues:         []string{"default", "critical"},
+			queueMrg:       newStaticQueueManagerForTest(map[string]int{"default": 1, "critical": 2}, false),
 			interval:       1 * time.Second,
 			retryDelayFunc: func(n int, err error, task *Task) time.Duration { return 30 * time.Second },
 			isFailureFunc:  defaultIsFailureFunc,

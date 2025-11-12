@@ -59,6 +59,27 @@ func TestServer(t *testing.T) {
 	testServer(t, c, srv)
 }
 
+func TestServerDynamicQueue(t *testing.T) {
+	ignoreOpt := goleak.IgnoreTopFunction("github.com/redis/go-redis/v9/internal/pool.(*ConnPool).reaper")
+	defer goleak.VerifyNone(t, ignoreOpt)
+
+	redisConnOpt := getRedisConnOpt(t)
+	c := NewClient(redisConnOpt)
+	defer c.Close()
+	srv := NewServer(redisConnOpt, Config{
+		Concurrency: 10,
+		LogLevel:    testLogLevel,
+		Queues: map[string]int{
+			"critical": 10,
+			"*":        5,
+		},
+		DynamicQueues:  true,
+		StrictPriority: true,
+	})
+
+	testServer(t, c, srv)
+}
+
 func TestServerFromRedisClient(t *testing.T) {
 	// https://github.com/go-redis/redis/issues/1029
 	ignoreOpt := goleak.IgnoreTopFunction("github.com/redis/go-redis/v9/internal/pool.(*ConnPool).reaper")

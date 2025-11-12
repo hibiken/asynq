@@ -23,8 +23,7 @@ type recoverer struct {
 	// channel to communicate back to the long running "recoverer" goroutine.
 	done chan struct{}
 
-	// list of queues to check for deadline.
-	queues []string
+	queueMrg *queueManager
 
 	// poll interval.
 	interval time.Duration
@@ -33,7 +32,7 @@ type recoverer struct {
 type recovererParams struct {
 	logger         *log.Logger
 	broker         base.Broker
-	queues         []string
+	queueMrg       *queueManager
 	interval       time.Duration
 	retryDelayFunc RetryDelayFunc
 	isFailureFunc  func(error) bool
@@ -44,7 +43,7 @@ func newRecoverer(params recovererParams) *recoverer {
 		logger:         params.logger,
 		broker:         params.broker,
 		done:           make(chan struct{}),
-		queues:         params.queues,
+		queueMrg:       params.queueMrg,
 		interval:       params.interval,
 		retryDelayFunc: params.retryDelayFunc,
 		isFailureFunc:  params.isFailureFunc,
@@ -89,7 +88,8 @@ func (r *recoverer) recover() {
 func (r *recoverer) recoverLeaseExpiredTasks() {
 	// Get all tasks which have expired 30 seconds ago or earlier to accommodate certain amount of clock skew.
 	cutoff := time.Now().Add(-30 * time.Second)
-	msgs, err := r.broker.ListLeaseExpired(cutoff, r.queues...)
+	queues := r.queueMrg.GetUnorderedQueueNames()
+	msgs, err := r.broker.ListLeaseExpired(cutoff, queues...)
 	if err != nil {
 		r.logger.Warnf("recoverer: could not list lease expired tasks: %v", err)
 		return
@@ -104,7 +104,8 @@ func (r *recoverer) recoverLeaseExpiredTasks() {
 }
 
 func (r *recoverer) recoverStaleAggregationSets() {
-	for _, qname := range r.queues {
+	queues := r.queueMrg.GetUnorderedQueueNames()
+	for _, qname := range queues {
 		if err := r.broker.ReclaimStaleAggregationSets(qname); err != nil {
 			r.logger.Warnf("recoverer: could not reclaim stale aggregation sets in queue %q: %v", qname, err)
 		}
