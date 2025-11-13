@@ -165,7 +165,7 @@ type SchedulerOpts struct {
 
 // enqueueJob encapsulates the job of enqueuing a task and recording the event.
 type enqueueJob struct {
-	id              uuid.UUID
+	id              string
 	cronspec        string
 	task            *Task
 	opts            []Option
@@ -197,7 +197,7 @@ func (j *enqueueJob) Run() {
 		TaskID:     info.ID,
 		EnqueuedAt: time.Now().In(j.location),
 	}
-	err = j.rdb.RecordSchedulerEnqueueEvent(j.id.String(), event)
+	err = j.rdb.RecordSchedulerEnqueueEvent(j.id, event)
 	if err != nil {
 		j.logger.Warnf("scheduler could not record enqueue event of enqueued task %s: %v", info.ID, err)
 	}
@@ -205,9 +205,9 @@ func (j *enqueueJob) Run() {
 
 // Register registers a task to be enqueued on the given schedule specified by the cronspec.
 // It returns an ID of the newly registered entry.
-func (s *Scheduler) Register(cronspec string, task *Task, opts ...Option) (entryID string, err error) {
+func (s *Scheduler) Register(ID, cronspec string, task *Task, opts ...Option) (entryID string, err error) {
 	job := &enqueueJob{
-		id:              uuid.New(),
+		id:              ID,
 		cronspec:        cronspec,
 		task:            task,
 		opts:            opts,
@@ -224,9 +224,9 @@ func (s *Scheduler) Register(cronspec string, task *Task, opts ...Option) (entry
 		return "", err
 	}
 	s.mu.Lock()
-	s.idmap[job.id.String()] = cronID
+	s.idmap[job.id] = cronID
 	s.mu.Unlock()
-	return job.id.String(), nil
+	return job.id, nil
 }
 
 // Unregister removes a registered entry by entry ID.
@@ -331,7 +331,7 @@ func (s *Scheduler) beat() {
 	for _, entry := range s.cron.Entries() {
 		job := entry.Job.(*enqueueJob)
 		e := &base.SchedulerEntry{
-			ID:      job.id.String(),
+			ID:      job.id,
 			Spec:    job.cronspec,
 			Type:    job.task.Type(),
 			Payload: job.task.Payload(),
@@ -357,8 +357,8 @@ func stringifyOptions(opts []Option) []string {
 func (s *Scheduler) clearHistory() {
 	for _, entry := range s.cron.Entries() {
 		job := entry.Job.(*enqueueJob)
-		if err := s.rdb.ClearSchedulerHistory(job.id.String()); err != nil {
-			s.logger.Warnf("Could not clear scheduler history for entry %q: %v", job.id.String(), err)
+		if err := s.rdb.ClearSchedulerHistory(job.id); err != nil {
+			s.logger.Warnf("Could not clear scheduler history for entry %q: %v", job.id, err)
 		}
 	}
 }
