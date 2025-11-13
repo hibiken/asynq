@@ -54,12 +54,12 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 	go func() {
 		defer wg.Done()
 		var (
-			pubsub *redis.PubSub
-			err    error
+			sub base.CancellationSubscription
+			err error
 		)
 		// Try until successfully connect to Redis.
 		for {
-			pubsub, err = s.broker.CancelationPubSub()
+			sub, err = s.broker.SubscribeCancellation()
 			if err != nil {
 				s.logger.Errorf("cannot subscribe to cancelation channel: %v", err)
 				select {
@@ -72,15 +72,15 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 			}
 			break
 		}
-		cancelCh := pubsub.Channel()
+		cancelCh := sub.Channel()
 		for {
 			select {
 			case <-s.done:
-				pubsub.Close()
+				sub.Close()
 				s.logger.Debug("Subscriber done")
 				return
-			case msg := <-cancelCh:
-				cancel, ok := s.cancelations.Get(msg.Payload)
+			case id := <-cancelCh:
+				cancel, ok := s.cancelations.Get(id)
 				if ok {
 					cancel()
 				}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq/broker"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/rdb"
@@ -44,7 +45,13 @@ func NewClient(r RedisConnOpt) *Client {
 // NewClientFromRedisClient returns a new instance of Client given a redis.UniversalClient
 // Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
 func NewClientFromRedisClient(c redis.UniversalClient) *Client {
-	return &Client{broker: rdb.NewRDB(c), sharedConnection: true}
+	return NewClientFromBroker(rdb.NewRDB(c))
+}
+
+// NewClientFromBroker returns a new instance of Client given a broker.
+// Warning: The underlying broker will not be closed by Asynq, you are responsible for closing it.
+func NewClientFromBroker(b broker.Broker) *Client {
+	return &Client{broker: b, sharedConnection: true}
 }
 
 type OptionType int
