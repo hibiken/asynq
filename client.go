@@ -60,6 +60,7 @@ const (
 	TaskIDOpt
 	RetentionOpt
 	GroupOpt
+	SchedulerEntryIDOpt
 )
 
 // Option specifies the task processing behavior.
@@ -76,16 +77,17 @@ type Option interface {
 
 // Internal option representations.
 type (
-	retryOption     int
-	queueOption     string
-	taskIDOption    string
-	timeoutOption   time.Duration
-	deadlineOption  time.Time
-	uniqueOption    time.Duration
-	processAtOption time.Time
-	processInOption time.Duration
-	retentionOption time.Duration
-	groupOption     string
+	retryOption            int
+	queueOption            string
+	taskIDOption           string
+	timeoutOption          time.Duration
+	deadlineOption         time.Time
+	uniqueOption           time.Duration
+	processAtOption        time.Time
+	processInOption        time.Duration
+	retentionOption        time.Duration
+	groupOption            string
+	schedulerEntryIDOption string
 )
 
 // MaxRetry returns an option to specify the max number of times
@@ -216,6 +218,18 @@ func Group(name string) Option {
 func (name groupOption) String() string     { return fmt.Sprintf("Group(%q)", string(name)) }
 func (name groupOption) Type() OptionType   { return GroupOpt }
 func (name groupOption) Value() interface{} { return string(name) }
+
+// SchedulerEntryIDOpt returns an option to specify the scheduler entry ID.
+// This option is only applicable to registered scheduled jobs.
+func SchedulerEntryID(id string) Option {
+	return schedulerEntryIDOption(id)
+}
+
+func (id schedulerEntryIDOption) String() string {
+	return fmt.Sprintf("SchedulerEntryID(%q)", string(id))
+}
+func (id schedulerEntryIDOption) Type() OptionType   { return SchedulerEntryIDOpt }
+func (id schedulerEntryIDOption) Value() interface{} { return string(id) }
 
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
