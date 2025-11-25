@@ -406,3 +406,46 @@ type badConnOpt struct {
 func (b badConnOpt) MakeRedisClient() interface{} {
 	return nil
 }
+
+func TestSemaphore_LockCount(t *testing.T) {
+	desc := "ShouldReturnSetCardinalityAsTheLockCount"
+
+	sema := NewSemaphore(getRedisConnOpt(t), "task-9", 3)
+	defer sema.Close()
+
+	ctx, cancel := asynqcontext.New(&base.TaskMessage{
+		ID:    "task-9-id",
+		Queue: "task-9",
+	}, time.Now().Add(time.Second))
+	defer cancel()
+
+	b, err := sema.Acquire(ctx)
+	if !b {
+		t.Errorf("%s;\nSemaphore.Acquire() failed, want true", desc)
+	}
+	if err != nil {
+		t.Errorf("%s;\nSemaphore.Acquire() got error %v want nil", desc, err)
+	}
+
+	n, err := sema.LockCount(ctx)
+	if err != nil {
+		t.Errorf("%s;\nSemaphore.LockCount() got error %v want nil", desc, err)
+	}
+
+	if n != 1 {
+		t.Errorf("%s;\nSemaphore.LockCount() got %d want 1", desc, n)
+	}
+
+	if err := sema.Release(ctx); err != nil {
+		t.Errorf("%s;\nSemaphore.Release() got error %v", desc, err)
+	}
+
+	n, err = sema.LockCount(ctx)
+	if err != nil {
+		t.Errorf("%s;\nSemaphore.LockCount() got error %v want nil", desc, err)
+	}
+
+	if n != 0 {
+		t.Errorf("%s;\nSemaphore.LockCount() got %d want 0", desc, n)
+	}
+}
