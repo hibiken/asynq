@@ -88,7 +88,7 @@ func formatQueues(qmap map[string]int) string {
 		name     string
 		priority int
 	}
-	var queues []*queue
+	queues := make([]*queue, 0, len(qmap))
 	for qname, p := range qmap {
 		queues = append(queues, &queue{qname, p})
 	}
