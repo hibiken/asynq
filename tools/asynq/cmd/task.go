@@ -770,4 +770,3 @@ func taskRunAll(cmd *cobra.Command, args []string) {
 	}
 	fmt.Printf("%d tasks are now pending\n", n)
 }
-

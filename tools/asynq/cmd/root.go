@@ -1,3 +1,4 @@
+//
 // Copyright 2020 Kentaro Hibino. All rights reserved.
 // Use of this source code is governed by a MIT license
 // that can be found in the LICENSE file.
@@ -36,12 +37,14 @@ var (
 	uri      string
 	db       int
 	password string
+	username string
 
 	useRedisCluster bool
 	clusterAddrs    string
 	tlsServerName   string
 	insecure        bool
 	keyPrefix       string
+	useTLS          bool
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -259,7 +262,6 @@ func adjustPadding(lines ...*displayLine) {
 func rpad(s string, padding int) string {
 	tmpl := fmt.Sprintf("%%-%ds ", padding)
 	return fmt.Sprintf(tmpl, s)
-
 }
 
 // lpad adds padding to the left of a string.
@@ -310,10 +312,12 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "Redis server URI")
 	rootCmd.PersistentFlags().IntVarP(&db, "db", "n", 0, "Redis database number (default is 0)")
 	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "Password to use when connecting to redis server")
+	rootCmd.PersistentFlags().StringVarP(&username, "username", "U", "", "Username to use when connecting to Redis (ACL username)")
 	rootCmd.PersistentFlags().BoolVar(&useRedisCluster, "cluster", false, "Connect to redis cluster")
 	rootCmd.PersistentFlags().StringVar(&clusterAddrs, "cluster_addrs",
 		"127.0.0.1:7000,127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003,127.0.0.1:7004,127.0.0.1:7005",
 		"List of comma-separated redis server addresses")
+	rootCmd.PersistentFlags().BoolVar(&useTLS, "tls", false, "Enable TLS connection")
 	rootCmd.PersistentFlags().StringVar(&tlsServerName, "tls_server",
 		"", "Server name for TLS validation")
 	rootCmd.PersistentFlags().BoolVar(&insecure, "insecure",
@@ -323,8 +327,10 @@ func init() {
 	viper.BindPFlag("uri", rootCmd.PersistentFlags().Lookup("uri"))
 	viper.BindPFlag("db", rootCmd.PersistentFlags().Lookup("db"))
 	viper.BindPFlag("password", rootCmd.PersistentFlags().Lookup("password"))
+	viper.BindPFlag("username", rootCmd.PersistentFlags().Lookup("username"))
 	viper.BindPFlag("cluster", rootCmd.PersistentFlags().Lookup("cluster"))
 	viper.BindPFlag("cluster_addrs", rootCmd.PersistentFlags().Lookup("cluster_addrs"))
+	viper.BindPFlag("tls", rootCmd.PersistentFlags().Lookup("tls"))
 	viper.BindPFlag("tls_server", rootCmd.PersistentFlags().Lookup("tls_server"))
 	viper.BindPFlag("insecure", rootCmd.PersistentFlags().Lookup("insecure"))
 	viper.BindPFlag("key_prefix", rootCmd.PersistentFlags().Lookup("key_prefix"))
@@ -368,6 +374,7 @@ func createRDB() *rdb.RDB {
 		c = redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs:     addrs,
 			Password:  viper.GetString("password"),
+			Username:  viper.GetString("username"),
 			TLSConfig: getTLSConfig(),
 		})
 	} else {
@@ -375,6 +382,7 @@ func createRDB() *rdb.RDB {
 			Addr:      viper.GetString("uri"),
 			DB:        viper.GetInt("db"),
 			Password:  viper.GetString("password"),
+			Username:  viper.GetString("username"),
 			TLSConfig: getTLSConfig(),
 		})
 	}
@@ -397,6 +405,7 @@ func getRedisConnOpt() asynq.RedisConnOpt {
 		return asynq.RedisClusterClientOpt{
 			Addrs:     addrs,
 			Password:  viper.GetString("password"),
+			Username:  viper.GetString("username"),
 			TLSConfig: getTLSConfig(),
 			KeyPrefix: viper.GetString("key_prefix"),
 		}
@@ -405,6 +414,7 @@ func getRedisConnOpt() asynq.RedisConnOpt {
 		Addr:      viper.GetString("uri"),
 		DB:        viper.GetInt("db"),
 		Password:  viper.GetString("password"),
+		Username:  viper.GetString("username"),
 		TLSConfig: getTLSConfig(),
 		KeyPrefix: viper.GetString("key_prefix"),
 	}
@@ -412,10 +422,15 @@ func getRedisConnOpt() asynq.RedisConnOpt {
 
 func getTLSConfig() *tls.Config {
 	tlsServer := viper.GetString("tls_server")
-	if tlsServer == "" {
-		return nil
+	if tlsServer != "" {
+		return &tls.Config{ServerName: tlsServer, InsecureSkipVerify: viper.GetBool("insecure")}
 	}
-	return &tls.Config{ServerName: tlsServer, InsecureSkipVerify: viper.GetBool("insecure")}
+
+	if viper.GetBool("tls") {
+		return &tls.Config{InsecureSkipVerify: viper.GetBool("insecure")}
+	}
+
+	return nil
 }
 
 // printTable is a helper function to print data in table format.
