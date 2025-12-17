@@ -2,8 +2,6 @@ module github.com/hibiken/asynq/tools
 
 go 1.22
 
-replace github.com/hibiken/asynq => ../
-
 require (
 	github.com/MakeNowJust/heredoc/v2 v2.0.1
 	github.com/fatih/color v1.18.0
