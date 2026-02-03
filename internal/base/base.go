@@ -28,16 +28,55 @@ const Version = "0.26.0"
 // DefaultQueueName is the queue name used if none are specified by user.
 const DefaultQueueName = "default"
 
+// DefaultKeyPrefix is the default Redis key prefix used if none is specified.
+const DefaultKeyPrefix = "asynq"
+
+// Global variable to store the current key prefix
+var (
+	keyPrefix = DefaultKeyPrefix
+	keyMutex  = sync.RWMutex{}
+)
+
+// SetKeyPrefix sets the global Redis key prefix for all Asynq operations.
+func SetKeyPrefix(prefix string) {
+	keyMutex.Lock()
+	defer keyMutex.Unlock()
+	if prefix == "" {
+		keyPrefix = DefaultKeyPrefix
+	} else {
+		keyPrefix = prefix
+	}
+}
+
+// GetKeyPrefix returns the current Redis key prefix.
+func GetKeyPrefix() string {
+	keyMutex.RLock()
+	defer keyMutex.RUnlock()
+	return keyPrefix
+}
+
 // DefaultQueue is the redis key for the default queue.
 var DefaultQueue = PendingKey(DefaultQueueName)
 
-// Global Redis keys.
-const (
-	AllServers    = "asynq:servers"    // ZSET
-	AllWorkers    = "asynq:workers"    // ZSET
-	AllSchedulers = "asynq:schedulers" // ZSET
-	AllQueues     = "asynq:queues"     // SET
-	CancelChannel = "asynq:cancel"     // PubSub channel
+// getGlobalKey returns a global Redis key with the current prefix.
+func getGlobalKey(suffix string) string {
+	return GetKeyPrefix() + ":" + suffix
+}
+
+// Global Redis keys functions that return dynamic keys based on current prefix.
+func AllServersKey() string    { return getGlobalKey("servers") }    // ZSET
+func AllWorkersKey() string    { return getGlobalKey("workers") }    // ZSET
+func AllSchedulersKey() string { return getGlobalKey("schedulers") } // ZSET
+func AllQueuesKey() string     { return getGlobalKey("queues") }     // SET
+func CancelChannelKey() string { return getGlobalKey("cancel") }     // PubSub channel
+
+// Legacy global key variables for backward compatibility - these will be deprecated
+var (
+	AllServers    = AllServersKey()
+	AllWorkers    = AllWorkersKey()
+	AllSchedulers = AllSchedulersKey()
+	AllQueues     = AllQueuesKey()
+	CancelChannel = CancelChannelKey()
 )
 
 // TaskState denotes the state of a task.
@@ -104,7 +143,7 @@ func ValidateQueueName(qname string) error {
 
 // QueueKeyPrefix returns a prefix for all keys in the given queue.
 func QueueKeyPrefix(qname string) string {
-	return "asynq:{" + qname + "}:"
+	return GetKeyPrefix() + ":{" + qname + "}:"
 }
 
 // TaskKeyPrefix returns a prefix for task key.
@@ -178,22 +217,22 @@ func FailedKey(qname string, t time.Time) string {
 
 // ServerInfoKey returns a redis key for process info.
 func ServerInfoKey(hostname string, pid int, serverID string) string {
-	return fmt.Sprintf("asynq:servers:{%s:%d:%s}", hostname, pid, serverID)
+	return fmt.Sprintf("%s:servers:{%s:%d:%s}", GetKeyPrefix(), hostname, pid, serverID)
 }
 
 // WorkersKey returns a redis key for the workers given hostname, pid, and server ID.
 func WorkersKey(hostname string, pid int, serverID string) string {
-	return fmt.Sprintf("asynq:workers:{%s:%d:%s}", hostname, pid, serverID)
+	return fmt.Sprintf("%s:workers:{%s:%d:%s}", GetKeyPrefix(), hostname, pid, serverID)
 }
 
 // SchedulerEntriesKey returns a redis key for the scheduler entries given scheduler ID.
 func SchedulerEntriesKey(schedulerID string) string {
-	return "asynq:schedulers:{" + schedulerID + "}"
+	return GetKeyPrefix() + ":schedulers:{" + schedulerID + "}"
 }
 
 // SchedulerHistoryKey returns a redis key for the scheduler's history for the given entry.
 func SchedulerHistoryKey(entryID string) string {
-	return "asynq:scheduler_history:" + entryID
+	return GetKeyPrefix() + ":scheduler_history:" + entryID
 }
 
 // UniqueKey returns a redis key with the given type, payload, and queue name.
@@ -727,4 +766,10 @@ type Broker interface {
 	PublishCancelation(id string) error
 
 	WriteResult(qname, id string, data []byte) (n int, err error)
+}
+
+func ApplyKeyPrefix(prefix string) {
+	if prefix != "" {
+		SetKeyPrefix(prefix)
+	}
 }
