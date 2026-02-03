@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-02-03
+
+### Upgrades
+- Prepare CI for Go 1.24.x and 1.25.x (commit: e9037f0)
+
+### Added
+- Add Headers support to tasks (PR: https://github.com/hibiken/asynq/pull/1070)
+- Add `--tls` option to dash command (PR: https://github.com/hibiken/asynq/pull/1073)
+- Add `--username` CLI flag for Redis ACL authentication (PR: https://github.com/hibiken/asynq/pull/1083)
+- Add `UpdateTaskPayload` method for inspector (PR: https://github.com/hibiken/asynq/pull/1042)
+
+### Fixes
+- Fix: Correct error message text in ResultWriter.Write (PR: https://github.com/hibiken/asynq/pull/1054)
+- Fix: Wrap all fmt.Errorf errors with %w (PR: https://github.com/hibiken/asynq/pull/1047)
+- Fix: ServeMux.NotFoundHandler returns ErrHandlerNotFound error (PR: https://github.com/hibiken/asynq/pull/1031)
+
+### Changed
+- Docs: Update server.go documentation (PR: https://github.com/hibiken/asynq/pull/1010)
+- Chore: Fix godoc comment (PR: https://github.com/hibiken/asynq/pull/1009)
+
 ## [0.25.1] - 2024-12-11
 
 ### Upgrades
