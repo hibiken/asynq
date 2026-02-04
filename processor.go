@@ -189,6 +189,13 @@ func (p *processor) exec() {
 			if p.errLogLimiter.Allow() {
 				p.logger.Errorf("Dequeue error: %v", err)
 			}
+			// If Dequeue returns an error (e.g., Redis is unreachable),
+			// we should avoid busy-looping and consuming high CPU.
+			// Add a sleep here to slow down retry attempts.
+			// Without this, the processor will immediately retry Dequeue in a tight loop,
+			// causing high CPU usage when Redis is down.
+			jitter := rand.N(p.taskCheckInterval)
+			time.Sleep(p.taskCheckInterval/2 + jitter)
 			<-p.sema // release token
 			return
 		}
