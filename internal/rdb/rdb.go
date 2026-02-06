@@ -22,21 +22,23 @@ import (
 
 const statsTTL = 90 * 24 * time.Hour // 90 days
 
-// LeaseDuration is the duration used to initially create a lease and to extend it thereafter.
-const LeaseDuration = 30 * time.Second
+// DefaultLeaseDuration is the default lease duration (30 seconds)
+const DefaultLeaseDuration = 30 * time.Second
 
 // RDB is a client interface to query and mutate task queues.
 type RDB struct {
 	client          redis.UniversalClient
 	clock           timeutil.Clock
 	queuesPublished sync.Map
+	leaseDuration   time.Duration // configurable lease duration
 }
 
 // NewRDB returns a new instance of RDB.
 func NewRDB(client redis.UniversalClient) *RDB {
 	return &RDB{
-		client: client,
-		clock:  timeutil.NewRealClock(),
+		client:        client,
+		clock:         timeutil.NewRealClock(),
+		leaseDuration: DefaultLeaseDuration,
 	}
 }
 
@@ -55,6 +57,15 @@ func (r *RDB) Client() redis.UniversalClient {
 // Use this function to set the clock to SimulatedClock in tests.
 func (r *RDB) SetClock(c timeutil.Clock) {
 	r.clock = c
+}
+
+// SetLeaseDuration sets the lease duration for this RDB instance.
+// If d is zero or negative, the default duration (30s) is used.
+func (r *RDB) SetLeaseDuration(d time.Duration) {
+	if d <= 0 {
+		d = DefaultLeaseDuration
+	}
+	r.leaseDuration = d
 }
 
 // Ping checks the connection with redis server.
@@ -250,7 +261,7 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, leaseExpirationT
 			base.ActiveKey(qname),
 			base.LeaseKey(qname),
 		}
-		leaseExpirationTime = r.clock.Now().Add(LeaseDuration)
+		leaseExpirationTime = r.clock.Now().Add(r.leaseDuration)
 		argv := []interface{}{
 			leaseExpirationTime.Unix(),
 			base.TaskKeyPrefix(qname),
@@ -1352,10 +1363,10 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 	return msgs, nil
 }
 
-// ExtendLease extends the lease for the given tasks by LeaseDuration (30s).
+// ExtendLease extends the lease for the given tasks by the configured lease duration.
 // It returns a new expiration time if the operation was successful.
 func (r *RDB) ExtendLease(qname string, ids ...string) (expirationTime time.Time, err error) {
-	expireAt := r.clock.Now().Add(LeaseDuration)
+	expireAt := r.clock.Now().Add(r.leaseDuration)
 	var zs []redis.Z
 	for _, id := range ids {
 		zs = append(zs, redis.Z{Member: id, Score: float64(expireAt.Unix())})
