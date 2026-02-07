@@ -264,7 +264,9 @@ for i=1,2 do
     if (table.getn(ids) > 0) then
         for _, id in ipairs(ids) do
             local bytes = redis.call("MEMORY", "USAGE", ARGV[1] .. id)
-            sample_total = sample_total + bytes
+            if bytes then
+                sample_total = sample_total + bytes
+            end
         end
         local n = redis.call("LLEN", KEYS[i])
         local avg = sample_total / table.getn(ids)
@@ -281,7 +283,9 @@ for i=3,6 do
     if (table.getn(ids) > 0) then
         for _, id in ipairs(ids) do
             local bytes = redis.call("MEMORY", "USAGE", ARGV[1] .. id)
-            sample_total = sample_total + bytes
+            if bytes then
+                sample_total = sample_total + bytes
+            end
         end
         local n = redis.call("ZCARD", KEYS[i])
         local avg = sample_total / table.getn(ids)
@@ -304,13 +308,17 @@ if table.getn(groups) > 0 then
 			local ids = redis.call("ZRANGE", group_key, 0, sample_size - 1)
 			for _, id in ipairs(ids) do
 				local bytes = redis.call("MEMORY", "USAGE", ARGV[1] .. id)
-				agg_task_sample_total = agg_task_sample_total + bytes
-				agg_task_sample_size = agg_task_sample_size + 1
+				if bytes then
+					agg_task_sample_total = agg_task_sample_total + bytes
+					agg_task_sample_size = agg_task_sample_size + 1
+				end
 			end
 		end
 	end
-	local avg = agg_task_sample_total / agg_task_sample_size
-	memusg = memusg + (avg * agg_task_count)
+	if agg_task_sample_size > 0 then
+		local avg = agg_task_sample_total / agg_task_sample_size
+		memusg = memusg + (avg * agg_task_count)
+	end
 end
 return memusg
 `)
