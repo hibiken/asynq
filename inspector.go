@@ -64,7 +64,7 @@ func (i *Inspector) Groups(queue string) ([]*GroupInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	var res []*GroupInfo
+	res := make([]*GroupInfo, 0, len(stats))
 	for _, s := range stats {
 		res = append(res, &GroupInfo{
 			Group: s.Group,
@@ -189,7 +189,7 @@ func (i *Inspector) History(queue string, n int) ([]*DailyStats, error) {
 	if err != nil {
 		return nil, err
 	}
-	var res []*DailyStats
+	res := make([]*DailyStats, 0, len(stats))
 	for _, s := range stats {
 		res = append(res, &DailyStats{
 			Queue:     s.Queue,
@@ -363,7 +363,7 @@ func (i *Inspector) ListActiveTasks(queue string, opts ...ListOption) ([]*TaskIn
 	for _, msg := range expired {
 		expiredSet[msg.ID] = struct{}{}
 	}
-	var tasks []*TaskInfo
+	tasks := make([]*TaskInfo, 0, len(infos))
 	for _, i := range infos {
 		t := newTaskInfo(
 			i.Message,
@@ -395,7 +395,7 @@ func (i *Inspector) ListAggregatingTasks(queue, group string, opts ...ListOption
 	case err != nil:
 		return nil, fmt.Errorf("asynq: %w", err)
 	}
-	var tasks []*TaskInfo
+	tasks := make([]*TaskInfo, 0, len(infos))
 	for _, i := range infos {
 		tasks = append(tasks, newTaskInfo(
 			i.Message,
@@ -891,7 +891,7 @@ func (i *Inspector) ClusterNodes(queue string) ([]*ClusterNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	var res []*ClusterNode
+	res := make([]*ClusterNode, 0, len(nodes))
 	for _, node := range nodes {
 		res = append(res, &ClusterNode{ID: node.ID, Addr: node.Addr})
 	}
@@ -923,14 +923,15 @@ type SchedulerEntry struct {
 // SchedulerEntries returns a list of all entries registered with
 // currently running schedulers.
 func (i *Inspector) SchedulerEntries() ([]*SchedulerEntry, error) {
-	var entries []*SchedulerEntry
 	res, err := i.rdb.ListSchedulerEntries()
 	if err != nil {
 		return nil, err
 	}
+
+	entries := make([]*SchedulerEntry, 0, len(res))
 	for _, e := range res {
 		task := NewTask(e.Type, e.Payload)
-		var opts []Option
+		opts := make([]Option, 0, len(e.Opts))
 		for _, s := range e.Opts {
 			if o, err := parseOption(s); err == nil {
 				// ignore bad data
@@ -1042,7 +1043,7 @@ func (i *Inspector) ListSchedulerEnqueueEvents(entryID string, opts ...ListOptio
 	if err != nil {
 		return nil, err
 	}
-	var events []*SchedulerEnqueueEvent
+	events := make([]*SchedulerEnqueueEvent, 0, len(data))
 	for _, e := range data {
 		events = append(events, &SchedulerEnqueueEvent{TaskID: e.TaskID, EnqueuedAt: e.EnqueuedAt})
 	}
