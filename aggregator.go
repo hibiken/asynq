@@ -31,6 +31,9 @@ type aggregator struct {
 	maxDelay    time.Duration
 	maxSize     int
 
+	// Override group configurations.
+	groupConfigs map[string]GroupConfig
+
 	// User provided group aggregator.
 	ga GroupAggregator
 
@@ -50,6 +53,7 @@ type aggregatorParams struct {
 	maxDelay        time.Duration
 	maxSize         int
 	groupAggregator GroupAggregator
+	groupConfigs    map[string]GroupConfig
 }
 
 const (
@@ -66,18 +70,22 @@ func newAggregator(params aggregatorParams) *aggregator {
 	if params.gracePeriod < interval {
 		interval = params.gracePeriod
 	}
+	for _, config := range params.groupConfigs {
+		interval = min(interval, config.GracePeriod)
+	}
 	return &aggregator{
-		logger:      params.logger,
-		broker:      params.broker,
-		client:      &Client{broker: params.broker},
-		done:        make(chan struct{}),
-		queues:      params.queues,
-		gracePeriod: params.gracePeriod,
-		maxDelay:    params.maxDelay,
-		maxSize:     params.maxSize,
-		ga:          params.groupAggregator,
-		sema:        make(chan struct{}, maxConcurrentAggregationChecks),
-		interval:    interval,
+		logger:       params.logger,
+		broker:       params.broker,
+		client:       &Client{broker: params.broker},
+		done:         make(chan struct{}),
+		queues:       params.queues,
+		gracePeriod:  params.gracePeriod,
+		maxDelay:     params.maxDelay,
+		maxSize:      params.maxSize,
+		ga:           params.groupAggregator,
+		groupConfigs: params.groupConfigs,
+		sema:         make(chan struct{}, maxConcurrentAggregationChecks),
+		interval:     interval,
 	}
 }
 
@@ -135,9 +143,23 @@ func (a *aggregator) aggregate(t time.Time) {
 			a.logger.Errorf("Failed to list groups in queue: %q", qname)
 			continue
 		}
+		var (
+			gracePeriod time.Duration
+			maxDelay    time.Duration
+			maxSize     int
+		)
 		for _, gname := range groups {
+			if config, ok := a.groupConfigs[gname]; ok {
+				gracePeriod = config.GracePeriod
+				maxDelay = config.MaxDelay
+				maxSize = config.MaxSize
+			} else {
+				gracePeriod = a.gracePeriod
+				maxDelay = a.maxDelay
+				maxSize = a.maxSize
+			}
 			aggregationSetID, err := a.broker.AggregationCheck(
-				qname, gname, t, a.gracePeriod, a.maxDelay, a.maxSize)
+				qname, gname, t, gracePeriod, maxDelay, maxSize)
 			if err != nil {
 				a.logger.Errorf("Failed to run aggregation check: queue=%q group=%q", qname, gname)
 				continue
