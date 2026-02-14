@@ -575,3 +575,8 @@ func (w *ResultWriter) Write(data []byte) (n int, err error) {
 func (w *ResultWriter) TaskID() string {
 	return w.id
 }
+
+// QueueName returns the name of the queue the task belongs to.
+func (w *ResultWriter) QueueName() string {
+	return w.qname
+}
