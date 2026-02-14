@@ -18,11 +18,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
+
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
-	"github.com/redis/go-redis/v9"
 )
 
 // variables used for package testing.
@@ -384,6 +385,7 @@ func TestDequeue(t *testing.T) {
 		wantPending        map[string][]*base.TaskMessage
 		wantActive         map[string][]*base.TaskMessage
 		wantLease          map[string][]base.Z
+		queueConcurrency   map[string]int
 	}{
 		{
 			pending: map[string][]*base.TaskMessage{
@@ -491,6 +493,92 @@ func TestDequeue(t *testing.T) {
 				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.LeaseKey(queue), diff)
 			}
 		}
+	}
+}
+
+func TestDequeueWithQueueConcurrency(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+	const taskNum = 3
+	msgs := make([]*base.TaskMessage, 0, taskNum)
+	for i := 0; i < taskNum; i++ {
+		msg := &base.TaskMessage{
+			ID:       uuid.NewString(),
+			Type:     "send_email",
+			Payload:  h.JSON(map[string]interface{}{"subject": "hello!"}),
+			Queue:    "default",
+			Timeout:  1800,
+			Deadline: 0,
+		}
+		msgs = append(msgs, msg)
+	}
+
+	tests := []struct {
+		name             string
+		pending          map[string][]*base.TaskMessage
+		qnames           []string // list of queues to query
+		queueConcurrency map[string]int
+		wantMsgs         []*base.TaskMessage
+	}{
+		{
+			name: "without queue concurrency control",
+			pending: map[string][]*base.TaskMessage{
+				"default": msgs,
+			},
+			qnames:   []string{"default"},
+			wantMsgs: msgs,
+		},
+		{
+			name: "with queue concurrency control",
+			pending: map[string][]*base.TaskMessage{
+				"default": msgs,
+			},
+			qnames:           []string{"default"},
+			queueConcurrency: map[string]int{"default": 2},
+			wantMsgs:         msgs[:2],
+		},
+		{
+			name: "with queue concurrency zero",
+			pending: map[string][]*base.TaskMessage{
+				"default": msgs,
+			},
+			qnames:           []string{"default"},
+			queueConcurrency: map[string]int{"default": 0},
+			wantMsgs:         msgs,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h.FlushDB(t, r.client) // clean up db before each test case
+			h.SeedAllPendingQueues(t, r.client, tc.pending)
+			r.queueConcurrency.Range(func(key, value interface{}) bool {
+				r.queueConcurrency.Delete(key)
+				return true
+			})
+			for queue, n := range tc.queueConcurrency {
+				r.queueConcurrency.Store(queue, n)
+			}
+
+			gotMsgs := make([]*base.TaskMessage, 0, len(msgs))
+			for i := 0; i < len(msgs); i++ {
+				msg, _, err := r.Dequeue(tc.qnames...)
+				if errors.Is(err, errors.ErrNoProcessableTask) {
+					break
+				}
+				if err != nil {
+					t.Errorf("(*RDB).Dequeue(%v) returned error %v", tc.qnames, err)
+					continue
+				}
+				gotMsgs = append(gotMsgs, msg)
+			}
+			if diff := cmp.Diff(tc.wantMsgs, gotMsgs, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("(*RDB).Dequeue(%v) returned message %v; want %v",
+					tc.qnames, gotMsgs, tc.wantMsgs)
+			}
+		})
 	}
 }
 
