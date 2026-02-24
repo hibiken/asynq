@@ -139,6 +139,65 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 	return nil
 }
 
+// BatchEnqueue adds all given tasks to their respective pending lists using a
+// single Redis pipeline round-trip. It returns the number of newly enqueued
+// messages (tasks whose IDs already exist in Redis are silently skipped).
+func (r *RDB) BatchEnqueue(ctx context.Context, msgs []*base.TaskMessage) (int, error) {
+	var op errors.Op = "rdb.BatchEnqueue"
+	if len(msgs) == 0 {
+		return 0, nil
+	}
+
+	pipe := r.client.Pipeline()
+
+	// Track which indices in the pipeline correspond to enqueueCmd results vs SADD commands.
+	type cmdIndex struct{ pipeIdx int }
+	scriptCmds := make([]cmdIndex, 0, len(msgs))
+	pipeLen := 0
+
+	now := r.clock.Now().UnixNano()
+
+	for _, msg := range msgs {
+		encoded, err := base.EncodeMessage(msg)
+		if err != nil {
+			return 0, errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
+		}
+		if _, found := r.queuesPublished.Load(msg.Queue); !found {
+			pipe.SAdd(ctx, base.AllQueues, msg.Queue)
+			r.queuesPublished.Store(msg.Queue, true)
+			pipeLen++
+		}
+		keys := []string{
+			base.TaskKey(msg.Queue, msg.ID),
+			base.PendingKey(msg.Queue),
+		}
+		argv := []interface{}{encoded, msg.ID, now}
+		enqueueCmd.Run(ctx, pipe, keys, argv...)
+		scriptCmds = append(scriptCmds, cmdIndex{pipeIdx: pipeLen})
+		pipeLen++
+	}
+
+	cmds, err := pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		return 0, errors.E(op, errors.Unknown, fmt.Sprintf("redis pipeline error: %v", err))
+	}
+
+	enqueued := 0
+	for _, sc := range scriptCmds {
+		if sc.pipeIdx >= len(cmds) {
+			continue
+		}
+		res, err := cmds[sc.pipeIdx].(*redis.Cmd).Result()
+		if err != nil {
+			continue
+		}
+		if n, ok := res.(int64); ok && n == 1 {
+			enqueued++
+		}
+	}
+	return enqueued, nil
+}
+
 // enqueueUniqueCmd enqueues the task message if the task is unique.
 //
 // KEYS[1] -> unique key

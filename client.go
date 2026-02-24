@@ -420,6 +420,98 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 	return newTaskInfo(msg, state, opt.processAt, nil), nil
 }
 
+// BatchEnqueueResult holds the result of enqueuing a single task within a batch.
+type BatchEnqueueResult struct {
+	TaskInfo *TaskInfo
+	Err      error
+}
+
+// BatchEnqueueContext enqueues all given tasks using a single Redis pipeline round-trip.
+// Each task gets its own result so callers can handle partial success.
+// Only immediate-enqueue tasks are supported; scheduled, unique, and group tasks
+// are rejected with an error in the corresponding BatchEnqueueResult.
+func (c *Client) BatchEnqueueContext(ctx context.Context, tasks []*Task, opts ...Option) []BatchEnqueueResult {
+	results := make([]BatchEnqueueResult, len(tasks))
+	if len(tasks) == 0 {
+		return results
+	}
+
+	msgs := make([]*base.TaskMessage, 0, len(tasks))
+	msgIndexes := make([]int, 0, len(tasks))
+
+	now := time.Now()
+	for i, task := range tasks {
+		if task == nil {
+			results[i] = BatchEnqueueResult{Err: fmt.Errorf("task cannot be nil")}
+			continue
+		}
+		if strings.TrimSpace(task.Type()) == "" {
+			results[i] = BatchEnqueueResult{Err: fmt.Errorf("task typename cannot be empty")}
+			continue
+		}
+		merged := append(task.opts, opts...)
+		opt, err := composeOptions(merged...)
+		if err != nil {
+			results[i] = BatchEnqueueResult{Err: err}
+			continue
+		}
+		if opt.processAt.After(now) {
+			results[i] = BatchEnqueueResult{Err: fmt.Errorf("batch enqueue does not support scheduled tasks")}
+			continue
+		}
+		if opt.group != "" {
+			results[i] = BatchEnqueueResult{Err: fmt.Errorf("batch enqueue does not support group tasks")}
+			continue
+		}
+		if opt.uniqueTTL > 0 {
+			results[i] = BatchEnqueueResult{Err: fmt.Errorf("batch enqueue does not support unique tasks")}
+			continue
+		}
+		deadline := noDeadline
+		if !opt.deadline.IsZero() {
+			deadline = opt.deadline
+		}
+		timeout := noTimeout
+		if opt.timeout != 0 {
+			timeout = opt.timeout
+		}
+		if deadline.Equal(noDeadline) && timeout == noTimeout {
+			timeout = defaultTimeout
+		}
+		msg := &base.TaskMessage{
+			ID:        opt.taskID,
+			Type:      task.Type(),
+			Payload:   task.Payload(),
+			Headers:   task.Headers(),
+			Queue:     opt.queue,
+			Retry:     opt.retry,
+			Deadline:  deadline.Unix(),
+			Timeout:   int64(timeout.Seconds()),
+			Retention: int64(opt.retention.Seconds()),
+		}
+		msgs = append(msgs, msg)
+		msgIndexes = append(msgIndexes, i)
+	}
+
+	if len(msgs) == 0 {
+		return results
+	}
+
+	_, err := c.broker.BatchEnqueue(ctx, msgs)
+	if err != nil {
+		for _, idx := range msgIndexes {
+			results[idx] = BatchEnqueueResult{Err: err}
+		}
+		return results
+	}
+
+	for j, idx := range msgIndexes {
+		info := newTaskInfo(msgs[j], base.TaskStatePending, now, nil)
+		results[idx] = BatchEnqueueResult{TaskInfo: info}
+	}
+	return results
+}
+
 // Ping performs a ping against the redis connection.
 func (c *Client) Ping() error {
 	return c.broker.Ping()
