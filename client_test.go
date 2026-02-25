@@ -1661,3 +1661,127 @@ func TestClientEnqueueWithHeadersAndGroup(t *testing.T) {
 		}
 	}
 }
+
+func TestBatchEnqueueContext_ImmediateTasks(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	tasks := []*Task{
+		NewTask("task1", []byte("payload1")),
+		NewTask("task2", []byte("payload2")),
+		NewTask("task3", []byte("payload3")),
+	}
+
+	results := client.BatchEnqueueContext(context.Background(), tasks)
+	if len(results) != 3 {
+		t.Fatalf("BatchEnqueueContext returned %d results, want 3", len(results))
+	}
+	for i, res := range results {
+		if res.Err != nil {
+			t.Errorf("results[%d].Err = %v, want nil", i, res.Err)
+		}
+		if res.TaskInfo == nil {
+			t.Errorf("results[%d].TaskInfo is nil, want non-nil", i)
+			continue
+		}
+		if res.TaskInfo.Queue != "default" {
+			t.Errorf("results[%d].TaskInfo.Queue = %q, want %q", i, res.TaskInfo.Queue, "default")
+		}
+		if res.TaskInfo.State != TaskStatePending {
+			t.Errorf("results[%d].TaskInfo.State = %v, want %v", i, res.TaskInfo.State, TaskStatePending)
+		}
+	}
+
+	gotPending := h.GetPendingMessages(t, r, "default")
+	if len(gotPending) != 3 {
+		t.Errorf("len(pending) = %d, want 3", len(gotPending))
+	}
+}
+
+func TestBatchEnqueueContext_ScheduledTask(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	future := time.Now().Add(1 * time.Hour)
+	tasks := []*Task{
+		NewTask("scheduled_task", []byte("payload"), ProcessAt(future)),
+	}
+
+	results := client.BatchEnqueueContext(context.Background(), tasks)
+	if len(results) != 1 {
+		t.Fatalf("BatchEnqueueContext returned %d results, want 1", len(results))
+	}
+	if results[0].Err != nil {
+		t.Fatalf("results[0].Err = %v, want nil", results[0].Err)
+	}
+	if results[0].TaskInfo == nil {
+		t.Fatal("results[0].TaskInfo is nil, want non-nil")
+	}
+	if results[0].TaskInfo.State != TaskStateScheduled {
+		t.Errorf("results[0].TaskInfo.State = %v, want %v", results[0].TaskInfo.State, TaskStateScheduled)
+	}
+
+	gotScheduled := h.GetScheduledMessages(t, r, "default")
+	if len(gotScheduled) != 1 {
+		t.Errorf("len(scheduled) = %d, want 1", len(gotScheduled))
+	}
+}
+
+func TestBatchEnqueueContext_MixedBatch(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	future := time.Now().Add(1 * time.Hour)
+	tasks := []*Task{
+		NewTask("immediate1", []byte("p1")),
+		NewTask("scheduled1", []byte("p2"), ProcessAt(future)),
+		NewTask("immediate2", []byte("p3")),
+		NewTask("grouped1", []byte("p4"), Group("mygroup")),
+		NewTask("immediate3", []byte("p5")),
+	}
+
+	results := client.BatchEnqueueContext(context.Background(), tasks)
+	if len(results) != 5 {
+		t.Fatalf("BatchEnqueueContext returned %d results, want 5", len(results))
+	}
+
+	// Immediate tasks (indices 0, 2, 4) should succeed with Pending state.
+	for _, idx := range []int{0, 2, 4} {
+		if results[idx].Err != nil {
+			t.Errorf("results[%d].Err = %v, want nil (immediate task)", idx, results[idx].Err)
+		}
+		if results[idx].TaskInfo == nil {
+			t.Errorf("results[%d].TaskInfo is nil, want non-nil", idx)
+			continue
+		}
+		if results[idx].TaskInfo.State != TaskStatePending {
+			t.Errorf("results[%d].TaskInfo.State = %v, want %v", idx, results[idx].TaskInfo.State, TaskStatePending)
+		}
+	}
+
+	// Scheduled task (index 1) should succeed with Scheduled state.
+	if results[1].Err != nil {
+		t.Errorf("results[1].Err = %v, want nil (scheduled task)", results[1].Err)
+	}
+	if results[1].TaskInfo != nil && results[1].TaskInfo.State != TaskStateScheduled {
+		t.Errorf("results[1].TaskInfo.State = %v, want %v", results[1].TaskInfo.State, TaskStateScheduled)
+	}
+
+	// Grouped task (index 3) should be rejected.
+	if results[3].Err == nil {
+		t.Error("results[3].Err is nil, want error for group task")
+	}
+
+	gotPending := h.GetPendingMessages(t, r, "default")
+	if len(gotPending) != 3 {
+		t.Errorf("len(pending) = %d, want 3", len(gotPending))
+	}
+
+	gotScheduled := h.GetScheduledMessages(t, r, "default")
+	if len(gotScheduled) != 1 {
+		t.Errorf("len(scheduled) = %d, want 1", len(gotScheduled))
+	}
+}

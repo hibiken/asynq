@@ -142,37 +142,48 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 // BatchEnqueue adds all given tasks to their respective pending lists using a
 // single Redis pipeline round-trip. It returns the number of newly enqueued
 // messages (tasks whose IDs already exist in Redis are silently skipped).
-func (r *RDB) BatchEnqueue(ctx context.Context, msgs []*base.TaskMessage) (int, error) {
+// BatchEnqueue adds all given tasks to Redis using a single pipeline round-trip.
+// Each item is either enqueued immediately or scheduled based on its ProcessAt field.
+func (r *RDB) BatchEnqueue(ctx context.Context, items []base.BatchEnqueueItem) (int, error) {
 	var op errors.Op = "rdb.BatchEnqueue"
-	if len(msgs) == 0 {
+	if len(items) == 0 {
 		return 0, nil
 	}
 
 	pipe := r.client.Pipeline()
 
-	// Track which indices in the pipeline correspond to enqueueCmd results vs SADD commands.
 	type cmdIndex struct{ pipeIdx int }
-	scriptCmds := make([]cmdIndex, 0, len(msgs))
+	scriptCmds := make([]cmdIndex, 0, len(items))
 	pipeLen := 0
 
 	now := r.clock.Now().UnixNano()
 
-	for _, msg := range msgs {
-		encoded, err := base.EncodeMessage(msg)
+	for _, item := range items {
+		encoded, err := base.EncodeMessage(item.Msg)
 		if err != nil {
 			return 0, errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 		}
-		if _, found := r.queuesPublished.Load(msg.Queue); !found {
-			pipe.SAdd(ctx, base.AllQueues, msg.Queue)
-			r.queuesPublished.Store(msg.Queue, true)
+		if _, found := r.queuesPublished.Load(item.Msg.Queue); !found {
+			pipe.SAdd(ctx, base.AllQueues, item.Msg.Queue)
+			r.queuesPublished.Store(item.Msg.Queue, true)
 			pipeLen++
 		}
-		keys := []string{
-			base.TaskKey(msg.Queue, msg.ID),
-			base.PendingKey(msg.Queue),
+
+		if item.ProcessAt.IsZero() {
+			keys := []string{
+				base.TaskKey(item.Msg.Queue, item.Msg.ID),
+				base.PendingKey(item.Msg.Queue),
+			}
+			argv := []interface{}{encoded, item.Msg.ID, now}
+			enqueueCmd.Run(ctx, pipe, keys, argv...)
+		} else {
+			keys := []string{
+				base.TaskKey(item.Msg.Queue, item.Msg.ID),
+				base.ScheduledKey(item.Msg.Queue),
+			}
+			argv := []interface{}{encoded, item.ProcessAt.Unix(), item.Msg.ID}
+			scheduleCmd.Run(ctx, pipe, keys, argv...)
 		}
-		argv := []interface{}{encoded, msg.ID, now}
-		enqueueCmd.Run(ctx, pipe, keys, argv...)
 		scriptCmds = append(scriptCmds, cmdIndex{pipeIdx: pipeLen})
 		pipeLen++
 	}

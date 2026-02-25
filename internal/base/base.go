@@ -684,6 +684,14 @@ func (l *Lease) IsValid() bool {
 	return l.expireAt.After(now) || l.expireAt.Equal(now)
 }
 
+// BatchEnqueueItem pairs a task message with optional scheduling metadata for
+// batch enqueue operations. If ProcessAt is zero, the task is enqueued for
+// immediate processing; otherwise it is added to the scheduled set.
+type BatchEnqueueItem struct {
+	Msg       *TaskMessage
+	ProcessAt time.Time // zero value → immediate
+}
+
 // Broker is a message broker that supports operations to manage task queues.
 //
 // See rdb.RDB as a reference implementation.
@@ -692,7 +700,7 @@ type Broker interface {
 	Close() error
 	Enqueue(ctx context.Context, msg *TaskMessage) error
 	EnqueueUnique(ctx context.Context, msg *TaskMessage, ttl time.Duration) error
-	BatchEnqueue(ctx context.Context, msgs []*TaskMessage) (int, error)
+	BatchEnqueue(ctx context.Context, items []BatchEnqueueItem) (int, error)
 	Dequeue(qnames ...string) (*TaskMessage, time.Time, error)
 	Done(ctx context.Context, msg *TaskMessage) error
 	MarkAsComplete(ctx context.Context, msg *TaskMessage) error

@@ -173,9 +173,13 @@ func TestBatchEnqueue(t *testing.T) {
 
 	t.Run("enqueue multiple tasks", func(t *testing.T) {
 		h.FlushDB(t, r.client)
-		msgs := []*base.TaskMessage{t1, t2, t3}
+		items := []base.BatchEnqueueItem{
+			{Msg: t1},
+			{Msg: t2},
+			{Msg: t3},
+		}
 
-		n, err := r.BatchEnqueue(context.Background(), msgs)
+		n, err := r.BatchEnqueue(context.Background(), items)
 		if err != nil {
 			t.Fatalf("BatchEnqueue returned error: %v", err)
 		}
@@ -183,7 +187,8 @@ func TestBatchEnqueue(t *testing.T) {
 			t.Errorf("BatchEnqueue returned %d, want 3", n)
 		}
 
-		for _, msg := range msgs {
+		for _, item := range items {
+			msg := item.Msg
 			pendingKey := base.PendingKey(msg.Queue)
 			pendingIDs := r.client.LRange(context.Background(), pendingKey, 0, -1).Val()
 			found := false
@@ -227,12 +232,65 @@ func TestBatchEnqueue(t *testing.T) {
 		dup := *t1
 		newMsg := h.NewTaskMessage("new_task", nil)
 
-		n, err := r.BatchEnqueue(context.Background(), []*base.TaskMessage{&dup, newMsg})
+		items := []base.BatchEnqueueItem{
+			{Msg: &dup},
+			{Msg: newMsg},
+		}
+		n, err := r.BatchEnqueue(context.Background(), items)
 		if err != nil {
 			t.Fatalf("BatchEnqueue returned error: %v", err)
 		}
 		if n != 1 {
 			t.Errorf("BatchEnqueue returned %d, want 1 (duplicate should be skipped)", n)
+		}
+	})
+
+	t.Run("scheduled tasks", func(t *testing.T) {
+		h.FlushDB(t, r.client)
+
+		future := time.Now().Add(1 * time.Hour)
+		s1 := h.NewTaskMessage("deferred_email", nil)
+		items := []base.BatchEnqueueItem{
+			{Msg: t1},
+			{Msg: s1, ProcessAt: future},
+		}
+
+		n, err := r.BatchEnqueue(context.Background(), items)
+		if err != nil {
+			t.Fatalf("BatchEnqueue returned error: %v", err)
+		}
+		if n != 2 {
+			t.Errorf("BatchEnqueue returned %d, want 2", n)
+		}
+
+		// Immediate task should be in pending.
+		pendingIDs := r.client.LRange(context.Background(), base.PendingKey(t1.Queue), 0, -1).Val()
+		foundPending := false
+		for _, id := range pendingIDs {
+			if id == t1.ID {
+				foundPending = true
+			}
+		}
+		if !foundPending {
+			t.Errorf("immediate task %s not found in pending list", t1.ID)
+		}
+
+		// Scheduled task should be in scheduled set.
+		scheduledIDs := r.client.ZRange(context.Background(), base.ScheduledKey(s1.Queue), 0, -1).Val()
+		foundScheduled := false
+		for _, id := range scheduledIDs {
+			if id == s1.ID {
+				foundScheduled = true
+			}
+		}
+		if !foundScheduled {
+			t.Errorf("scheduled task %s not found in scheduled set", s1.ID)
+		}
+
+		taskKey := base.TaskKey(s1.Queue, s1.ID)
+		state := r.client.HGet(context.Background(), taskKey, "state").Val()
+		if state != "scheduled" {
+			t.Errorf("state for scheduled task %s = %q, want %q", s1.ID, state, "scheduled")
 		}
 	})
 }

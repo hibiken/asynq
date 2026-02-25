@@ -428,18 +428,23 @@ type BatchEnqueueResult struct {
 
 // BatchEnqueueContext enqueues all given tasks using a single Redis pipeline round-trip.
 // Each task gets its own result so callers can handle partial success.
-// Only immediate-enqueue tasks are supported; scheduled, unique, and group tasks
-// are rejected with an error in the corresponding BatchEnqueueResult.
+// Immediate and scheduled tasks are supported; unique and group tasks are
+// rejected with an error in the corresponding BatchEnqueueResult.
 func (c *Client) BatchEnqueueContext(ctx context.Context, tasks []*Task, opts ...Option) []BatchEnqueueResult {
 	results := make([]BatchEnqueueResult, len(tasks))
 	if len(tasks) == 0 {
 		return results
 	}
 
-	msgs := make([]*base.TaskMessage, 0, len(tasks))
-	msgIndexes := make([]int, 0, len(tasks))
+	type itemMeta struct {
+		state     base.TaskState
+		processAt time.Time
+	}
 
-	now := time.Now()
+	items := make([]base.BatchEnqueueItem, 0, len(tasks))
+	itemIndexes := make([]int, 0, len(tasks))
+	itemMetas := make([]itemMeta, 0, len(tasks))
+
 	for i, task := range tasks {
 		if task == nil {
 			results[i] = BatchEnqueueResult{Err: fmt.Errorf("task cannot be nil")}
@@ -453,10 +458,6 @@ func (c *Client) BatchEnqueueContext(ctx context.Context, tasks []*Task, opts ..
 		opt, err := composeOptions(merged...)
 		if err != nil {
 			results[i] = BatchEnqueueResult{Err: err}
-			continue
-		}
-		if opt.processAt.After(now) {
-			results[i] = BatchEnqueueResult{Err: fmt.Errorf("batch enqueue does not support scheduled tasks")}
 			continue
 		}
 		if opt.group != "" {
@@ -489,24 +490,38 @@ func (c *Client) BatchEnqueueContext(ctx context.Context, tasks []*Task, opts ..
 			Timeout:   int64(timeout.Seconds()),
 			Retention: int64(opt.retention.Seconds()),
 		}
-		msgs = append(msgs, msg)
-		msgIndexes = append(msgIndexes, i)
+
+		now := time.Now()
+		scheduled := opt.processAt.After(now)
+
+		item := base.BatchEnqueueItem{Msg: msg}
+		var meta itemMeta
+		if scheduled {
+			item.ProcessAt = opt.processAt
+			meta = itemMeta{state: base.TaskStateScheduled, processAt: opt.processAt}
+		} else {
+			meta = itemMeta{state: base.TaskStatePending, processAt: now}
+		}
+
+		items = append(items, item)
+		itemIndexes = append(itemIndexes, i)
+		itemMetas = append(itemMetas, meta)
 	}
 
-	if len(msgs) == 0 {
+	if len(items) == 0 {
 		return results
 	}
 
-	_, err := c.broker.BatchEnqueue(ctx, msgs)
+	_, err := c.broker.BatchEnqueue(ctx, items)
 	if err != nil {
-		for _, idx := range msgIndexes {
+		for _, idx := range itemIndexes {
 			results[idx] = BatchEnqueueResult{Err: err}
 		}
 		return results
 	}
 
-	for j, idx := range msgIndexes {
-		info := newTaskInfo(msgs[j], base.TaskStatePending, now, nil)
+	for j, idx := range itemIndexes {
+		info := newTaskInfo(items[j].Msg, itemMetas[j].state, itemMetas[j].processAt, nil)
 		results[idx] = BatchEnqueueResult{TaskInfo: info}
 	}
 	return results
