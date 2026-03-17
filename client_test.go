@@ -1341,13 +1341,13 @@ func TestClientEnqueueWithHeaders(t *testing.T) {
 		},
 		{
 			desc: "Task with header option",
-			task: NewTask("store_data", []byte("data"), Header("channel", "email")),
+			task: NewTask("store_data", []byte("data"), Header("channel", "email"), Header("user-id", "bob1234")),
 			opts: []Option{},
 			wantInfo: &TaskInfo{
 				Queue:         "default",
 				Type:          "store_data",
 				Payload:       []byte("data"),
-				Headers:       map[string]string{"channel": "email"},
+				Headers:       map[string]string{"channel": "email", "user-id": "bob1234"},
 				State:         TaskStatePending,
 				MaxRetry:      25,
 				Retried:       0,
@@ -1362,7 +1362,7 @@ func TestClientEnqueueWithHeaders(t *testing.T) {
 					{
 						Type:     "store_data",
 						Payload:  []byte("data"),
-						Headers:  map[string]string{"channel": "email"},
+						Headers:  map[string]string{"channel": "email", "user-id": "bob1234"},
 						Retry:    25,
 						Queue:    "default",
 						Timeout:  int64(defaultTimeout.Seconds()),
@@ -1374,12 +1374,12 @@ func TestClientEnqueueWithHeaders(t *testing.T) {
 		{
 			desc: "Enqueue task with header option",
 			task: NewTask("store_data", []byte("data")),
-			opts: []Option{Header("channel", "email"), MaxRetry(5)},
+			opts: []Option{Header("channel", "email"), Header("user-id", "bob1234"), MaxRetry(5)},
 			wantInfo: &TaskInfo{
 				Queue:         "default",
 				Type:          "store_data",
 				Payload:       []byte("data"),
-				Headers:       map[string]string{"channel": "email"},
+				Headers:       map[string]string{"channel": "email", "user-id": "bob1234"},
 				State:         TaskStatePending,
 				MaxRetry:      5,
 				Retried:       0,
@@ -1394,7 +1394,7 @@ func TestClientEnqueueWithHeaders(t *testing.T) {
 					{
 						Type:     "store_data",
 						Payload:  []byte("data"),
-						Headers:  map[string]string{"channel": "email"},
+						Headers:  map[string]string{"channel": "email", "user-id": "bob1234"},
 						Retry:    5,
 						Queue:    "default",
 						Timeout:  int64(defaultTimeout.Seconds()),
