@@ -234,6 +234,13 @@ func (h headerOption) String() string {
 func (h headerOption) Type() OptionType   { return HeaderOpt }
 func (h headerOption) Value() interface{} { return [2]string{h[0], h[1]} }
 
+func Headers(headers map[string]string) (ret []Option) {
+	for key, value := range headers {
+		ret = append(ret, Header(key, value))
+	}
+	return
+}
+
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
