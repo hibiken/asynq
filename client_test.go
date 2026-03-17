@@ -1339,6 +1339,70 @@ func TestClientEnqueueWithHeaders(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "Task with header option",
+			task: NewTask("store_data", []byte("data"), Header("channel", "email")),
+			opts: []Option{},
+			wantInfo: &TaskInfo{
+				Queue:         "default",
+				Type:          "store_data",
+				Payload:       []byte("data"),
+				Headers:       map[string]string{"channel": "email"},
+				State:         TaskStatePending,
+				MaxRetry:      25,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {
+					{
+						Type:     "store_data",
+						Payload:  []byte("data"),
+						Headers:  map[string]string{"channel": "email"},
+						Retry:    25,
+						Queue:    "default",
+						Timeout:  int64(defaultTimeout.Seconds()),
+						Deadline: noDeadline.Unix(),
+					},
+				},
+			},
+		},
+		{
+			desc: "Enqueue task with header option",
+			task: NewTask("store_data", []byte("data")),
+			opts: []Option{Header("channel", "email"), MaxRetry(5)},
+			wantInfo: &TaskInfo{
+				Queue:         "default",
+				Type:          "store_data",
+				Payload:       []byte("data"),
+				Headers:       map[string]string{"channel": "email"},
+				State:         TaskStatePending,
+				MaxRetry:      5,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {
+					{
+						Type:     "store_data",
+						Payload:  []byte("data"),
+						Headers:  map[string]string{"channel": "email"},
+						Retry:    5,
+						Queue:    "default",
+						Timeout:  int64(defaultTimeout.Seconds()),
+						Deadline: noDeadline.Unix(),
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {

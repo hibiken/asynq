@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -1002,6 +1003,13 @@ func parseOption(s string) (Option, error) {
 			return nil, err
 		}
 		return Retention(d), nil
+	case "Header":
+		var h [2]string
+		err := json.Unmarshal([]byte(arg), &h)
+		if err != nil {
+			return nil, err
+		}
+		return Header(h[0], h[1]), nil
 	default:
 		return nil, fmt.Errorf("cannot not parse option string %q", s)
 	}
