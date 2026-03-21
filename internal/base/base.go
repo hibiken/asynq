@@ -167,13 +167,15 @@ func FailedTotalKey(qname string) string {
 }
 
 // ProcessedKey returns a redis key for processed count for the given day for the queue.
+// The caller is responsible for converting t to the desired timezone before calling this function.
 func ProcessedKey(qname string, t time.Time) string {
-	return QueueKeyPrefix(qname) + "processed:" + t.UTC().Format("2006-01-02")
+	return QueueKeyPrefix(qname) + "processed:" + t.Format("2006-01-02")
 }
 
 // FailedKey returns a redis key for failure count for the given day for the queue.
+// The caller is responsible for converting t to the desired timezone before calling this function.
 func FailedKey(qname string, t time.Time) string {
-	return QueueKeyPrefix(qname) + "failed:" + t.UTC().Format("2006-01-02")
+	return QueueKeyPrefix(qname) + "failed:" + t.Format("2006-01-02")
 }
 
 // ServerInfoKey returns a redis key for process info.

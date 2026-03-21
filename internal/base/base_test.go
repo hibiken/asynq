@@ -209,6 +209,10 @@ func TestFailedTotalKey(t *testing.T) {
 }
 
 func TestProcessedKey(t *testing.T) {
+	shanghaiLoc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Skip("could not load Asia/Shanghai timezone, skipping")
+	}
 	tests := []struct {
 		qname string
 		input time.Time
@@ -217,6 +221,11 @@ func TestProcessedKey(t *testing.T) {
 		{"default", time.Date(2019, 11, 14, 10, 30, 1, 1, time.UTC), "asynq:{default}:processed:2019-11-14"},
 		{"critical", time.Date(2020, 12, 1, 1, 0, 1, 1, time.UTC), "asynq:{critical}:processed:2020-12-01"},
 		{"default", time.Date(2020, 1, 6, 15, 02, 1, 1, time.UTC), "asynq:{default}:processed:2020-01-06"},
+		// Timezone-aware test: 2024-03-22 07:30 CST = 2024-03-21 23:30 UTC
+		// With the fix, the key should use the local date (03-22), not UTC date (03-21).
+		{"default", time.Date(2024, 3, 22, 7, 30, 0, 0, shanghaiLoc), "asynq:{default}:processed:2024-03-22"},
+		// Edge case: exactly midnight CST = 16:00 previous day UTC
+		{"default", time.Date(2024, 3, 22, 0, 0, 0, 0, shanghaiLoc), "asynq:{default}:processed:2024-03-22"},
 	}
 
 	for _, tc := range tests {
@@ -228,6 +237,10 @@ func TestProcessedKey(t *testing.T) {
 }
 
 func TestFailedKey(t *testing.T) {
+	shanghaiLoc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Skip("could not load Asia/Shanghai timezone, skipping")
+	}
 	tests := []struct {
 		qname string
 		input time.Time
@@ -236,6 +249,9 @@ func TestFailedKey(t *testing.T) {
 		{"default", time.Date(2019, 11, 14, 10, 30, 1, 1, time.UTC), "asynq:{default}:failed:2019-11-14"},
 		{"custom", time.Date(2020, 12, 1, 1, 0, 1, 1, time.UTC), "asynq:{custom}:failed:2020-12-01"},
 		{"low", time.Date(2020, 1, 6, 15, 02, 1, 1, time.UTC), "asynq:{low}:failed:2020-01-06"},
+		// Timezone-aware test: 2024-03-22 07:30 CST = 2024-03-21 23:30 UTC
+		// With the fix, the key should use the local date (03-22), not UTC date (03-21).
+		{"default", time.Date(2024, 3, 22, 7, 30, 0, 0, shanghaiLoc), "asynq:{default}:failed:2024-03-22"},
 	}
 
 	for _, tc := range tests {
