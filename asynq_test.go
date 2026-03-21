@@ -148,6 +148,23 @@ func TestParseRedisURI(t *testing.T) {
 				SentinelPassword: "mypassword",
 			},
 		},
+		{
+			"redis-sentinel://localhost:5000,localhost:5001,localhost:5002/3?master=mymaster",
+			RedisFailoverClientOpt{
+				MasterName:    "mymaster",
+				SentinelAddrs: []string{"localhost:5000", "localhost:5001", "localhost:5002"},
+				DB:            3,
+			},
+		},
+		{
+			"redis-sentinel://:mypassword@localhost:5000,localhost:5001,localhost:5002/7?master=mymaster",
+			RedisFailoverClientOpt{
+				MasterName:       "mymaster",
+				SentinelAddrs:    []string{"localhost:5000", "localhost:5001", "localhost:5002"},
+				SentinelPassword: "mypassword",
+				DB:               7,
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -187,6 +204,10 @@ func TestParseRedisURIErrors(t *testing.T) {
 		{
 			"non integer for db numbers for socket",
 			"redis-socket:///some/path/to/redis?db=one",
+		},
+		{
+			"non integer for db number for sentinel",
+			"redis-sentinel://localhost:5000/abc?master=mymaster",
 		},
 	}
 
