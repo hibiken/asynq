@@ -146,7 +146,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 	if !exists {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	now := r.clock.Now()
+	now := r.clock.Now().In(r.location)
 	keys := []string{
 		base.PendingKey(qname),
 		base.ActiveKey(qname),
@@ -381,7 +381,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 		return nil, errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
 	const day = 24 * time.Hour
-	now := r.clock.Now().UTC()
+	now := r.clock.Now().In(r.location)
 	var days []time.Time
 	var keys []string
 	for i := 0; i < n; i++ {
