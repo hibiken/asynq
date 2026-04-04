@@ -6,7 +6,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
@@ -31,22 +30,25 @@ var groupListCmd = &cobra.Command{
 	Aliases: []string{"ls"},
 	Short:   "List groups",
 	Args:    cobra.NoArgs,
-	Run:     groupLists,
+	RunE:    groupLists,
 }
 
-func groupLists(cmd *cobra.Command, args []string) {
+func groupLists(cmd *cobra.Command, args []string) error {
 	qname, err := cmd.Flags().GetString("queue")
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	inspector := createInspector()
 	groups, err := inspector.Groups(qname)
+	if err != nil {
+		return fmt.Errorf("could not fetch groups: %v", err)
+	}
 	if len(groups) == 0 {
 		fmt.Printf("No groups found in queue %q\n", qname)
-		return
+		return nil
 	}
 	for _, g := range groups {
 		fmt.Println(g.Group)
 	}
+	return nil
 }

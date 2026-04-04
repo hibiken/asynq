@@ -7,7 +7,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -44,20 +43,19 @@ The command shows the following for each server:
 
 A "active" server is pulling tasks from queues and processing them.
 A "stopped" server is no longer pulling new tasks from queues`,
-	Run: serverList,
+	RunE: serverList,
 }
 
-func serverList(cmd *cobra.Command, args []string) {
+func serverList(cmd *cobra.Command, args []string) error {
 	r := createRDB()
 
 	servers, err := r.ListServers()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return fmt.Errorf("could not fetch list of servers: %v", err)
 	}
 	if len(servers) == 0 {
 		fmt.Println("No running servers")
-		return
+		return nil
 	}
 
 	// sort by hostname and pid
@@ -80,6 +78,7 @@ func serverList(cmd *cobra.Command, args []string) {
 		}
 	}
 	printTable(cols, printRows)
+	return nil
 }
 
 func formatQueues(qmap map[string]int) string {

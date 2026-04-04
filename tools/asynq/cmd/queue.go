@@ -7,7 +7,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/fatih/color"
@@ -44,16 +43,14 @@ var queueListCmd = &cobra.Command{
 	Use:     "list",
 	Short:   "List queues",
 	Aliases: []string{"ls"},
-	// TODO: Use RunE instead?
-	Run: queueList,
+	RunE:    queueList,
 }
 
 var queueInspectCmd = &cobra.Command{
 	Use:   "inspect <queue> [<queue>...]",
 	Short: "Display detailed information on one or more queues",
-	Args:  cobra.MinimumNArgs(1),
-	// TODO: Use RunE instead?
-	Run: queueInspect,
+	Args: cobra.MinimumNArgs(1),
+	RunE: queueInspect,
 	Example: heredoc.Doc(`
 		$ asynq queue inspect myqueue
 		$ asynq queue inspect queue1 queue2 queue3`),
@@ -62,8 +59,8 @@ var queueInspectCmd = &cobra.Command{
 var queueHistoryCmd = &cobra.Command{
 	Use:   "history <queue> [<queue>...]",
 	Short: "Display historical aggregate data from one or more queues",
-	Args:  cobra.MinimumNArgs(1),
-	Run:   queueHistory,
+	Args: cobra.MinimumNArgs(1),
+	RunE: queueHistory,
 	Example: heredoc.Doc(`
 		$ asynq queue history myqueue
 		$ asynq queue history queue1 queue2 queue3
@@ -74,7 +71,7 @@ var queuePauseCmd = &cobra.Command{
 	Use:   "pause <queue> [<queue>...]",
 	Short: "Pause one or more queues",
 	Args:  cobra.MinimumNArgs(1),
-	Run:   queuePause,
+	RunE:  queuePause,
 	Example: heredoc.Doc(`
 		$ asynq queue pause myqueue
 		$ asynq queue pause queue1 queue2 queue3`),
@@ -85,7 +82,7 @@ var queueUnpauseCmd = &cobra.Command{
 	Short:   "Resume (unpause) one or more queues",
 	Args:    cobra.MinimumNArgs(1),
 	Aliases: []string{"unpause"},
-	Run:     queueUnpause,
+	RunE:    queueUnpause,
 	Example: heredoc.Doc(`
 		$ asynq queue resume myqueue
 		$ asynq queue resume queue1 queue2 queue3`),
@@ -96,14 +93,14 @@ var queueRemoveCmd = &cobra.Command{
 	Short:   "Remove one or more queues",
 	Aliases: []string{"rm", "delete"},
 	Args:    cobra.MinimumNArgs(1),
-	Run:     queueRemove,
+	RunE:    queueRemove,
 	Example: heredoc.Doc(`
 		$ asynq queue rm myqueue
 		$ asynq queue rm queue1 queue2 queue3
 		$ asynq queue rm myqueue --force`),
 }
 
-func queueList(cmd *cobra.Command, args []string) {
+func queueList(cmd *cobra.Command, args []string) error {
 	type queueInfo struct {
 		name    string
 		keyslot int64
@@ -112,8 +109,7 @@ func queueList(cmd *cobra.Command, args []string) {
 	inspector := createInspector()
 	queues, err := inspector.Queues()
 	if err != nil {
-		fmt.Printf("error: Could not fetch list of queues: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("could not fetch list of queues: %v", err)
 	}
 	var qs []*queueInfo
 	for _, qname := range queues {
@@ -121,13 +117,13 @@ func queueList(cmd *cobra.Command, args []string) {
 		if useRedisCluster {
 			keyslot, err := inspector.ClusterKeySlot(qname)
 			if err != nil {
-				fmt.Errorf("error: Could not get cluster keyslot for %q\n", qname)
+				fmt.Printf("error: could not get cluster keyslot for %q\n", qname)
 				continue
 			}
 			q.keyslot = keyslot
 			nodes, err := inspector.ClusterNodes(qname)
 			if err != nil {
-				fmt.Errorf("error: Could not get cluster nodes for %q\n", qname)
+				fmt.Printf("error: could not get cluster nodes for %q\n", qname)
 				continue
 			}
 			q.nodes = nodes
@@ -148,9 +144,10 @@ func queueList(cmd *cobra.Command, args []string) {
 			fmt.Println(q.name)
 		}
 	}
+	return nil
 }
 
-func queueInspect(cmd *cobra.Command, args []string) {
+func queueInspect(cmd *cobra.Command, args []string) error {
 	inspector := createInspector()
 	for i, qname := range args {
 		if i > 0 {
@@ -163,6 +160,7 @@ func queueInspect(cmd *cobra.Command, args []string) {
 		}
 		printQueueInfo(info)
 	}
+	return nil
 }
 
 func printQueueInfo(info *asynq.QueueInfo) {
@@ -195,11 +193,10 @@ func printQueueInfo(info *asynq.QueueInfo) {
 	)
 }
 
-func queueHistory(cmd *cobra.Command, args []string) {
+func queueHistory(cmd *cobra.Command, args []string) error {
 	days, err := cmd.Flags().GetInt("days")
 	if err != nil {
-		fmt.Printf("error: Internal error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	inspector := createInspector()
 	for i, qname := range args {
@@ -214,6 +211,7 @@ func queueHistory(cmd *cobra.Command, args []string) {
 		}
 		printDailyStats(stats)
 	}
+	return nil
 }
 
 func printDailyStats(stats []*asynq.DailyStats) {
@@ -233,49 +231,63 @@ func printDailyStats(stats []*asynq.DailyStats) {
 	)
 }
 
-func queuePause(cmd *cobra.Command, args []string) {
+func queuePause(cmd *cobra.Command, args []string) error {
 	inspector := createInspector()
+	var firstErr error
 	for _, qname := range args {
 		err := inspector.PauseQueue(qname)
 		if err != nil {
 			fmt.Println(err)
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		fmt.Printf("Successfully paused queue %q\n", qname)
 	}
+	return firstErr
 }
 
-func queueUnpause(cmd *cobra.Command, args []string) {
+func queueUnpause(cmd *cobra.Command, args []string) error {
 	inspector := createInspector()
+	var firstErr error
 	for _, qname := range args {
 		err := inspector.UnpauseQueue(qname)
 		if err != nil {
 			fmt.Println(err)
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		fmt.Printf("Successfully unpaused queue %q\n", qname)
 	}
+	return firstErr
 }
 
-func queueRemove(cmd *cobra.Command, args []string) {
+func queueRemove(cmd *cobra.Command, args []string) error {
 	// TODO: Use inspector once RemoveQueue become public API.
 	force, err := cmd.Flags().GetBool("force")
 	if err != nil {
-		fmt.Printf("error: Internal error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	r := createRDB()
+	var firstErr error
 	for _, qname := range args {
 		err = r.RemoveQueue(qname, force)
 		if err != nil {
 			if errors.IsQueueNotEmpty(err) {
 				fmt.Printf("error: %v\nIf you are sure you want to delete it, run 'asynq queue rm --force %s'\n", err, qname)
-				continue
+			} else {
+				fmt.Printf("error: %v\n", err)
 			}
-			fmt.Printf("error: %v\n", err)
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		fmt.Printf("Successfully removed queue %q\n", qname)
 	}
+	return firstErr
 }
