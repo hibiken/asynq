@@ -160,6 +160,98 @@ func TestEnqueueTaskIdConflictError(t *testing.T) {
 	}
 }
 
+func TestEnqueueOverwritesArchivedTaskWithSameID(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	enqueueTime := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(enqueueTime))
+	ctx := context.Background()
+
+	msg := &base.TaskMessage{
+		ID:      "custom_id",
+		Type:    "foo",
+		Payload: nil,
+		Queue:   base.DefaultQueueName,
+	}
+
+	h.SeedArchivedQueue(t, r.client, []base.Z{
+		{Message: msg, Score: enqueueTime.Add(-1 * time.Hour).Unix()},
+	}, base.DefaultQueueName)
+
+	err := r.Enqueue(ctx, msg)
+	if err != nil {
+		t.Fatalf("Enqueue over archived task returned error: %v", err)
+	}
+
+	// Task should be in pending list.
+	pendingKey := base.PendingKey(msg.Queue)
+	pendingIDs := r.client.LRange(ctx, pendingKey, 0, -1).Val()
+	if len(pendingIDs) != 1 || pendingIDs[0] != msg.ID {
+		t.Errorf("Pending list = %v, want [%q]", pendingIDs, msg.ID)
+	}
+
+	// Task key should have state=pending.
+	taskKey := base.TaskKey(msg.Queue, msg.ID)
+	state := r.client.HGet(ctx, taskKey, "state").Val()
+	if state != "pending" {
+		t.Errorf("state = %q, want %q", state, "pending")
+	}
+
+	// Archived set should be empty.
+	archivedKey := base.ArchivedKey(msg.Queue)
+	archivedCount := r.client.ZCard(ctx, archivedKey).Val()
+	if archivedCount != 0 {
+		t.Errorf("Archived set has %d entries, want 0", archivedCount)
+	}
+}
+
+func TestEnqueueOverwritesCompletedTaskWithSameID(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	enqueueTime := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(enqueueTime))
+	ctx := context.Background()
+
+	msg := &base.TaskMessage{
+		ID:      "custom_id",
+		Type:    "foo",
+		Payload: nil,
+		Queue:   base.DefaultQueueName,
+	}
+
+	h.SeedCompletedQueue(t, r.client, []base.Z{
+		{Message: msg, Score: enqueueTime.Add(1 * time.Hour).Unix()},
+	}, base.DefaultQueueName)
+
+	err := r.Enqueue(ctx, msg)
+	if err != nil {
+		t.Fatalf("Enqueue over completed task returned error: %v", err)
+	}
+
+	// Task should be in pending list.
+	pendingKey := base.PendingKey(msg.Queue)
+	pendingIDs := r.client.LRange(ctx, pendingKey, 0, -1).Val()
+	if len(pendingIDs) != 1 || pendingIDs[0] != msg.ID {
+		t.Errorf("Pending list = %v, want [%q]", pendingIDs, msg.ID)
+	}
+
+	// Task key should have state=pending.
+	taskKey := base.TaskKey(msg.Queue, msg.ID)
+	state := r.client.HGet(ctx, taskKey, "state").Val()
+	if state != "pending" {
+		t.Errorf("state = %q, want %q", state, "pending")
+	}
+
+	// Completed set should be empty.
+	completedKey := base.CompletedKey(msg.Queue)
+	completedCount := r.client.ZCard(ctx, completedKey).Val()
+	if completedCount != 0 {
+		t.Errorf("Completed set has %d entries, want 0", completedCount)
+	}
+}
+
 func TestEnqueueQueueCache(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -1327,6 +1419,56 @@ func TestAddToGroupeTaskIdConflictError(t *testing.T) {
 	}
 }
 
+func TestAddToGroupOverwritesArchivedTaskWithSameID(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+	ctx := context.Background()
+	const groupKey = "mygroup"
+
+	msg := &base.TaskMessage{
+		ID:      "custom_id",
+		Type:    "foo",
+		Payload: nil,
+		Queue:   base.DefaultQueueName,
+	}
+
+	h.SeedArchivedQueue(t, r.client, []base.Z{
+		{Message: msg, Score: now.Add(-1 * time.Hour).Unix()},
+	}, base.DefaultQueueName)
+
+	err := r.AddToGroup(ctx, msg, groupKey)
+	if err != nil {
+		t.Fatalf("AddToGroup over archived task returned error: %v", err)
+	}
+
+	// Task should be in group set.
+	gkey := base.GroupKey(msg.Queue, groupKey)
+	zs := r.client.ZRangeWithScores(ctx, gkey, 0, -1).Val()
+	if len(zs) != 1 {
+		t.Fatalf("Group set has %d entries, want 1", len(zs))
+	}
+	if got := zs[0].Member.(string); got != msg.ID {
+		t.Errorf("Group set member = %q, want %q", got, msg.ID)
+	}
+
+	// Task key should have state=aggregating.
+	taskKey := base.TaskKey(msg.Queue, msg.ID)
+	state := r.client.HGet(ctx, taskKey, "state").Val()
+	if state != "aggregating" {
+		t.Errorf("state = %q, want %q", state, "aggregating")
+	}
+
+	// Archived set should be empty.
+	archivedKey := base.ArchivedKey(msg.Queue)
+	archivedCount := r.client.ZCard(ctx, archivedKey).Val()
+	if archivedCount != 0 {
+		t.Errorf("Archived set has %d entries, want 0", archivedCount)
+	}
+}
+
 func TestAddToGroupUnique(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -1545,6 +1687,55 @@ func TestScheduleTaskIdConflictError(t *testing.T) {
 			t.Errorf("Second message: Schedule returned %v, want %v", err, errors.ErrTaskIdConflict)
 			continue
 		}
+	}
+}
+
+func TestScheduleOverwritesArchivedTaskWithSameID(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	now := time.Now()
+	ctx := context.Background()
+	processAt := now.Add(15 * time.Minute)
+
+	msg := &base.TaskMessage{
+		ID:      "custom_id",
+		Type:    "foo",
+		Payload: nil,
+		Queue:   base.DefaultQueueName,
+	}
+
+	h.SeedArchivedQueue(t, r.client, []base.Z{
+		{Message: msg, Score: now.Add(-1 * time.Hour).Unix()},
+	}, base.DefaultQueueName)
+
+	err := r.Schedule(ctx, msg, processAt)
+	if err != nil {
+		t.Fatalf("Schedule over archived task returned error: %v", err)
+	}
+
+	// Task should be in scheduled set.
+	scheduledKey := base.ScheduledKey(msg.Queue)
+	zs := r.client.ZRangeWithScores(ctx, scheduledKey, 0, -1).Val()
+	if len(zs) != 1 {
+		t.Fatalf("Scheduled set has %d entries, want 1", len(zs))
+	}
+	if got := zs[0].Member.(string); got != msg.ID {
+		t.Errorf("Scheduled set member = %q, want %q", got, msg.ID)
+	}
+
+	// Task key should have state=scheduled.
+	taskKey := base.TaskKey(msg.Queue, msg.ID)
+	state := r.client.HGet(ctx, taskKey, "state").Val()
+	if state != "scheduled" {
+		t.Errorf("state = %q, want %q", state, "scheduled")
+	}
+
+	// Archived set should be empty.
+	archivedKey := base.ArchivedKey(msg.Queue)
+	archivedCount := r.client.ZCard(ctx, archivedKey).Val()
+	if archivedCount != 0 {
+		t.Errorf("Archived set has %d entries, want 0", archivedCount)
 	}
 }
 

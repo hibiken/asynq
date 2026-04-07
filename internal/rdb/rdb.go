@@ -82,11 +82,51 @@ func (r *RDB) runScriptWithErrorCode(ctx context.Context, op errors.Op, script *
 	return n, nil
 }
 
+// clearStaleLua returns a Lua fragment that checks whether a task key already
+// exists. If the task is in "archived" or "completed" state, it removes the
+// stale entry from the corresponding sorted set and deletes the hash so the
+// caller can proceed to enqueue. For any other state it returns 0 (conflict).
+//
+// Parameters are 1-based Lua KEYS/ARGV indices:
+//   - taskKeyIdx:      KEYS index of the task hash key
+//   - archivedKeyIdx:  KEYS index of the archived sorted set key
+//   - completedKeyIdx: KEYS index of the completed sorted set key
+//   - taskIDArgvIdx:   ARGV index of the task ID
+func clearStaleLua(taskKeyIdx, archivedKeyIdx, completedKeyIdx, taskIDArgvIdx int) string {
+	return fmt.Sprintf(`
+if redis.call("EXISTS", KEYS[%d]) == 1 then
+	local state = redis.call("HGET", KEYS[%d], "state")
+	if state == "archived" then
+		redis.call("ZREM", KEYS[%d], ARGV[%d])
+		redis.call("DEL", KEYS[%d])
+	elseif state == "completed" then
+		redis.call("ZREM", KEYS[%d], ARGV[%d])
+		redis.call("DEL", KEYS[%d])
+	else
+		return 0
+	end
+end
+`, taskKeyIdx, taskKeyIdx, archivedKeyIdx, taskIDArgvIdx, taskKeyIdx, completedKeyIdx, taskIDArgvIdx, taskKeyIdx)
+}
+
+// enqueueBaseKeys returns the archived and completed sorted-set keys for a
+// queue. These are appended to every enqueue-family script's KEYS so the
+// shared clearStaleLua fragment can clean up terminal-state tasks that would
+// otherwise block re-enqueue with the same TaskID.
+func enqueueBaseKeys(queue string) []string {
+	return []string{
+		base.ArchivedKey(queue),
+		base.CompletedKey(queue),
+	}
+}
+
 // enqueueCmd enqueues a given task message.
 //
 // Input:
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:pending
+// KEYS[3] -> asynq:{<qname>}:archived
+// KEYS[4] -> asynq:{<qname>}:completed
 // --
 // ARGV[1] -> task message data
 // ARGV[2] -> task ID
@@ -95,10 +135,7 @@ func (r *RDB) runScriptWithErrorCode(ctx context.Context, op errors.Op, script *
 // Output:
 // Returns 1 if successfully enqueued
 // Returns 0 if task ID already exists
-var enqueueCmd = redis.NewScript(`
-if redis.call("EXISTS", KEYS[1]) == 1 then
-	return 0
-end
+var enqueueCmd = redis.NewScript(clearStaleLua(1, 3, 4, 2) + `
 redis.call("HSET", KEYS[1],
            "msg", ARGV[1],
            "state", "pending",
@@ -124,6 +161,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 		base.TaskKey(msg.Queue, msg.ID),
 		base.PendingKey(msg.Queue),
 	}
+	keys = append(keys, enqueueBaseKeys(msg.Queue)...)
 	argv := []interface{}{
 		encoded,
 		msg.ID,
@@ -144,6 +182,8 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 // KEYS[1] -> unique key
 // KEYS[2] -> asynq:{<qname>}:t:<taskid>
 // KEYS[3] -> asynq:{<qname>}:pending
+// KEYS[4] -> asynq:{<qname>}:archived
+// KEYS[5] -> asynq:{<qname>}:completed
 // --
 // ARGV[1] -> task ID
 // ARGV[2] -> uniqueness lock TTL
@@ -159,9 +199,7 @@ local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
 if not ok then
   return -1
 end
-if redis.call("EXISTS", KEYS[2]) == 1 then
-  return 0
-end
+` + clearStaleLua(2, 4, 5, 1) + `
 redis.call("HSET", KEYS[2],
            "msg", ARGV[3],
            "state", "pending",
@@ -190,6 +228,7 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 		base.TaskKey(msg.Queue, msg.ID),
 		base.PendingKey(msg.Queue),
 	}
+	keys = append(keys, enqueueBaseKeys(msg.Queue)...)
 	argv := []interface{}{
 		msg.ID,
 		int(ttl.Seconds()),
@@ -509,6 +548,8 @@ func (r *RDB) Requeue(ctx context.Context, msg *base.TaskMessage) error {
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:g:<group_key>
 // KEYS[3] -> asynq:{<qname>}:groups
+// KEYS[4] -> asynq:{<qname>}:archived
+// KEYS[5] -> asynq:{<qname>}:completed
 // -------
 // ARGV[1] -> task message data
 // ARGV[2] -> task ID
@@ -518,10 +559,7 @@ func (r *RDB) Requeue(ctx context.Context, msg *base.TaskMessage) error {
 // Output:
 // Returns 1 if successfully added
 // Returns 0 if task ID already exists
-var addToGroupCmd = redis.NewScript(`
-if redis.call("EXISTS", KEYS[1]) == 1 then
-	return 0
-end
+var addToGroupCmd = redis.NewScript(clearStaleLua(1, 4, 5, 2) + `
 redis.call("HSET", KEYS[1],
            "msg", ARGV[1],
            "state", "aggregating",
@@ -548,6 +586,7 @@ func (r *RDB) AddToGroup(ctx context.Context, msg *base.TaskMessage, groupKey st
 		base.GroupKey(msg.Queue, groupKey),
 		base.AllGroups(msg.Queue),
 	}
+	keys = append(keys, enqueueBaseKeys(msg.Queue)...)
 	argv := []interface{}{
 		encoded,
 		msg.ID,
@@ -568,6 +607,8 @@ func (r *RDB) AddToGroup(ctx context.Context, msg *base.TaskMessage, groupKey st
 // KEYS[2] -> asynq:{<qname>}:g:<group_key>
 // KEYS[3] -> asynq:{<qname>}:groups
 // KEYS[4] -> unique key
+// KEYS[5] -> asynq:{<qname>}:archived
+// KEYS[6] -> asynq:{<qname>}:completed
 // -------
 // ARGV[1] -> task message data
 // ARGV[2] -> task ID
@@ -584,9 +625,7 @@ local ok = redis.call("SET", KEYS[4], ARGV[2], "NX", "EX", ARGV[5])
 if not ok then
   return -1
 end
-if redis.call("EXISTS", KEYS[1]) == 1 then
-	return 0
-end
+` + clearStaleLua(1, 5, 6, 2) + `
 redis.call("HSET", KEYS[1],
            "msg", ARGV[1],
            "state", "aggregating",
@@ -614,6 +653,7 @@ func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, group
 		base.AllGroups(msg.Queue),
 		base.UniqueKey(msg.Queue, msg.Type, msg.Payload),
 	}
+	keys = append(keys, enqueueBaseKeys(msg.Queue)...)
 	argv := []interface{}{
 		encoded,
 		msg.ID,
@@ -636,6 +676,8 @@ func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, group
 
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:scheduled
+// KEYS[3] -> asynq:{<qname>}:archived
+// KEYS[4] -> asynq:{<qname>}:completed
 // -------
 // ARGV[1] -> task message data
 // ARGV[2] -> process_at time in Unix time
@@ -644,10 +686,7 @@ func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, group
 // Output:
 // Returns 1 if successfully enqueued
 // Returns 0 if task ID already exists
-var scheduleCmd = redis.NewScript(`
-if redis.call("EXISTS", KEYS[1]) == 1 then
-	return 0
-end
+var scheduleCmd = redis.NewScript(clearStaleLua(1, 3, 4, 3) + `
 redis.call("HSET", KEYS[1],
            "msg", ARGV[1],
            "state", "scheduled")
@@ -672,6 +711,7 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 		base.TaskKey(msg.Queue, msg.ID),
 		base.ScheduledKey(msg.Queue),
 	}
+	keys = append(keys, enqueueBaseKeys(msg.Queue)...)
 	argv := []interface{}{
 		encoded,
 		processAt.Unix(),
@@ -690,6 +730,8 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 // KEYS[1] -> unique key
 // KEYS[2] -> asynq:{<qname>}:t:<task_id>
 // KEYS[3] -> asynq:{<qname>}:scheduled
+// KEYS[4] -> asynq:{<qname>}:archived
+// KEYS[5] -> asynq:{<qname>}:completed
 // -------
 // ARGV[1] -> task ID
 // ARGV[2] -> uniqueness lock TTL
@@ -705,9 +747,7 @@ local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
 if not ok then
   return -1
 end
-if redis.call("EXISTS", KEYS[2]) == 1 then
-  return 0
-end
+` + clearStaleLua(2, 4, 5, 1) + `
 redis.call("HSET", KEYS[2],
            "msg", ARGV[4],
            "state", "scheduled",
@@ -735,6 +775,7 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 		base.TaskKey(msg.Queue, msg.ID),
 		base.ScheduledKey(msg.Queue),
 	}
+	keys = append(keys, enqueueBaseKeys(msg.Queue)...)
 	argv := []interface{}{
 		msg.ID,
 		int(ttl.Seconds()),
