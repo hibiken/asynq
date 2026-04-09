@@ -64,6 +64,12 @@ Initialize your project by creating a folder and then running `go mod init githu
 go get -u github.com/hibiken/asynq
 ```
 
+You may use the latest features not available in the last tagged release by installing with:
+
+```sh
+go get -u github.com/hibiken/asynq@master
+```
+
 Make sure you're running a Redis server locally or from a [Docker](https://hub.docker.com/_/redis) container. Version `4.0` or higher is required.
 
 Next, write a package that encapsulates task creation and task handling.
