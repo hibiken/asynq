@@ -426,10 +426,39 @@ type BatchEnqueueResult struct {
 	Err      error
 }
 
-// BatchEnqueueContext enqueues all given tasks using a single Redis pipeline round-trip.
-// Each task gets its own result so callers can handle partial success.
-// Immediate and scheduled tasks are supported; unique and group tasks are
-// rejected with an error in the corresponding BatchEnqueueResult.
+// BatchEnqueueContext enqueues multiple tasks in a single Redis pipeline round-trip,
+// returning a per-task result slice aligned with the input tasks slice.
+//
+// # Atomicity Guarantees
+//
+// There is no all-or-nothing guarantee across the batch. Each task is executed as
+// an independent Lua script inside a Redis pipeline. Individual scripts are atomic
+// (the existence check, hash write, and list/sorted-set push for one task cannot
+// be partially applied), but the pipeline as a whole is not wrapped in a
+// MULTI/EXEC transaction. This means:
+//
+//   - Partial success is possible: some tasks may be enqueued while others are not.
+//   - A task whose ID already exists in Redis is silently skipped (treated as a
+//     no-op by the Lua script), and its result will still show success.
+//   - If the Redis pipeline call itself fails (e.g. connection lost, context
+//     cancelled), every task that passed client-side validation receives that
+//     error — none of them can be assumed to have been enqueued.
+//
+// # Validation Errors (pre-pipeline)
+//
+// The following are caught before any Redis call and rejected in the
+// corresponding BatchEnqueueResult.Err without affecting other tasks:
+//
+//   - nil task
+//   - empty task type name
+//   - invalid options
+//   - group tasks (not supported in batch mode)
+//   - unique tasks (not supported in batch mode)
+//
+// # Supported Task Types
+//
+// Immediate and scheduled (via [ProcessAt] or [ProcessIn]) tasks are supported.
+// Group and unique tasks are rejected as described above.
 func (c *Client) BatchEnqueueContext(ctx context.Context, tasks []*Task, opts ...Option) []BatchEnqueueResult {
 	results := make([]BatchEnqueueResult, len(tasks))
 	if len(tasks) == 0 {

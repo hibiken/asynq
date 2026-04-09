@@ -700,6 +700,11 @@ type Broker interface {
 	Close() error
 	Enqueue(ctx context.Context, msg *TaskMessage) error
 	EnqueueUnique(ctx context.Context, msg *TaskMessage, ttl time.Duration) error
+	// BatchEnqueue enqueues multiple tasks in a single round-trip. It returns the
+	// count of newly enqueued tasks; duplicate IDs are silently skipped. The error
+	// is non-nil only on infrastructure failure (e.g. lost connection), in which
+	// case the count is meaningless. Individual task scripts are atomic but the
+	// batch as a whole is not transactional — partial success is possible.
 	BatchEnqueue(ctx context.Context, items []BatchEnqueueItem) (int, error)
 	Dequeue(qnames ...string) (*TaskMessage, time.Time, error)
 	Done(ctx context.Context, msg *TaskMessage) error
