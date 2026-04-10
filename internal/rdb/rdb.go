@@ -143,15 +143,14 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 // Each item is either enqueued immediately (ProcessAt is zero) or added to the
 // scheduled sorted set.
 //
+// WARNING: tasks whose IDs already exist in Redis are silently skipped.
+//
 // The pipeline executes independent Lua scripts per task — there is no
 // MULTI/EXEC wrapping the batch, so individual tasks may succeed or fail
-// independently. A task whose ID already exists in Redis is skipped by the Lua
-// script (returns 0) and does not count toward the returned enqueued total.
-//
-// The returned int is the number of tasks that were actually written to Redis
-// (i.e. whose IDs did not already exist). The returned error is non-nil only
-// when the pipeline call itself fails (network error, context cancellation,
-// etc.), in which case no individual result should be trusted.
+// independently. The returned int is the number of tasks actually written;
+// skipped duplicates do not count. The returned error is non-nil only when the
+// pipeline call itself fails (network error, context cancellation, etc.), in
+// which case no individual result should be trusted.
 //
 // Message encoding errors cause an immediate return before any Redis I/O.
 func (r *RDB) BatchEnqueue(ctx context.Context, items []base.BatchEnqueueItem) (int, error) {
