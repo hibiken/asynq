@@ -13,6 +13,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq/internal/testbroker"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/redis/go-redis/v9"
 )
@@ -1783,5 +1785,87 @@ func TestBatchEnqueueContext_MixedBatch(t *testing.T) {
 	gotScheduled := h.GetScheduledMessages(t, r, "default")
 	if len(gotScheduled) != 1 {
 		t.Errorf("len(scheduled) = %d, want 1", len(gotScheduled))
+	}
+}
+
+func TestBatchEnqueueContext_ValidationErrors(t *testing.T) {
+	setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	tests := []struct {
+		desc  string
+		tasks []*Task
+		opts  []Option
+	}{
+		{
+			desc:  "nil task",
+			tasks: []*Task{nil},
+		},
+		{
+			desc:  "empty task typename",
+			tasks: []*Task{NewTask("", []byte("payload"))},
+		},
+		{
+			desc:  "blank task typename",
+			tasks: []*Task{NewTask("   ", []byte("payload"))},
+		},
+		{
+			desc:  "invalid option: unique TTL less than 1s",
+			tasks: []*Task{NewTask("foo", nil)},
+			opts:  []Option{Unique(300 * time.Millisecond)},
+		},
+		{
+			desc:  "group task rejected",
+			tasks: []*Task{NewTask("foo", nil, Group("mygroup"))},
+		},
+		{
+			desc:  "unique task rejected",
+			tasks: []*Task{NewTask("foo", nil, Unique(time.Hour))},
+		},
+	}
+
+	for _, tc := range tests {
+		results := client.BatchEnqueueContext(context.Background(), tc.tasks, tc.opts...)
+		if len(results) != len(tc.tasks) {
+			t.Errorf("%s: got %d results, want %d", tc.desc, len(results), len(tc.tasks))
+			continue
+		}
+		for i, res := range results {
+			if res.Err == nil {
+				t.Errorf("%s: results[%d].Err = nil, want non-nil error", tc.desc, i)
+			}
+			if res.TaskInfo != nil {
+				t.Errorf("%s: results[%d].TaskInfo = %v, want nil", tc.desc, i, res.TaskInfo)
+			}
+		}
+	}
+}
+
+func TestBatchEnqueueContext_BrokerError(t *testing.T) {
+	r := rdb.NewRDB(setup(t))
+	defer r.Close()
+	testBroker := testbroker.NewTestBroker(r)
+	client := &Client{broker: testBroker, sharedConnection: true}
+
+	tasks := []*Task{
+		NewTask("task1", []byte("p1")),
+		NewTask("task2", []byte("p2")),
+	}
+
+	testBroker.Sleep()
+	results := client.BatchEnqueueContext(context.Background(), tasks)
+	testBroker.Wakeup()
+
+	if len(results) != 2 {
+		t.Fatalf("BatchEnqueueContext returned %d results, want 2", len(results))
+	}
+	for i, res := range results {
+		if res.Err == nil {
+			t.Errorf("results[%d].Err = nil, want non-nil error when broker is down", i)
+		}
+		if res.TaskInfo != nil {
+			t.Errorf("results[%d].TaskInfo = %v, want nil on broker error", i, res.TaskInfo)
+		}
 	}
 }

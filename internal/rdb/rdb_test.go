@@ -293,6 +293,21 @@ func TestBatchEnqueue(t *testing.T) {
 			t.Errorf("state for scheduled task %s = %q, want %q", s1.ID, state, "scheduled")
 		}
 	})
+
+	t.Run("pipeline error from cancelled context", func(t *testing.T) {
+		h.FlushDB(t, r.client)
+
+		msg := h.NewTaskMessage("pipeline_error_task", nil)
+		items := []base.BatchEnqueueItem{{Msg: msg}}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := r.BatchEnqueue(ctx, items)
+		if err == nil {
+			t.Error("BatchEnqueue with cancelled context returned nil error, want non-nil")
+		}
+	})
 }
 
 func TestEnqueueQueueCache(t *testing.T) {
