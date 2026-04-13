@@ -3274,6 +3274,29 @@ func TestCancelationPubSub(t *testing.T) {
 	mu.Unlock()
 }
 
+func TestCancelationPubSubReceiveError(t *testing.T) {
+	// Use a client connected to a non-existent Redis server to trigger
+	// a Receive() error. This verifies that the pubsub connection is
+	// closed on error, preventing connection leaks.
+	client := redis.NewClient(&redis.Options{
+		Addr: "localhost:0", // invalid port — connection will fail
+	})
+	r := NewRDB(client)
+	defer r.Close()
+
+	pubsub, err := r.CancelationPubSub()
+	if err == nil {
+		// If no error, we must clean up the pubsub.
+		if pubsub != nil {
+			pubsub.Close()
+		}
+		t.Fatal("(*RDB).CancelationPubSub() expected to return an error when redis is unreachable")
+	}
+	if pubsub != nil {
+		t.Error("(*RDB).CancelationPubSub() expected nil pubsub on error")
+	}
+}
+
 func TestWriteResult(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
