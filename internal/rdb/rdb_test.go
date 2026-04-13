@@ -3236,12 +3236,12 @@ func TestCancelationPubSub(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 
-	pubsub, err := r.CancelationPubSub()
+	sub, err := r.SubscribeCancellation()
 	if err != nil {
 		t.Fatalf("(*RDB).CancelationPubSub() returned an error: %v", err)
 	}
 
-	cancelCh := pubsub.Channel()
+	cancelCh := sub.Channel()
 
 	var (
 		mu       sync.Mutex
@@ -3249,9 +3249,9 @@ func TestCancelationPubSub(t *testing.T) {
 	)
 
 	go func() {
-		for msg := range cancelCh {
+		for id := range cancelCh {
 			mu.Lock()
-			received = append(received, msg.Payload)
+			received = append(received, id)
 			mu.Unlock()
 		}
 	}()
@@ -3265,7 +3265,7 @@ func TestCancelationPubSub(t *testing.T) {
 	// allow for message to reach subscribers.
 	time.Sleep(time.Second)
 
-	pubsub.Close()
+	sub.Close()
 
 	mu.Lock()
 	if diff := cmp.Diff(publish, received, h.SortStringSliceOpt); diff != "" {
