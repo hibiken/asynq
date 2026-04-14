@@ -10,7 +10,6 @@ import (
 
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
-	"github.com/redis/go-redis/v9"
 )
 
 type subscriber struct {
@@ -54,7 +53,7 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 	go func() {
 		defer wg.Done()
 		var (
-			pubsub *redis.PubSub
+			pubsub base.PubSub
 			err    error
 		)
 		// Try until successfully connect to Redis.
@@ -80,7 +79,7 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 				s.logger.Debug("Subscriber done")
 				return
 			case msg := <-cancelCh:
-				cancel, ok := s.cancelations.Get(msg.Payload)
+				cancel, ok := s.cancelations.Get(msg)
 				if ok {
 					cancel()
 				}

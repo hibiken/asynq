@@ -17,7 +17,6 @@ import (
 	"github.com/hibiken/asynq/internal/errors"
 	pb "github.com/hibiken/asynq/internal/proto"
 	"github.com/hibiken/asynq/internal/timeutil"
-	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -684,6 +683,12 @@ func (l *Lease) IsValid() bool {
 	return l.expireAt.After(now) || l.expireAt.Equal(now)
 }
 
+type PubSub interface {
+	Subscribe(ctx context.Context, channels ...string) error
+	Channel() <-chan string
+	Close() error
+}
+
 // Broker is a message broker that supports operations to manage task queues.
 //
 // See rdb.RDB as a reference implementation.
@@ -723,7 +728,7 @@ type Broker interface {
 	ClearServerState(host string, pid int, serverID string) error
 
 	// Cancelation related methods
-	CancelationPubSub() (*redis.PubSub, error) // TODO: Need to decouple from redis to support other brokers
+	CancelationPubSub() (PubSub, error) // TODO: Need to decouple from redis to support other brokers
 	PublishCancelation(id string) error
 
 	WriteResult(qname, id string, data []byte) (n int, err error)
