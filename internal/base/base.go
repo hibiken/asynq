@@ -684,7 +684,6 @@ func (l *Lease) IsValid() bool {
 }
 
 type PubSub interface {
-	Subscribe(ctx context.Context, channels ...string) error
 	Channel() <-chan string
 	Close() error
 }
