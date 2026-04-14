@@ -728,7 +728,7 @@ type Broker interface {
 	ClearServerState(host string, pid int, serverID string) error
 
 	// Cancelation related methods
-	CancelationPubSub() (PubSub, error) // TODO: Need to decouple from redis to support other brokers
+	CancelationPubSub() (PubSub, error)
 	PublishCancelation(id string) error
 
 	WriteResult(qname, id string, data []byte) (n int, err error)
