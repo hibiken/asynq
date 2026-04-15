@@ -222,6 +222,14 @@ func (name groupOption) Type() OptionType   { return GroupOpt }
 func (name groupOption) Value() interface{} { return string(name) }
 
 // Header returns an option to associate the key-value header to the task.
+//
+// This option is composable with other Client options and can be used together
+// with other options like MaxRetry, Queue, etc. For use cases where headers
+// need to be combined with other options, using Header option is recommended.
+//
+// Alternatively, NewTaskWithHeaders can be used to create a task with headers
+// directly, which may be preferable when headers are an intrinsic part of the
+// task definition rather than enqueue-time configuration.
 func Header(key, value string) Option {
 	return headerOption{key, value}
 }
@@ -233,13 +241,6 @@ func (h headerOption) String() string {
 }
 func (h headerOption) Type() OptionType   { return HeaderOpt }
 func (h headerOption) Value() interface{} { return [2]string{h[0], h[1]} }
-
-func Headers(headers map[string]string) (ret []Option) {
-	for key, value := range headers {
-		ret = append(ret, Header(key, value))
-	}
-	return
-}
 
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
