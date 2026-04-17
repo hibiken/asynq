@@ -78,9 +78,9 @@ func (dd *dashDrawer) Draw(state *State) {
 }
 
 func drawQueueSizeGraphs(d *ScreenDrawer, state *State) {
-	var qnames []string
-	var qsizes []string // queue size in strings
-	maxSize := 1        // not zero to avoid division by zero
+	qnames := make([]string, 0, len(state.queues))
+	qsizes := make([]string, 0, len(state.queues)) // queue size in strings
+	maxSize := 1                                   // not zero to avoid division by zero
 	for _, q := range state.queues {
 		qnames = append(qnames, q.Queue)
 		qsizes = append(qsizes, strconv.Itoa(q.Size))
