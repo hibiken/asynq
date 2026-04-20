@@ -237,6 +237,10 @@ type Config struct {
 	// If unset or zero, no size limit is used.
 	GroupMaxSize int
 
+	// GroupConfigs specifies the configuration for each group.
+	// If unset, the server will use the default group configuration.
+	GroupConfigs map[string]GroupConfig
+
 	// GroupAggregator specifies the aggregation function used to aggregate multiple tasks in a group into one task.
 	//
 	// If unset or nil, the group aggregation feature will be disabled on the server.
@@ -277,6 +281,30 @@ func (fn GroupAggregatorFunc) Aggregate(group string, tasks []*Task) *Task {
 // An ErrorHandler handles an error occurred during task processing.
 type ErrorHandler interface {
 	HandleError(ctx context.Context, task *Task, err error)
+}
+
+// GroupConfig specifies the configuration for a group of tasks.
+type GroupConfig struct {
+	// MaxDelay specifies the maximum amount of time the server will wait for incoming tasks before aggregating
+	// the tasks in a group.
+	//
+	// If unset or zero, the max delay is set to server's GroupMaxDelay.
+	MaxDelay time.Duration
+
+	// GracePeriod specifies the amount of time the server will wait for an incoming task before aggregating
+	// the tasks in a group. If an incoming task is received within this period, the server will wait for another
+	// period of the same length, up to MaxDelay if specified.
+	//
+	// If unset or zero, the grace period is set to server's GroupGracePeriod.
+	// Minimum duration for GracePeriod is 1 second. If value specified is less than a second, the call to
+	// NewServer will panic.
+	GracePeriod time.Duration
+
+	// MaxSize specifies the maximum number of tasks that can be aggregated into a single task within a group.
+	// If MaxSize is reached, the server will aggregate the tasks into one immediately.
+	//
+	// If unset or zero, the max size is set to server's GroupMaxSize.
+	MaxSize int
 }
 
 // The ErrorHandlerFunc type is an adapter to allow the use of  ordinary functions as a ErrorHandler.
@@ -496,6 +524,25 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	if groupGracePeriod < time.Second {
 		panic("GroupGracePeriod cannot be less than a second")
 	}
+	if cfg.GroupConfigs == nil {
+		cfg.GroupConfigs = make(map[string]GroupConfig)
+	}
+	// Set default value for GroupConfig if not set
+	for groupName, config := range cfg.GroupConfigs {
+		if config.GracePeriod == 0 {
+			config.GracePeriod = groupGracePeriod
+		}
+		if config.MaxDelay == time.Duration(0) {
+			config.MaxDelay = cfg.GroupMaxDelay
+		}
+		if config.MaxSize == 0 {
+			config.MaxSize = cfg.GroupMaxSize
+		}
+		if config.GracePeriod < time.Second {
+			panic(fmt.Sprintf("GroupGracePeriod (group: %s) cannot be less than a second", groupName))
+		}
+		cfg.GroupConfigs[groupName] = config
+	}
 	logger := log.NewLogger(cfg.Logger)
 	loglevel := cfg.LogLevel
 	if loglevel == level_unspecified {
@@ -601,6 +648,7 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		maxDelay:        cfg.GroupMaxDelay,
 		maxSize:         cfg.GroupMaxSize,
 		groupAggregator: cfg.GroupAggregator,
+		groupConfigs:    cfg.GroupConfigs,
 	})
 	return &Server{
 		logger:           logger,
