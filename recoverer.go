@@ -87,8 +87,8 @@ func (r *recoverer) recover() {
 }
 
 func (r *recoverer) recoverLeaseExpiredTasks() {
-	// Get all tasks which have expired 30 seconds ago or earlier to accommodate certain amount of clock skew.
-	cutoff := time.Now().Add(-30 * time.Second)
+	// Get all tasks which have expired 3 seconds ago or earlier to accommodate certain amount of clock skew.
+	cutoff := time.Now().Add(-3 * time.Second)
 	msgs, err := r.broker.ListLeaseExpired(cutoff, r.queues...)
 	if err != nil {
 		r.logger.Warnf("recoverer: could not list lease expired tasks: %v", err)

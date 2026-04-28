@@ -518,7 +518,7 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	heartbeater := newHeartbeater(heartbeaterParams{
 		logger:         logger,
 		broker:         rdb,
-		interval:       5 * time.Second,
+		interval:       2 * time.Second,
 		concurrency:    n,
 		queues:         queues,
 		strictPriority: cfg.StrictPriority,
@@ -564,7 +564,7 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		retryDelayFunc: delayFunc,
 		isFailureFunc:  isFailureFunc,
 		queues:         qnames,
-		interval:       1 * time.Minute,
+		interval:       3 * time.Second,
 	})
 	healthchecker := newHealthChecker(healthcheckerParams{
 		logger:          logger,
