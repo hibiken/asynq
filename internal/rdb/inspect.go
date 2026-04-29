@@ -7,6 +7,7 @@ package rdb
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -228,11 +229,15 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		}
 	}
 	stats.Size = size
-	memusg, err := r.memoryUsage(qname)
-	if err != nil {
-		return nil, errors.E(op, errors.CanonicalCode(err), err)
+	disableMemUsageProfiling := os.Getenv("DISABLE_MEMORY_USAGE_PROFILING")
+	if disableMemUsageProfiling == "false" || disableMemUsageProfiling == "" {
+		memusg, err := r.memoryUsage(qname)
+		if err != nil {
+			return nil, errors.E(op, errors.CanonicalCode(err), err)
+		}
+
+		stats.MemoryUsage = memusg
 	}
-	stats.MemoryUsage = memusg
 	return stats, nil
 }
 
