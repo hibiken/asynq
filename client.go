@@ -60,6 +60,8 @@ const (
 	TaskIDOpt
 	RetentionOpt
 	GroupOpt
+	LockOpt
+	LockKeyOpt
 )
 
 // Option specifies the task processing behavior.
@@ -86,6 +88,8 @@ type (
 	processInOption time.Duration
 	retentionOption time.Duration
 	groupOption     string
+	lockOption      struct{}
+	lockKeyOption   string
 )
 
 // MaxRetry returns an option to specify the max number of times
@@ -217,6 +221,27 @@ func (name groupOption) String() string     { return fmt.Sprintf("Group(%q)", st
 func (name groupOption) Type() OptionType   { return GroupOpt }
 func (name groupOption) Value() interface{} { return string(name) }
 
+// Lock returns an option to ensure only one worker processes a task delivery at a time.
+// The lock scope is derived from the task type and task ID, and the lock lifetime follows
+// the worker's processing deadline.
+func Lock() Option {
+	return lockOption{}
+}
+
+func (lockOption) String() string     { return "Lock()" }
+func (lockOption) Type() OptionType   { return LockOpt }
+func (lockOption) Value() interface{} { return nil }
+
+// LockKey returns an option to use a custom distributed lock key while processing the task.
+// Providing a custom key also enables locking for the task.
+func LockKey(key string) Option {
+	return lockKeyOption(key)
+}
+
+func (key lockKeyOption) String() string     { return fmt.Sprintf("LockKey(%q)", string(key)) }
+func (key lockKeyOption) Type() OptionType   { return LockKeyOpt }
+func (key lockKeyOption) Value() interface{} { return string(key) }
+
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
@@ -237,6 +262,8 @@ type option struct {
 	processAt time.Time
 	retention time.Duration
 	group     string
+	lock      bool
+	lockKey   string
 }
 
 // composeOptions merges user provided options into the default options
@@ -290,6 +317,15 @@ func composeOptions(opts ...Option) (option, error) {
 				return option{}, errors.New("group key cannot be empty")
 			}
 			res.group = key
+		case lockOption:
+			res.lock = true
+		case lockKeyOption:
+			key := string(opt)
+			if isBlank(key) {
+				return option{}, errors.New("lock key cannot be empty")
+			}
+			res.lock = true
+			res.lockKey = key
 		default:
 			// ignore unexpected option
 		}
@@ -385,7 +421,7 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 		ID:        opt.taskID,
 		Type:      task.Type(),
 		Payload:   task.Payload(),
-		Headers:   task.Headers(),
+		Headers:   taskLockHeaders(task.Headers(), opt.lock, opt.lockKey),
 		Queue:     opt.queue,
 		Retry:     opt.retry,
 		Deadline:  deadline.Unix(),
