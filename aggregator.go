@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"context"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -158,7 +159,10 @@ func (a *aggregator) aggregate(t time.Time) {
 			for i, m := range msgs {
 				tasks[i] = NewTaskWithHeaders(m.Type, m.Payload, m.Headers)
 			}
-			aggregatedTask := a.ga.Aggregate(gname, tasks)
+			aggregatedTask, ok := a.invokeAggregate(gname, tasks)
+			if !ok {
+				continue
+			}
 			ctx, cancel := context.WithDeadline(context.Background(), deadline)
 			if _, err := a.client.EnqueueContext(ctx, aggregatedTask, Queue(qname)); err != nil {
 				a.logger.Errorf("Failed to enqueue aggregated task (queue=%q, group=%q, setID=%q): %v",
@@ -173,4 +177,18 @@ func (a *aggregator) aggregate(t time.Time) {
 			cancel()
 		}
 	}
+}
+
+// invokeAggregate calls the user-provided GroupAggregator.Aggregate, recovering
+// from panics so a buggy aggregator doesn't crash the worker process. Returns
+// the aggregated task and true on success, or nil and false on panic.
+func (a *aggregator) invokeAggregate(group string, tasks []*Task) (result *Task, ok bool) {
+	defer func() {
+		if x := recover(); x != nil {
+			a.logger.Errorf("recovering from panic in GroupAggregator.Aggregate (group=%q). See the stack trace below for details:\n%s",
+				group, string(debug.Stack()))
+			ok = false
+		}
+	}()
+	return a.ga.Aggregate(group, tasks), true
 }

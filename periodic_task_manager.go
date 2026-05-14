@@ -7,6 +7,7 @@ package asynq
 import (
 	"crypto/sha256"
 	"fmt"
+	"runtime/debug"
 	"sort"
 	"sync"
 	"time"
@@ -138,7 +139,7 @@ func (mgr *PeriodicTaskManager) Start() error {
 				ticker.Stop()
 				return
 			case <-ticker.C:
-				mgr.sync()
+				mgr.safeSync()
 			}
 		}
 	}()
@@ -202,6 +203,17 @@ func (mgr *PeriodicTaskManager) remove(removed map[string]string) {
 		delete(mgr.m, hash)
 		mgr.s.logger.Infof("Successfully unregistered periodic task: entryID=%s", entryID)
 	}
+}
+
+// safeSync wraps sync() with panic recovery so a buggy
+// PeriodicTaskConfigProvider doesn't crash the worker process.
+func (mgr *PeriodicTaskManager) safeSync() {
+	defer func() {
+		if x := recover(); x != nil {
+			mgr.s.logger.Errorf("recovering from panic in PeriodicTaskConfigProvider. See the stack trace below for details:\n%s", string(debug.Stack()))
+		}
+	}()
+	mgr.sync()
 }
 
 func (mgr *PeriodicTaskManager) sync() {
