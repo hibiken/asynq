@@ -471,7 +471,7 @@ func (opt RedisClusterClientOpt) MakeRedisClient() interface{} {
 //	redis://[:password@]host[:port][/dbnumber]
 //	rediss://[:password@]host[:port][/dbnumber]
 //	redis-socket://[:password@]path[?db=dbnumber]
-//	redis-sentinel://[:password@]host1[:port][,host2:[:port]][,hostN:[:port]][?master=masterName]
+//	redis-sentinel://[:password@]host1[:port][,host2:[:port]][,hostN:[:port]][/dbnumber][?master=masterName]
 func ParseRedisURI(uri string) (RedisConnOpt, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
@@ -545,11 +545,20 @@ func parseRedisSocketURI(u *url.URL) (RedisConnOpt, error) {
 func parseRedisSentinelURI(u *url.URL) (RedisConnOpt, error) {
 	addrs := strings.Split(u.Host, ",")
 	master := u.Query().Get("master")
+	var db int
+	var err error
+	if len(u.Path) > 0 {
+		xs := strings.Split(strings.Trim(u.Path, "/"), "/")
+		db, err = strconv.Atoi(xs[0])
+		if err != nil {
+			return nil, fmt.Errorf("asynq: could not parse redis sentinel uri: database number should be the first segment of the path")
+		}
+	}
 	var password string
 	if v, ok := u.User.Password(); ok {
 		password = v
 	}
-	return RedisFailoverClientOpt{MasterName: master, SentinelAddrs: addrs, SentinelPassword: password}, nil
+	return RedisFailoverClientOpt{MasterName: master, SentinelAddrs: addrs, SentinelPassword: password, DB: db}, nil
 }
 
 // ResultWriter is a client interface to write result data for a task.
