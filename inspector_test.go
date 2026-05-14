@@ -3526,6 +3526,7 @@ func TestParseOption(t *testing.T) {
 		{ProcessAt(oneHourFromNow).String(), ProcessAtOpt, oneHourFromNow},
 		{`ProcessIn(10m)`, ProcessInOpt, 10 * time.Minute},
 		{`Retention(24h)`, RetentionOpt, 24 * time.Hour},
+		{`Header(["email", "hello@example.com"])`, HeaderOpt, [2]string{"email", "hello@example.com"}},
 	}
 
 	for _, tc := range tests {
@@ -3571,6 +3572,14 @@ func TestParseOption(t *testing.T) {
 					t.Fatal("returned Option with non time value")
 				}
 				if cmp.Equal(gotVal, tc.wantVal.(time.Time)) {
+					t.Fatalf("got value %v, want %v", gotVal, tc.wantVal)
+				}
+			case HeaderOpt:
+				gotVal, ok := got.Value().([2]string)
+				if !ok {
+					t.Fatal("returned Option with non array value")
+				}
+				if gotVal != tc.wantVal.([2]string) {
 					t.Fatalf("got value %v, want %v", gotVal, tc.wantVal)
 				}
 			default:

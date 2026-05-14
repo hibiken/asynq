@@ -6,7 +6,9 @@ package asynq
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -60,6 +62,7 @@ const (
 	TaskIDOpt
 	RetentionOpt
 	GroupOpt
+	HeaderOpt
 )
 
 // Option specifies the task processing behavior.
@@ -86,6 +89,7 @@ type (
 	processInOption time.Duration
 	retentionOption time.Duration
 	groupOption     string
+	headerOption    [2]string
 )
 
 // MaxRetry returns an option to specify the max number of times
@@ -217,6 +221,27 @@ func (name groupOption) String() string     { return fmt.Sprintf("Group(%q)", st
 func (name groupOption) Type() OptionType   { return GroupOpt }
 func (name groupOption) Value() interface{} { return string(name) }
 
+// Header returns an option to associate the key-value header to the task.
+//
+// This option is composable with other Client options and can be used together
+// with other options like MaxRetry, Queue, etc. For use cases where headers
+// need to be combined with other options, using Header option is recommended.
+//
+// Alternatively, NewTaskWithHeaders can be used to create a task with headers
+// directly, which may be preferable when headers are an intrinsic part of the
+// task definition rather than enqueue-time configuration.
+func Header(key, value string) Option {
+	return headerOption{key, value}
+}
+
+func (h headerOption) String() string {
+	var bytes []byte
+	bytes, _ = json.Marshal(h)
+	return fmt.Sprintf("Header(%s)", bytes)
+}
+func (h headerOption) Type() OptionType   { return HeaderOpt }
+func (h headerOption) Value() interface{} { return [2]string{h[0], h[1]} }
+
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
 // ErrDuplicateTask error only applies to tasks enqueued with a Unique option.
@@ -237,6 +262,7 @@ type option struct {
 	processAt time.Time
 	retention time.Duration
 	group     string
+	headers   map[string]string
 }
 
 // composeOptions merges user provided options into the default options
@@ -251,6 +277,7 @@ func composeOptions(opts ...Option) (option, error) {
 		timeout:   0, // do not set to defaultTimeout here
 		deadline:  time.Time{},
 		processAt: time.Now(),
+		headers:   make(map[string]string),
 	}
 	for _, opt := range opts {
 		switch opt := opt.(type) {
@@ -290,6 +317,9 @@ func composeOptions(opts ...Option) (option, error) {
 				return option{}, errors.New("group key cannot be empty")
 			}
 			res.group = key
+		case headerOption:
+			key, value := opt[0], opt[1]
+			res.headers[key] = value
 		default:
 			// ignore unexpected option
 		}
@@ -385,7 +415,7 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 		ID:        opt.taskID,
 		Type:      task.Type(),
 		Payload:   task.Payload(),
-		Headers:   task.Headers(),
+		Headers:   maps.Clone(task.Headers()),
 		Queue:     opt.queue,
 		Retry:     opt.retry,
 		Deadline:  deadline.Unix(),
@@ -393,6 +423,12 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 		UniqueKey: uniqueKey,
 		GroupKey:  opt.group,
 		Retention: int64(opt.retention.Seconds()),
+	}
+	if len(opt.headers) > 0 {
+		if msg.Headers == nil {
+			msg.Headers = make(map[string]string)
+		}
+		maps.Copy(msg.Headers, opt.headers)
 	}
 	now := time.Now()
 	var state base.TaskState
