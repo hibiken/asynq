@@ -7,6 +7,7 @@ package asynq
 import (
 	"crypto/sha256"
 	"fmt"
+	"runtime/debug"
 	"sort"
 	"sync"
 	"time"
@@ -130,6 +131,11 @@ func (mgr *PeriodicTaskManager) Start() error {
 	mgr.wg.Add(1)
 	go func() {
 		defer mgr.wg.Done()
+		defer func() {
+			if x := recover(); x != nil {
+				mgr.s.logger.Errorf("recovering from panic in PeriodicTaskConfigProvider. See the stack trace below for details:\n%s", string(debug.Stack()))
+			}
+		}()
 		ticker := time.NewTicker(mgr.syncInterval)
 		for {
 			select {

@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"context"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -129,6 +130,11 @@ func (a *aggregator) exec(t time.Time) {
 
 func (a *aggregator) aggregate(t time.Time) {
 	defer func() { <-a.sema /* release token */ }()
+	defer func() {
+		if x := recover(); x != nil {
+			a.logger.Errorf("recovering from panic in GroupAggregator. See the stack trace below for details:\n%s", string(debug.Stack()))
+		}
+	}()
 	for _, qname := range a.queues {
 		groups, err := a.broker.ListGroups(qname)
 		if err != nil {
