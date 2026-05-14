@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -63,6 +64,11 @@ func (hc *healthchecker) start(wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if x := recover(); x != nil {
+				hc.logger.Errorf("recovering from panic in HealthCheckFunc. See the stack trace below for details:\n%s", string(debug.Stack()))
+			}
+		}()
 		timer := time.NewTimer(hc.interval)
 		for {
 			select {
