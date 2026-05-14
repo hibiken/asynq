@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -217,5 +218,32 @@ func TestParseRedisURIErrors(t *testing.T) {
 			t.Errorf("%s: ParseRedisURI(%q) succeeded for malformed input, want error",
 				tc.desc, tc.uri)
 		}
+	}
+}
+
+func TestTaskOptions(t *testing.T) {
+	opts := []Option{
+		MaxRetry(3),
+		Queue("critical"),
+		Timeout(5 * time.Minute),
+	}
+	task := NewTask("mytask", []byte("payload"), opts...)
+
+	got := task.Options()
+	if len(got) != len(opts) {
+		t.Fatalf("task.Options() returned %d options, want %d", len(got), len(opts))
+	}
+	for i, o := range opts {
+		if got[i].String() != o.String() {
+			t.Errorf("task.Options()[%d] = %v, want %v", i, got[i], o)
+		}
+	}
+}
+
+func TestTaskOptionsNil(t *testing.T) {
+	task := NewTask("mytask", []byte("payload"))
+	got := task.Options()
+	if got != nil {
+		t.Errorf("task.Options() = %v, want nil for task with no options", got)
 	}
 }
