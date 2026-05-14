@@ -7,7 +7,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"github.com/MakeNowJust/heredoc/v2"
@@ -120,14 +119,14 @@ var taskListCmd = &cobra.Command{
 		$ asynq task list --queue=myqueue --state=pending
 		$ asynq task list --queue=myqueue --state=aggregating --group=mygroup
 		$ asynq task list --queue=myqueue --state=scheduled --page=2`),
-	Run: taskList,
+	RunE: taskList,
 }
 
 var taskInspectCmd = &cobra.Command{
 	Use:   "inspect --queue=<queue> --id=<task_id>",
 	Short: "Display detailed information on the specified task",
 	Args:  cobra.NoArgs,
-	Run:   taskInspect,
+	RunE:  taskInspect,
 	Example: heredoc.Doc(`
 		$ asynq task inspect --queue=myqueue --id=f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
@@ -136,7 +135,7 @@ var taskCancelCmd = &cobra.Command{
 	Use:   "cancel <task_id> [<task_id>...]",
 	Short: "Cancel one or more active tasks",
 	Args:  cobra.MinimumNArgs(1),
-	Run:   taskCancel,
+	RunE:  taskCancel,
 	Example: heredoc.Doc(`
 		$ asynq task cancel f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
@@ -145,7 +144,7 @@ var taskArchiveCmd = &cobra.Command{
 	Use:   "archive --queue=<queue> --id=<task_id>",
 	Short: "Archive a task with the given id",
 	Args:  cobra.NoArgs,
-	Run:   taskArchive,
+	RunE:  taskArchive,
 	Example: heredoc.Doc(`
 		$ asynq task archive --queue=myqueue --id=f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
@@ -155,7 +154,7 @@ var taskDeleteCmd = &cobra.Command{
 	Aliases: []string{"remove", "rm"},
 	Short:   "Delete a task with the given id",
 	Args:    cobra.NoArgs,
-	Run:     taskDelete,
+	RunE:    taskDelete,
 	Example: heredoc.Doc(`
 		$ asynq task delete --queue=myqueue --id=f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
@@ -164,7 +163,7 @@ var taskRunCmd = &cobra.Command{
 	Use:   "run --queue=<queue> --id=<task_id>",
 	Short: "Run a task with the given id",
 	Args:  cobra.NoArgs,
-	Run:   taskRun,
+	RunE:  taskRun,
 	Example: heredoc.Doc(`
 		$ asynq task run --queue=myqueue --id=f1720682-f5a6-4db1-8953-4f48ae541d0f`),
 }
@@ -173,7 +172,7 @@ var taskEnqueueCmd = &cobra.Command{
 	Use:   "enqueue --type_name=footype --payload=barpayload",
 	Short: "Enqueue a task",
 	Args:  cobra.NoArgs,
-	Run:   taskEnqueue,
+	RunE:  taskEnqueue,
 	Example: heredoc.Doc(`
 		$ asynq task enqueue -t footype -l barpayload
 		$ asynq task enqueue -t footask -l barpayload --retry 3 --id f1720682-f5a6-4db1-8953-4f48ae541d0f --queue bazqueue --timeout 100s --deadline 2024-12-14T01:23:45Z --unique 100s --process_at 2024-12-14T01:22:05Z --process_in 100s --retention 5h --group baygroup`),
@@ -183,7 +182,7 @@ var taskArchiveAllCmd = &cobra.Command{
 	Use:   "archiveall --queue=<queue> --state=<state>",
 	Short: "Archive all tasks in the given state",
 	Args:  cobra.NoArgs,
-	Run:   taskArchiveAll,
+	RunE:  taskArchiveAll,
 	Example: heredoc.Doc(`
 		$ asynq task archiveall --queue=myqueue --state=retry
 		$ asynq task archiveall --queue=myqueue --state=aggregating --group=mygroup`),
@@ -193,7 +192,7 @@ var taskDeleteAllCmd = &cobra.Command{
 	Use:   "deleteall --queue=<queue> --state=<state>",
 	Short: "Delete all tasks in the given state",
 	Args:  cobra.NoArgs,
-	Run:   taskDeleteAll,
+	RunE:  taskDeleteAll,
 	Example: heredoc.Doc(`
 		$ asynq task deleteall --queue=myqueue --state=archived
 		$ asynq task deleteall --queue=myqueue --state=aggregating --group=mygroup`),
@@ -203,74 +202,66 @@ var taskRunAllCmd = &cobra.Command{
 	Use:   "runall --queue=<queue> --state=<state>",
 	Short: "Run all tasks in the given state",
 	Args:  cobra.NoArgs,
-	Run:   taskRunAll,
+	RunE:  taskRunAll,
 	Example: heredoc.Doc(`
 		$ asynq task runall --queue=myqueue --state=retry
 		$ asynq task runall --queue=myqueue --state=aggregating --group=mygroup`),
 }
 
-func taskList(cmd *cobra.Command, args []string) {
+func taskList(cmd *cobra.Command, args []string) error {
 	qname, err := cmd.Flags().GetString("queue")
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	state, err := cmd.Flags().GetString("state")
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	pageNum, err := cmd.Flags().GetInt("page")
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	pageSize, err := cmd.Flags().GetInt("size")
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 
 	switch state {
 	case "active":
-		listActiveTasks(qname, pageNum, pageSize)
+		return listActiveTasks(qname, pageNum, pageSize)
 	case "pending":
-		listPendingTasks(qname, pageNum, pageSize)
+		return listPendingTasks(qname, pageNum, pageSize)
 	case "scheduled":
-		listScheduledTasks(qname, pageNum, pageSize)
+		return listScheduledTasks(qname, pageNum, pageSize)
 	case "retry":
-		listRetryTasks(qname, pageNum, pageSize)
+		return listRetryTasks(qname, pageNum, pageSize)
 	case "archived":
-		listArchivedTasks(qname, pageNum, pageSize)
+		return listArchivedTasks(qname, pageNum, pageSize)
 	case "completed":
-		listCompletedTasks(qname, pageNum, pageSize)
+		return listCompletedTasks(qname, pageNum, pageSize)
 	case "aggregating":
 		group, err := cmd.Flags().GetString("group")
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			return err
 		}
 		if group == "" {
-			fmt.Println("Flag --group is required for listing aggregating tasks")
-			os.Exit(1)
+			return fmt.Errorf("flag --group is required for listing aggregating tasks")
 		}
-		listAggregatingTasks(qname, group, pageNum, pageSize)
+		return listAggregatingTasks(qname, group, pageNum, pageSize)
 	default:
-		fmt.Printf("error: state=%q is not supported\n", state)
-		os.Exit(1)
+		return fmt.Errorf("state=%q is not supported", state)
 	}
 }
 
-func listActiveTasks(qname string, pageNum, pageSize int) {
+func listActiveTasks(qname string, pageNum, pageSize int) error {
 	i := createInspector()
 	tasks, err := i.ListActiveTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	if len(tasks) == 0 {
 		fmt.Printf("No active tasks in %q queue\n", qname)
-		return
+		return nil
 	}
 	printTable(
 		[]string{"ID", "Type", "Payload"},
@@ -280,18 +271,18 @@ func listActiveTasks(qname string, pageNum, pageSize int) {
 			}
 		},
 	)
+	return nil
 }
 
-func listPendingTasks(qname string, pageNum, pageSize int) {
+func listPendingTasks(qname string, pageNum, pageSize int) error {
 	i := createInspector()
 	tasks, err := i.ListPendingTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	if len(tasks) == 0 {
 		fmt.Printf("No pending tasks in %q queue\n", qname)
-		return
+		return nil
 	}
 	printTable(
 		[]string{"ID", "Type", "Payload"},
@@ -301,18 +292,18 @@ func listPendingTasks(qname string, pageNum, pageSize int) {
 			}
 		},
 	)
+	return nil
 }
 
-func listScheduledTasks(qname string, pageNum, pageSize int) {
+func listScheduledTasks(qname string, pageNum, pageSize int) error {
 	i := createInspector()
 	tasks, err := i.ListScheduledTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	if len(tasks) == 0 {
 		fmt.Printf("No scheduled tasks in %q queue\n", qname)
-		return
+		return nil
 	}
 	printTable(
 		[]string{"ID", "Type", "Payload", "Process In"},
@@ -322,6 +313,7 @@ func listScheduledTasks(qname string, pageNum, pageSize int) {
 			}
 		},
 	)
+	return nil
 }
 
 // formatProcessAt formats next process at time to human friendly string.
@@ -335,16 +327,15 @@ func formatProcessAt(processAt time.Time) string {
 	return fmt.Sprintf("in %v", d.Round(time.Second))
 }
 
-func listRetryTasks(qname string, pageNum, pageSize int) {
+func listRetryTasks(qname string, pageNum, pageSize int) error {
 	i := createInspector()
 	tasks, err := i.ListRetryTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	if len(tasks) == 0 {
 		fmt.Printf("No retry tasks in %q queue\n", qname)
-		return
+		return nil
 	}
 	printTable(
 		[]string{"ID", "Type", "Payload", "Next Retry", "Last Error", "Last Failed", "Retried", "Max Retry"},
@@ -355,18 +346,18 @@ func listRetryTasks(qname string, pageNum, pageSize int) {
 			}
 		},
 	)
+	return nil
 }
 
-func listArchivedTasks(qname string, pageNum, pageSize int) {
+func listArchivedTasks(qname string, pageNum, pageSize int) error {
 	i := createInspector()
 	tasks, err := i.ListArchivedTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	if len(tasks) == 0 {
 		fmt.Printf("No archived tasks in %q queue\n", qname)
-		return
+		return nil
 	}
 	printTable(
 		[]string{"ID", "Type", "Payload", "Last Failed", "Last Error"},
@@ -375,18 +366,18 @@ func listArchivedTasks(qname string, pageNum, pageSize int) {
 				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload), formatPastTime(t.LastFailedAt), t.LastErr)
 			}
 		})
+	return nil
 }
 
-func listCompletedTasks(qname string, pageNum, pageSize int) {
+func listCompletedTasks(qname string, pageNum, pageSize int) error {
 	i := createInspector()
 	tasks, err := i.ListCompletedTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	if len(tasks) == 0 {
 		fmt.Printf("No completed tasks in %q queue\n", qname)
-		return
+		return nil
 	}
 	printTable(
 		[]string{"ID", "Type", "Payload", "CompletedAt", "Result"},
@@ -395,18 +386,18 @@ func listCompletedTasks(qname string, pageNum, pageSize int) {
 				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload), formatPastTime(t.CompletedAt), sprintBytes(t.Result))
 			}
 		})
+	return nil
 }
 
-func listAggregatingTasks(qname, group string, pageNum, pageSize int) {
+func listAggregatingTasks(qname, group string, pageNum, pageSize int) error {
 	i := createInspector()
 	tasks, err := i.ListAggregatingTasks(qname, group, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	if len(tasks) == 0 {
 		fmt.Printf("No aggregating tasks in group %q \n", group)
-		return
+		return nil
 	}
 	printTable(
 		[]string{"ID", "Type", "Payload", "Group"},
@@ -416,38 +407,42 @@ func listAggregatingTasks(qname, group string, pageNum, pageSize int) {
 			}
 		},
 	)
+	return nil
 }
 
-func taskCancel(cmd *cobra.Command, args []string) {
+func taskCancel(cmd *cobra.Command, args []string) error {
 	i := createInspector()
+	var firstErr error
 	for _, id := range args {
 		if err := i.CancelProcessing(id); err != nil {
 			fmt.Printf("error: could not send cancelation signal: %v\n", err)
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		fmt.Printf("Sent cancelation signal for task %s\n", id)
 	}
+	return firstErr
 }
 
-func taskInspect(cmd *cobra.Command, args []string) {
+func taskInspect(cmd *cobra.Command, args []string) error {
 	qname, err := cmd.Flags().GetString("queue")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	id, err := cmd.Flags().GetString("id")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	i := createInspector()
 	info, err := i.GetTaskInfo(qname, id)
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("could not get task info: %v", err)
 	}
 	printTaskInfo(info)
+	return nil
 }
 
 func printTaskInfo(info *asynq.TaskInfo) {
@@ -486,80 +481,72 @@ func formatPastTime(t time.Time) string {
 	return t.Format(time.UnixDate)
 }
 
-func taskArchive(cmd *cobra.Command, args []string) {
+func taskArchive(cmd *cobra.Command, args []string) error {
 	qname, err := cmd.Flags().GetString("queue")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	id, err := cmd.Flags().GetString("id")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	i := createInspector()
 	err = i.ArchiveTask(qname, id)
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("could not archive task: %v", err)
 	}
 	fmt.Println("task archived")
+	return nil
 }
 
-func taskDelete(cmd *cobra.Command, args []string) {
+func taskDelete(cmd *cobra.Command, args []string) error {
 	qname, err := cmd.Flags().GetString("queue")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	id, err := cmd.Flags().GetString("id")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	i := createInspector()
 	err = i.DeleteTask(qname, id)
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("could not delete task: %v", err)
 	}
 	fmt.Println("task deleted")
+	return nil
 }
 
-func taskRun(cmd *cobra.Command, args []string) {
+func taskRun(cmd *cobra.Command, args []string) error {
 	qname, err := cmd.Flags().GetString("queue")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	id, err := cmd.Flags().GetString("id")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	i := createInspector()
 	err = i.RunTask(qname, id)
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("could not run task: %v", err)
 	}
 	fmt.Println("task is now pending")
+	return nil
 }
 
-func taskEnqueue(cmd *cobra.Command, args []string) {
+func taskEnqueue(cmd *cobra.Command, args []string) error {
 	typeName, err := cmd.Flags().GetString("type_name")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	payload, err := cmd.Flags().GetString("payload")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	// For all of the optional flags, we need to explicitly check whether they were set or
@@ -569,8 +556,7 @@ func taskEnqueue(cmd *cobra.Command, args []string) {
 	if cmd.Flags().Changed("retry") {
 		retry, err := cmd.Flags().GetInt("retry")
 		if err != nil {
-			fmt.Printf("error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 		opts = append(opts, asynq.MaxRetry(retry))
 	}
@@ -578,8 +564,7 @@ func taskEnqueue(cmd *cobra.Command, args []string) {
 	if cmd.Flags().Changed("queue") {
 		queue, err := cmd.Flags().GetString("queue")
 		if err != nil {
-			fmt.Printf("error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 		opts = append(opts, asynq.Queue(queue))
 	}
@@ -587,41 +572,63 @@ func taskEnqueue(cmd *cobra.Command, args []string) {
 	if cmd.Flags().Changed("id") {
 		id, err := cmd.Flags().GetString("id")
 		if err != nil {
-			fmt.Printf("error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 		opts = append(opts, asynq.TaskID(id))
 	}
 
 	if cmd.Flags().Changed("timeout") {
-		opts = append(opts, asynq.Timeout(getDuration(cmd, "timeout")))
+		d, err := getDuration(cmd, "timeout")
+		if err != nil {
+			return err
+		}
+		opts = append(opts, asynq.Timeout(d))
 	}
 
 	if cmd.Flags().Changed("deadline") {
-		opts = append(opts, asynq.Deadline(getTime(cmd, "deadline")))
+		t, err := getTime(cmd, "deadline")
+		if err != nil {
+			return err
+		}
+		opts = append(opts, asynq.Deadline(t))
 	}
 
 	if cmd.Flags().Changed("unique") {
-		opts = append(opts, asynq.Unique(getDuration(cmd, "unique")))
+		d, err := getDuration(cmd, "unique")
+		if err != nil {
+			return err
+		}
+		opts = append(opts, asynq.Unique(d))
 	}
 
 	if cmd.Flags().Changed("process_at") {
-		opts = append(opts, asynq.ProcessAt(getTime(cmd, "process_at")))
+		t, err := getTime(cmd, "process_at")
+		if err != nil {
+			return err
+		}
+		opts = append(opts, asynq.ProcessAt(t))
 	}
 
 	if cmd.Flags().Changed("process_in") {
-		opts = append(opts, asynq.ProcessIn(getDuration(cmd, "process_in")))
+		d, err := getDuration(cmd, "process_in")
+		if err != nil {
+			return err
+		}
+		opts = append(opts, asynq.ProcessIn(d))
 	}
 
 	if cmd.Flags().Changed("retention") {
-		opts = append(opts, asynq.Retention(getDuration(cmd, "retention")))
+		d, err := getDuration(cmd, "retention")
+		if err != nil {
+			return err
+		}
+		opts = append(opts, asynq.Retention(d))
 	}
 
 	if cmd.Flags().Changed("group") {
 		group, err := cmd.Flags().GetString("group")
 		if err != nil {
-			fmt.Printf("error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 		opts = append(opts, asynq.Group(group))
 	}
@@ -631,23 +638,21 @@ func taskEnqueue(cmd *cobra.Command, args []string) {
 
 	taskInfo, err := c.Enqueue(task)
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("could not enqueue task: %v", err)
 	}
 
 	fmt.Printf("Enqueued task %s to queue %s\n", taskInfo.ID, taskInfo.Queue)
+	return nil
 }
 
-func taskArchiveAll(cmd *cobra.Command, args []string) {
+func taskArchiveAll(cmd *cobra.Command, args []string) error {
 	qname, err := cmd.Flags().GetString("queue")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	state, err := cmd.Flags().GetString("state")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	i := createInspector()
@@ -662,35 +667,35 @@ func taskArchiveAll(cmd *cobra.Command, args []string) {
 	case "aggregating":
 		group, err := cmd.Flags().GetString("group")
 		if err != nil {
-			fmt.Printf("error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 		if group == "" {
-			fmt.Println("error: Flag --group is required for aggregating tasks")
-			os.Exit(1)
+			return fmt.Errorf("flag --group is required for aggregating tasks")
 		}
 		n, err = i.ArchiveAllAggregatingTasks(qname, group)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%d tasks archived\n", n)
+		return nil
 	default:
-		fmt.Printf("error: unsupported state %q\n", state)
-		os.Exit(1)
+		return fmt.Errorf("unsupported state %q", state)
 	}
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	fmt.Printf("%d tasks archived\n", n)
+	return nil
 }
 
-func taskDeleteAll(cmd *cobra.Command, args []string) {
+func taskDeleteAll(cmd *cobra.Command, args []string) error {
 	qname, err := cmd.Flags().GetString("queue")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	state, err := cmd.Flags().GetString("state")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	i := createInspector()
@@ -709,35 +714,35 @@ func taskDeleteAll(cmd *cobra.Command, args []string) {
 	case "aggregating":
 		group, err := cmd.Flags().GetString("group")
 		if err != nil {
-			fmt.Printf("error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 		if group == "" {
-			fmt.Println("error: Flag --group is required for aggregating tasks")
-			os.Exit(1)
+			return fmt.Errorf("flag --group is required for aggregating tasks")
 		}
 		n, err = i.DeleteAllAggregatingTasks(qname, group)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%d tasks deleted\n", n)
+		return nil
 	default:
-		fmt.Printf("error: unsupported state %q\n", state)
-		os.Exit(1)
+		return fmt.Errorf("unsupported state %q", state)
 	}
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	fmt.Printf("%d tasks deleted\n", n)
+	return nil
 }
 
-func taskRunAll(cmd *cobra.Command, args []string) {
+func taskRunAll(cmd *cobra.Command, args []string) error {
 	qname, err := cmd.Flags().GetString("queue")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	state, err := cmd.Flags().GetString("state")
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
 	i := createInspector()
@@ -752,21 +757,23 @@ func taskRunAll(cmd *cobra.Command, args []string) {
 	case "aggregating":
 		group, err := cmd.Flags().GetString("group")
 		if err != nil {
-			fmt.Printf("error: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 		if group == "" {
-			fmt.Println("error: Flag --group is required for aggregating tasks")
-			os.Exit(1)
+			return fmt.Errorf("flag --group is required for aggregating tasks")
 		}
 		n, err = i.RunAllAggregatingTasks(qname, group)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%d tasks are now pending\n", n)
+		return nil
 	default:
-		fmt.Printf("error: unsupported state %q\n", state)
-		os.Exit(1)
+		return fmt.Errorf("unsupported state %q", state)
 	}
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	fmt.Printf("%d tasks are now pending\n", n)
+	return nil
 }

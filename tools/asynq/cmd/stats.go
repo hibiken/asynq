@@ -35,7 +35,7 @@ var statsCmd = &cobra.Command{
 	    * Aggregate data for the current day
 	    * Basic information about the running redis instance`),
 	Args: cobra.NoArgs,
-	Run:  stats,
+	RunE: stats,
 }
 
 var jsonFlag bool
@@ -74,13 +74,12 @@ type FullStats struct {
 	RedisInfo  map[string]string `json:"redis"`
 }
 
-func stats(cmd *cobra.Command, args []string) {
+func stats(cmd *cobra.Command, args []string) error {
 	r := createRDB()
 
 	queues, err := r.AllQueues()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return fmt.Errorf("could not fetch queues: %v", err)
 	}
 
 	var aggStats AggregateStats
@@ -88,8 +87,7 @@ func stats(cmd *cobra.Command, args []string) {
 	for _, qname := range queues {
 		s, err := r.CurrentStats(qname)
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			return fmt.Errorf("could not fetch stats for queue %q: %v", qname, err)
 		}
 		aggStats.Active += s.Active
 		aggStats.Pending += s.Pending
@@ -110,8 +108,7 @@ func stats(cmd *cobra.Command, args []string) {
 		info, err = r.RedisInfo()
 	}
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return fmt.Errorf("could not fetch redis info: %v", err)
 	}
 
 	if jsonFlag {
@@ -122,12 +119,11 @@ func stats(cmd *cobra.Command, args []string) {
 		})
 
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			return fmt.Errorf("could not marshal stats to JSON: %v", err)
 		}
 
 		fmt.Println(string(statsJSON))
-		return
+		return nil
 	}
 
 	bold := color.New(color.Bold)
@@ -151,6 +147,7 @@ func stats(cmd *cobra.Command, args []string) {
 		printInfo(info)
 	}
 	fmt.Println()
+	return nil
 }
 
 func printStatsByState(s *AggregateStats) {

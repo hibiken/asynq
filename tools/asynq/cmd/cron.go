@@ -7,7 +7,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"time"
 
@@ -36,14 +35,14 @@ var cronListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List cron entries",
-	Run:     cronList,
+	RunE:    cronList,
 }
 
 var cronHistoryCmd = &cobra.Command{
 	Use:   "history <entry_id> [<entry_id>...]",
 	Short: "Show history of each cron tasks",
 	Args:  cobra.MinimumNArgs(1),
-	Run:   cronHistory,
+	RunE:  cronHistory,
 	Example: heredoc.Doc(`
 		$ asynq cron history 7837f142-6337-4217-9276-8f27281b67d1
 		$ asynq cron history 7837f142-6337-4217-9276-8f27281b67d1 bf6a8594-cd03-4968-b36a-8572c5e160dd
@@ -51,17 +50,16 @@ var cronHistoryCmd = &cobra.Command{
 		$ asynq cron history 7837f142-6337-4217-9276-8f27281b67d1 --page=2`),
 }
 
-func cronList(cmd *cobra.Command, args []string) {
+func cronList(cmd *cobra.Command, args []string) error {
 	inspector := createInspector()
 
 	entries, err := inspector.SchedulerEntries()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return fmt.Errorf("could not fetch scheduler entries: %v", err)
 	}
 	if len(entries) == 0 {
 		fmt.Println("No scheduler entries")
-		return
+		return nil
 	}
 
 	// Sort entries by spec.
@@ -78,6 +76,7 @@ func cronList(cmd *cobra.Command, args []string) {
 		}
 	}
 	printTable(cols, printRows)
+	return nil
 }
 
 // Returns a string describing when the next enqueue will happen.
@@ -97,16 +96,14 @@ func prevEnqueue(prevEnqueuedAt time.Time) string {
 	return fmt.Sprintf("%v ago", time.Since(prevEnqueuedAt).Round(time.Second))
 }
 
-func cronHistory(cmd *cobra.Command, args []string) {
+func cronHistory(cmd *cobra.Command, args []string) error {
 	pageNum, err := cmd.Flags().GetInt("page")
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	pageSize, err := cmd.Flags().GetInt("size")
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	inspector := createInspector()
 	for i, entryID := range args {
@@ -136,4 +133,5 @@ func cronHistory(cmd *cobra.Command, args []string) {
 		}
 		printTable(cols, printRows)
 	}
+	return nil
 }
