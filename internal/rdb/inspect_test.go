@@ -64,7 +64,8 @@ func TestCurrentStats(t *testing.T) {
 	m5 := h.NewTaskMessageBuilder().SetType("important_notification").SetQueue("critical").Build()
 	m6 := h.NewTaskMessageBuilder().SetType("minor_notification").SetQueue("low").Build()
 	m7 := h.NewTaskMessageBuilder().SetType("send_sms").Build()
-	now := time.Now()
+	// CurrentStats uses UTC by default unless SetLocation is called.
+	now := time.Now().UTC()
 	r.SetClock(timeutil.NewSimulatedClock(now))
 
 	tests := []struct {

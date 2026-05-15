@@ -3684,3 +3684,18 @@ func TestInspectorGroups(t *testing.T) {
 		})
 	}
 }
+
+func TestInspectorSetLocation(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Skip("could not load Asia/Shanghai timezone, skipping")
+	}
+	inspector := NewInspector(getRedisConnOpt(t))
+	defer inspector.Close()
+
+	// Should not panic with a valid location.
+	inspector.SetLocation(loc)
+
+	// Should not panic with nil (falls back to UTC).
+	inspector.SetLocation(nil)
+}
