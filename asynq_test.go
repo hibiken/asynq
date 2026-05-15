@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -148,6 +149,23 @@ func TestParseRedisURI(t *testing.T) {
 				SentinelPassword: "mypassword",
 			},
 		},
+		{
+			"redis-sentinel://localhost:5000,localhost:5001,localhost:5002/3?master=mymaster",
+			RedisFailoverClientOpt{
+				MasterName:    "mymaster",
+				SentinelAddrs: []string{"localhost:5000", "localhost:5001", "localhost:5002"},
+				DB:            3,
+			},
+		},
+		{
+			"redis-sentinel://:mypassword@localhost:5000,localhost:5001,localhost:5002/7?master=mymaster",
+			RedisFailoverClientOpt{
+				MasterName:       "mymaster",
+				SentinelAddrs:    []string{"localhost:5000", "localhost:5001", "localhost:5002"},
+				SentinelPassword: "mypassword",
+				DB:               7,
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -188,6 +206,10 @@ func TestParseRedisURIErrors(t *testing.T) {
 			"non integer for db numbers for socket",
 			"redis-socket:///some/path/to/redis?db=one",
 		},
+		{
+			"non integer for db number for sentinel",
+			"redis-sentinel://localhost:5000/abc?master=mymaster",
+		},
 	}
 
 	for _, tc := range tests {
@@ -196,5 +218,32 @@ func TestParseRedisURIErrors(t *testing.T) {
 			t.Errorf("%s: ParseRedisURI(%q) succeeded for malformed input, want error",
 				tc.desc, tc.uri)
 		}
+	}
+}
+
+func TestTaskOptions(t *testing.T) {
+	opts := []Option{
+		MaxRetry(3),
+		Queue("critical"),
+		Timeout(5 * time.Minute),
+	}
+	task := NewTask("mytask", []byte("payload"), opts...)
+
+	got := task.Options()
+	if len(got) != len(opts) {
+		t.Fatalf("task.Options() returned %d options, want %d", len(got), len(opts))
+	}
+	for i, o := range opts {
+		if got[i].String() != o.String() {
+			t.Errorf("task.Options()[%d] = %v, want %v", i, got[i], o)
+		}
+	}
+}
+
+func TestTaskOptionsNil(t *testing.T) {
+	task := NewTask("mytask", []byte("payload"))
+	got := task.Options()
+	if got != nil {
+		t.Errorf("task.Options() = %v, want nil for task with no options", got)
 	}
 }

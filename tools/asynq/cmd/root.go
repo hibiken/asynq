@@ -487,35 +487,31 @@ func isPrintable(data []byte) bool {
 }
 
 // Helper to turn a command line flag into a duration
-func getDuration(cmd *cobra.Command, arg string) time.Duration {
+func getDuration(cmd *cobra.Command, arg string) (time.Duration, error) {
 	durationStr, err := cmd.Flags().GetString(arg)
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return 0, err
 	}
 
 	duration, err := time.ParseDuration(durationStr)
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return 0, err
 	}
 
-	return duration
+	return duration, nil
 }
 
 // Helper to turn a command line flag into a time
-func getTime(cmd *cobra.Command, arg string) time.Time {
+func getTime(cmd *cobra.Command, arg string) (time.Time, error) {
 	timeStr, err := cmd.Flags().GetString(arg)
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return time.Time{}, err
 	}
 
 	timeVal, err := time.Parse(time.RFC3339, timeStr)
 	if err != nil {
-		fmt.Printf("error: %v\n", err)
-		os.Exit(1)
+		return time.Time{}, err
 	}
 
-	return timeVal
+	return timeVal, nil
 }

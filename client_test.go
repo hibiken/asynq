@@ -13,6 +13,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/hibiken/asynq/internal/base"
+	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq/internal/testbroker"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/redis/go-redis/v9"
 )
@@ -1339,6 +1341,70 @@ func TestClientEnqueueWithHeaders(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "Task with header option",
+			task: NewTask("store_data", []byte("data"), Header("channel", "email"), Header("user-id", "bob1234")),
+			opts: []Option{},
+			wantInfo: &TaskInfo{
+				Queue:         "default",
+				Type:          "store_data",
+				Payload:       []byte("data"),
+				Headers:       map[string]string{"channel": "email", "user-id": "bob1234"},
+				State:         TaskStatePending,
+				MaxRetry:      25,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {
+					{
+						Type:     "store_data",
+						Payload:  []byte("data"),
+						Headers:  map[string]string{"channel": "email", "user-id": "bob1234"},
+						Retry:    25,
+						Queue:    "default",
+						Timeout:  int64(defaultTimeout.Seconds()),
+						Deadline: noDeadline.Unix(),
+					},
+				},
+			},
+		},
+		{
+			desc: "Enqueue task with header option",
+			task: NewTask("store_data", []byte("data")),
+			opts: []Option{Header("channel", "email"), Header("user-id", "bob1234"), MaxRetry(5)},
+			wantInfo: &TaskInfo{
+				Queue:         "default",
+				Type:          "store_data",
+				Payload:       []byte("data"),
+				Headers:       map[string]string{"channel": "email", "user-id": "bob1234"},
+				State:         TaskStatePending,
+				MaxRetry:      5,
+				Retried:       0,
+				LastErr:       "",
+				LastFailedAt:  time.Time{},
+				Timeout:       defaultTimeout,
+				Deadline:      time.Time{},
+				NextProcessAt: now,
+			},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {
+					{
+						Type:     "store_data",
+						Payload:  []byte("data"),
+						Headers:  map[string]string{"channel": "email", "user-id": "bob1234"},
+						Retry:    5,
+						Queue:    "default",
+						Timeout:  int64(defaultTimeout.Seconds()),
+						Deadline: noDeadline.Unix(),
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -1658,6 +1724,212 @@ func TestClientEnqueueWithHeadersAndGroup(t *testing.T) {
 					t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.GroupKey(qname, groupKey), diff)
 				}
 			}
+		}
+	}
+}
+
+func TestBatchEnqueueContext_ImmediateTasks(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	tasks := []*Task{
+		NewTask("task1", []byte("payload1")),
+		NewTask("task2", []byte("payload2")),
+		NewTask("task3", []byte("payload3")),
+	}
+
+	results := client.BatchEnqueueContext(context.Background(), tasks)
+	if len(results) != 3 {
+		t.Fatalf("BatchEnqueueContext returned %d results, want 3", len(results))
+	}
+	for i, res := range results {
+		if res.Err != nil {
+			t.Errorf("results[%d].Err = %v, want nil", i, res.Err)
+		}
+		if res.TaskInfo == nil {
+			t.Errorf("results[%d].TaskInfo is nil, want non-nil", i)
+			continue
+		}
+		if res.TaskInfo.Queue != "default" {
+			t.Errorf("results[%d].TaskInfo.Queue = %q, want %q", i, res.TaskInfo.Queue, "default")
+		}
+		if res.TaskInfo.State != TaskStatePending {
+			t.Errorf("results[%d].TaskInfo.State = %v, want %v", i, res.TaskInfo.State, TaskStatePending)
+		}
+	}
+
+	gotPending := h.GetPendingMessages(t, r, "default")
+	if len(gotPending) != 3 {
+		t.Errorf("len(pending) = %d, want 3", len(gotPending))
+	}
+}
+
+func TestBatchEnqueueContext_ScheduledTask(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	future := time.Now().Add(1 * time.Hour)
+	tasks := []*Task{
+		NewTask("scheduled_task", []byte("payload"), ProcessAt(future)),
+	}
+
+	results := client.BatchEnqueueContext(context.Background(), tasks)
+	if len(results) != 1 {
+		t.Fatalf("BatchEnqueueContext returned %d results, want 1", len(results))
+	}
+	if results[0].Err != nil {
+		t.Fatalf("results[0].Err = %v, want nil", results[0].Err)
+	}
+	if results[0].TaskInfo == nil {
+		t.Fatal("results[0].TaskInfo is nil, want non-nil")
+	}
+	if results[0].TaskInfo.State != TaskStateScheduled {
+		t.Errorf("results[0].TaskInfo.State = %v, want %v", results[0].TaskInfo.State, TaskStateScheduled)
+	}
+
+	gotScheduled := h.GetScheduledMessages(t, r, "default")
+	if len(gotScheduled) != 1 {
+		t.Errorf("len(scheduled) = %d, want 1", len(gotScheduled))
+	}
+}
+
+func TestBatchEnqueueContext_MixedBatch(t *testing.T) {
+	r := setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	future := time.Now().Add(1 * time.Hour)
+	tasks := []*Task{
+		NewTask("immediate1", []byte("p1")),
+		NewTask("scheduled1", []byte("p2"), ProcessAt(future)),
+		NewTask("immediate2", []byte("p3")),
+		NewTask("grouped1", []byte("p4"), Group("mygroup")),
+		NewTask("immediate3", []byte("p5")),
+	}
+
+	results := client.BatchEnqueueContext(context.Background(), tasks)
+	if len(results) != 5 {
+		t.Fatalf("BatchEnqueueContext returned %d results, want 5", len(results))
+	}
+
+	// Immediate tasks (indices 0, 2, 4) should succeed with Pending state.
+	for _, idx := range []int{0, 2, 4} {
+		if results[idx].Err != nil {
+			t.Errorf("results[%d].Err = %v, want nil (immediate task)", idx, results[idx].Err)
+		}
+		if results[idx].TaskInfo == nil {
+			t.Errorf("results[%d].TaskInfo is nil, want non-nil", idx)
+			continue
+		}
+		if results[idx].TaskInfo.State != TaskStatePending {
+			t.Errorf("results[%d].TaskInfo.State = %v, want %v", idx, results[idx].TaskInfo.State, TaskStatePending)
+		}
+	}
+
+	// Scheduled task (index 1) should succeed with Scheduled state.
+	if results[1].Err != nil {
+		t.Errorf("results[1].Err = %v, want nil (scheduled task)", results[1].Err)
+	}
+	if results[1].TaskInfo != nil && results[1].TaskInfo.State != TaskStateScheduled {
+		t.Errorf("results[1].TaskInfo.State = %v, want %v", results[1].TaskInfo.State, TaskStateScheduled)
+	}
+
+	// Grouped task (index 3) should be rejected.
+	if results[3].Err == nil {
+		t.Error("results[3].Err is nil, want error for group task")
+	}
+
+	gotPending := h.GetPendingMessages(t, r, "default")
+	if len(gotPending) != 3 {
+		t.Errorf("len(pending) = %d, want 3", len(gotPending))
+	}
+
+	gotScheduled := h.GetScheduledMessages(t, r, "default")
+	if len(gotScheduled) != 1 {
+		t.Errorf("len(scheduled) = %d, want 1", len(gotScheduled))
+	}
+}
+
+func TestBatchEnqueueContext_ValidationErrors(t *testing.T) {
+	setup(t)
+	client := NewClient(getRedisConnOpt(t))
+	defer client.Close()
+
+	tests := []struct {
+		desc  string
+		tasks []*Task
+		opts  []Option
+	}{
+		{
+			desc:  "nil task",
+			tasks: []*Task{nil},
+		},
+		{
+			desc:  "empty task typename",
+			tasks: []*Task{NewTask("", []byte("payload"))},
+		},
+		{
+			desc:  "blank task typename",
+			tasks: []*Task{NewTask("   ", []byte("payload"))},
+		},
+		{
+			desc:  "invalid option: unique TTL less than 1s",
+			tasks: []*Task{NewTask("foo", nil)},
+			opts:  []Option{Unique(300 * time.Millisecond)},
+		},
+		{
+			desc:  "group task rejected",
+			tasks: []*Task{NewTask("foo", nil, Group("mygroup"))},
+		},
+		{
+			desc:  "unique task rejected",
+			tasks: []*Task{NewTask("foo", nil, Unique(time.Hour))},
+		},
+	}
+
+	for _, tc := range tests {
+		results := client.BatchEnqueueContext(context.Background(), tc.tasks, tc.opts...)
+		if len(results) != len(tc.tasks) {
+			t.Errorf("%s: got %d results, want %d", tc.desc, len(results), len(tc.tasks))
+			continue
+		}
+		for i, res := range results {
+			if res.Err == nil {
+				t.Errorf("%s: results[%d].Err = nil, want non-nil error", tc.desc, i)
+			}
+			if res.TaskInfo != nil {
+				t.Errorf("%s: results[%d].TaskInfo = %v, want nil", tc.desc, i, res.TaskInfo)
+			}
+		}
+	}
+}
+
+func TestBatchEnqueueContext_BrokerError(t *testing.T) {
+	r := rdb.NewRDB(setup(t))
+	defer r.Close()
+	testBroker := testbroker.NewTestBroker(r)
+	client := &Client{broker: testBroker, sharedConnection: true}
+
+	tasks := []*Task{
+		NewTask("task1", []byte("p1")),
+		NewTask("task2", []byte("p2")),
+	}
+
+	testBroker.Sleep()
+	results := client.BatchEnqueueContext(context.Background(), tasks)
+	testBroker.Wakeup()
+
+	if len(results) != 2 {
+		t.Fatalf("BatchEnqueueContext returned %d results, want 2", len(results))
+	}
+	for i, res := range results {
+		if res.Err == nil {
+			t.Errorf("results[%d].Err = nil, want non-nil error when broker is down", i)
+		}
+		if res.TaskInfo != nil {
+			t.Errorf("results[%d].TaskInfo = %v, want nil on broker error", i, res.TaskInfo)
 		}
 	}
 }

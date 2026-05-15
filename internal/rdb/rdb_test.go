@@ -160,6 +160,156 @@ func TestEnqueueTaskIdConflictError(t *testing.T) {
 	}
 }
 
+func TestBatchEnqueue(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	t1 := h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"to": "user@example.com"}))
+	t2 := h.NewTaskMessageWithQueue("generate_csv", h.JSON(map[string]interface{}{}), "csv")
+	t3 := h.NewTaskMessageWithQueue("sync", nil, "low")
+
+	enqueueTime := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(enqueueTime))
+
+	t.Run("enqueue multiple tasks", func(t *testing.T) {
+		h.FlushDB(t, r.client)
+		items := []base.BatchEnqueueItem{
+			{Msg: t1},
+			{Msg: t2},
+			{Msg: t3},
+		}
+
+		n, err := r.BatchEnqueue(context.Background(), items)
+		if err != nil {
+			t.Fatalf("BatchEnqueue returned error: %v", err)
+		}
+		if n != 3 {
+			t.Errorf("BatchEnqueue returned %d, want 3", n)
+		}
+
+		for _, item := range items {
+			msg := item.Msg
+			pendingKey := base.PendingKey(msg.Queue)
+			pendingIDs := r.client.LRange(context.Background(), pendingKey, 0, -1).Val()
+			found := false
+			for _, id := range pendingIDs {
+				if id == msg.ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("task %s not found in pending list %s", msg.ID, pendingKey)
+			}
+
+			taskKey := base.TaskKey(msg.Queue, msg.ID)
+			state := r.client.HGet(context.Background(), taskKey, "state").Val()
+			if state != "pending" {
+				t.Errorf("state for task %s = %q, want %q", msg.ID, state, "pending")
+			}
+		}
+	})
+
+	t.Run("empty batch", func(t *testing.T) {
+		h.FlushDB(t, r.client)
+
+		n, err := r.BatchEnqueue(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("BatchEnqueue(nil) returned error: %v", err)
+		}
+		if n != 0 {
+			t.Errorf("BatchEnqueue(nil) returned %d, want 0", n)
+		}
+	})
+
+	t.Run("duplicate IDs skipped", func(t *testing.T) {
+		h.FlushDB(t, r.client)
+
+		if err := r.Enqueue(context.Background(), t1); err != nil {
+			t.Fatalf("pre-enqueue failed: %v", err)
+		}
+
+		dup := *t1
+		newMsg := h.NewTaskMessage("new_task", nil)
+
+		items := []base.BatchEnqueueItem{
+			{Msg: &dup},
+			{Msg: newMsg},
+		}
+		n, err := r.BatchEnqueue(context.Background(), items)
+		if err != nil {
+			t.Fatalf("BatchEnqueue returned error: %v", err)
+		}
+		if n != 1 {
+			t.Errorf("BatchEnqueue returned %d, want 1 (duplicate should be skipped)", n)
+		}
+	})
+
+	t.Run("scheduled tasks", func(t *testing.T) {
+		h.FlushDB(t, r.client)
+
+		future := time.Now().Add(1 * time.Hour)
+		s1 := h.NewTaskMessage("deferred_email", nil)
+		items := []base.BatchEnqueueItem{
+			{Msg: t1},
+			{Msg: s1, ProcessAt: future},
+		}
+
+		n, err := r.BatchEnqueue(context.Background(), items)
+		if err != nil {
+			t.Fatalf("BatchEnqueue returned error: %v", err)
+		}
+		if n != 2 {
+			t.Errorf("BatchEnqueue returned %d, want 2", n)
+		}
+
+		// Immediate task should be in pending.
+		pendingIDs := r.client.LRange(context.Background(), base.PendingKey(t1.Queue), 0, -1).Val()
+		foundPending := false
+		for _, id := range pendingIDs {
+			if id == t1.ID {
+				foundPending = true
+			}
+		}
+		if !foundPending {
+			t.Errorf("immediate task %s not found in pending list", t1.ID)
+		}
+
+		// Scheduled task should be in scheduled set.
+		scheduledIDs := r.client.ZRange(context.Background(), base.ScheduledKey(s1.Queue), 0, -1).Val()
+		foundScheduled := false
+		for _, id := range scheduledIDs {
+			if id == s1.ID {
+				foundScheduled = true
+			}
+		}
+		if !foundScheduled {
+			t.Errorf("scheduled task %s not found in scheduled set", s1.ID)
+		}
+
+		taskKey := base.TaskKey(s1.Queue, s1.ID)
+		state := r.client.HGet(context.Background(), taskKey, "state").Val()
+		if state != "scheduled" {
+			t.Errorf("state for scheduled task %s = %q, want %q", s1.ID, state, "scheduled")
+		}
+	})
+
+	t.Run("pipeline error from cancelled context", func(t *testing.T) {
+		h.FlushDB(t, r.client)
+
+		msg := h.NewTaskMessage("pipeline_error_task", nil)
+		items := []base.BatchEnqueueItem{{Msg: msg}}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := r.BatchEnqueue(ctx, items)
+		if err == nil {
+			t.Error("BatchEnqueue with cancelled context returned nil error, want non-nil")
+		}
+	})
+}
+
 func TestEnqueueQueueCache(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -3272,6 +3422,29 @@ func TestCancelationPubSub(t *testing.T) {
 		t.Errorf("subscriber received %v, want %v; (-want,+got)\n%s", received, publish, diff)
 	}
 	mu.Unlock()
+}
+
+func TestCancelationPubSubReceiveError(t *testing.T) {
+	// Use a client connected to a non-existent Redis server to trigger
+	// a Receive() error. This verifies that the pubsub connection is
+	// closed on error, preventing connection leaks.
+	client := redis.NewClient(&redis.Options{
+		Addr: "localhost:0", // invalid port — connection will fail
+	})
+	r := NewRDB(client)
+	defer r.Close()
+
+	pubsub, err := r.CancelationPubSub()
+	if err == nil {
+		// If no error, we must clean up the pubsub.
+		if pubsub != nil {
+			pubsub.Close()
+		}
+		t.Fatal("(*RDB).CancelationPubSub() expected to return an error when redis is unreachable")
+	}
+	if pubsub != nil {
+		t.Error("(*RDB).CancelationPubSub() expected nil pubsub on error")
+	}
 }
 
 func TestWriteResult(t *testing.T) {

@@ -6,7 +6,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/MakeNowJust/heredoc/v2"
@@ -32,14 +31,14 @@ var dashCmd = &cobra.Command{
 	Example: heredoc.Doc(`
         $ asynq dash
         $ asynq dash --refresh=3s`),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if flagPollInterval < 1*time.Second {
-			fmt.Println("error: --refresh cannot be less than 1s")
-			os.Exit(1)
+			return fmt.Errorf("--refresh cannot be less than 1s")
 		}
 		dash.Run(dash.Options{
 			PollInterval: flagPollInterval,
 			RedisConnOpt: getRedisConnOpt(),
 		})
+		return nil
 	},
 }
