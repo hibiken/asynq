@@ -252,6 +252,25 @@ type Config struct {
 	// If unset or zero, default batch size of 100 is used.
 	// Make sure to not put a big number as the batch size to prevent a long-running script.
 	JanitorBatchSize int
+
+	// LeaseDuration specifies the duration for which a worker can hold a lease on a task.
+	// The worker must extend the lease by sending heartbeat to the server before it expires.
+	//
+	// Longer lease duration provides better tolerance for network instability (e.g., cross-region VPS deployments)
+	// but delays task recovery when a worker crashes.
+	//
+	// Recommended range: 30s to 120s
+	// If unset or zero, default duration of 30 seconds is used.
+	LeaseDuration time.Duration
+
+	// HeartbeatInterval specifies the interval between heartbeats sent by the server to extend task leases.
+	//
+	// Shorter intervals provide faster detection of worker failures but increase Redis load.
+	// LeaseDuration should be at least 3x HeartbeatInterval to allow for network failures.
+	//
+	// Recommended range: 3s to 10s
+	// If unset or zero, default interval of 5 seconds is used.
+	HeartbeatInterval time.Duration
 }
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
@@ -503,7 +522,34 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	}
 	logger.SetLevel(toInternalLogLevel(loglevel))
 
+	// Process LeaseDuration configuration
+	leaseDuration := cfg.LeaseDuration
+	if leaseDuration <= 0 {
+		leaseDuration = rdb.DefaultLeaseDuration // use constant from rdb package
+	}
+	if leaseDuration < 10*time.Second || leaseDuration > 5*time.Minute {
+		logger.Warnf("LeaseDuration %v is out of recommended range [10s, 5m]", leaseDuration)
+	}
+
+	// Process HeartbeatInterval configuration
+	heartbeatInterval := cfg.HeartbeatInterval
+	if heartbeatInterval <= 0 {
+		heartbeatInterval = 5 * time.Second // default
+	}
+	if heartbeatInterval < 1*time.Second {
+		logger.Warnf("HeartbeatInterval %v is too short, may cause high Redis load", heartbeatInterval)
+	}
+	if heartbeatInterval > 30*time.Second {
+		logger.Warnf("HeartbeatInterval %v is too long, may delay lease expiration detection", heartbeatInterval)
+	}
+
+	// Validate: LeaseDuration should be at least 3x HeartbeatInterval
+	if leaseDuration < heartbeatInterval*3 {
+		panic(fmt.Sprintf("LeaseDuration (%v) must be at least 3x HeartbeatInterval (%v)", leaseDuration, heartbeatInterval))
+	}
+
 	rdb := rdb.NewRDB(c)
+	rdb.SetLeaseDuration(leaseDuration)
 	starting := make(chan *workerInfo)
 	finished := make(chan *base.TaskMessage)
 	syncCh := make(chan *syncRequest)
@@ -513,12 +559,12 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	syncer := newSyncer(syncerParams{
 		logger:     logger,
 		requestsCh: syncCh,
-		interval:   5 * time.Second,
+		interval:   heartbeatInterval,
 	})
 	heartbeater := newHeartbeater(heartbeaterParams{
 		logger:         logger,
 		broker:         rdb,
-		interval:       5 * time.Second,
+		interval:       heartbeatInterval,
 		concurrency:    n,
 		queues:         queues,
 		strictPriority: cfg.StrictPriority,
