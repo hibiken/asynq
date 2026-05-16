@@ -346,10 +346,16 @@ var (
 	noDeadline time.Time     = time.Unix(0, 0)
 )
 
+// ErrSharedConnection is returned by Close on a Client, Inspector, or
+// Scheduler that was constructed with a caller-owned redis client (the
+// *FromRedisClient constructors). The connection isn't asynq's to close;
+// the caller has to do it themselves.
+var ErrSharedConnection = errors.New("redis connection is shared so the Client can't be closed through asynq")
+
 // Close closes the connection with redis.
 func (c *Client) Close() error {
 	if c.sharedConnection {
-		return fmt.Errorf("redis connection is shared so the Client can't be closed through asynq")
+		return ErrSharedConnection
 	}
 	return c.broker.Close()
 }
