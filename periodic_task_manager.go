@@ -7,6 +7,7 @@ package asynq
 import (
 	"crypto/sha256"
 	"fmt"
+	"runtime/debug"
 	"sort"
 	"sync"
 	"time"
@@ -205,7 +206,7 @@ func (mgr *PeriodicTaskManager) remove(removed map[string]string) {
 }
 
 func (mgr *PeriodicTaskManager) sync() {
-	configs, err := mgr.p.GetConfigs()
+	configs, err := mgr.runGetConfigs()
 	if err != nil {
 		mgr.s.logger.Errorf("Failed to get periodic task configs: %v", err)
 		return
@@ -221,6 +222,20 @@ func (mgr *PeriodicTaskManager) sync() {
 	added := mgr.diffAdded(configs)
 	mgr.remove(removed)
 	mgr.add(added)
+}
+
+// runGetConfigs invokes the user-provided PeriodicTaskConfigProvider
+// and recovers from any panic so a buggy provider doesn't tear down
+// the worker process.
+func (mgr *PeriodicTaskManager) runGetConfigs() (configs []*PeriodicTaskConfig, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			mgr.s.logger.Errorf("recovered from panic in PeriodicTaskConfigProvider.GetConfigs: %v\n%s",
+				r, debug.Stack())
+			err = fmt.Errorf("panic in GetConfigs: %v", r)
+		}
+	}()
+	return mgr.p.GetConfigs()
 }
 
 // diffRemoved diffs the incoming configs with the registered config and returns

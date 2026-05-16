@@ -54,6 +54,24 @@ func TestHealthChecker(t *testing.T) {
 	hc.shutdown()
 }
 
+// Regression for #1132. A panic inside the user-supplied HealthCheckFunc
+// used to take down the entire worker process. runHealthcheckFunc now
+// swallows the panic so the goroutine keeps polling.
+func TestHealthChecker_RecoversFromPanicInUserCallback(t *testing.T) {
+	hc := &healthchecker{
+		logger: testLogger,
+		healthcheckFunc: func(error) {
+			panic("boom from HealthCheckFunc")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("panic leaked out of runHealthcheckFunc: %v", r)
+		}
+	}()
+	hc.runHealthcheckFunc(nil)
+}
+
 func TestHealthCheckerWhenRedisDown(t *testing.T) {
 	// Make sure that healthchecker goroutine doesn't panic
 	// if it cannot connect to redis.
