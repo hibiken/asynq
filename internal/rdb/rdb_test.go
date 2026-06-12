@@ -2999,6 +2999,49 @@ func TestListLeaseExpired(t *testing.T) {
 	}
 }
 
+// TestListLeaseExpiredSkipsUndecodable verifies that a single undecodable task
+// message in the lease set does not abort the whole batch. The recoverer must be
+// able to make forward progress on the remaining (decodable) tasks; otherwise a
+// single corrupted message wedges the recoverer goroutine on every tick.
+func TestListLeaseExpiredSkipsUndecodable(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	t1 := h.NewTaskMessageWithQueue("task1", nil, "default")
+	t2 := h.NewTaskMessageWithQueue("task2", nil, "default")
+	now := time.Now()
+
+	h.FlushDB(t, r.client)
+
+	// Seed two good lease-expired tasks plus a third lease entry whose backing
+	// task hash holds bytes that are not a valid protobuf TaskMessage encoding.
+	h.SeedLease(t, r.client, []base.Z{
+		{Message: t1, Score: now.Add(-2 * time.Minute).Unix()},
+		{Message: t2, Score: now.Add(-1 * time.Minute).Unix()},
+	}, "default")
+
+	const badID = "bad-task-id"
+	badKey := base.TaskKey("default", badID)
+	if err := r.client.HSet(context.Background(), badKey, "msg", []byte{0xff, 0xff, 0xff, 0xff, 0xff}).Err(); err != nil {
+		t.Fatalf("failed to seed bad task hash: %v", err)
+	}
+	if err := r.client.ZAdd(context.Background(), base.LeaseKey("default"), redis.Z{
+		Score:  float64(now.Add(-30 * time.Second).Unix()),
+		Member: badID,
+	}).Err(); err != nil {
+		t.Fatalf("failed to seed bad lease entry: %v", err)
+	}
+
+	got, err := r.ListLeaseExpired(now, "default")
+	if err != nil {
+		t.Fatalf("ListLeaseExpired returned error with undecodable message: %v; expected the bad message to be skipped", err)
+	}
+	want := []*base.TaskMessage{t1, t2}
+	if diff := cmp.Diff(want, got, h.SortMsgOpt); diff != "" {
+		t.Errorf("ListLeaseExpired returned %v, want %v;(-want,+got)\n%s", got, want, diff)
+	}
+}
+
 func TestExtendLease(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
