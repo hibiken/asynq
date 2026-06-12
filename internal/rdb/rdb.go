@@ -29,14 +29,16 @@ const LeaseDuration = 30 * time.Second
 type RDB struct {
 	client          redis.UniversalClient
 	clock           timeutil.Clock
+	location        *time.Location
 	queuesPublished sync.Map
 }
 
 // NewRDB returns a new instance of RDB.
 func NewRDB(client redis.UniversalClient) *RDB {
 	return &RDB{
-		client: client,
-		clock:  timeutil.NewRealClock(),
+		client:   client,
+		clock:    timeutil.NewRealClock(),
+		location: time.UTC,
 	}
 }
 
@@ -55,6 +57,19 @@ func (r *RDB) Client() redis.UniversalClient {
 // Use this function to set the clock to SimulatedClock in tests.
 func (r *RDB) SetClock(c timeutil.Clock) {
 	r.clock = c
+}
+
+// SetLocation sets the time zone location used by RDB to determine
+// the date boundary for daily processed/failed stats keys.
+//
+// By default, RDB uses time.UTC. Setting this to a different location
+// (e.g., time.Local, or a location loaded via time.LoadLocation("Asia/Shanghai"))
+// will cause daily stats to be aggregated according to that timezone's date boundary.
+func (r *RDB) SetLocation(loc *time.Location) {
+	if loc == nil {
+		loc = time.UTC
+	}
+	r.location = loc
 }
 
 // Ping checks the connection with redis server.
@@ -463,7 +478,7 @@ func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
 		base.ActiveKey(msg.Queue),
 		base.LeaseKey(msg.Queue),
 		base.TaskKey(msg.Queue, msg.ID),
-		base.ProcessedKey(msg.Queue, now),
+		base.ProcessedKey(msg.Queue, now.In(r.location)),
 		base.ProcessedTotalKey(msg.Queue),
 	}
 	argv := []interface{}{
@@ -571,7 +586,7 @@ func (r *RDB) MarkAsComplete(ctx context.Context, msg *base.TaskMessage) error {
 		base.LeaseKey(msg.Queue),
 		base.CompletedKey(msg.Queue),
 		base.TaskKey(msg.Queue, msg.ID),
-		base.ProcessedKey(msg.Queue, now),
+		base.ProcessedKey(msg.Queue, now.In(r.location)),
 		base.ProcessedTotalKey(msg.Queue),
 	}
 	argv := []interface{}{
@@ -932,8 +947,8 @@ func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.T
 		base.ActiveKey(msg.Queue),
 		base.LeaseKey(msg.Queue),
 		base.RetryKey(msg.Queue),
-		base.ProcessedKey(msg.Queue, now),
-		base.FailedKey(msg.Queue, now),
+		base.ProcessedKey(msg.Queue, now.In(r.location)),
+		base.FailedKey(msg.Queue, now.In(r.location)),
 		base.ProcessedTotalKey(msg.Queue),
 		base.FailedTotalKey(msg.Queue),
 	}
@@ -1032,8 +1047,8 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 		base.ActiveKey(msg.Queue),
 		base.LeaseKey(msg.Queue),
 		base.ArchivedKey(msg.Queue),
-		base.ProcessedKey(msg.Queue, now),
-		base.FailedKey(msg.Queue, now),
+		base.ProcessedKey(msg.Queue, now.In(r.location)),
+		base.FailedKey(msg.Queue, now.In(r.location)),
 		base.ProcessedTotalKey(msg.Queue),
 		base.FailedTotalKey(msg.Queue),
 		base.TaskKeyPrefix(msg.Queue),
