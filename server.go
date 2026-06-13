@@ -476,7 +476,7 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	if len(queues) == 0 {
 		queues = defaultQueueConfig
 	}
-	var qnames []string
+	qnames := make([]string, 0, len(queues))
 	for q := range queues {
 		qnames = append(qnames, q)
 	}

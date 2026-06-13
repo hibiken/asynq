@@ -159,7 +159,7 @@ func (h *heartbeater) beat() {
 		ActiveWorkerCount: len(h.workers),
 	}
 
-	var ws []*base.WorkerInfo
+	ws := make([]*base.WorkerInfo, 0, len(h.workers))
 	idsByQueue := make(map[string][]string)
 	for id, w := range h.workers {
 		ws = append(ws, &base.WorkerInfo{

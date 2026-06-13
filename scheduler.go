@@ -327,7 +327,7 @@ func (s *Scheduler) runHeartbeater() {
 
 // beat writes a snapshot of entries to redis.
 func (s *Scheduler) beat() {
-	var entries []*base.SchedulerEntry
+	entries := make([]*base.SchedulerEntry, 0, len(s.cron.Entries()))
 	for _, entry := range s.cron.Entries() {
 		job := entry.Job.(*enqueueJob)
 		e := &base.SchedulerEntry{
@@ -347,7 +347,7 @@ func (s *Scheduler) beat() {
 }
 
 func stringifyOptions(opts []Option) []string {
-	var res []string
+	res := make([]string, 0, len(opts))
 	for _, opt := range opts {
 		res = append(res, opt.String())
 	}
