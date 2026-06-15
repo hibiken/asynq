@@ -49,8 +49,8 @@ var queueListCmd = &cobra.Command{
 var queueInspectCmd = &cobra.Command{
 	Use:   "inspect <queue> [<queue>...]",
 	Short: "Display detailed information on one or more queues",
-	Args: cobra.MinimumNArgs(1),
-	RunE: queueInspect,
+	Args:  cobra.MinimumNArgs(1),
+	RunE:  queueInspect,
 	Example: heredoc.Doc(`
 		$ asynq queue inspect myqueue
 		$ asynq queue inspect queue1 queue2 queue3`),
@@ -59,8 +59,8 @@ var queueInspectCmd = &cobra.Command{
 var queueHistoryCmd = &cobra.Command{
 	Use:   "history <queue> [<queue>...]",
 	Short: "Display historical aggregate data from one or more queues",
-	Args: cobra.MinimumNArgs(1),
-	RunE: queueHistory,
+	Args:  cobra.MinimumNArgs(1),
+	RunE:  queueHistory,
 	Example: heredoc.Doc(`
 		$ asynq queue history myqueue
 		$ asynq queue history queue1 queue2 queue3
@@ -106,7 +106,10 @@ func queueList(cmd *cobra.Command, args []string) error {
 		keyslot int64
 		nodes   []*asynq.ClusterNode
 	}
+
 	inspector := createInspector()
+	defer closeInspector(inspector)
+
 	queues, err := inspector.Queues()
 	if err != nil {
 		return fmt.Errorf("could not fetch list of queues: %v", err)
@@ -149,6 +152,8 @@ func queueList(cmd *cobra.Command, args []string) error {
 
 func queueInspect(cmd *cobra.Command, args []string) error {
 	inspector := createInspector()
+	defer closeInspector(inspector)
+
 	for i, qname := range args {
 		if i > 0 {
 			fmt.Printf("\n%s\n\n", separator)
@@ -198,7 +203,10 @@ func queueHistory(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	inspector := createInspector()
+	defer closeInspector(inspector)
+
 	for i, qname := range args {
 		if i > 0 {
 			fmt.Printf("\n%s\n\n", separator)
@@ -233,6 +241,8 @@ func printDailyStats(stats []*asynq.DailyStats) {
 
 func queuePause(cmd *cobra.Command, args []string) error {
 	inspector := createInspector()
+	defer closeInspector(inspector)
+
 	var firstErr error
 	for _, qname := range args {
 		err := inspector.PauseQueue(qname)
@@ -250,6 +260,8 @@ func queuePause(cmd *cobra.Command, args []string) error {
 
 func queueUnpause(cmd *cobra.Command, args []string) error {
 	inspector := createInspector()
+	defer closeInspector(inspector)
+
 	var firstErr error
 	for _, qname := range args {
 		err := inspector.UnpauseQueue(qname)

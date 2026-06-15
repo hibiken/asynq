@@ -52,6 +52,7 @@ var cronHistoryCmd = &cobra.Command{
 
 func cronList(cmd *cobra.Command, args []string) error {
 	inspector := createInspector()
+	defer closeInspector(inspector)
 
 	entries, err := inspector.SchedulerEntries()
 	if err != nil {
@@ -105,7 +106,10 @@ func cronHistory(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	inspector := createInspector()
+	defer closeInspector(inspector)
+
 	for i, entryID := range args {
 		if i > 0 {
 			fmt.Printf("\n%s\n", separator)
