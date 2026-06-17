@@ -40,6 +40,11 @@ const (
 	CancelChannel = "asynq:cancel"     // PubSub channel
 )
 
+type TaskInfoExtension struct {
+	ID                 string
+	SynchronizationKey string
+}
+
 // TaskState denotes the state of a task.
 type TaskState int
 
@@ -120,6 +125,22 @@ func TaskKey(qname, id string) string {
 // PendingKey returns a redis key for the given queue name.
 func PendingKey(qname string) string {
 	return QueueKeyPrefix(qname) + "pending"
+}
+
+func SyncGroupKey(qname, taskId string) string {
+	return QueueKeyPrefix(qname) + "sync_group:" + "t:" + taskId
+}
+
+func SyncGroupPrefix(qname string) string {
+	return QueueKeyPrefix(qname) + "sync_group:" + "t:"
+}
+
+func SyncGroupLockPrefix(qname string) string {
+	return "lock:" + QueueKeyPrefix(qname)
+}
+
+func SyncGroupLockKey(qname, syncGroup string) string {
+	return "lock:" + QueueKeyPrefix(qname) + syncGroup
 }
 
 // ActiveKey returns a redis key for the active tasks.
@@ -297,6 +318,12 @@ type TaskMessage struct {
 	//
 	// Use zero to indicate no value.
 	CompletedAt int64
+
+	// SynchronizationKey holds the redis key used for task synchronization.
+	//
+	// Used to ensure that only one task is processed at a time.
+	// Empty string indicates no synchronization is used for this task.
+	SynchronizationKey string
 }
 
 // EncodeMessage marshals the given task message and returns an encoded bytes.
@@ -305,21 +332,22 @@ func EncodeMessage(msg *TaskMessage) ([]byte, error) {
 		return nil, fmt.Errorf("cannot encode nil message")
 	}
 	return proto.Marshal(&pb.TaskMessage{
-		Type:         msg.Type,
-		Payload:      msg.Payload,
-		Headers:      msg.Headers,
-		Id:           msg.ID,
-		Queue:        msg.Queue,
-		Retry:        int32(msg.Retry),
-		Retried:      int32(msg.Retried),
-		ErrorMsg:     msg.ErrorMsg,
-		LastFailedAt: msg.LastFailedAt,
-		Timeout:      msg.Timeout,
-		Deadline:     msg.Deadline,
-		UniqueKey:    msg.UniqueKey,
-		GroupKey:     msg.GroupKey,
-		Retention:    msg.Retention,
-		CompletedAt:  msg.CompletedAt,
+		Type:               msg.Type,
+		Payload:            msg.Payload,
+		Headers:            msg.Headers,
+		Id:                 msg.ID,
+		Queue:              msg.Queue,
+		Retry:              int32(msg.Retry),
+		Retried:            int32(msg.Retried),
+		ErrorMsg:           msg.ErrorMsg,
+		LastFailedAt:       msg.LastFailedAt,
+		Timeout:            msg.Timeout,
+		Deadline:           msg.Deadline,
+		UniqueKey:          msg.UniqueKey,
+		GroupKey:           msg.GroupKey,
+		Retention:          msg.Retention,
+		SynchronizationKey: msg.SynchronizationKey,
+		CompletedAt:        msg.CompletedAt,
 	})
 }
 
@@ -330,21 +358,22 @@ func DecodeMessage(data []byte) (*TaskMessage, error) {
 		return nil, err
 	}
 	return &TaskMessage{
-		Type:         pbmsg.GetType(),
-		Payload:      pbmsg.GetPayload(),
-		Headers:      pbmsg.GetHeaders(),
-		ID:           pbmsg.GetId(),
-		Queue:        pbmsg.GetQueue(),
-		Retry:        int(pbmsg.GetRetry()),
-		Retried:      int(pbmsg.GetRetried()),
-		ErrorMsg:     pbmsg.GetErrorMsg(),
-		LastFailedAt: pbmsg.GetLastFailedAt(),
-		Timeout:      pbmsg.GetTimeout(),
-		Deadline:     pbmsg.GetDeadline(),
-		UniqueKey:    pbmsg.GetUniqueKey(),
-		GroupKey:     pbmsg.GetGroupKey(),
-		Retention:    pbmsg.GetRetention(),
-		CompletedAt:  pbmsg.GetCompletedAt(),
+		Type:               pbmsg.GetType(),
+		Payload:            pbmsg.GetPayload(),
+		Headers:            pbmsg.GetHeaders(),
+		ID:                 pbmsg.GetId(),
+		Queue:              pbmsg.GetQueue(),
+		Retry:              int(pbmsg.GetRetry()),
+		Retried:            int(pbmsg.GetRetried()),
+		ErrorMsg:           pbmsg.GetErrorMsg(),
+		LastFailedAt:       pbmsg.GetLastFailedAt(),
+		Timeout:            pbmsg.GetTimeout(),
+		Deadline:           pbmsg.GetDeadline(),
+		UniqueKey:          pbmsg.GetUniqueKey(),
+		GroupKey:           pbmsg.GetGroupKey(),
+		Retention:          pbmsg.GetRetention(),
+		SynchronizationKey: pbmsg.GetSynchronizationKey(),
+		CompletedAt:        pbmsg.GetCompletedAt(),
 	}, nil
 }
 
@@ -731,6 +760,7 @@ type Broker interface {
 	// Lease related methods
 	ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*TaskMessage, error)
 	ExtendLease(qname string, ids ...string) (time.Time, error)
+	ExtendSyncLock(qname string, syncgroups ...string) (err error)
 
 	// State snapshot related methods
 	WriteServerState(info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error
