@@ -68,6 +68,11 @@ message TaskMessage {
   // the number of seconds elapsed since January 1, 1970 UTC.
   // This field is populated if result_ttl > 0 upon completion.
   int64 completed_at = 13;
+
+  // SynchronizationKey holds the redis key used for task synchronization.
+  // Used to ensure that only one task is processed at a time.
+	// This field is optional and an empty value ensure full parallelization task.
+  string synchronizationKey = 16;
 };
 
 // ServerInfo holds information about a running server.

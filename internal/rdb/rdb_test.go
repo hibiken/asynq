@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -68,6 +69,12 @@ func TestEnqueue(t *testing.T) {
 	t1 := h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"to": "exampleuser@gmail.com", "from": "noreply@example.com"}))
 	t2 := h.NewTaskMessageWithQueue("generate_csv", h.JSON(map[string]interface{}{}), "csv")
 	t3 := h.NewTaskMessageWithQueue("sync", nil, "low")
+	t4 := h.NewTaskMessageWithSyncKey(
+		"say_hello",
+		h.JSON(map[string]interface{}{"greeting": "hello"}),
+		"sync",
+		"greeting_group",
+	)
 
 	enqueueTime := time.Now()
 	r.SetClock(timeutil.NewSimulatedClock(enqueueTime))
@@ -78,6 +85,7 @@ func TestEnqueue(t *testing.T) {
 		{t1},
 		{t2},
 		{t3},
+		{t4},
 	}
 
 	for _, tc := range tests {
@@ -120,6 +128,14 @@ func TestEnqueue(t *testing.T) {
 		// Check queue is in the AllQueues set.
 		if !r.client.SIsMember(context.Background(), base.AllQueues, tc.msg.Queue).Val() {
 			t.Errorf("%q is not a member of SET %q", tc.msg.Queue, base.AllQueues)
+		}
+
+		if tc.msg.SynchronizationKey != "" {
+			taskKey := base.TaskKey(tc.msg.Queue, tc.msg.ID)
+			syncKey := r.client.HGet(context.Background(), taskKey, "sync_group").Val()
+			if syncKey != tc.msg.SynchronizationKey {
+				t.Errorf("sync_group field under task-key is set to %q, want %q", r.client.HGet(context.Background(), taskKey, "sync_group").Val(), tc.msg.SynchronizationKey)
+			}
 		}
 	}
 }
@@ -644,6 +660,130 @@ func TestDequeue(t *testing.T) {
 	}
 }
 
+func TestDequeueWithSynchronizationKey(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	t1 := &base.TaskMessage{
+		ID:                 uuid.NewString(),
+		Type:               "send_email",
+		Payload:            h.JSON(map[string]interface{}{"subject": "hello!"}),
+		Queue:              "default",
+		SynchronizationKey: "sync-key",
+		Timeout:            1800,
+		Deadline:           0,
+	}
+	t2 := &base.TaskMessage{
+		ID:                 uuid.NewString(),
+		Type:               "export_csv",
+		Payload:            nil,
+		Queue:              "default",
+		SynchronizationKey: "sync-key",
+		Timeout:            1800,
+		Deadline:           0,
+	}
+
+	tests := []struct {
+		pending            map[string][]*base.TaskMessage
+		qnames             []string // list of queues to query
+		shouldHoldLock     bool
+		wantMsg            *base.TaskMessage
+		wantExpirationTime time.Time
+		wantPending        map[string][]*base.TaskMessage
+		wantScheduled      map[string][]*base.TaskMessage
+		wantActive         map[string][]*base.TaskMessage
+		wantLease          map[string][]base.Z
+	}{
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			shouldHoldLock:     true,
+			qnames:             []string{"default"},
+			wantMsg:            t1,
+			wantExpirationTime: now.Add(LeaseDuration),
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			wantLease: map[string][]base.Z{
+				"default": {{Message: t1, Score: now.Add(LeaseDuration).Unix()}},
+			},
+		},
+		{
+			pending: map[string][]*base.TaskMessage{
+				"default": {t2},
+			},
+			qnames: []string{"default"},
+			wantPending: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantScheduled: map[string][]*base.TaskMessage{
+				"default": {t2},
+			},
+		},
+	}
+
+	defer h.FlushDB(t, r.client) // clean up db before each test case
+	for _, tc := range tests {
+		h.SeedAllPendingQueues(t, r.client, tc.pending)
+
+		gotMsg, gotExpirationTime, err := r.Dequeue(tc.qnames...)
+		if err != nil && !errors.Is(err, errors.ErrNoProcessableTask) {
+			t.Errorf("(*RDB).Dequeue(%v) returned error %v", tc.qnames, err)
+			continue
+		}
+		if !cmp.Equal(gotMsg, tc.wantMsg) {
+			t.Errorf("(*RDB).Dequeue(%v) returned message %v; want %v",
+				tc.qnames, gotMsg, tc.wantMsg)
+			continue
+		}
+
+		if gotExpirationTime != tc.wantExpirationTime {
+			t.Errorf("(*RDB).Dequeue(%v) returned expiration time %v, want %v",
+				tc.qnames, gotExpirationTime, tc.wantExpirationTime)
+		}
+
+		for queue, want := range tc.wantPending {
+			gotPending := h.GetPendingMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.PendingKey(queue), diff)
+			}
+		}
+
+		for queue, want := range tc.wantScheduled {
+			gotPending := h.GetScheduledMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.PendingKey(queue), diff)
+			}
+		}
+		for queue, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.ActiveKey(queue), diff)
+			}
+		}
+
+		for queue, want := range tc.wantLease {
+			gotLease := h.GetLeaseEntries(t, r.client, queue)
+			if diff := cmp.Diff(want, gotLease, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("mismatch found in %q: (-want,+got):\n%s", base.LeaseKey(queue), diff)
+			}
+		}
+
+		if tc.shouldHoldLock {
+			lockKey := base.SyncGroupLockKey(tc.wantMsg.Queue, tc.wantMsg.SynchronizationKey)
+			if r.client.Exists(context.Background(), lockKey).Val() != 1 {
+				t.Errorf("(*RDB).Dequeue(%v) didn't hold lock on %q", tc.qnames, lockKey)
+			}
+		}
+	}
+}
+
 func TestDequeueError(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -1002,6 +1142,158 @@ func TestDone(t *testing.T) {
 	}
 }
 
+func TestDoneWithSyncGroup(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+
+	t1 := &base.TaskMessage{
+		ID:                 uuid.NewString(),
+		Type:               "process_tx",
+		Payload:            nil,
+		Timeout:            1800,
+		Queue:              "default",
+		SynchronizationKey: "wallet_123",
+	}
+
+	t2 := &base.TaskMessage{
+		ID:                 uuid.NewString(),
+		Type:               "process_tx",
+		Payload:            nil,
+		Timeout:            1800,
+		Queue:              "default",
+		SynchronizationKey: "wallet_456",
+	}
+
+	tests := []struct {
+		desc         string
+		active       map[string][]*base.TaskMessage // initial state of the active list
+		lease        map[string][]base.Z            // initial state of the lease set
+		initialLocks map[string]string              // initial locks map[LockKey]TaskID
+		target       *base.TaskMessage              // task to remove
+		wantActive   map[string][]*base.TaskMessage // final state of the active list
+		wantLease    map[string][]base.Z            // final state of the lease set
+		wantLocks    map[string]string              // final locks map[LockKey]TaskID (empty string means expect deleted)
+	}{
+		{
+			desc: "removes sync group lock when task owns it",
+			active: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			lease: map[string][]base.Z{
+				"default": {{Message: t1, Score: now.Add(10 * time.Second).Unix()}},
+			},
+			initialLocks: map[string]string{
+				base.SyncGroupLockKey("default", "wallet_123"): t1.ID,
+			},
+			target: t1,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantLease: map[string][]base.Z{
+				"default": {},
+			},
+			wantLocks: map[string]string{
+				base.SyncGroupLockKey("default", "wallet_123"): "",
+			},
+		},
+		{
+			desc: "does NOT remove sync group lock when owned by another task (race condition protection)",
+			active: map[string][]*base.TaskMessage{
+				"default": {t2},
+			},
+			lease: map[string][]base.Z{
+				"default": {{Message: t2, Score: now.Add(10 * time.Second).Unix()}},
+			},
+			initialLocks: map[string]string{
+				base.SyncGroupLockKey("default", "wallet_456"): "some_other_task_id",
+			},
+			target: t2,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantLease: map[string][]base.Z{
+				"default": {},
+			},
+			wantLocks: map[string]string{
+				base.SyncGroupLockKey("default", "wallet_456"): "some_other_task_id",
+			},
+		},
+		{
+			desc: "succeeds gracefully if lock already expired/missing",
+			active: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			lease: map[string][]base.Z{
+				"default": {{Message: t1, Score: now.Add(10 * time.Second).Unix()}},
+			},
+			initialLocks: map[string]string{},
+			target:       t1,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantLease: map[string][]base.Z{
+				"default": {},
+			},
+			wantLocks: map[string]string{
+				base.SyncGroupLockKey("default", "wallet_123"): "",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			h.FlushDB(t, r.client) // clean up db before each test case
+			h.SeedAllLease(t, r.client, tc.lease)
+			h.SeedAllActiveQueues(t, r.client, tc.active)
+
+			for lockKey, ownerID := range tc.initialLocks {
+				log.Printf("Seeding lock %q with owner %q\n", lockKey, ownerID)
+				err := r.client.Set(context.Background(), lockKey, ownerID, time.Minute).Err()
+				if err != nil {
+					t.Fatalf("Failed to seed lock %q: %v", lockKey, err)
+				}
+			}
+
+			err := r.Done(context.Background(), tc.target)
+			if err != nil {
+				t.Fatalf("(*RDB).Done(task) = %v, want nil", err)
+			}
+
+			for queue, want := range tc.wantActive {
+				gotActive := h.GetActiveMessages(t, r.client, queue)
+				if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+					t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.ActiveKey(queue), diff)
+				}
+			}
+
+			for queue, want := range tc.wantLease {
+				gotLease := h.GetLeaseEntries(t, r.client, queue)
+				if diff := cmp.Diff(want, gotLease, h.SortZSetEntryOpt); diff != "" {
+					t.Errorf("mismatch found in %q: (-want, +got):\n%s", base.LeaseKey(queue), diff)
+				}
+			}
+
+			// Assert Synchronization Locks
+			for lockKey, expectedOwner := range tc.wantLocks {
+				if expectedOwner == "" {
+					// Expecting the lock to be deleted
+					exists := r.client.Exists(context.Background(), lockKey).Val()
+					if exists != 0 {
+						t.Errorf("Sync lock %q still exists, expected it to be deleted", lockKey)
+					}
+				} else {
+					// Expecting the lock to still exist and belong to the expected owner
+					gotOwner := r.client.Get(context.Background(), lockKey).Val()
+					if gotOwner != expectedOwner {
+						t.Errorf("Sync lock %q = %q, want %q", lockKey, gotOwner, expectedOwner)
+					}
+				}
+			}
+		})
+	}
+}
+
 // Make sure that processed_total counter wraps to 1 when reaching int64 max value.
 func TestDoneWithMaxCounter(t *testing.T) {
 	r := setup(t)
@@ -1221,6 +1513,202 @@ func TestMarkAsComplete(t *testing.T) {
 		if len(tc.target.UniqueKey) > 0 && r.client.Exists(context.Background(), tc.target.UniqueKey).Val() != 0 {
 			t.Errorf("%s; Uniqueness lock %q still exists", tc.desc, tc.target.UniqueKey)
 		}
+	}
+}
+
+func TestMarkAsCompleteWithSyncGroup(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+
+	t1 := &base.TaskMessage{
+		ID:                 uuid.NewString(),
+		Type:               "process_tx",
+		Payload:            nil,
+		Timeout:            1800,
+		Queue:              "default",
+		SynchronizationKey: "wallet_123",
+	}
+
+	t2 := &base.TaskMessage{
+		ID:                 uuid.NewString(),
+		Type:               "process_tx",
+		Payload:            nil,
+		Timeout:            1800,
+		Queue:              "default",
+		SynchronizationKey: "wallet_456",
+	}
+	tests := []struct {
+		desc          string
+		active        map[string][]*base.TaskMessage // initial state of the active list
+		lease         map[string][]base.Z            // initial state of the lease set
+		initialLocks  map[string]string              // initial locks map[LockKey]TaskID
+		completed     map[string][]base.Z            // initial state of the completed set
+		target        *base.TaskMessage              // task to remove
+		wantActive    map[string][]*base.TaskMessage // final state of the active list
+		wantLease     map[string][]base.Z            // final state of the lease set
+		wantLocks     map[string]string              // final locks map[LockKey]TaskID (empty string means expect deleted)
+		wantCompleted map[string][]base.Z            // final state of the completed set
+	}{
+		{
+			desc: "removes sync group lock when task owns it",
+			active: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			completed: map[string][]base.Z{
+				"default": {},
+			},
+			lease: map[string][]base.Z{
+				"default": {{Message: t1, Score: now.Add(10 * time.Second).Unix()}},
+			},
+			initialLocks: map[string]string{
+				base.SyncGroupLockKey("default", "wallet_123"): t1.ID,
+			},
+			target: t1,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantLease: map[string][]base.Z{
+				"default": {},
+			},
+			wantLocks: map[string]string{
+				base.SyncGroupLockKey("default", "wallet_123"): "",
+			},
+			wantCompleted: map[string][]base.Z{
+				"default": {{
+					Message: h.TaskMessageWithCompletedAt(*t1, now),
+					Score:   now.Unix() + t1.Retention}},
+			},
+		},
+		{
+			desc: "does NOT remove sync group lock when owned by another task (race condition protection)",
+			active: map[string][]*base.TaskMessage{
+				"default": {t2},
+			},
+			completed: map[string][]base.Z{
+				"default": {},
+			},
+			lease: map[string][]base.Z{
+				"default": {{Message: t2, Score: now.Add(10 * time.Second).Unix()}},
+			},
+			initialLocks: map[string]string{
+				base.SyncGroupLockKey("default", "wallet_456"): "some_other_task_id",
+			},
+			target: t2,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantLease: map[string][]base.Z{
+				"default": {},
+			},
+			wantLocks: map[string]string{
+				base.SyncGroupLockKey("default", "wallet_456"): "some_other_task_id",
+			},
+			wantCompleted: map[string][]base.Z{
+				"default": {{
+					Message: h.TaskMessageWithCompletedAt(*t2, now),
+					Score:   now.Unix() + t2.Retention}},
+			},
+		},
+		{
+			desc: "succeeds gracefully if lock already expired/missing",
+			active: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			completed: map[string][]base.Z{
+				"default": {},
+			},
+			lease: map[string][]base.Z{
+				"default": {{Message: t1, Score: now.Add(10 * time.Second).Unix()}},
+			},
+			initialLocks: map[string]string{},
+			target:       t1,
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantLease: map[string][]base.Z{
+				"default": {},
+			},
+			wantLocks: map[string]string{
+				base.SyncGroupLockKey("default", "wallet_123"): "",
+			},
+			wantCompleted: map[string][]base.Z{
+				"default": {{
+					Message: h.TaskMessageWithCompletedAt(*t1, now),
+					Score:   now.Unix() + t1.Retention}},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client) // clean up db before each test case
+		h.SeedAllLease(t, r.client, tc.lease)
+		h.SeedAllActiveQueues(t, r.client, tc.active)
+		h.SeedAllCompletedQueues(t, r.client, tc.completed)
+
+		for lockKey, ownerID := range tc.initialLocks {
+			err := r.client.Set(context.Background(), lockKey, ownerID, time.Minute).Err()
+			if err != nil {
+				t.Fatalf("Failed to seed lock %q: %v", lockKey, err)
+			}
+		}
+
+		err := r.MarkAsComplete(context.Background(), tc.target)
+		if err != nil {
+			t.Errorf("%s; (*RDB).MarkAsCompleted(task) = %v, want nil", tc.desc, err)
+			continue
+		}
+
+		for queue, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r.client, queue)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q: (-want, +got):\n%s", tc.desc, base.ActiveKey(queue), diff)
+				continue
+			}
+		}
+		for queue, want := range tc.wantLease {
+			gotLease := h.GetLeaseEntries(t, r.client, queue)
+			if diff := cmp.Diff(want, gotLease, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q: (-want, +got):\n%s", tc.desc, base.LeaseKey(queue), diff)
+				continue
+			}
+		}
+		for queue, want := range tc.wantCompleted {
+			gotCompleted := h.GetCompletedEntries(t, r.client, queue)
+			if diff := cmp.Diff(want, gotCompleted, h.SortZSetEntryOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q: (-want, +got):\n%s", tc.desc, base.CompletedKey(queue), diff)
+				continue
+			}
+		}
+
+		// Assert Synchronization Locks
+		for lockKey, expectedOwner := range tc.wantLocks {
+			if expectedOwner == "" {
+				// Expecting the lock to be deleted
+				exists := r.client.Exists(context.Background(), lockKey).Val()
+				if exists != 0 {
+					t.Errorf("Sync lock %q still exists, expected it to be deleted", lockKey)
+				}
+			} else {
+				// Expecting the lock to still exist and belong to the expected owner
+				gotOwner := r.client.Get(context.Background(), lockKey).Val()
+				if gotOwner != expectedOwner {
+					t.Errorf("Sync lock %q = %q, want %q", lockKey, gotOwner, expectedOwner)
+				}
+			}
+		}
+
+		processedKey := base.ProcessedKey(tc.target.Queue, time.Now())
+		gotProcessed := r.client.Get(context.Background(), processedKey).Val()
+		if gotProcessed != "1" {
+			t.Errorf("%s; GET %q = %q, want 1", tc.desc, processedKey, gotProcessed)
+		}
+
+		gotTTL := r.client.TTL(context.Background(), processedKey).Val()
+		if gotTTL > statsTTL {
+			t.Errorf("%s; TTL %q = %v, want less than or equal to %v", tc.desc, processedKey, gotTTL, statsTTL)
+		}
+
 	}
 }
 
@@ -4197,5 +4685,105 @@ func TestListGroups(t *testing.T) {
 		if diff := cmp.Diff(tc.want, got, h.SortStringSliceOpt); diff != "" {
 			t.Errorf("ListGroups=%v, want=%v; (-want,+got)\n%s", got, tc.want, diff)
 		}
+	}
+}
+
+func TestExtendSyncLock(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	ctx := context.Background()
+	qname := "default"
+
+	// Define a short TTL to test the extension against
+	shortTTL := 5 * time.Second
+
+	tests := []struct {
+		desc         string
+		initialLocks map[string]time.Duration // Maps sync group name to initial TTL
+		targetGroups []string                 // Sync groups to extend
+		wantLocks    []string                 // Sync groups that should have an extended TTL
+		wantNoErr    bool
+	}{
+		{
+			desc: "extends single existing sync group lock",
+			initialLocks: map[string]time.Duration{
+				"wallet_123": shortTTL,
+			},
+			targetGroups: []string{"wallet_123"},
+			wantLocks:    []string{"wallet_123"},
+			wantNoErr:    true,
+		},
+		{
+			desc: "extends multiple existing sync group locks",
+			initialLocks: map[string]time.Duration{
+				"wallet_123": shortTTL,
+				"wallet_456": shortTTL,
+			},
+			targetGroups: []string{"wallet_123", "wallet_456"},
+			wantLocks:    []string{"wallet_123", "wallet_456"},
+			wantNoErr:    true,
+		},
+		{
+			desc: "gracefully handles non-existent lock",
+			initialLocks: map[string]time.Duration{
+				"wallet_123": shortTTL,
+			},
+			targetGroups: []string{"wallet_123", "non_existent_wallet"},
+			wantLocks:    []string{"wallet_123"},
+			wantNoErr:    true,
+		},
+		{
+			desc:         "gracefully handles empty lock target",
+			initialLocks: map[string]time.Duration{},
+			targetGroups: []string{"ghost_wallet"},
+			wantLocks:    []string{},
+			wantNoErr:    true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			h.FlushDB(t, r.client) // Clean up DB before each test case
+
+			for syncGroup, ttl := range tc.initialLocks {
+				lockKey := base.SyncGroupLockKey(qname, syncGroup)
+				err := r.client.Set(ctx, lockKey, uuid.NewString(), ttl).Err()
+				if err != nil {
+					t.Fatalf("Failed to seed sync group lock %q: %v", lockKey, err)
+				}
+			}
+
+			err := r.ExtendSyncLock(qname, tc.targetGroups...)
+
+			if tc.wantNoErr && err != nil {
+				t.Fatalf("(*RDB).ExtendSyncLock() returned error: %v, want nil", err)
+			} else if !tc.wantNoErr && err == nil {
+				t.Fatalf("(*RDB).ExtendSyncLock() returned nil, want error")
+			}
+
+			for _, syncGroup := range tc.wantLocks {
+				lockKey := base.SyncGroupLockKey(qname, syncGroup)
+
+				gotTTL := r.client.TTL(ctx, lockKey).Val()
+
+				// Ensure the TTL is now greater than the short initial TTL
+				// but not exceeding the LeaseDuration constant (30s)
+				if gotTTL <= shortTTL || gotTTL > LeaseDuration {
+					t.Errorf("ExtendSyncLock failed for %q; got TTL = %v, want ~%v",
+						lockKey, gotTTL, LeaseDuration)
+				}
+			}
+
+			for _, syncGroup := range tc.targetGroups {
+				if _, ok := tc.initialLocks[syncGroup]; !ok {
+					lockKey := base.SyncGroupLockKey(qname, syncGroup)
+					exists := r.client.Exists(ctx, lockKey).Val()
+					if exists != 0 {
+						t.Errorf("ExtendSyncLock improperly created a key for non-existent lock %q", lockKey)
+					}
+				}
+			}
+		})
 	}
 }
