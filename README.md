@@ -263,6 +263,8 @@ func main() {
 }
 ```
 
+For a runnable version of the above, see [`_examples/basic`](./_examples/basic).
+
 For a more detailed walk-through of the library, see our [Getting Started](https://github.com/hibiken/asynq/wiki/Getting-Started) guide.
 
 To learn more about `asynq` features and APIs, see the package [godoc](https://godoc.org/github.com/hibiken/asynq).
