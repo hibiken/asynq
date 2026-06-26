@@ -43,11 +43,11 @@ func TestForwarder(t *testing.T) {
 	}{
 		{
 			initScheduled: map[string][]base.Z{
-				"default":  {{Message: t1, Score: now.Add(time.Hour).Unix()}},
-				"critical": {{Message: t2, Score: now.Add(-2 * time.Second).Unix()}},
+				"default":  {{Message: t1, Score: now.Add(time.Hour).UnixMicro()}},
+				"critical": {{Message: t2, Score: now.Add(-2 * time.Second).UnixMicro()}},
 			},
 			initRetry: map[string][]base.Z{
-				"default":  {{Message: t3, Score: time.Now().Add(-500 * time.Millisecond).Unix()}},
+				"default":  {{Message: t3, Score: time.Now().Add(-500 * time.Millisecond).UnixMicro()}},
 				"critical": {},
 			},
 			initPending: map[string][]*base.TaskMessage{
@@ -71,11 +71,11 @@ func TestForwarder(t *testing.T) {
 		{
 			initScheduled: map[string][]base.Z{
 				"default": {
-					{Message: t1, Score: now.Unix()},
-					{Message: t3, Score: now.Add(-500 * time.Millisecond).Unix()},
+					{Message: t1, Score: now.UnixMicro()},
+					{Message: t3, Score: now.Add(-500 * time.Millisecond).UnixMicro()},
 				},
 				"critical": {
-					{Message: t2, Score: now.Add(-2 * time.Second).Unix()},
+					{Message: t2, Score: now.Add(-2 * time.Second).UnixMicro()},
 				},
 			},
 			initRetry: map[string][]base.Z{
