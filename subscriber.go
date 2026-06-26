@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -44,7 +45,7 @@ func newSubscriber(params subscriberParams) *subscriber {
 }
 
 func (s *subscriber) shutdown() {
-	s.logger.Debug("Subscriber shutting down...")
+	s.logger.DebugContext(context.Background(), "Subscriber shutting down", "component", "subscriber")
 	// Signal the subscriber goroutine to stop.
 	s.done <- struct{}{}
 }
@@ -61,12 +62,12 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 		for {
 			pubsub, err = s.broker.CancelationPubSub()
 			if err != nil {
-				s.logger.Errorf("cannot subscribe to cancelation channel: %v", err)
+				s.logger.ErrorContext(context.Background(), "cannot subscribe to cancelation channel", "component", "subscriber", "error", err)
 				select {
 				case <-time.After(s.retryTimeout):
 					continue
 				case <-s.done:
-					s.logger.Debug("Subscriber done")
+					s.logger.DebugContext(context.Background(), "Subscriber done", "component", "subscriber")
 					return
 				}
 			}
@@ -77,7 +78,7 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 			select {
 			case <-s.done:
 				pubsub.Close()
-				s.logger.Debug("Subscriber done")
+				s.logger.DebugContext(context.Background(), "Subscriber done", "component", "subscriber")
 				return
 			case msg := <-cancelCh:
 				cancel, ok := s.cancelations.Get(msg.Payload)

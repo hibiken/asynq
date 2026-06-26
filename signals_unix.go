@@ -3,6 +3,7 @@
 package asynq
 
 import (
+	"context"
 	"os"
 	"os/signal"
 
@@ -14,8 +15,8 @@ import (
 // SIGTERM and SIGINT will signal the process to exit.
 // SIGTSTP will signal the process to stop processing new tasks.
 func (srv *Server) waitForSignals() {
-	srv.logger.Info("Send signal TSTP to stop processing new tasks")
-	srv.logger.Info("Send signal TERM or INT to terminate the process")
+	srv.logger.InfoContext(context.Background(), "Send signal TSTP to stop processing new tasks", "component", "server")
+	srv.logger.InfoContext(context.Background(), "Send signal TERM or INT to terminate the process", "component", "server")
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, unix.SIGTERM, unix.SIGINT, unix.SIGTSTP)
@@ -32,7 +33,7 @@ func (srv *Server) waitForSignals() {
 }
 
 func (s *Scheduler) waitForSignals() {
-	s.logger.Info("Send signal TERM or INT to stop the scheduler")
+	s.logger.InfoContext(context.Background(), "Send signal TERM or INT to stop the scheduler", "component", "scheduler")
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, unix.SIGTERM, unix.SIGINT)
 	<-sigs

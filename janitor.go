@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -52,7 +53,7 @@ func newJanitor(params janitorParams) *janitor {
 }
 
 func (j *janitor) shutdown() {
-	j.logger.Debug("Janitor shutting down...")
+	j.logger.DebugContext(context.Background(), "Janitor shutting down", "component", "janitor")
 	// Signal the janitor goroutine to stop.
 	j.done <- struct{}{}
 }
@@ -66,7 +67,7 @@ func (j *janitor) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-j.done:
-				j.logger.Debug("Janitor done")
+				j.logger.DebugContext(context.Background(), "Janitor done", "component", "janitor")
 				return
 			case <-timer.C:
 				j.exec()
@@ -79,8 +80,8 @@ func (j *janitor) start(wg *sync.WaitGroup) {
 func (j *janitor) exec() {
 	for _, qname := range j.queues {
 		if err := j.broker.DeleteExpiredCompletedTasks(qname, j.batchSize); err != nil {
-			j.logger.Errorf("Failed to delete expired completed tasks from queue %q: %v",
-				qname, err)
+			j.logger.ErrorContext(context.Background(), "Failed to delete expired completed tasks",
+				"component", "janitor", "queue", qname, "error", err)
 		}
 	}
 }
