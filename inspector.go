@@ -47,9 +47,13 @@ func NewInspectorFromRedisClient(c redis.UniversalClient) *Inspector {
 }
 
 // Close closes the connection with redis.
+//
+// If the Inspector was constructed via NewInspectorFromRedisClient
+// the returned error is [ErrSharedConnection]: the underlying
+// connection is owned by the caller and must be closed by them.
 func (i *Inspector) Close() error {
 	if i.sharedConnection {
-		return fmt.Errorf("redis connection is shared so the Inspector can't be closed through asynq")
+		return ErrSharedConnection
 	}
 	return i.rdb.Close()
 }

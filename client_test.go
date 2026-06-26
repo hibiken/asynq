@@ -1906,6 +1906,17 @@ func TestBatchEnqueueContext_ValidationErrors(t *testing.T) {
 	}
 }
 
+// Regression for #1068. Client.Close on a shared connection should
+// return ErrSharedConnection so callers (and the Scheduler shutdown
+// path) can distinguish "the user owns this conn" from a real error.
+func TestClient_Close_SharedConnection(t *testing.T) {
+	client := &Client{sharedConnection: true}
+	err := client.Close()
+	if !errors.Is(err, ErrSharedConnection) {
+		t.Fatalf("Close() on shared conn = %v, want ErrSharedConnection", err)
+	}
+}
+
 func TestBatchEnqueueContext_BrokerError(t *testing.T) {
 	r := rdb.NewRDB(setup(t))
 	defer r.Close()
