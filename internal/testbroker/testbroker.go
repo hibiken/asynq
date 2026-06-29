@@ -181,6 +181,15 @@ func (tb *TestBroker) ExtendLease(qname string, ids ...string) (time.Time, error
 	return tb.real.ExtendLease(qname, ids...)
 }
 
+func (tb *TestBroker) ReclaimOrphanedActiveTasks(cutoff time.Time, qnames ...string) (int, error) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return 0, errRedisDown
+	}
+	return tb.real.ReclaimOrphanedActiveTasks(cutoff, qnames...)
+}
+
 func (tb *TestBroker) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo, ttl time.Duration) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()

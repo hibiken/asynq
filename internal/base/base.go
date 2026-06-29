@@ -731,6 +731,7 @@ type Broker interface {
 	// Lease related methods
 	ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*TaskMessage, error)
 	ExtendLease(qname string, ids ...string) (time.Time, error)
+	ReclaimOrphanedActiveTasks(cutoff time.Time, qnames ...string) (int, error)
 
 	// State snapshot related methods
 	WriteServerState(info *ServerInfo, workers []*WorkerInfo, ttl time.Duration) error

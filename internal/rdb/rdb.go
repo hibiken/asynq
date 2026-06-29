@@ -1481,6 +1481,51 @@ func (r *RDB) ExtendLease(qname string, ids ...string) (expirationTime time.Time
 	return expireAt, nil
 }
 
+// KEYS[1] -> asynq:{<qname>}:active
+// KEYS[2] -> asynq:{<qname>}:lease
+// ARGV[1] -> expired lease expiration time (unix time)
+// Returns the number of orphaned active tasks that were re-leased.
+// ref: https://github.com/hibiken/asynq/issues/1144
+var reclaimOrphanedActiveTasksCmd = redis.NewScript(`
+local n = 0
+local ids = redis.call("LRANGE", KEYS[1], 0, -1)
+for _, id in ipairs(ids) do
+	if redis.call("ZSCORE", KEYS[2], id) == false then
+		redis.call("ZADD", KEYS[2], ARGV[1], id)
+		n = n + 1
+	end
+end
+return n
+`)
+
+// ReclaimOrphanedActiveTasks finds tasks that are in the active list but have no
+// corresponding entry in the lease set ("orphaned" active tasks) and attaches an
+// already-expired lease (scored at the given cutoff) to each of them. It returns
+// the total number of tasks that were re-leased across the given queues.
+func (r *RDB) ReclaimOrphanedActiveTasks(cutoff time.Time, qnames ...string) (int, error) {
+	var op errors.Op = "rdb.ReclaimOrphanedActiveTasks"
+	var total int
+
+	for _, qname := range qnames {
+		res, err := reclaimOrphanedActiveTasksCmd.Run(context.Background(), r.client,
+			[]string{base.ActiveKey(qname), base.LeaseKey(qname)},
+			cutoff.Unix()).Result()
+
+		if err != nil {
+			return total, errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
+		}
+
+		n, err := cast.ToIntE(res)
+		if err != nil {
+			return total, errors.E(op, errors.Internal, fmt.Sprintf("cast error: Lua script returned unexpected value: %v", res))
+		}
+
+		total += n
+	}
+
+	return total, nil
+}
+
 // KEYS[1]  -> asynq:servers:{<host:pid:sid>}
 // KEYS[2]  -> asynq:workers:{<host:pid:sid>}
 // ARGV[1]  -> TTL in seconds
