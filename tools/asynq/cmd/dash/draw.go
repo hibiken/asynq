@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/hibiken/asynq"
@@ -298,7 +296,7 @@ var activeTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
 	{"Retried", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.Retried) }},
 	{"Max Retry", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.MaxRetry) }},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return payload.Format(t.Payload, false) }},
 }
 
 var pendingTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
@@ -306,13 +304,13 @@ var pendingTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
 	{"Retried", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.Retried) }},
 	{"Max Retry", alignRight, func(t *asynq.TaskInfo) string { return strconv.Itoa(t.MaxRetry) }},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return payload.Format(t.Payload, false) }},
 }
 
 var aggregatingTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return payload.Format(t.Payload, false) }},
 	{"Group", alignLeft, func(t *asynq.TaskInfo) string { return t.Group }},
 }
 
@@ -322,7 +320,7 @@ var scheduledTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"Next Process Time", alignLeft, func(t *asynq.TaskInfo) string {
 		return formatNextProcessTime(t.NextProcessAt)
 	}},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return payload.Format(t.Payload, false) }},
 }
 
 var retryTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
@@ -334,7 +332,7 @@ var retryTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"Next Process Time", alignLeft, func(t *asynq.TaskInfo) string {
 		return formatNextProcessTime(t.NextProcessAt)
 	}},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return payload.Format(t.Payload, false) }},
 }
 
 var archivedTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
@@ -343,15 +341,15 @@ var archivedTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"Retry", alignRight, func(t *asynq.TaskInfo) string { return fmt.Sprintf("%d/%d", t.Retried, t.MaxRetry) }},
 	{"Last Failure", alignLeft, func(t *asynq.TaskInfo) string { return t.LastErr }},
 	{"Last Failure Time", alignLeft, func(t *asynq.TaskInfo) string { return formatPastTime(t.LastFailedAt) }},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return payload.Format(t.Payload, false) }},
 }
 
 var completedTaskTableColumns = []*columnConfig[*asynq.TaskInfo]{
 	{"ID", alignLeft, func(t *asynq.TaskInfo) string { return t.ID }},
 	{"Type", alignLeft, func(t *asynq.TaskInfo) string { return t.Type }},
 	{"Completion Time", alignLeft, func(t *asynq.TaskInfo) string { return formatPastTime(t.CompletedAt) }},
-	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Payload) }},
-	{"Result", alignLeft, func(t *asynq.TaskInfo) string { return formatByteSlice(t.Result) }},
+	{"Payload", alignLeft, func(t *asynq.TaskInfo) string { return payload.Format(t.Payload, false) }},
+	{"Result", alignLeft, func(t *asynq.TaskInfo) string { return payload.Format(t.Result, false) }},
 }
 
 func drawTaskTable(d *ScreenDrawer, state *State) {
@@ -643,33 +641,6 @@ func appendEnvelopeRows(add func(func(*modalRowDrawer)), e *payload.Envelope) {
 	for k, v := range e.Meta {
 		add(func(d *modalRowDrawer) { d.Print(fmt.Sprintf("  meta.%s: %s", k, v), baseStyle) })
 	}
-}
-
-// Reports whether the given byte slice is printable (i.e. human readable)
-func isPrintable(data []byte) bool {
-	if !utf8.Valid(data) {
-		return false
-	}
-	isAllSpace := true
-	for _, r := range string(data) {
-		if !unicode.IsGraphic(r) {
-			return false
-		}
-		if !unicode.IsSpace(r) {
-			isAllSpace = false
-		}
-	}
-	return !isAllSpace
-}
-
-func formatByteSlice(data []byte) string {
-	if data == nil {
-		return "<nil>"
-	}
-	if !isPrintable(data) {
-		return "<non-printable>"
-	}
-	return strings.ReplaceAll(string(data), "\n", "  ")
 }
 
 type modalRowDrawer struct {
