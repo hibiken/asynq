@@ -21,6 +21,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq/tools/asynq/payload"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -468,6 +469,16 @@ func sprintBytes(payload []byte) string {
 		return "non-printable bytes"
 	}
 	return string(payload)
+}
+
+// formatPayload returns a display string for a task payload. When decode is true,
+// the payload is decoded (base64/envelope) and pretty-printed as single-line JSON
+// (suitable for a table cell). Otherwise it behaves like sprintBytes.
+func formatPayload(p []byte, decode bool) string {
+	if !decode {
+		return sprintBytes(p)
+	}
+	return payload.Format(p, false)
 }
 
 func isPrintable(data []byte) bool {

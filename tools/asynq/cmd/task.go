@@ -7,11 +7,13 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"sort"
 	"time"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/fatih/color"
 	"github.com/hibiken/asynq"
+	"github.com/hibiken/asynq/tools/asynq/payload"
 	"github.com/spf13/cobra"
 )
 
@@ -23,6 +25,7 @@ func init() {
 	taskListCmd.Flags().Int("page", 1, "page number")
 	taskListCmd.Flags().Int("size", 30, "page size")
 	taskListCmd.Flags().StringP("group", "g", "", "group to inspect (required for listing aggregating tasks)")
+	taskListCmd.Flags().BoolP("decode", "d", false, "decode base64/envelope payloads and pretty-print (single-line)")
 	taskListCmd.MarkFlagRequired("queue")
 	taskListCmd.MarkFlagRequired("state")
 
@@ -31,6 +34,7 @@ func init() {
 	taskCmd.AddCommand(taskInspectCmd)
 	taskInspectCmd.Flags().StringP("queue", "q", "", "queue to which the task belongs (required)")
 	taskInspectCmd.Flags().StringP("id", "i", "", "id of the task (required)")
+	taskInspectCmd.Flags().BoolP("decode", "d", false, "decode base64/envelope payload and pretty-print")
 	taskInspectCmd.MarkFlagRequired("queue")
 	taskInspectCmd.MarkFlagRequired("id")
 
@@ -225,20 +229,24 @@ func taskList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	decode, err := cmd.Flags().GetBool("decode")
+	if err != nil {
+		return err
+	}
 
 	switch state {
 	case "active":
-		return listActiveTasks(qname, pageNum, pageSize)
+		return listActiveTasks(qname, pageNum, pageSize, decode)
 	case "pending":
-		return listPendingTasks(qname, pageNum, pageSize)
+		return listPendingTasks(qname, pageNum, pageSize, decode)
 	case "scheduled":
-		return listScheduledTasks(qname, pageNum, pageSize)
+		return listScheduledTasks(qname, pageNum, pageSize, decode)
 	case "retry":
-		return listRetryTasks(qname, pageNum, pageSize)
+		return listRetryTasks(qname, pageNum, pageSize, decode)
 	case "archived":
-		return listArchivedTasks(qname, pageNum, pageSize)
+		return listArchivedTasks(qname, pageNum, pageSize, decode)
 	case "completed":
-		return listCompletedTasks(qname, pageNum, pageSize)
+		return listCompletedTasks(qname, pageNum, pageSize, decode)
 	case "aggregating":
 		group, err := cmd.Flags().GetString("group")
 		if err != nil {
@@ -247,13 +255,13 @@ func taskList(cmd *cobra.Command, args []string) error {
 		if group == "" {
 			return fmt.Errorf("flag --group is required for listing aggregating tasks")
 		}
-		return listAggregatingTasks(qname, group, pageNum, pageSize)
+		return listAggregatingTasks(qname, group, pageNum, pageSize, decode)
 	default:
 		return fmt.Errorf("state=%q is not supported", state)
 	}
 }
 
-func listActiveTasks(qname string, pageNum, pageSize int) error {
+func listActiveTasks(qname string, pageNum, pageSize int, decode bool) error {
 	i := createInspector()
 	tasks, err := i.ListActiveTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
@@ -267,14 +275,14 @@ func listActiveTasks(qname string, pageNum, pageSize int) error {
 		[]string{"ID", "Type", "Payload"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload))
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload, decode))
 			}
 		},
 	)
 	return nil
 }
 
-func listPendingTasks(qname string, pageNum, pageSize int) error {
+func listPendingTasks(qname string, pageNum, pageSize int, decode bool) error {
 	i := createInspector()
 	tasks, err := i.ListPendingTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
@@ -288,14 +296,14 @@ func listPendingTasks(qname string, pageNum, pageSize int) error {
 		[]string{"ID", "Type", "Payload"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload))
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload, decode))
 			}
 		},
 	)
 	return nil
 }
 
-func listScheduledTasks(qname string, pageNum, pageSize int) error {
+func listScheduledTasks(qname string, pageNum, pageSize int, decode bool) error {
 	i := createInspector()
 	tasks, err := i.ListScheduledTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
@@ -309,7 +317,7 @@ func listScheduledTasks(qname string, pageNum, pageSize int) error {
 		[]string{"ID", "Type", "Payload", "Process In"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload), formatProcessAt(t.NextProcessAt))
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload, decode), formatProcessAt(t.NextProcessAt))
 			}
 		},
 	)
@@ -327,7 +335,7 @@ func formatProcessAt(processAt time.Time) string {
 	return fmt.Sprintf("in %v", d.Round(time.Second))
 }
 
-func listRetryTasks(qname string, pageNum, pageSize int) error {
+func listRetryTasks(qname string, pageNum, pageSize int, decode bool) error {
 	i := createInspector()
 	tasks, err := i.ListRetryTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
@@ -341,7 +349,7 @@ func listRetryTasks(qname string, pageNum, pageSize int) error {
 		[]string{"ID", "Type", "Payload", "Next Retry", "Last Error", "Last Failed", "Retried", "Max Retry"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload), formatProcessAt(t.NextProcessAt),
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload, decode), formatProcessAt(t.NextProcessAt),
 					t.LastErr, formatPastTime(t.LastFailedAt), t.Retried, t.MaxRetry)
 			}
 		},
@@ -349,7 +357,7 @@ func listRetryTasks(qname string, pageNum, pageSize int) error {
 	return nil
 }
 
-func listArchivedTasks(qname string, pageNum, pageSize int) error {
+func listArchivedTasks(qname string, pageNum, pageSize int, decode bool) error {
 	i := createInspector()
 	tasks, err := i.ListArchivedTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
@@ -363,13 +371,13 @@ func listArchivedTasks(qname string, pageNum, pageSize int) error {
 		[]string{"ID", "Type", "Payload", "Last Failed", "Last Error"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload), formatPastTime(t.LastFailedAt), t.LastErr)
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload, decode), formatPastTime(t.LastFailedAt), t.LastErr)
 			}
 		})
 	return nil
 }
 
-func listCompletedTasks(qname string, pageNum, pageSize int) error {
+func listCompletedTasks(qname string, pageNum, pageSize int, decode bool) error {
 	i := createInspector()
 	tasks, err := i.ListCompletedTasks(qname, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
@@ -383,13 +391,13 @@ func listCompletedTasks(qname string, pageNum, pageSize int) error {
 		[]string{"ID", "Type", "Payload", "CompletedAt", "Result"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload), formatPastTime(t.CompletedAt), sprintBytes(t.Result))
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload, decode), formatPastTime(t.CompletedAt), formatPayload(t.Result, decode))
 			}
 		})
 	return nil
 }
 
-func listAggregatingTasks(qname, group string, pageNum, pageSize int) error {
+func listAggregatingTasks(qname, group string, pageNum, pageSize int, decode bool) error {
 	i := createInspector()
 	tasks, err := i.ListAggregatingTasks(qname, group, asynq.PageSize(pageSize), asynq.Page(pageNum))
 	if err != nil {
@@ -403,7 +411,7 @@ func listAggregatingTasks(qname, group string, pageNum, pageSize int) error {
 		[]string{"ID", "Type", "Payload", "Group"},
 		func(w io.Writer, tmpl string) {
 			for _, t := range tasks {
-				fmt.Fprintf(w, tmpl, t.ID, t.Type, sprintBytes(t.Payload), t.Group)
+				fmt.Fprintf(w, tmpl, t.ID, t.Type, formatPayload(t.Payload, decode), t.Group)
 			}
 		},
 	)
@@ -435,17 +443,21 @@ func taskInspect(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	decode, err := cmd.Flags().GetBool("decode")
+	if err != nil {
+		return err
+	}
 
 	i := createInspector()
 	info, err := i.GetTaskInfo(qname, id)
 	if err != nil {
 		return fmt.Errorf("could not get task info: %v", err)
 	}
-	printTaskInfo(info)
+	printTaskInfo(info, decode)
 	return nil
 }
 
-func printTaskInfo(info *asynq.TaskInfo) {
+func printTaskInfo(info *asynq.TaskInfo, decode bool) {
 	bold := color.New(color.Bold)
 	bold.Println("Task Info")
 	fmt.Printf("Queue:   %s\n", info.Queue)
@@ -461,6 +473,45 @@ func printTaskInfo(info *asynq.TaskInfo) {
 		fmt.Printf("Failed at:     %s\n", formatPastTime(info.LastFailedAt))
 		fmt.Printf("Error message: %s\n", info.LastErr)
 	}
+
+	// Payload
+	fmt.Println()
+	bold.Println("Payload")
+	if decode {
+		res := payload.Decode(info.Payload, true)
+		fmt.Println(res.Payload)
+		if res.Envelope != nil {
+			bold.Println("Envelope")
+			fmt.Printf("  version: %d\n", res.Envelope.Version)
+			if res.Envelope.HasSampled {
+				fmt.Printf("  sampled: %v\n", res.Envelope.Sampled)
+			}
+			if res.Envelope.TraceID != "" {
+				fmt.Printf("  trace_id: %s\n", res.Envelope.TraceID)
+			}
+			if res.Envelope.SpanID != "" {
+				fmt.Printf("  span_id: %s\n", res.Envelope.SpanID)
+			}
+			if res.Envelope.ReplyTo != "" {
+				fmt.Printf("  reply_to: %s\n", res.Envelope.ReplyTo)
+			}
+			for _, k := range sortedKeys(res.Envelope.Meta) {
+				fmt.Printf("  meta.%s: %s\n", k, res.Envelope.Meta[k])
+			}
+		}
+	} else {
+		fmt.Println(sprintBytes(info.Payload))
+	}
+}
+
+// sortedKeys returns the keys of m in sorted order (stable CLI output).
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func formatNextProcessAt(processAt time.Time) string {
