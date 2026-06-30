@@ -44,6 +44,8 @@ type State struct {
 
 	pageNum int // pagination page number
 
+	payloadScrollOffset int // scroll offset (body rows) for the task modal
+
 	view     viewType // current view type
 	prevView viewType // to support "go back"
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/hibiken/asynq"
+	"github.com/hibiken/asynq/tools/asynq/payload"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -502,73 +503,140 @@ func drawTaskModal(d *ScreenDrawer, state *State) {
 	task := state.selectedTask
 	if task == nil {
 		// task no longer found
-		fns := []func(d *modalRowDrawer){
+		withModal(d, []func(d *modalRowDrawer){
 			func(d *modalRowDrawer) { d.Print("=== Task Info ===", baseStyle.Bold(true)) },
 			func(d *modalRowDrawer) { d.Print("", baseStyle) },
 			func(d *modalRowDrawer) {
 				d.Print(fmt.Sprintf("Task %q no longer exists", state.taskID), baseStyle)
 			},
-		}
-		withModal(d, fns)
+		})
 		return
 	}
-	fns := []func(d *modalRowDrawer){
-		func(d *modalRowDrawer) { d.Print("=== Task Info ===", baseStyle.Bold(true)) },
-		func(d *modalRowDrawer) { d.Print("", baseStyle) },
-		func(d *modalRowDrawer) {
-			d.Print("ID: ", labelStyle)
-			d.Print(task.ID, baseStyle)
-		},
-		func(d *modalRowDrawer) {
-			d.Print("Type: ", labelStyle)
-			d.Print(task.Type, baseStyle)
-		},
-		func(d *modalRowDrawer) {
-			d.Print("State: ", labelStyle)
-			d.Print(task.State.String(), baseStyle)
-		},
-		func(d *modalRowDrawer) {
-			d.Print("Queue: ", labelStyle)
-			d.Print(task.Queue, baseStyle)
-		},
-		func(d *modalRowDrawer) {
-			d.Print("Retry: ", labelStyle)
-			d.Print(fmt.Sprintf("%d/%d", task.Retried, task.MaxRetry), baseStyle)
-		},
+
+	contentWidth, bodyHeight := modalDims(d.Screen())
+	rows := buildModalRows(task, contentWidth)
+
+	offset := state.payloadScrollOffset
+	if max := clampMaxOffset(len(rows), bodyHeight); offset > max {
+		offset = max
 	}
+	if offset < 0 {
+		offset = 0
+	}
+	end := offset + bodyHeight
+	if end > len(rows) {
+		end = len(rows)
+	}
+	withModal(d, rows[offset:end])
+}
+
+// buildModalRows builds the ordered body rows for the task modal (title, fields,
+// decoded payload lines, envelope metadata, result). Width is used to wrap the
+// payload. The caller windows the result by scroll offset.
+func buildModalRows(task *asynq.TaskInfo, contentWidth int) []func(*modalRowDrawer) {
+	res := payload.Decode(task.Payload, true)
+
+	var rows []func(*modalRowDrawer)
+	add := func(fn func(*modalRowDrawer)) { rows = append(rows, fn) }
+
+	add(func(d *modalRowDrawer) { d.Print("=== Task Info ===", baseStyle.Bold(true)) })
+	add(func(d *modalRowDrawer) { d.Print("", baseStyle) })
+	add(func(d *modalRowDrawer) {
+		d.Print("ID: ", labelStyle)
+		d.Print(task.ID, baseStyle)
+	})
+	add(func(d *modalRowDrawer) {
+		d.Print("Type: ", labelStyle)
+		d.Print(task.Type, baseStyle)
+	})
+	add(func(d *modalRowDrawer) {
+		d.Print("State: ", labelStyle)
+		d.Print(task.State.String(), baseStyle)
+	})
+	add(func(d *modalRowDrawer) {
+		d.Print("Queue: ", labelStyle)
+		d.Print(task.Queue, baseStyle)
+	})
+	add(func(d *modalRowDrawer) {
+		d.Print("Retry: ", labelStyle)
+		d.Print(fmt.Sprintf("%d/%d", task.Retried, task.MaxRetry), baseStyle)
+	})
 	if task.LastErr != "" {
-		fns = append(fns, func(d *modalRowDrawer) {
+		add(func(d *modalRowDrawer) {
 			d.Print("Last Failure: ", labelStyle)
 			d.Print(task.LastErr, baseStyle)
 		})
-		fns = append(fns, func(d *modalRowDrawer) {
+		add(func(d *modalRowDrawer) {
 			d.Print("Last Failure Time: ", labelStyle)
 			d.Print(fmt.Sprintf("%v (%s)", task.LastFailedAt, formatPastTime(task.LastFailedAt)), baseStyle)
 		})
 	}
 	if !task.NextProcessAt.IsZero() {
-		fns = append(fns, func(d *modalRowDrawer) {
+		add(func(d *modalRowDrawer) {
 			d.Print("Next Process Time: ", labelStyle)
 			d.Print(fmt.Sprintf("%v (%s)", task.NextProcessAt, formatNextProcessTime(task.NextProcessAt)), baseStyle)
 		})
 	}
 	if !task.CompletedAt.IsZero() {
-		fns = append(fns, func(d *modalRowDrawer) {
+		add(func(d *modalRowDrawer) {
 			d.Print("Completion Time: ", labelStyle)
 			d.Print(fmt.Sprintf("%v (%s)", task.CompletedAt, formatPastTime(task.CompletedAt)), baseStyle)
 		})
 	}
-	fns = append(fns, func(d *modalRowDrawer) {
-		d.Print("Payload: ", labelStyle)
-		d.Print(formatByteSlice(task.Payload), baseStyle)
-	})
+
+	// Payload (decoded, multi-line, wrapped to content width)
+	add(func(d *modalRowDrawer) { d.Print("Payload:", labelStyle) })
+	for _, line := range wrapLines(res.Payload, contentWidth-2) {
+		add(func(d *modalRowDrawer) { d.Print(line, baseStyle) })
+	}
+
+	// Envelope metadata
+	if res.Envelope != nil {
+		appendEnvelopeRows(add, res.Envelope)
+	}
+
+	// Result (decoded, multi-line, wrapped)
 	if task.Result != nil {
-		fns = append(fns, func(d *modalRowDrawer) {
-			d.Print("Result: ", labelStyle)
-			d.Print(formatByteSlice(task.Result), baseStyle)
+		add(func(d *modalRowDrawer) { d.Print("Result:", labelStyle) })
+		for _, line := range wrapLines(payload.Format(task.Result, true), contentWidth-2) {
+			add(func(d *modalRowDrawer) { d.Print(line, baseStyle) })
+		}
+	}
+
+	return rows
+}
+
+// modalMaxOffset returns the maximum scroll offset for the task modal, given the
+// current screen size and the selected task's content. Used by key handling.
+func modalMaxOffset(s tcell.Screen, task *asynq.TaskInfo) int {
+	contentWidth, bodyHeight := modalDims(s)
+	rows := buildModalRows(task, contentWidth)
+	return clampMaxOffset(len(rows), bodyHeight)
+}
+
+// appendEnvelopeRows adds envelope metadata rows to the modal body.
+func appendEnvelopeRows(add func(func(*modalRowDrawer)), e *payload.Envelope) {
+	add(func(d *modalRowDrawer) { d.Print("Envelope:", labelStyle) })
+	add(func(d *modalRowDrawer) {
+		d.Print(fmt.Sprintf("  version: %d", e.Version), baseStyle)
+	})
+	if e.HasSampled {
+		add(func(d *modalRowDrawer) {
+			d.Print(fmt.Sprintf("  sampled: %v", e.Sampled), baseStyle)
 		})
 	}
-	withModal(d, fns)
+	if e.TraceID != "" {
+		add(func(d *modalRowDrawer) { d.Print(fmt.Sprintf("  trace_id: %s", e.TraceID), baseStyle) })
+	}
+	if e.SpanID != "" {
+		add(func(d *modalRowDrawer) { d.Print(fmt.Sprintf("  span_id: %s", e.SpanID), baseStyle) })
+	}
+	if e.ReplyTo != "" {
+		add(func(d *modalRowDrawer) { d.Print(fmt.Sprintf("  reply_to: %s", e.ReplyTo), baseStyle) })
+	}
+	for k, v := range e.Meta {
+		add(func(d *modalRowDrawer) { d.Print(fmt.Sprintf("  meta.%s: %s", k, v), baseStyle) })
+	}
 }
 
 // Reports whether the given byte slice is printable (i.e. human readable)
