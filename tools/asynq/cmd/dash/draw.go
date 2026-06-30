@@ -615,15 +615,65 @@ func (d *modalRowDrawer) Print(s string, style tcell.Style) {
 	d.d.Print(s, style)
 }
 
+// wrapLines splits s into visual lines no wider than max (measured by rune width).
+// Existing newlines are honored; over-long logical lines are wrapped.
+func wrapLines(s string, max int) []string {
+	if max <= 0 {
+		return []string{s}
+	}
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		var cur strings.Builder
+		curW := 0
+		for _, r := range line {
+			rw := runewidth.RuneWidth(r)
+			if curW+rw > max && cur.Len() > 0 {
+				out = append(out, cur.String())
+				cur.Reset()
+				curW = 0
+			}
+			cur.WriteRune(r)
+			curW += rw
+		}
+		out = append(out, cur.String())
+	}
+	return out
+}
+
+// clampMaxOffset returns the largest scroll offset that still shows content,
+// i.e. max(0, total-height). height<1 is treated as 1.
+func clampMaxOffset(total, height int) int {
+	if height < 1 {
+		height = 1
+	}
+	if total <= height {
+		return 0
+	}
+	return total - height
+}
+
+// modalDimsFromSize computes (contentWidth, bodyHeight) from screen size using
+// the same proportions as withModal (60% width/height, 4-char horizontal padding,
+// 2-char vertical border).
+func modalDimsFromSize(w, h int) (contentWidth, bodyHeight int) {
+	modalWidth := int(math.Floor(float64(w) * 0.6))
+	modalHeight := int(math.Floor(float64(h) * 0.6))
+	return modalWidth - 4, modalHeight - 2
+}
+
+func modalDims(s tcell.Screen) (contentWidth, bodyHeight int) {
+	w, h := s.Size()
+	return modalDimsFromSize(w, h)
+}
+
 // withModal draws a modal with the given functions row by row.
 func withModal(d *ScreenDrawer, rowPrintFns []func(d *modalRowDrawer)) {
 	w, h := d.Screen().Size()
-	var (
-		modalWidth  = int(math.Floor(float64(w) * 0.6))
-		modalHeight = int(math.Floor(float64(h) * 0.6))
-		rowOffset   = int(math.Floor(float64(h) * 0.2)) // 20% from the top
-		colOffset   = int(math.Floor(float64(w) * 0.2)) // 20% from the left
-	)
+	modalWidth, modalHeight := modalDimsFromSize(w, h)
+	modalWidth += 4  // restore full modal width (content + horizontal padding)
+	modalHeight += 2 // restore full modal height (body + vertical borders)
+	rowOffset := int(math.Floor(float64(h) * 0.2)) // 20% from the top
+	colOffset := int(math.Floor(float64(w) * 0.2)) // 20% from the left
 	if modalHeight < 3 {
 		return // no content can be shown
 	}
