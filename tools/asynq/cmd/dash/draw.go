@@ -144,6 +144,12 @@ func drawFooter(d *ScreenDrawer, state *State) {
 	switch state.view {
 	case viewTypeHelp:
 		d.Print("<Esc>: GoBack", style)
+	case viewTypeQueueDetails:
+		if state.taskID != "" {
+			d.Print("<Up/Down> or <j/k>: Scroll    <Esc>/<q>: Back    <?>: Help ", style)
+		} else {
+			d.Print("<?>: Help    <Ctrl+C>: Exit ", style)
+		}
 	default:
 		d.Print("<?>: Help    <Ctrl+C>: Exit ", style)
 	}
@@ -833,6 +839,12 @@ func drawHelp(d *ScreenDrawer) {
 			d.Print(" or ", baseStyle)
 			d.Print("<l>", keyStyle)
 			d.Print("  to move right", baseStyle)
+		},
+		func(d *modalRowDrawer) {
+			d.Print("<UpArrow>", keyStyle)
+			d.Print("/", baseStyle)
+			d.Print("<DownArrow>", keyStyle)
+			d.Print(" scroll payload in task modal", baseStyle)
 		},
 		func(d *modalRowDrawer) {
 			d.Print("<Ctrl+C>", keyStyle)

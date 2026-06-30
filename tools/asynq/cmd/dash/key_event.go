@@ -74,6 +74,7 @@ func (h *keyEventHandler) goBack() {
 		if state.taskID != "" {
 			state.taskID = ""
 			state.selectedTask = nil
+			state.payloadScrollOffset = 0
 			d.Draw(state)
 		} else {
 			state.view = viewTypeQueues
@@ -118,6 +119,11 @@ func (h *keyEventHandler) downKeyQueueDetails() {
 		} else {
 			state.taskTableRowIdx = 0 // loop back
 		}
+	} else {
+		// modal open: scroll content down
+		if state.selectedTask != nil && state.payloadScrollOffset < modalMaxOffset(s, state.selectedTask) {
+			state.payloadScrollOffset++
+		}
 	}
 	h.drawer.Draw(state)
 }
@@ -154,6 +160,11 @@ func (h *keyEventHandler) upKeyQueueDetails() {
 			state.taskTableRowIdx = len(state.tasks)
 		} else {
 			state.taskTableRowIdx--
+		}
+	} else {
+		// modal open: scroll content up
+		if state.payloadScrollOffset > 0 {
+			state.payloadScrollOffset--
 		}
 	}
 	h.drawer.Draw(state)
@@ -207,6 +218,7 @@ func (h *keyEventHandler) enterKeyQueueDetails() {
 		task := state.tasks[state.taskTableRowIdx-1]
 		state.selectedTask = task
 		state.taskID = task.ID
+		state.payloadScrollOffset = 0
 		f.Fetch(state)
 		h.resetTicker()
 		d.Draw(state)
