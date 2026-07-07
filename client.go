@@ -74,7 +74,7 @@ type Option interface {
 	Type() OptionType
 
 	// Value returns a value used to create this option.
-	Value() interface{}
+	Value() any
 }
 
 // Internal option representations.
@@ -103,27 +103,27 @@ func MaxRetry(n int) Option {
 	return retryOption(n)
 }
 
-func (n retryOption) String() string     { return fmt.Sprintf("MaxRetry(%d)", int(n)) }
-func (n retryOption) Type() OptionType   { return MaxRetryOpt }
-func (n retryOption) Value() interface{} { return int(n) }
+func (n retryOption) String() string   { return fmt.Sprintf("MaxRetry(%d)", int(n)) }
+func (n retryOption) Type() OptionType { return MaxRetryOpt }
+func (n retryOption) Value() any       { return int(n) }
 
 // Queue returns an option to specify the queue to enqueue the task into.
 func Queue(name string) Option {
 	return queueOption(name)
 }
 
-func (name queueOption) String() string     { return fmt.Sprintf("Queue(%q)", string(name)) }
-func (name queueOption) Type() OptionType   { return QueueOpt }
-func (name queueOption) Value() interface{} { return string(name) }
+func (name queueOption) String() string   { return fmt.Sprintf("Queue(%q)", string(name)) }
+func (name queueOption) Type() OptionType { return QueueOpt }
+func (name queueOption) Value() any       { return string(name) }
 
 // TaskID returns an option to specify the task ID.
 func TaskID(id string) Option {
 	return taskIDOption(id)
 }
 
-func (id taskIDOption) String() string     { return fmt.Sprintf("TaskID(%q)", string(id)) }
-func (id taskIDOption) Type() OptionType   { return TaskIDOpt }
-func (id taskIDOption) Value() interface{} { return string(id) }
+func (id taskIDOption) String() string   { return fmt.Sprintf("TaskID(%q)", string(id)) }
+func (id taskIDOption) Type() OptionType { return TaskIDOpt }
+func (id taskIDOption) Value() any       { return string(id) }
 
 // Timeout returns an option to specify how long a task may run.
 // If the timeout elapses before the Handler returns, then the task
@@ -137,9 +137,9 @@ func Timeout(d time.Duration) Option {
 	return timeoutOption(d)
 }
 
-func (d timeoutOption) String() string     { return fmt.Sprintf("Timeout(%v)", time.Duration(d)) }
-func (d timeoutOption) Type() OptionType   { return TimeoutOpt }
-func (d timeoutOption) Value() interface{} { return time.Duration(d) }
+func (d timeoutOption) String() string   { return fmt.Sprintf("Timeout(%v)", time.Duration(d)) }
+func (d timeoutOption) Type() OptionType { return TimeoutOpt }
+func (d timeoutOption) Value() any       { return time.Duration(d) }
 
 // Deadline returns an option to specify the deadline for the given task.
 // If it reaches the deadline before the Handler returns, then the task
@@ -154,8 +154,8 @@ func Deadline(t time.Time) Option {
 func (t deadlineOption) String() string {
 	return fmt.Sprintf("Deadline(%v)", time.Time(t).Format(time.UnixDate))
 }
-func (t deadlineOption) Type() OptionType   { return DeadlineOpt }
-func (t deadlineOption) Value() interface{} { return time.Time(t) }
+func (t deadlineOption) Type() OptionType { return DeadlineOpt }
+func (t deadlineOption) Value() any       { return time.Time(t) }
 
 // Unique returns an option to enqueue a task only if the given task is unique.
 // Task enqueued with this option is guaranteed to be unique within the given ttl.
@@ -172,9 +172,9 @@ func Unique(ttl time.Duration) Option {
 	return uniqueOption(ttl)
 }
 
-func (ttl uniqueOption) String() string     { return fmt.Sprintf("Unique(%v)", time.Duration(ttl)) }
-func (ttl uniqueOption) Type() OptionType   { return UniqueOpt }
-func (ttl uniqueOption) Value() interface{} { return time.Duration(ttl) }
+func (ttl uniqueOption) String() string   { return fmt.Sprintf("Unique(%v)", time.Duration(ttl)) }
+func (ttl uniqueOption) Type() OptionType { return UniqueOpt }
+func (ttl uniqueOption) Value() any       { return time.Duration(ttl) }
 
 // ProcessAt returns an option to specify when to process the given task.
 //
@@ -186,8 +186,8 @@ func ProcessAt(t time.Time) Option {
 func (t processAtOption) String() string {
 	return fmt.Sprintf("ProcessAt(%v)", time.Time(t).Format(time.UnixDate))
 }
-func (t processAtOption) Type() OptionType   { return ProcessAtOpt }
-func (t processAtOption) Value() interface{} { return time.Time(t) }
+func (t processAtOption) Type() OptionType { return ProcessAtOpt }
+func (t processAtOption) Value() any       { return time.Time(t) }
 
 // ProcessIn returns an option to specify when to process the given task relative to the current time.
 //
@@ -196,9 +196,9 @@ func ProcessIn(d time.Duration) Option {
 	return processInOption(d)
 }
 
-func (d processInOption) String() string     { return fmt.Sprintf("ProcessIn(%v)", time.Duration(d)) }
-func (d processInOption) Type() OptionType   { return ProcessInOpt }
-func (d processInOption) Value() interface{} { return time.Duration(d) }
+func (d processInOption) String() string   { return fmt.Sprintf("ProcessIn(%v)", time.Duration(d)) }
+func (d processInOption) Type() OptionType { return ProcessInOpt }
+func (d processInOption) Value() any       { return time.Duration(d) }
 
 // Retention returns an option to specify the duration of retention period for the task.
 // If this option is provided, the task will be stored as a completed task after successful processing.
@@ -207,9 +207,9 @@ func Retention(d time.Duration) Option {
 	return retentionOption(d)
 }
 
-func (ttl retentionOption) String() string     { return fmt.Sprintf("Retention(%v)", time.Duration(ttl)) }
-func (ttl retentionOption) Type() OptionType   { return RetentionOpt }
-func (ttl retentionOption) Value() interface{} { return time.Duration(ttl) }
+func (ttl retentionOption) String() string   { return fmt.Sprintf("Retention(%v)", time.Duration(ttl)) }
+func (ttl retentionOption) Type() OptionType { return RetentionOpt }
+func (ttl retentionOption) Value() any       { return time.Duration(ttl) }
 
 // Group returns an option to specify the group used for the task.
 // Tasks in a given queue with the same group will be aggregated into one task before passed to Handler.
@@ -217,9 +217,9 @@ func Group(name string) Option {
 	return groupOption(name)
 }
 
-func (name groupOption) String() string     { return fmt.Sprintf("Group(%q)", string(name)) }
-func (name groupOption) Type() OptionType   { return GroupOpt }
-func (name groupOption) Value() interface{} { return string(name) }
+func (name groupOption) String() string   { return fmt.Sprintf("Group(%q)", string(name)) }
+func (name groupOption) Type() OptionType { return GroupOpt }
+func (name groupOption) Value() any       { return string(name) }
 
 // Header returns an option to associate the key-value header to the task.
 //
@@ -239,8 +239,8 @@ func (h headerOption) String() string {
 	bytes, _ = json.Marshal(h)
 	return fmt.Sprintf("Header(%s)", bytes)
 }
-func (h headerOption) Type() OptionType   { return HeaderOpt }
-func (h headerOption) Value() interface{} { return [2]string{h[0], h[1]} }
+func (h headerOption) Type() OptionType { return HeaderOpt }
+func (h headerOption) Value() any       { return [2]string{h[0], h[1]} }
 
 // ErrDuplicateTask indicates that the given task could not be enqueued since it's a duplicate of another task.
 //
@@ -617,4 +617,9 @@ func (c *Client) addToGroup(ctx context.Context, msg *base.TaskMessage, group st
 		return c.broker.AddToGroupUnique(ctx, msg, group, uniqueTTL)
 	}
 	return c.broker.AddToGroup(ctx, msg, group)
+}
+
+// StateChanged watchs state updates, with more customized detail
+func (c *Client) SetTaskProber(prober base.TaskProber) {
+	c.broker.SetTaskProber(prober)
 }

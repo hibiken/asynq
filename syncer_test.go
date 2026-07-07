@@ -119,7 +119,7 @@ func TestSyncerDropsStaleRequests(t *testing.T) {
 		n  int // number of times request has been processed
 	)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		syncRequestCh <- &syncRequest{
 			fn: func() error {
 				mu.Lock()

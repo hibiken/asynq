@@ -3467,7 +3467,7 @@ func TestInspectorSchedulerEntries(t *testing.T) {
 				{
 					Spec:    "@every 20m",
 					Type:    "bar",
-					Payload: h.JSON(map[string]interface{}{"fiz": "baz"}),
+					Payload: h.JSON(map[string]any{"fiz": "baz"}),
 					Opts:    []string{`Queue("bar")`, `MaxRetry(20)`},
 					Next:    now.Add(1 * time.Minute),
 					Prev:    now.Add(-19 * time.Minute),
@@ -3483,7 +3483,7 @@ func TestInspectorSchedulerEntries(t *testing.T) {
 				},
 				{
 					Spec: "@every 20m",
-					Task: NewTask("bar", h.JSON(map[string]interface{}{"fiz": "baz"})),
+					Task: NewTask("bar", h.JSON(map[string]any{"fiz": "baz"})),
 					Opts: []Option{Queue("bar"), MaxRetry(20)},
 					Next: now.Add(1 * time.Minute),
 					Prev: now.Add(-19 * time.Minute),
@@ -3516,7 +3516,7 @@ func TestParseOption(t *testing.T) {
 	tests := []struct {
 		s        string
 		wantType OptionType
-		wantVal  interface{}
+		wantVal  any
 	}{
 		{`MaxRetry(10)`, MaxRetryOpt, 10},
 		{`Queue("email")`, QueueOpt, "email"},

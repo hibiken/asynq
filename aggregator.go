@@ -62,10 +62,7 @@ const (
 )
 
 func newAggregator(params aggregatorParams) *aggregator {
-	interval := defaultAggregationCheckInterval
-	if params.gracePeriod < interval {
-		interval = params.gracePeriod
-	}
+	interval := min(params.gracePeriod, defaultAggregationCheckInterval)
 	return &aggregator{
 		logger:      params.logger,
 		broker:      params.broker,

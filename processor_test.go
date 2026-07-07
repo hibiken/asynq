@@ -231,7 +231,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 	defer r.Close()
 	rdbClient := rdb.NewRDB(r)
 
-	m1 := h.NewTaskMessage("large_number", h.JSON(map[string]interface{}{"data": 111111111111111111}))
+	m1 := h.NewTaskMessage("large_number", h.JSON(map[string]any{"data": 111111111111111111}))
 	t1 := NewTask(m1.Type, m1.Payload)
 
 	tests := []struct {
@@ -769,7 +769,7 @@ func TestProcessorPerform(t *testing.T) {
 			handler: func(ctx context.Context, t *Task) error {
 				return nil
 			},
-			task:    NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"})),
+			task:    NewTask("gen_thumbnail", h.JSON(map[string]any{"src": "some/img/path"})),
 			wantErr: false,
 		},
 		{
@@ -777,7 +777,7 @@ func TestProcessorPerform(t *testing.T) {
 			handler: func(ctx context.Context, t *Task) error {
 				return fmt.Errorf("something went wrong")
 			},
-			task:    NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"})),
+			task:    NewTask("gen_thumbnail", h.JSON(map[string]any{"src": "some/img/path"})),
 			wantErr: true,
 		},
 		{
@@ -785,7 +785,7 @@ func TestProcessorPerform(t *testing.T) {
 			handler: func(ctx context.Context, t *Task) error {
 				panic("something went terribly wrong")
 			},
-			task:    NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"})),
+			task:    NewTask("gen_thumbnail", h.JSON(map[string]any{"src": "some/img/path"})),
 			wantErr: true,
 		},
 	}
@@ -955,7 +955,7 @@ func TestProcessorComputeDeadline(t *testing.T) {
 
 func TestReturnPanicError(t *testing.T) {
 
-	task := NewTask("gen_thumbnail", h.JSON(map[string]interface{}{"src": "some/img/path"}))
+	task := NewTask("gen_thumbnail", h.JSON(map[string]any{"src": "some/img/path"}))
 
 	tests := []struct {
 		name         string

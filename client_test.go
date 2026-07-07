@@ -24,7 +24,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
+	task := NewTask("send_email", h.JSON(map[string]any{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 
 	var (
 		now          = time.Now()
@@ -147,7 +147,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 }
 
 func testClientEnqueue(t *testing.T, client *Client, r redis.UniversalClient) {
-	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
+	task := NewTask("send_email", h.JSON(map[string]any{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 	now := time.Now()
 
 	tests := []struct {
@@ -746,7 +746,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
+	task := NewTask("send_email", h.JSON(map[string]any{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 	now := time.Now()
 
 	tests := []struct {
@@ -869,7 +869,7 @@ func TestClientEnqueueError(t *testing.T) {
 	client := NewClient(getRedisConnOpt(t))
 	defer client.Close()
 
-	task := NewTask("send_email", h.JSON(map[string]interface{}{"to": "customer@gmail.com", "from": "merchant@example.com"}))
+	task := NewTask("send_email", h.JSON(map[string]any{"to": "customer@gmail.com", "from": "merchant@example.com"}))
 
 	tests := []struct {
 		desc string
@@ -890,12 +890,12 @@ func TestClientEnqueueError(t *testing.T) {
 		},
 		{
 			desc: "With empty task typename",
-			task: NewTask("", h.JSON(map[string]interface{}{})),
+			task: NewTask("", h.JSON(map[string]any{})),
 			opts: []Option{},
 		},
 		{
 			desc: "With blank task typename",
-			task: NewTask("    ", h.JSON(map[string]interface{}{})),
+			task: NewTask("    ", h.JSON(map[string]any{})),
 			opts: []Option{},
 		},
 		{
@@ -1069,7 +1069,7 @@ func TestClientEnqueueUnique(t *testing.T) {
 		ttl  time.Duration
 	}{
 		{
-			NewTask("email", h.JSON(map[string]interface{}{"user_id": 123})),
+			NewTask("email", h.JSON(map[string]any{"user_id": 123})),
 			time.Hour,
 		},
 	}
@@ -1215,12 +1215,12 @@ func TestClientEnqueueWithHeaders(t *testing.T) {
 	}{
 		{
 			desc: "Task with headers",
-			task: NewTaskWithHeaders("send_email", h.JSON(map[string]interface{}{"to": "user@example.com"}), headers),
+			task: NewTaskWithHeaders("send_email", h.JSON(map[string]any{"to": "user@example.com"}), headers),
 			opts: []Option{},
 			wantInfo: &TaskInfo{
 				Queue:         "default",
 				Type:          "send_email",
-				Payload:       h.JSON(map[string]interface{}{"to": "user@example.com"}),
+				Payload:       h.JSON(map[string]any{"to": "user@example.com"}),
 				Headers:       headers,
 				State:         TaskStatePending,
 				MaxRetry:      defaultMaxRetry,
@@ -1235,7 +1235,7 @@ func TestClientEnqueueWithHeaders(t *testing.T) {
 				"default": {
 					{
 						Type:     "send_email",
-						Payload:  h.JSON(map[string]interface{}{"to": "user@example.com"}),
+						Payload:  h.JSON(map[string]any{"to": "user@example.com"}),
 						Headers:  headers,
 						Retry:    defaultMaxRetry,
 						Queue:    "default",

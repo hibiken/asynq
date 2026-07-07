@@ -252,7 +252,7 @@ func (i *Inspector) GetTaskInfo(queue, id string) (*TaskInfo, error) {
 }
 
 // ListOption specifies behavior of list operation.
-type ListOption interface{}
+type ListOption any
 
 // Internal list option representations.
 type (

@@ -333,6 +333,12 @@ var SkipRetry = errors.New("skip retry for the task")
 var RevokeTask = errors.New("revoke task")
 
 func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg *base.TaskMessage, err error) {
+	if msg.Retry == 0 {
+		if errors.Is(err, SkipRetry) {
+			p.markAsDone(l, msg)
+			return
+		}
+	}
 	if p.errHandler != nil {
 		p.errHandler.HandleError(ctx, NewTaskWithHeaders(msg.Type, msg.Payload, msg.Headers), err)
 	}
@@ -349,7 +355,7 @@ func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg 
 }
 
 func (p *processor) retry(l *base.Lease, msg *base.TaskMessage, e error, isFailure bool) {
-	if !l.IsValid() {
+	if !l.IsValid() || msg.Retry == 0 {
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
 		return
 	}
@@ -410,7 +416,7 @@ func (p *processor) queues() []string {
 	}
 	var names []string
 	for qname, priority := range p.queueConfig {
-		for i := 0; i < priority; i++ {
+		for range priority {
 			names = append(names, qname)
 		}
 	}
@@ -511,7 +517,7 @@ func gcd(xs ...int) int {
 		return x
 	}
 	res := xs[0]
-	for i := 0; i < len(xs); i++ {
+	for i := range xs {
 		res = fn(xs[i], res)
 		if res == 1 {
 			return 1

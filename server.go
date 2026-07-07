@@ -252,6 +252,55 @@ type Config struct {
 	// If unset or zero, default batch size of 100 is used.
 	// Make sure to not put a big number as the batch size to prevent a long-running script.
 	JanitorBatchSize int
+
+	// StateChanged called when a task state changed
+	//
+	TaskStateProber *TaskStateProber
+}
+
+// TaskStateProber tell there's a state changed happening
+type TaskStateProber struct {
+	Probers map[string]string // map[state-string]data-name
+	Handler func(map[string]any)
+}
+
+func (p TaskStateProber) Changed(out map[string]any) {
+	if p.Handler != nil {
+		p.Handler(out)
+	}
+}
+
+func (p TaskStateProber) Result(state base.TaskState, raw *base.TaskInfo) (key string, data any) {
+	defer func() {
+		if len(key) == 0 {
+			key = "task"
+		}
+		if data == nil {
+			data = *newTaskInfo(raw.Message, raw.State, raw.NextProcessAt, raw.Result)
+		}
+	}()
+
+	probers := p.Probers
+	if len(probers) == 0 {
+		probers = map[string]string{"*": "task"}
+	}
+	key, ok := probers["*"]
+	if !ok {
+		key, ok = probers[state.String()]
+	}
+	if !ok {
+		return
+	}
+
+	switch key {
+	case "next":
+		data = raw.NextProcessAt
+	case "result":
+		if len(raw.Result) > 0 {
+			data = raw.Result
+		}
+	}
+	return
 }
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
@@ -299,20 +348,20 @@ type RetryDelayFunc func(n int, e error, t *Task) time.Duration
 // Logger supports logging at various log levels.
 type Logger interface {
 	// Debug logs a message at Debug level.
-	Debug(args ...interface{})
+	Debug(args ...any)
 
 	// Info logs a message at Info level.
-	Info(args ...interface{})
+	Info(args ...any)
 
 	// Warn logs a message at Warning level.
-	Warn(args ...interface{})
+	Warn(args ...any)
 
 	// Error logs a message at Error level.
-	Error(args ...interface{})
+	Error(args ...any)
 
 	// Fatal logs a message at Fatal level
 	// and process will exit with status set to 1.
-	Fatal(args ...interface{})
+	Fatal(args ...any)
 }
 
 // LogLevel represents logging level.
@@ -509,6 +558,11 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	syncCh := make(chan *syncRequest)
 	srvState := &serverState{value: srvStateNew}
 	cancels := base.NewCancelations()
+
+	taskStateProber := cfg.TaskStateProber
+	if taskStateProber != nil {
+		rdb.SetTaskProber(*taskStateProber)
+	}
 
 	syncer := newSyncer(syncerParams{
 		logger:     logger,
@@ -784,4 +838,9 @@ func (srv *Server) Ping() error {
 	}
 
 	return srv.broker.Ping()
+}
+
+// StateChanged watch state updates, with more customized detail
+func (srv *Server) SetTaskStateProber(prober base.TaskProber) {
+	srv.broker.SetTaskProber(prober)
 }
