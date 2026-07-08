@@ -50,7 +50,46 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 
 ### Redis Cluster Compatibility
 
-Some of the lua scripts in this library may not be compatible with Redis Cluster.
+Asynq works with Redis Cluster. Every key that belongs to a queue is wrapped in a
+[hash tag](https://redis.io/docs/reference/cluster-spec/#hash-tags), so the key
+prefix is `asynq:{<queue>}:...`. Redis hashes only the text inside the braces,
+which means all of a queue's keys map to the same hash slot and therefore live on
+the same node. The Lua scripts and multi-key commands in this library only ever
+touch keys that belong to a single queue (or to a single server, worker, or
+scheduler record, which is wrapped the same way), so each one runs against a
+single slot and does not raise a `CROSSSLOT` error. Global bookkeeping sets such
+as `asynq:queues` and `asynq:servers` are updated with their own single-key
+commands, never mixed into a per-queue script.
+
+Data is sharded across the cluster by queue: a single queue maps to one node, so
+you scale by adding queues rather than by spreading one queue over several nodes.
+
+The following features work on Redis Cluster:
+
+| Feature | Status |
+| --- | --- |
+| Enqueue, schedule, dequeue, and unique tasks | Works |
+| Retry, archive, and completed-task retention | Works |
+| Task aggregation (groups) | Works |
+| Periodic tasks (scheduler) and scheduler history | Works |
+| Server, worker, and scheduler registration | Works |
+| Inspector and the `asynq` CLI (stats, list, run, archive, delete, pause, remove queue) | Works |
+| Rate-limiting semaphore (`x/rate`) | Works |
+
+A few things to keep in mind:
+
+- A single queue is served by one node, so its throughput is bound to that node.
+  Add queues to spread load; you cannot split one queue across nodes.
+- `BatchEnqueue` is not atomic across queues. A batch that spans several queues is
+  sent as a pipeline whose commands are routed to different nodes, so individual
+  tasks may succeed or fail independently.
+- Operations can briefly become unavailable for a queue while its slot is being
+  resharded, because the scripts use multiple keys.
+
+Connect with `RedisClusterClientOpt`. `Inspector.ClusterKeySlot` and
+`Inspector.ClusterNodes` report which slot and nodes a queue maps to. See the
+[Redis Cluster wiki page](https://github.com/hibiken/asynq/wiki/Redis-Cluster)
+for a walkthrough.
 
 ## Sponsoring
 If you are using this package in production, **please consider sponsoring the project to show your support!**
