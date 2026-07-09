@@ -50,7 +50,9 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 
 ### Redis Cluster Compatibility
 
-Asynq works with Redis Cluster. Every key that belongs to a queue is wrapped in a
+Asynq works with Redis Cluster. No script issues a `CROSSSLOT`: every per-queue
+key shares a `{<queue>}` hash tag, so each script only ever touches keys in a
+single slot. Every key that belongs to a queue is wrapped in a
 [hash tag](https://redis.io/docs/reference/cluster-spec/#hash-tags), so the key
 prefix is `asynq:{<queue>}:...`. Redis hashes only the text inside the braces,
 which means all of a queue's keys map to the same hash slot and therefore live on
@@ -59,7 +61,9 @@ touch keys that belong to a single queue (or to a single server, worker, or
 scheduler record, which is wrapped the same way), so each one runs against a
 single slot and does not raise a `CROSSSLOT` error. Global bookkeeping sets such
 as `asynq:queues` and `asynq:servers` are updated with their own single-key
-commands, never mixed into a per-queue script.
+commands, never mixed into a per-queue script. This reflects an audit of all Lua
+scripts as of the current release; if you do hit a `CROSSSLOT` on a supported
+operation, please [open an issue](https://github.com/hibiken/asynq/issues).
 
 Data is sharded across the cluster by queue: a single queue maps to one node, so
 you scale by adding queues rather than by spreading one queue over several nodes.
