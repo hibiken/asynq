@@ -301,8 +301,8 @@ func composeOptions(opts ...Option) (option, error) {
 			res.deadline = time.Time(opt)
 		case uniqueOption:
 			ttl := time.Duration(opt)
-			if ttl < 1*time.Second {
-				return option{}, errors.New("Unique TTL cannot be less than 1s")
+			if ttl <= 0 {
+				return option{}, errors.New("Unique TTL must be greater than 0")
 			}
 			res.uniqueTTL = ttl
 		case processAtOption:
