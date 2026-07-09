@@ -113,7 +113,7 @@ var taskListCmd = &cobra.Command{
 
 	Note: For aggregating tasks, additional --group flag is required.
 
-	List opeartion paginates the result set. By default, the command fetches the first 30 tasks.
+	List operation paginates the result set. By default, the command fetches the first 30 tasks.
 	Use --page and --size flags to specify the page number and size.`),
 	Example: heredoc.Doc(`
 		$ asynq task list --queue=myqueue --state=pending

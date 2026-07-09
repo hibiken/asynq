@@ -749,7 +749,7 @@ func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]*base.TaskInfo, err
 }
 
 // ListRetry returns all tasks from the given queue that have failed before
-// and willl be retried in the future.
+// and will be retried in the future.
 func (r *RDB) ListRetry(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListRetry"
 	exists, err := r.queueExists(qname)
@@ -1927,7 +1927,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return errors.E(op, errors.Internal, fmt.Sprintf("unexpeced return value from Lua script: %v", res))
+		return errors.E(op, errors.Internal, fmt.Sprintf("unexpected return value from Lua script: %v", res))
 	}
 	switch n {
 	case 1:
@@ -1995,7 +1995,7 @@ func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
 	}
 	keys, err := cast.ToStringSliceE(res)
 	if err != nil {
-		return nil, errors.E(op, errors.Internal, fmt.Sprintf("unexpeced return value from Lua script: %v", res))
+		return nil, errors.E(op, errors.Internal, fmt.Sprintf("unexpected return value from Lua script: %v", res))
 	}
 	var workers []*base.WorkerInfo
 	for _, key := range keys {
