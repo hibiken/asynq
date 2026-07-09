@@ -162,7 +162,7 @@ func (t deadlineOption) Value() interface{} { return time.Time(t) }
 // Once the task gets processed successfully or once the TTL has expired,
 // another task with the same uniqueness may be enqueued.
 // ErrDuplicateTask error is returned when enqueueing a duplicate task.
-// TTL duration must be greater than or equal to 1 second.
+// TTL duration must be greater than or equal to 1 millisecond.
 //
 // Uniqueness of a task is based on the following properties:
 //   - Task Type
