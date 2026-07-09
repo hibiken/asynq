@@ -479,7 +479,7 @@ func getTaskCount(queue *asynq.QueueInfo, taskState asynq.TaskState) int {
 	case asynq.TaskStateCompleted:
 		return queue.Completed
 	}
-	panic("unkonwn task state")
+	panic("unknown task state")
 }
 
 func drawTaskStateBreakdown(d *ScreenDrawer, style tcell.Style, state *State) {
