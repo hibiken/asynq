@@ -16,12 +16,13 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/hibiken/asynq/internal/base"
 	asynqcontext "github.com/hibiken/asynq/internal/context"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/timeutil"
-	"golang.org/x/time/rate"
 )
 
 type processor struct {
@@ -57,7 +58,7 @@ type processor struct {
 	// channel to communicate back to the long running "processor" goroutine.
 	// once is used to send value to the channel only once.
 	done chan struct{}
-	once sync.Once
+	once *sync.Once
 
 	// quit channel is closed when the shutdown of the "processor" goroutine starts.
 	quit chan struct{}
@@ -112,6 +113,7 @@ func newProcessor(params processorParams) *processor {
 		errLogLimiter:     rate.NewLimiter(rate.Every(3*time.Second), 1),
 		sema:              make(chan struct{}, params.concurrency),
 		done:              make(chan struct{}),
+		once:              &sync.Once{},
 		quit:              make(chan struct{}),
 		abort:             make(chan struct{}),
 		errHandler:        params.errHandler,
@@ -139,7 +141,9 @@ func (p *processor) stop() {
 func (p *processor) shutdown() {
 	p.stop()
 
-	time.AfterFunc(p.shutdownTimeout, func() { close(p.abort) })
+	go func(abort chan struct{}) {
+		time.AfterFunc(p.shutdownTimeout, func() { close(abort) })
+	}(p.abort)
 
 	p.logger.Info("Waiting for all workers to finish...")
 	// block until all workers have released the token
@@ -147,6 +151,14 @@ func (p *processor) shutdown() {
 		p.sema <- struct{}{}
 	}
 	p.logger.Info("All workers have finished")
+}
+
+func (p *processor) resetState() {
+	p.sema = make(chan struct{}, cap(p.sema))
+	p.done = make(chan struct{})
+	p.quit = make(chan struct{})
+	p.abort = make(chan struct{})
+	p.once = &sync.Once{}
 }
 
 func (p *processor) start(wg *sync.WaitGroup) {
