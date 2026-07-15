@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
+	internalerrors "github.com/hibiken/asynq/internal/errors"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -572,13 +573,18 @@ type ResultWriter struct {
 }
 
 // Write writes the given data as a result of the task the ResultWriter is associated with.
+// It returns an error wrapping ErrTaskNotFound if the task no longer exists.
 func (w *ResultWriter) Write(data []byte) (n int, err error) {
 	select {
 	case <-w.ctx.Done():
 		return 0, fmt.Errorf("failed to write task result: %w", w.ctx.Err())
 	default:
 	}
-	return w.broker.WriteResult(w.qname, w.id, data)
+	n, err = w.broker.WriteResult(w.qname, w.id, data)
+	if internalerrors.IsTaskNotFound(err) {
+		return 0, fmt.Errorf("asynq: %w", ErrTaskNotFound)
+	}
+	return n, err
 }
 
 // TaskID returns the ID of the task the ResultWriter is associated with.
