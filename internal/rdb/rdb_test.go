@@ -3451,35 +3451,72 @@ func TestWriteResult(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 
+	data := []byte("hello")
+	type expectation struct {
+		n            int
+		taskNotFound bool
+		keyExists    bool
+		result       string
+	}
 	tests := []struct {
-		qname  string
-		taskID string
-		data   []byte
+		name       string
+		taskExists bool
+		want       expectation
 	}{
 		{
-			qname:  "default",
-			taskID: uuid.NewString(),
-			data:   []byte("hello"),
+			name:       "existing task",
+			taskExists: true,
+			want: expectation{
+				n:         len(data),
+				keyExists: true,
+				result:    string(data),
+			},
+		},
+		{
+			name: "missing task",
+			want: expectation{
+				taskNotFound: true,
+			},
 		},
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
+		t.Run(tc.name, func(t *testing.T) {
+			h.FlushDB(t, r.client)
+			const qname = "default"
+			taskID := uuid.NewString()
+			if tc.taskExists {
+				msg := h.NewTaskMessageWithQueue("task", nil, qname)
+				taskID = msg.ID
+				if err := r.Enqueue(context.Background(), msg); err != nil {
+					t.Fatalf("Enqueue failed: %v", err)
+				}
+			}
 
-		n, err := r.WriteResult(tc.qname, tc.taskID, tc.data)
-		if err != nil {
-			t.Errorf("WriteResult failed: %v", err)
-			continue
-		}
-		if n != len(tc.data) {
-			t.Errorf("WriteResult returned %d, want %d", n, len(tc.data))
-		}
+			n, err := r.WriteResult(qname, taskID, data)
 
-		taskKey := base.TaskKey(tc.qname, tc.taskID)
-		got := r.client.HGet(context.Background(), taskKey, "result").Val()
-		if got != string(tc.data) {
-			t.Errorf("`result` field under %q key is set to %q, want %q", taskKey, got, string(tc.data))
-		}
+			switch {
+			case tc.want.taskNotFound && !errors.IsTaskNotFound(err):
+				t.Errorf("WriteResult error = %v, want TaskNotFoundError", err)
+			case !tc.want.taskNotFound && err != nil:
+				t.Errorf("WriteResult failed: %v", err)
+			}
+			if n != tc.want.n {
+				t.Errorf("WriteResult returned %d, want %d", n, tc.want.n)
+			}
+
+			taskKey := base.TaskKey(qname, taskID)
+			keyExists := r.client.Exists(context.Background(), taskKey).Val() != 0
+			if keyExists != tc.want.keyExists {
+				t.Errorf("task key existence after WriteResult = %t, want %t", keyExists, tc.want.keyExists)
+			}
+			if tc.want.keyExists {
+				got := r.client.HGet(context.Background(), taskKey, "result").Val()
+				if got != tc.want.result {
+					t.Errorf("`result` field under %q key is set to %q, want %q", taskKey, got, tc.want.result)
+				}
+			}
+		})
 	}
 }
 
