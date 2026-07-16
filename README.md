@@ -50,7 +50,17 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 
 ### Redis Cluster Compatibility
 
-Some of the lua scripts in this library may not be compatible with Redis Cluster.
+All Redis keys used by this library are hash-tagged on the queue name
+(`asynq:{<qname>}:...`), so every key belonging to a given queue is guaranteed to
+hash to the same Redis Cluster slot. This is what makes it safe for a handful of
+internal Lua scripts (used by task introspection/management operations such as
+`Inspector.ArchiveTask`, `RunTask`, `DeleteTask`, and `RemoveQueue`) to build some of
+their keys from `ARGV` at runtime rather than declaring them all in `KEYS` — as long
+as every key they touch is derived from the same `qname`, they stay in the same slot.
+
+**The one thing this depends on:** don't pass keys from two different queues into the
+same script call, and don't construct a key without the `{qname}` hash tag. Doing
+either would produce a genuine `CROSSSLOT` error. All current call sites respect this.
 
 ## Sponsoring
 If you are using this package in production, **please consider sponsoring the project to show your support!**
