@@ -64,7 +64,7 @@ func (r *RDB) Ping() error {
 
 func (r *RDB) runScript(ctx context.Context, op errors.Op, script *redis.Script, keys []string, args ...interface{}) error {
 	if err := script.Run(ctx, r.client, keys, args...).Err(); err != nil {
-		return errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
+		return errors.E(op, errors.Internal, fmt.Errorf("redis eval error: %w", err))
 	}
 	return nil
 }
@@ -73,7 +73,7 @@ func (r *RDB) runScript(ctx context.Context, op errors.Op, script *redis.Script,
 func (r *RDB) runScriptWithErrorCode(ctx context.Context, op errors.Op, script *redis.Script, keys []string, args ...interface{}) (int64, error) {
 	res, err := script.Run(ctx, r.client, keys, args...).Result()
 	if err != nil {
-		return 0, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+		return 0, errors.E(op, errors.Unknown, fmt.Errorf("redis eval error: %w", err))
 	}
 	n, ok := res.(int64)
 	if !ok {
@@ -371,7 +371,7 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, leaseExpirationT
 		if err == redis.Nil {
 			continue
 		} else if err != nil {
-			return nil, time.Time{}, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+			return nil, time.Time{}, errors.E(op, errors.Unknown, fmt.Errorf("redis eval error: %w", err))
 		}
 		encoded, err := cast.ToStringE(res)
 		if err != nil {
@@ -1103,7 +1103,7 @@ func (r *RDB) forward(delayedKey, pendingKey, taskKeyPrefix, groupKeyPrefix stri
 	}
 	res, err := forwardCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
-		return 0, errors.E(errors.Internal, fmt.Sprintf("redis eval error: %v", err))
+		return 0, errors.E(errors.Internal, fmt.Errorf("redis eval error: %w", err))
 	}
 	n, err := cast.ToIntE(res)
 	if err != nil {
@@ -1295,7 +1295,7 @@ func (r *RDB) ReadAggregationSet(qname, gname, setID string) ([]*base.TaskMessag
 	res, err := readAggregationSetCmd.Run(ctx, r.client,
 		[]string{aggSetKey}, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
-		return nil, time.Time{}, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+		return nil, time.Time{}, errors.E(op, errors.Unknown, fmt.Errorf("redis eval error: %w", err))
 	}
 	data, err := cast.ToStringSliceE(res)
 	if err != nil {
@@ -1413,7 +1413,7 @@ func (r *RDB) deleteExpiredCompletedTasks(qname string, batchSize int) (int64, e
 	}
 	res, err := deleteExpiredCompletedTasksCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
-		return 0, errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
+		return 0, errors.E(op, errors.Internal, fmt.Errorf("redis eval error: %w", err))
 	}
 	n, ok := res.(int64)
 	if !ok {
@@ -1447,7 +1447,7 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 			[]string{base.LeaseKey(qname)},
 			cutoff.Unix(), base.TaskKeyPrefix(qname)).Result()
 		if err != nil {
-			return nil, errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
+			return nil, errors.E(op, errors.Internal, fmt.Errorf("redis eval error: %w", err))
 		}
 		data, err := cast.ToStringSliceE(res)
 		if err != nil {
