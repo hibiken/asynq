@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -26,22 +27,55 @@ type Inspector struct {
 	sharedConnection bool
 }
 
+// InspectorConfig optionally overrides global archive retention defaults.
+// Settings persisted by a running Server are loaded from Redis once when the
+// Inspector is created.
+type InspectorConfig struct {
+	// MaxArchiveSize specifies the maximum number of tasks to keep in the archive set.
+	//
+	// When the archive exceeds this limit, the oldest archived tasks are deleted.
+	// If unset, zero, or negative, default size of 10000 is used.
+	MaxArchiveSize int
+
+	// ArchivedExpirationInDays specifies the number of days before an archived task is deleted.
+	//
+	// If unset, zero, or negative, default of 90 days is used.
+	ArchivedExpirationInDays int
+}
+
+func rdbConfigFromInspectorConfig(cfg InspectorConfig) rdb.RDBConfig {
+	return rdb.RDBConfig{
+		MaxArchiveSize:           cfg.MaxArchiveSize,
+		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+	}
+}
+
 // New returns a new instance of Inspector.
-func NewInspector(r RedisConnOpt) *Inspector {
+func NewInspector(r RedisConnOpt, cfg ...InspectorConfig) *Inspector {
 	c, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("inspeq: unsupported RedisConnOpt type %T", r))
 	}
-	inspector := NewInspectorFromRedisClient(c)
+	var icfg InspectorConfig
+	if len(cfg) > 0 {
+		icfg = cfg[0]
+	}
+	inspector := NewInspectorFromRedisClient(c, icfg)
 	inspector.sharedConnection = false
 	return inspector
 }
 
 // NewInspectorFromRedisClient returns a new instance of Inspector given a redis.UniversalClient
 // Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
-func NewInspectorFromRedisClient(c redis.UniversalClient) *Inspector {
+func NewInspectorFromRedisClient(c redis.UniversalClient, cfg ...InspectorConfig) *Inspector {
+	var icfg InspectorConfig
+	if len(cfg) > 0 {
+		icfg = cfg[0]
+	}
+	rdbClient := rdb.NewRDB(c, rdbConfigFromInspectorConfig(icfg))
+	_ = rdbClient.LoadArchiveConfigFromRedis(context.Background())
 	return &Inspector{
-		rdb:              rdb.NewRDB(c),
+		rdb:              rdbClient,
 		sharedConnection: true,
 	}
 }

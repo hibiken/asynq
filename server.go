@@ -42,6 +42,8 @@ type Server struct {
 	// not want to close it.
 	sharedConnection bool
 
+	archiveSettings base.ArchiveConfig
+
 	state *serverState
 
 	// wait group to wait for all goroutines to finish.
@@ -254,20 +256,15 @@ type Config struct {
 	// Make sure to not put a big number as the batch size to prevent a long-running script.
 	JanitorBatchSize int
 
-	// MaxArchiveSize specifies the maximum number of tasks to keep in the archive set per queue.
+	// MaxArchiveSize specifies the maximum number of tasks to keep in the archive set.
 	//
 	// When the archive exceeds this limit, the oldest archived tasks are deleted.
 	// If unset, zero, or negative, default size of 10000 is used.
-	//
-	// Note that this only applies to tasks archived by this Server. Archive operations
-	// performed through Inspector or the CLI use their own configuration.
 	MaxArchiveSize int
 
 	// ArchivedExpirationInDays specifies the number of days before an archived task is deleted.
 	//
 	// If unset, zero, or negative, default of 90 days is used.
-	//
-	// Like MaxArchiveSize, this only applies to tasks archived by this Server.
 	ArchivedExpirationInDays int
 }
 
@@ -441,6 +438,8 @@ const (
 	defaultJanitorInterval = 8 * time.Second
 
 	defaultJanitorBatchSize = 100
+
+	queueConfigWriteTimeout = 5 * time.Second
 )
 
 // NewServer returns a new Server given a redis connection option
@@ -520,6 +519,10 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	}
 	logger.SetLevel(toInternalLogLevel(loglevel))
 
+	archiveSettings := base.ArchiveConfig{
+		MaxArchiveSize:           cfg.MaxArchiveSize,
+		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+	}
 	rdb := rdb.NewRDB(c, rdb.RDBConfig{
 		MaxArchiveSize:           cfg.MaxArchiveSize,
 		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
@@ -626,6 +629,7 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		logger:           logger,
 		broker:           rdb,
 		sharedConnection: true,
+		archiveSettings:  archiveSettings,
 		state:            srvState,
 		forwarder:        forwarder,
 		processor:        processor,
@@ -707,6 +711,12 @@ func (srv *Server) Start(handler Handler) error {
 		return err
 	}
 	srv.logger.Info("Starting processing")
+
+	ctx, cancel := context.WithTimeout(context.Background(), queueConfigWriteTimeout)
+	if err := srv.broker.WriteArchiveConfig(ctx, srv.archiveSettings); err != nil {
+		srv.logger.Warnf("Could not persist archive settings: %v", err)
+	}
+	cancel()
 
 	srv.heartbeater.start(&srv.wg)
 	srv.healthchecker.start(&srv.wg)

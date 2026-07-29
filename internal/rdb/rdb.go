@@ -33,7 +33,7 @@ const DefaultArchivedExpirationInDays = 90
 
 // RDBConfig holds RDB configuration options.
 type RDBConfig struct {
-	// MaxArchiveSize is the maximum number of tasks to keep in the archive set per queue.
+	// MaxArchiveSize is the maximum number of tasks to keep in the archive set.
 	// Zero or negative values fall back to DefaultMaxArchiveSize.
 	MaxArchiveSize int
 
@@ -54,17 +54,15 @@ func normalizeConfig(cfg RDBConfig) RDBConfig {
 
 // RDB is a client interface to query and mutate task queues.
 type RDB struct {
-	client                   redis.UniversalClient
-	clock                    timeutil.Clock
-	queuesPublished          sync.Map
-	maxArchiveSize           int
-	archivedExpirationInDays int
+	client          redis.UniversalClient
+	clock           timeutil.Clock
+	queuesPublished sync.Map
+	archiveConfig   RDBConfig
 }
 
 // NewRDB returns a new instance of RDB.
 //
-// An optional RDBConfig customizes archive retention. Callers that do not manage
-// retention (Client, Scheduler, Inspector, the CLI) can omit it and get the defaults.
+// An optional RDBConfig customizes archive retention.
 func NewRDB(client redis.UniversalClient, config ...RDBConfig) *RDB {
 	var cfg RDBConfig
 	if len(config) > 0 {
@@ -72,20 +70,48 @@ func NewRDB(client redis.UniversalClient, config ...RDBConfig) *RDB {
 	}
 	cfg = normalizeConfig(cfg)
 	return &RDB{
-		client:                   client,
-		clock:                    timeutil.NewRealClock(),
-		maxArchiveSize:           cfg.MaxArchiveSize,
-		archivedExpirationInDays: cfg.ArchivedExpirationInDays,
+		client:        client,
+		clock:         timeutil.NewRealClock(),
+		archiveConfig: cfg,
 	}
 }
 
-// archiveTrimArgs returns the cutoff timestamp and max archive size to trim an
-// archive with.
-//
-// Note that these come from this instance's own config, so an Inspector created
-// without one trims using the defaults rather than the Server's settings.
+// WriteArchiveConfig persists global archive retention settings.
+func (r *RDB) WriteArchiveConfig(ctx context.Context, cfg base.ArchiveConfig) error {
+	normalized := normalizeConfig(RDBConfig{
+		MaxArchiveSize:           cfg.MaxArchiveSize,
+		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+	})
+	return r.client.HSet(ctx, base.ArchiveConfigKey, map[string]interface{}{
+		"max_archive_size":            normalized.MaxArchiveSize,
+		"archived_expiration_in_days": normalized.ArchivedExpirationInDays,
+	}).Err()
+}
+
+// LoadArchiveConfigFromRedis loads archive settings from Redis into this instance's
+// in-memory config. Call once at startup; archiveTrimArgs does not read from Redis.
+func (r *RDB) LoadArchiveConfigFromRedis(ctx context.Context) error {
+	vals, err := r.client.HGetAll(ctx, base.ArchiveConfigKey).Result()
+	if err != nil {
+		return err
+	}
+	if len(vals) == 0 {
+		return nil
+	}
+	cfg := r.archiveConfig
+	if n := cast.ToInt(vals["max_archive_size"]); n > 0 {
+		cfg.MaxArchiveSize = n
+	}
+	if n := cast.ToInt(vals["archived_expiration_in_days"]); n > 0 {
+		cfg.ArchivedExpirationInDays = n
+	}
+	r.archiveConfig = normalizeConfig(cfg)
+	return nil
+}
+
+// archiveTrimArgs returns the cutoff timestamp and max archive size to trim an archive with.
 func (r *RDB) archiveTrimArgs(now time.Time) (cutoff int64, maxSize int) {
-	return now.AddDate(0, 0, -r.archivedExpirationInDays).Unix(), r.maxArchiveSize
+	return now.AddDate(0, 0, -r.archiveConfig.ArchivedExpirationInDays).Unix(), r.archiveConfig.MaxArchiveSize
 }
 
 // Close closes the connection with redis server.
