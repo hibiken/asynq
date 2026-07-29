@@ -3444,7 +3444,7 @@ var sortSchedulerEntry = cmp.Transformer("SortSchedulerEntry", func(in []*Schedu
 
 func TestInspectorSchedulerEntries(t *testing.T) {
 	r := setup(t)
-	rdbClient := rdb.NewRDB(r, rdb.RDBConfig{})
+	rdbClient := rdb.NewRDB(r)
 	inspector := NewInspector(getRedisConnOpt(t))
 
 	now := time.Now().UTC()

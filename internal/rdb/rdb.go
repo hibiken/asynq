@@ -22,11 +22,6 @@ import (
 
 const statsTTL = 90 * 24 * time.Hour // 90 days
 
-// archivedExpirationCutoff returns the unix timestamp before which archived tasks are expired.
-func (r *RDB) archivedExpirationCutoff(now time.Time) int64 {
-	return now.AddDate(0, 0, -r.archivedExpirationInDays).Unix()
-}
-
 // LeaseDuration is the duration used to initially create a lease and to extend it thereafter.
 const LeaseDuration = 30 * time.Second
 
@@ -67,7 +62,14 @@ type RDB struct {
 }
 
 // NewRDB returns a new instance of RDB.
-func NewRDB(client redis.UniversalClient, cfg RDBConfig) *RDB {
+//
+// An optional RDBConfig customizes archive retention. Callers that do not manage
+// retention (Client, Scheduler, Inspector, the CLI) can omit it and get the defaults.
+func NewRDB(client redis.UniversalClient, config ...RDBConfig) *RDB {
+	var cfg RDBConfig
+	if len(config) > 0 {
+		cfg = config[0]
+	}
 	cfg = normalizeConfig(cfg)
 	return &RDB{
 		client:                   client,
@@ -77,43 +79,13 @@ func NewRDB(client redis.UniversalClient, cfg RDBConfig) *RDB {
 	}
 }
 
-// WriteArchiveConfig persists archive retention settings to Redis so that
-// other RDB instances (e.g. Inspector) can honor the Server's configuration.
-func (r *RDB) WriteArchiveConfig(ctx context.Context) error {
-	return r.client.HSet(ctx, base.ArchiveConfigKey, map[string]interface{}{
-		"max_archive_size":            r.maxArchiveSize,
-		"archived_expiration_in_days": r.archivedExpirationInDays,
-	}).Err()
-}
-
-// sharedArchiveLimits returns archive retention settings, preferring values
-// persisted in Redis by a running Server when available.
-func (r *RDB) sharedArchiveLimits(ctx context.Context) (maxSize, expirationDays int) {
-	maxSize = r.maxArchiveSize
-	expirationDays = r.archivedExpirationInDays
-	vals, err := r.client.HGetAll(ctx, base.ArchiveConfigKey).Result()
-	if err != nil || len(vals) == 0 {
-		return maxSize, expirationDays
-	}
-	if n := cast.ToInt(vals["max_archive_size"]); n > 0 {
-		maxSize = n
-	}
-	if n := cast.ToInt(vals["archived_expiration_in_days"]); n > 0 {
-		expirationDays = n
-	}
-	return maxSize, expirationDays
-}
-
-func (r *RDB) sharedArchivedExpirationCutoff(ctx context.Context, now time.Time) int64 {
-	_, days := r.sharedArchiveLimits(ctx)
-	return now.AddDate(0, 0, -days).Unix()
-}
-
-func (r *RDB) sharedArchiveTrimArgs(now time.Time) (cutoff int64, maxSize int) {
-	ctx := context.Background()
-	maxSize, _ = r.sharedArchiveLimits(ctx)
-	cutoff = r.sharedArchivedExpirationCutoff(ctx, now)
-	return cutoff, maxSize
+// archiveTrimArgs returns the cutoff timestamp and max archive size to trim an
+// archive with.
+//
+// Note that these come from this instance's own config, so an Inspector created
+// without one trims using the defaults rather than the Server's settings.
+func (r *RDB) archiveTrimArgs(now time.Time) (cutoff int64, maxSize int) {
+	return now.AddDate(0, 0, -r.archivedExpirationInDays).Unix(), r.maxArchiveSize
 }
 
 // Close closes the connection with redis server.
@@ -1057,7 +1029,7 @@ if #old > 0 then
 	redis.call("ZREM", KEYS[4], unpack(old))
 end
 
-local extra = redis.call("ZRANGE", KEYS[4], 0, -ARGV[5])
+local extra = redis.call("ZRANGE", KEYS[4], 0, -ARGV[5]-1)
 if #extra > 0 then
 	for _, id in ipairs(extra) do
 		redis.call("DEL", KEYS[9] .. id)
@@ -1096,7 +1068,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 	if err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	cutoff := r.archivedExpirationCutoff(now)
+	cutoff, maxSize := r.archiveTrimArgs(now)
 	expireAt := now.Add(statsTTL)
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
@@ -1114,7 +1086,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 		encoded,
 		now.Unix(),
 		cutoff,
-		r.maxArchiveSize,
+		maxSize,
 		expireAt.Unix(),
 		int64(math.MaxInt64),
 	}

@@ -151,7 +151,7 @@ func TestServerWithRedisDown(t *testing.T) {
 			t.Errorf("panic occurred: %v", r)
 		}
 	}()
-	r := rdb.NewRDB(setup(t), rdb.RDBConfig{})
+	r := rdb.NewRDB(setup(t))
 	testBroker := testbroker.NewTestBroker(r)
 	srv := NewServer(getRedisConnOpt(t), Config{LogLevel: testLogLevel})
 	srv.broker = testBroker
@@ -183,7 +183,7 @@ func TestServerWithFlakyBroker(t *testing.T) {
 			t.Errorf("panic occurred: %v", r)
 		}
 	}()
-	r := rdb.NewRDB(setup(t), rdb.RDBConfig{})
+	r := rdb.NewRDB(setup(t))
 	testBroker := testbroker.NewTestBroker(r)
 	redisConnOpt := getRedisConnOpt(t)
 	srv := NewServer(redisConnOpt, Config{LogLevel: testLogLevel})

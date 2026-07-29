@@ -41,7 +41,7 @@ func NewInspector(r RedisConnOpt) *Inspector {
 // Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
 func NewInspectorFromRedisClient(c redis.UniversalClient) *Inspector {
 	return &Inspector{
-		rdb:              rdb.NewRDB(c, rdb.RDBConfig{}),
+		rdb:              rdb.NewRDB(c),
 		sharedConnection: true,
 	}
 }

@@ -379,7 +379,7 @@ func createRDB() *rdb.RDB {
 			TLSConfig: getTLSConfig(),
 		})
 	}
-	return rdb.NewRDB(c, rdb.RDBConfig{})
+	return rdb.NewRDB(c)
 }
 
 // createClient creates a Client instance using flag values and returns it.
