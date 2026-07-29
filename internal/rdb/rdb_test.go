@@ -50,12 +50,12 @@ func setup(tb testing.TB) (r *RDB) {
 		}
 		r = NewRDB(redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs: addrs,
-		}), RDBConfig{})
+		}))
 	} else {
 		r = NewRDB(redis.NewClient(&redis.Options{
 			Addr: redisAddr,
 			DB:   redisDB,
-		}), RDBConfig{})
+		}))
 	}
 	// Start each test with a clean slate.
 	h.FlushDB(tb, r.client)
@@ -2421,7 +2421,7 @@ func TestArchiveTrim(t *testing.T) {
 	errMsg := "SMTP server not responding"
 
 	maxArchiveSet := make([]base.Z, 0)
-	for i := 0; i < DefaultMaxArchiveSize-1; i++ {
+	for i := 0; i < DefaultMaxArchiveSize; i++ {
 		maxArchiveSet = append(maxArchiveSet, base.Z{Message: &base.TaskMessage{
 			ID:      uuid.NewString(),
 			Type:    "generate_csv",
@@ -2552,7 +2552,7 @@ func TestArchiveTrim(t *testing.T) {
 }
 
 func TestNewRDBArchiveConfig(t *testing.T) {
-	r := NewRDB(nil, RDBConfig{})
+	r := NewRDB(nil)
 	if r.maxArchiveSize != DefaultMaxArchiveSize {
 		t.Errorf("maxArchiveSize = %d, want %d", r.maxArchiveSize, DefaultMaxArchiveSize)
 	}
@@ -2577,36 +2577,29 @@ func TestNewRDBArchiveConfig(t *testing.T) {
 	}
 }
 
-func TestSharedArchiveLimits(t *testing.T) {
-	r := setup(t)
+// Covers the trim in archiveAllPendingCmd, which enforces the max archive size
+// through a different Lua script than (*RDB).Archive.
+func TestArchiveAllPendingTasksTrimsToMaxArchiveSize(t *testing.T) {
+	const customMaxArchiveSize = 3
+
+	r := setupWithArchive(t, customMaxArchiveSize, 0)
 	defer r.Close()
+	r.SetClock(timeutil.NewSimulatedClock(time.Now()))
 
-	if err := r.WriteArchiveConfig(context.Background()); err != nil {
-		t.Fatalf("WriteArchiveConfig() = %v", err)
+	var pending []*base.TaskMessage
+	for i := 0; i < 10; i++ {
+		pending = append(pending, h.NewTaskMessage("send_email", nil))
 	}
+	h.SeedAllPendingQueues(t, r.client, map[string][]*base.TaskMessage{
+		"default": pending,
+	})
 
-	inspector := NewRDB(r.client, RDBConfig{})
-	maxSize, days := inspector.sharedArchiveLimits(context.Background())
-	if maxSize != DefaultMaxArchiveSize {
-		t.Errorf("shared maxArchiveSize = %d, want %d", maxSize, DefaultMaxArchiveSize)
-	}
-	if days != DefaultArchivedExpirationInDays {
-		t.Errorf("shared archivedExpirationInDays = %d, want %d", days, DefaultArchivedExpirationInDays)
-	}
-
-	r = setupWithArchive(t, 50000, 180)
-	defer r.Close()
-	if err := r.WriteArchiveConfig(context.Background()); err != nil {
-		t.Fatalf("WriteArchiveConfig() = %v", err)
+	if _, err := r.ArchiveAllPendingTasks("default"); err != nil {
+		t.Fatalf("ArchiveAllPendingTasks() = %v, want nil", err)
 	}
 
-	inspector = NewRDB(r.client, RDBConfig{})
-	maxSize, days = inspector.sharedArchiveLimits(context.Background())
-	if maxSize != 50000 {
-		t.Errorf("shared maxArchiveSize = %d, want 50000", maxSize)
-	}
-	if days != 180 {
-		t.Errorf("shared archivedExpirationInDays = %d, want 180", days)
+	if got := len(h.GetArchivedEntries(t, r.client, "default")); got != customMaxArchiveSize {
+		t.Errorf("archived set size = %d, want %d", got, customMaxArchiveSize)
 	}
 }
 
@@ -2630,8 +2623,10 @@ func TestArchiveWithCustomMaxArchiveSize(t *testing.T) {
 	}
 	errMsg := "SMTP server not responding"
 
-	archived := make([]base.Z, 0, customMaxArchiveSize-1)
-	for i := 0; i < customMaxArchiveSize-1; i++ {
+	// Fill the archive to the configured limit so that archiving one more task
+	// has to drop exactly the oldest entry.
+	archived := make([]base.Z, 0, customMaxArchiveSize)
+	for i := 0; i < customMaxArchiveSize; i++ {
 		archived = append(archived, base.Z{Message: &base.TaskMessage{
 			ID:      uuid.NewString(),
 			Type:    "generate_csv",
@@ -2662,6 +2657,42 @@ func TestArchiveWithCustomMaxArchiveSize(t *testing.T) {
 		t.Fatalf("(*RDB).Archive() = %v, want nil", err)
 	}
 
+	gotArchived := h.GetArchivedEntries(t, r.client, "default")
+	if diff := cmp.Diff(wantArchived, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt, timeCmpOpt); diff != "" {
+		t.Errorf("mismatch found in archived set: (-want, +got):\n%s", diff)
+	}
+}
+
+// The trim used to keep MaxArchiveSize-1 tasks, which made MaxArchiveSize of 1
+// drop the whole archive, including the task that was just archived.
+func TestArchiveWithMaxArchiveSizeOfOne(t *testing.T) {
+	r := setupWithArchive(t, 1, 0)
+	defer r.Close()
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	t1 := h.NewTaskMessage("send_email", nil)
+	t2 := h.NewTaskMessage("reindex", nil)
+	errMsg := "SMTP server not responding"
+
+	h.SeedAllActiveQueues(t, r.client, map[string][]*base.TaskMessage{
+		"default": {t1},
+	})
+	h.SeedAllLease(t, r.client, map[string][]base.Z{
+		"default": {{Message: t1, Score: now.Add(10 * time.Second).Unix()}},
+	})
+	h.SeedAllArchivedQueues(t, r.client, map[string][]base.Z{
+		"default": {{Message: t2, Score: now.Add(-time.Hour).Unix()}},
+	})
+
+	if err := r.Archive(context.Background(), t1, errMsg); err != nil {
+		t.Fatalf("(*RDB).Archive() = %v, want nil", err)
+	}
+
+	wantArchived := []base.Z{
+		{Message: h.TaskMessageWithError(*t1, errMsg, now), Score: now.Unix()},
+	}
 	gotArchived := h.GetArchivedEntries(t, r.client, "default")
 	if diff := cmp.Diff(wantArchived, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt, timeCmpOpt); diff != "" {
 		t.Errorf("mismatch found in archived set: (-want, +got):\n%s", diff)
@@ -3624,7 +3655,7 @@ func TestCancelationPubSubReceiveError(t *testing.T) {
 	client := redis.NewClient(&redis.Options{
 		Addr: "localhost:0", // invalid port — connection will fail
 	})
-	r := NewRDB(client, RDBConfig{})
+	r := NewRDB(client)
 	defer r.Close()
 
 	pubsub, err := r.CancelationPubSub()

@@ -1907,7 +1907,7 @@ func TestBatchEnqueueContext_ValidationErrors(t *testing.T) {
 }
 
 func TestBatchEnqueueContext_BrokerError(t *testing.T) {
-	r := rdb.NewRDB(setup(t), rdb.RDBConfig{})
+	r := rdb.NewRDB(setup(t))
 	defer r.Close()
 	testBroker := testbroker.NewTestBroker(r)
 	client := &Client{broker: testBroker, sharedConnection: true}

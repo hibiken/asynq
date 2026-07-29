@@ -16,7 +16,7 @@ import (
 func TestHealthChecker(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	rdbClient := rdb.NewRDB(r, rdb.RDBConfig{})
+	rdbClient := rdb.NewRDB(r)
 
 	var (
 		// mu guards called and e variables.
@@ -62,7 +62,7 @@ func TestHealthCheckerWhenRedisDown(t *testing.T) {
 			t.Errorf("panic occurred: %v", r)
 		}
 	}()
-	r := rdb.NewRDB(setup(t), rdb.RDBConfig{})
+	r := rdb.NewRDB(setup(t))
 	defer r.Close()
 	testBroker := testbroker.NewTestBroker(r)
 	var (

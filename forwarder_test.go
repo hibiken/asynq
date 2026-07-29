@@ -18,7 +18,7 @@ import (
 func TestForwarder(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	rdbClient := rdb.NewRDB(r, rdb.RDBConfig{})
+	rdbClient := rdb.NewRDB(r)
 	const pollInterval = time.Second
 	s := newForwarder(forwarderParams{
 		logger:   testLogger,
