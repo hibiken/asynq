@@ -22,21 +22,52 @@ import (
 
 const statsTTL = 90 * 24 * time.Hour // 90 days
 
+// archivedExpirationCutoff returns the unix timestamp before which archived tasks are expired.
+func (r *RDB) archivedExpirationCutoff(now time.Time) int64 {
+	return now.AddDate(0, 0, -r.archivedExpirationInDays).Unix()
+}
+
 // LeaseDuration is the duration used to initially create a lease and to extend it thereafter.
 const LeaseDuration = 30 * time.Second
 
+// DefaultMaxArchiveSize is the default maximum number of tasks kept in the archive set.
+const DefaultMaxArchiveSize = 10000
+
+// DefaultArchivedExpirationInDays is the default number of days before an archived task is deleted.
+const DefaultArchivedExpirationInDays = 90
+
 // RDB is a client interface to query and mutate task queues.
 type RDB struct {
-	client          redis.UniversalClient
-	clock           timeutil.Clock
-	queuesPublished sync.Map
+	client                   redis.UniversalClient
+	clock                    timeutil.Clock
+	queuesPublished          sync.Map
+	maxArchiveSize           int
+	archivedExpirationInDays int
 }
 
 // NewRDB returns a new instance of RDB.
 func NewRDB(client redis.UniversalClient) *RDB {
 	return &RDB{
-		client: client,
-		clock:  timeutil.NewRealClock(),
+		client:                   client,
+		clock:                    timeutil.NewRealClock(),
+		maxArchiveSize:           DefaultMaxArchiveSize,
+		archivedExpirationInDays: DefaultArchivedExpirationInDays,
+	}
+}
+
+// SetMaxArchiveSize sets the maximum number of tasks to keep in the archive set.
+// If n is zero or negative, the value is unchanged.
+func (r *RDB) SetMaxArchiveSize(n int) {
+	if n > 0 {
+		r.maxArchiveSize = n
+	}
+}
+
+// SetArchivedExpirationInDays sets the number of days before an archived task is deleted.
+// If n is zero or negative, the value is unchanged.
+func (r *RDB) SetArchivedExpirationInDays(n int) {
+	if n > 0 {
+		r.archivedExpirationInDays = n
 	}
 }
 
@@ -948,10 +979,6 @@ func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.T
 	return r.runScript(ctx, op, retryCmd, keys, argv...)
 }
 
-const (
-	maxArchiveSize           = 10000 // maximum number of tasks in archive
-	archivedExpirationInDays = 90    // number of days before an archived task gets deleted permanently
-)
 
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:active
@@ -1025,7 +1052,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 	if err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	cutoff := now.AddDate(0, 0, -archivedExpirationInDays)
+	cutoff := r.archivedExpirationCutoff(now)
 	expireAt := now.Add(statsTTL)
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
@@ -1042,8 +1069,8 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 		msg.ID,
 		encoded,
 		now.Unix(),
-		cutoff.Unix(),
-		maxArchiveSize,
+		cutoff,
+		r.maxArchiveSize,
 		expireAt.Unix(),
 		int64(math.MaxInt64),
 	}
