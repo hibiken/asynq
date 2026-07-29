@@ -64,7 +64,10 @@ func setup(tb testing.TB) (r *RDB) {
 
 func setupWithArchive(tb testing.TB, maxArchiveSize, archivedExpirationInDays int) (r *RDB) {
 	tb.Helper()
-	cfg := RDBConfig{MaxArchiveSize: maxArchiveSize, ArchivedExpirationInDays: archivedExpirationInDays}
+	cfg := RDBConfig{
+		MaxArchiveSize:           maxArchiveSize,
+		ArchivedExpirationInDays: archivedExpirationInDays,
+	}
 	if useRedisCluster {
 		addrs := strings.Split(redisClusterAddrs, ",")
 		if len(addrs) == 0 {
@@ -2553,27 +2556,27 @@ func TestArchiveTrim(t *testing.T) {
 
 func TestNewRDBArchiveConfig(t *testing.T) {
 	r := NewRDB(nil)
-	if r.maxArchiveSize != DefaultMaxArchiveSize {
-		t.Errorf("maxArchiveSize = %d, want %d", r.maxArchiveSize, DefaultMaxArchiveSize)
+	if r.archiveConfig.MaxArchiveSize != DefaultMaxArchiveSize {
+		t.Errorf("MaxArchiveSize = %d, want %d", r.archiveConfig.MaxArchiveSize, DefaultMaxArchiveSize)
 	}
-	if r.archivedExpirationInDays != DefaultArchivedExpirationInDays {
-		t.Errorf("archivedExpirationInDays = %d, want %d", r.archivedExpirationInDays, DefaultArchivedExpirationInDays)
+	if r.archiveConfig.ArchivedExpirationInDays != DefaultArchivedExpirationInDays {
+		t.Errorf("ArchivedExpirationInDays = %d, want %d", r.archiveConfig.ArchivedExpirationInDays, DefaultArchivedExpirationInDays)
 	}
 
 	r = NewRDB(nil, RDBConfig{MaxArchiveSize: -1, ArchivedExpirationInDays: -5})
-	if r.maxArchiveSize != DefaultMaxArchiveSize {
-		t.Errorf("maxArchiveSize = %d, want default for negative input", r.maxArchiveSize)
+	if r.archiveConfig.MaxArchiveSize != DefaultMaxArchiveSize {
+		t.Errorf("MaxArchiveSize = %d, want default for negative input", r.archiveConfig.MaxArchiveSize)
 	}
-	if r.archivedExpirationInDays != DefaultArchivedExpirationInDays {
-		t.Errorf("archivedExpirationInDays = %d, want default for negative input", r.archivedExpirationInDays)
+	if r.archiveConfig.ArchivedExpirationInDays != DefaultArchivedExpirationInDays {
+		t.Errorf("ArchivedExpirationInDays = %d, want default for negative input", r.archiveConfig.ArchivedExpirationInDays)
 	}
 
 	r = NewRDB(nil, RDBConfig{MaxArchiveSize: 500, ArchivedExpirationInDays: 30})
-	if r.maxArchiveSize != 500 {
-		t.Errorf("maxArchiveSize = %d, want 500", r.maxArchiveSize)
+	if r.archiveConfig.MaxArchiveSize != 500 {
+		t.Errorf("MaxArchiveSize = %d, want 500", r.archiveConfig.MaxArchiveSize)
 	}
-	if r.archivedExpirationInDays != 30 {
-		t.Errorf("archivedExpirationInDays = %d, want 30", r.archivedExpirationInDays)
+	if r.archiveConfig.ArchivedExpirationInDays != 30 {
+		t.Errorf("ArchivedExpirationInDays = %d, want 30", r.archiveConfig.ArchivedExpirationInDays)
 	}
 }
 
@@ -2751,6 +2754,33 @@ func TestArchiveWithCustomArchivedExpirationInDays(t *testing.T) {
 	gotArchived := h.GetArchivedEntries(t, r.client, "default")
 	if diff := cmp.Diff(wantArchived, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt, timeCmpOpt); diff != "" {
 		t.Errorf("mismatch found in archived set: (-want, +got):\n%s", diff)
+	}
+}
+
+func TestLoadArchiveConfigFromRedis(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	if err := r.WriteArchiveConfig(context.Background(), base.ArchiveConfig{
+		MaxArchiveSize:           777,
+		ArchivedExpirationInDays: 7,
+	}); err != nil {
+		t.Fatalf("WriteArchiveConfig() = %v", err)
+	}
+
+	inspector := NewRDB(r.client)
+	if err := inspector.LoadArchiveConfigFromRedis(context.Background()); err != nil {
+		t.Fatalf("LoadArchiveConfigFromRedis() = %v", err)
+	}
+
+	now := time.Now()
+	if _, maxSize := inspector.archiveTrimArgs(now); maxSize != 777 {
+		t.Errorf("maxSize = %d, want 777", maxSize)
+	}
+	cutoff, _ := inspector.archiveTrimArgs(now)
+	wantCutoff := now.AddDate(0, 0, -7).Unix()
+	if cutoff != wantCutoff {
+		t.Errorf("cutoff = %d, want %d", cutoff, wantCutoff)
 	}
 }
 
