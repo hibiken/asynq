@@ -86,7 +86,7 @@ func newProcessorForTest(t *testing.T, r *rdb.RDB, h Handler) *processor {
 func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	rdbClient := rdb.NewRDB(r)
+	rdbClient := rdb.NewRDB(r, rdb.RDBConfig{})
 
 	m1 := h.NewTaskMessage("task1", nil)
 	m2 := h.NewTaskMessage("task2", nil)
@@ -155,7 +155,7 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 	var (
 		r         = setup(t)
-		rdbClient = rdb.NewRDB(r)
+		rdbClient = rdb.NewRDB(r, rdb.RDBConfig{})
 
 		m1 = h.NewTaskMessage("task1", nil)
 		m2 = h.NewTaskMessage("task2", nil)
@@ -229,7 +229,7 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	rdbClient := rdb.NewRDB(r)
+	rdbClient := rdb.NewRDB(r, rdb.RDBConfig{})
 
 	m1 := h.NewTaskMessage("large_number", h.JSON(map[string]interface{}{"data": 111111111111111111}))
 	t1 := NewTask(m1.Type, m1.Payload)
@@ -285,7 +285,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 func TestProcessorRetry(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	rdbClient := rdb.NewRDB(r)
+	rdbClient := rdb.NewRDB(r, rdb.RDBConfig{})
 
 	m1 := h.NewTaskMessage("send_email", nil)
 	m1.Retried = m1.Retry // m1 has reached its max retry count
@@ -441,7 +441,7 @@ func TestProcessorRetry(t *testing.T) {
 func TestProcessorMarkAsComplete(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	rdbClient := rdb.NewRDB(r)
+	rdbClient := rdb.NewRDB(r, rdb.RDBConfig{})
 
 	msg1 := h.NewTaskMessage("one", nil)
 	msg2 := h.NewTaskMessage("two", nil)
@@ -518,7 +518,7 @@ func TestProcessorMarkAsComplete(t *testing.T) {
 func TestProcessorWithExpiredLease(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	rdbClient := rdb.NewRDB(r)
+	rdbClient := rdb.NewRDB(r, rdb.RDBConfig{})
 
 	m1 := h.NewTaskMessage("task1", nil)
 
@@ -656,7 +656,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 	var (
 		r = setup(t)
 
-		rdbClient = rdb.NewRDB(r)
+		rdbClient = rdb.NewRDB(r, rdb.RDBConfig{})
 
 		m1 = h.NewTaskMessageWithQueue("task1", nil, "critical")
 		m2 = h.NewTaskMessageWithQueue("task2", nil, "critical")

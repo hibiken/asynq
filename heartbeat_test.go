@@ -27,7 +27,7 @@ import (
 func TestHeartbeater(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	rdbClient := rdb.NewRDB(r)
+	rdbClient := rdb.NewRDB(r, rdb.RDBConfig{})
 
 	now := time.Now()
 	const elapsedTime = 10 * time.Second // simulated time elapsed between phase1 and phase2
@@ -320,7 +320,7 @@ func TestHeartbeaterWithRedisDown(t *testing.T) {
 			t.Errorf("panic occurred: %v", r)
 		}
 	}()
-	r := rdb.NewRDB(setup(t))
+	r := rdb.NewRDB(setup(t), rdb.RDBConfig{})
 	defer r.Close()
 	testBroker := testbroker.NewTestBroker(r)
 	state := &serverState{value: srvStateActive}

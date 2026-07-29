@@ -257,12 +257,12 @@ type Config struct {
 	// MaxArchiveSize specifies the maximum number of tasks to keep in the archive set per queue.
 	//
 	// When the archive exceeds this limit, the oldest archived tasks are deleted.
-	// If unset or zero, default size of 10000 is used.
+	// If unset, zero, or negative, default size of 10000 is used.
 	MaxArchiveSize int
 
 	// ArchivedExpirationInDays specifies the number of days before an archived task is deleted.
 	//
-	// If unset or zero, default of 90 days is used.
+	// If unset, zero, or negative, default of 90 days is used.
 	ArchivedExpirationInDays int
 }
 
@@ -436,10 +436,6 @@ const (
 	defaultJanitorInterval = 8 * time.Second
 
 	defaultJanitorBatchSize = 100
-
-	defaultMaxArchiveSize = rdb.DefaultMaxArchiveSize
-
-	defaultArchivedExpirationInDays = rdb.DefaultArchivedExpirationInDays
 )
 
 // NewServer returns a new Server given a redis connection option
@@ -519,18 +515,13 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	}
 	logger.SetLevel(toInternalLogLevel(loglevel))
 
-	rdb := rdb.NewRDB(c)
-	maxArchiveSize := cfg.MaxArchiveSize
-	if maxArchiveSize == 0 {
-		maxArchiveSize = defaultMaxArchiveSize
+	rdb := rdb.NewRDB(c, rdb.RDBConfig{
+		MaxArchiveSize:           cfg.MaxArchiveSize,
+		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+	})
+	if err := rdb.WriteArchiveConfig(context.Background()); err != nil {
+		logger.Warnf("asynq: could not persist archive config: %v", err)
 	}
-	rdb.SetMaxArchiveSize(maxArchiveSize)
-
-	archivedExpirationInDays := cfg.ArchivedExpirationInDays
-	if archivedExpirationInDays == 0 {
-		archivedExpirationInDays = defaultArchivedExpirationInDays
-	}
-	rdb.SetArchivedExpirationInDays(archivedExpirationInDays)
 
 	starting := make(chan *workerInfo)
 	finished := make(chan *base.TaskMessage)

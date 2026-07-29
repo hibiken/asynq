@@ -50,14 +50,35 @@ func setup(tb testing.TB) (r *RDB) {
 		}
 		r = NewRDB(redis.NewClusterClient(&redis.ClusterOptions{
 			Addrs: addrs,
-		}))
+		}), RDBConfig{})
 	} else {
 		r = NewRDB(redis.NewClient(&redis.Options{
 			Addr: redisAddr,
 			DB:   redisDB,
-		}))
+		}), RDBConfig{})
 	}
 	// Start each test with a clean slate.
+	h.FlushDB(tb, r.client)
+	return r
+}
+
+func setupWithArchive(tb testing.TB, maxArchiveSize, archivedExpirationInDays int) (r *RDB) {
+	tb.Helper()
+	cfg := RDBConfig{MaxArchiveSize: maxArchiveSize, ArchivedExpirationInDays: archivedExpirationInDays}
+	if useRedisCluster {
+		addrs := strings.Split(redisClusterAddrs, ",")
+		if len(addrs) == 0 {
+			tb.Fatal("No redis cluster addresses provided. Please set addresses using --redis_cluster_addrs flag.")
+		}
+		r = NewRDB(redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs: addrs,
+		}), cfg)
+	} else {
+		r = NewRDB(redis.NewClient(&redis.Options{
+			Addr: redisAddr,
+			DB:   redisDB,
+		}), cfg)
+	}
 	h.FlushDB(tb, r.client)
 	return r
 }
@@ -2456,7 +2477,7 @@ func TestArchiveTrim(t *testing.T) {
 			},
 			archived: map[string][]base.Z{
 				"default": {
-					{Message: t2, Score: now.Add(-time.Hour * 24 * (DefaultArchivedExpirationInDays + 1)).Unix()},
+					{Message: t2, Score: now.AddDate(0, 0, -(DefaultArchivedExpirationInDays + 1)).Unix()},
 				},
 			},
 			wantArchived: map[string][]base.Z{
@@ -2530,13 +2551,70 @@ func TestArchiveTrim(t *testing.T) {
 	}
 }
 
-func TestArchiveWithCustomMaxArchiveSize(t *testing.T) {
+func TestNewRDBArchiveConfig(t *testing.T) {
+	r := NewRDB(nil, RDBConfig{})
+	if r.maxArchiveSize != DefaultMaxArchiveSize {
+		t.Errorf("maxArchiveSize = %d, want %d", r.maxArchiveSize, DefaultMaxArchiveSize)
+	}
+	if r.archivedExpirationInDays != DefaultArchivedExpirationInDays {
+		t.Errorf("archivedExpirationInDays = %d, want %d", r.archivedExpirationInDays, DefaultArchivedExpirationInDays)
+	}
+
+	r = NewRDB(nil, RDBConfig{MaxArchiveSize: -1, ArchivedExpirationInDays: -5})
+	if r.maxArchiveSize != DefaultMaxArchiveSize {
+		t.Errorf("maxArchiveSize = %d, want default for negative input", r.maxArchiveSize)
+	}
+	if r.archivedExpirationInDays != DefaultArchivedExpirationInDays {
+		t.Errorf("archivedExpirationInDays = %d, want default for negative input", r.archivedExpirationInDays)
+	}
+
+	r = NewRDB(nil, RDBConfig{MaxArchiveSize: 500, ArchivedExpirationInDays: 30})
+	if r.maxArchiveSize != 500 {
+		t.Errorf("maxArchiveSize = %d, want 500", r.maxArchiveSize)
+	}
+	if r.archivedExpirationInDays != 30 {
+		t.Errorf("archivedExpirationInDays = %d, want 30", r.archivedExpirationInDays)
+	}
+}
+
+func TestSharedArchiveLimits(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 
-	const customMaxArchiveSize = 5
+	if err := r.WriteArchiveConfig(context.Background()); err != nil {
+		t.Fatalf("WriteArchiveConfig() = %v", err)
+	}
 
-	r.SetMaxArchiveSize(customMaxArchiveSize)
+	inspector := NewRDB(r.client, RDBConfig{})
+	maxSize, days := inspector.sharedArchiveLimits(context.Background())
+	if maxSize != DefaultMaxArchiveSize {
+		t.Errorf("shared maxArchiveSize = %d, want %d", maxSize, DefaultMaxArchiveSize)
+	}
+	if days != DefaultArchivedExpirationInDays {
+		t.Errorf("shared archivedExpirationInDays = %d, want %d", days, DefaultArchivedExpirationInDays)
+	}
+
+	r = setupWithArchive(t, 50000, 180)
+	defer r.Close()
+	if err := r.WriteArchiveConfig(context.Background()); err != nil {
+		t.Fatalf("WriteArchiveConfig() = %v", err)
+	}
+
+	inspector = NewRDB(r.client, RDBConfig{})
+	maxSize, days = inspector.sharedArchiveLimits(context.Background())
+	if maxSize != 50000 {
+		t.Errorf("shared maxArchiveSize = %d, want 50000", maxSize)
+	}
+	if days != 180 {
+		t.Errorf("shared archivedExpirationInDays = %d, want 180", days)
+	}
+}
+
+func TestArchiveWithCustomMaxArchiveSize(t *testing.T) {
+	r := setupWithArchive(t, 5, 0)
+	defer r.Close()
+
+	const customMaxArchiveSize = 5
 
 	now := time.Now()
 	r.SetClock(timeutil.NewSimulatedClock(now))
@@ -2591,12 +2669,10 @@ func TestArchiveWithCustomMaxArchiveSize(t *testing.T) {
 }
 
 func TestArchiveWithCustomArchivedExpirationInDays(t *testing.T) {
-	r := setup(t)
-	defer r.Close()
-
 	const customArchivedExpirationInDays = 30
 
-	r.SetArchivedExpirationInDays(customArchivedExpirationInDays)
+	r := setupWithArchive(t, 0, customArchivedExpirationInDays)
+	defer r.Close()
 
 	now := time.Now()
 	r.SetClock(timeutil.NewSimulatedClock(now))
@@ -2630,7 +2706,7 @@ func TestArchiveWithCustomArchivedExpirationInDays(t *testing.T) {
 	})
 	h.SeedAllArchivedQueues(t, r.client, map[string][]base.Z{
 		"default": {
-			{Message: t2, Score: now.Add(-time.Hour * 24 * (customArchivedExpirationInDays + 1)).Unix()},
+			{Message: t2, Score: now.AddDate(0, 0, -(customArchivedExpirationInDays + 1)).Unix()},
 		},
 	})
 
@@ -3548,7 +3624,7 @@ func TestCancelationPubSubReceiveError(t *testing.T) {
 	client := redis.NewClient(&redis.Options{
 		Addr: "localhost:0", // invalid port — connection will fail
 	})
-	r := NewRDB(client)
+	r := NewRDB(client, RDBConfig{})
 	defer r.Close()
 
 	pubsub, err := r.CancelationPubSub()

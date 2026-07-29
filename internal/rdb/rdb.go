@@ -36,6 +36,27 @@ const DefaultMaxArchiveSize = 10000
 // DefaultArchivedExpirationInDays is the default number of days before an archived task is deleted.
 const DefaultArchivedExpirationInDays = 90
 
+// RDBConfig holds RDB configuration options.
+type RDBConfig struct {
+	// MaxArchiveSize is the maximum number of tasks to keep in the archive set per queue.
+	// Zero or negative values fall back to DefaultMaxArchiveSize.
+	MaxArchiveSize int
+
+	// ArchivedExpirationInDays is the number of days before an archived task is deleted.
+	// Zero or negative values fall back to DefaultArchivedExpirationInDays.
+	ArchivedExpirationInDays int
+}
+
+func normalizeConfig(cfg RDBConfig) RDBConfig {
+	if cfg.MaxArchiveSize <= 0 {
+		cfg.MaxArchiveSize = DefaultMaxArchiveSize
+	}
+	if cfg.ArchivedExpirationInDays <= 0 {
+		cfg.ArchivedExpirationInDays = DefaultArchivedExpirationInDays
+	}
+	return cfg
+}
+
 // RDB is a client interface to query and mutate task queues.
 type RDB struct {
 	client                   redis.UniversalClient
@@ -46,29 +67,53 @@ type RDB struct {
 }
 
 // NewRDB returns a new instance of RDB.
-func NewRDB(client redis.UniversalClient) *RDB {
+func NewRDB(client redis.UniversalClient, cfg RDBConfig) *RDB {
+	cfg = normalizeConfig(cfg)
 	return &RDB{
 		client:                   client,
 		clock:                    timeutil.NewRealClock(),
-		maxArchiveSize:           DefaultMaxArchiveSize,
-		archivedExpirationInDays: DefaultArchivedExpirationInDays,
+		maxArchiveSize:           cfg.MaxArchiveSize,
+		archivedExpirationInDays: cfg.ArchivedExpirationInDays,
 	}
 }
 
-// SetMaxArchiveSize sets the maximum number of tasks to keep in the archive set.
-// If n is zero or negative, the value is unchanged.
-func (r *RDB) SetMaxArchiveSize(n int) {
-	if n > 0 {
-		r.maxArchiveSize = n
-	}
+// WriteArchiveConfig persists archive retention settings to Redis so that
+// other RDB instances (e.g. Inspector) can honor the Server's configuration.
+func (r *RDB) WriteArchiveConfig(ctx context.Context) error {
+	return r.client.HSet(ctx, base.ArchiveConfigKey, map[string]interface{}{
+		"max_archive_size":            r.maxArchiveSize,
+		"archived_expiration_in_days": r.archivedExpirationInDays,
+	}).Err()
 }
 
-// SetArchivedExpirationInDays sets the number of days before an archived task is deleted.
-// If n is zero or negative, the value is unchanged.
-func (r *RDB) SetArchivedExpirationInDays(n int) {
-	if n > 0 {
-		r.archivedExpirationInDays = n
+// sharedArchiveLimits returns archive retention settings, preferring values
+// persisted in Redis by a running Server when available.
+func (r *RDB) sharedArchiveLimits(ctx context.Context) (maxSize, expirationDays int) {
+	maxSize = r.maxArchiveSize
+	expirationDays = r.archivedExpirationInDays
+	vals, err := r.client.HGetAll(ctx, base.ArchiveConfigKey).Result()
+	if err != nil || len(vals) == 0 {
+		return maxSize, expirationDays
 	}
+	if n := cast.ToInt(vals["max_archive_size"]); n > 0 {
+		maxSize = n
+	}
+	if n := cast.ToInt(vals["archived_expiration_in_days"]); n > 0 {
+		expirationDays = n
+	}
+	return maxSize, expirationDays
+}
+
+func (r *RDB) sharedArchivedExpirationCutoff(ctx context.Context, now time.Time) int64 {
+	_, days := r.sharedArchiveLimits(ctx)
+	return now.AddDate(0, 0, -days).Unix()
+}
+
+func (r *RDB) sharedArchiveTrimArgs(now time.Time) (cutoff int64, maxSize int) {
+	ctx := context.Background()
+	maxSize, _ = r.sharedArchiveLimits(ctx)
+	cutoff = r.sharedArchivedExpirationCutoff(ctx, now)
+	return cutoff, maxSize
 }
 
 // Close closes the connection with redis server.
@@ -978,7 +1023,6 @@ func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.T
 	}
 	return r.runScript(ctx, op, retryCmd, keys, argv...)
 }
-
 
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:active
