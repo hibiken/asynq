@@ -1194,10 +1194,11 @@ func (r *RDB) ArchiveAllAggregatingTasks(qname, gname string) (int64, error) {
 		base.AllGroups(qname),
 	}
 	now := r.clock.Now()
+	cutoff, maxSize := r.sharedArchiveTrimArgs(now)
 	argv := []interface{}{
 		now.Unix(),
-		now.AddDate(0, 0, -r.archivedExpirationInDays).Unix(),
-		r.maxArchiveSize,
+		cutoff,
+		maxSize,
 		base.TaskKeyPrefix(qname),
 		gname,
 	}
@@ -1250,10 +1251,11 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 		base.ArchivedKey(qname),
 	}
 	now := r.clock.Now()
+	cutoff, maxSize := r.sharedArchiveTrimArgs(now)
 	argv := []interface{}{
 		now.Unix(),
-		now.AddDate(0, 0, -r.archivedExpirationInDays).Unix(),
-		r.maxArchiveSize,
+		cutoff,
+		maxSize,
 		base.TaskKeyPrefix(qname),
 	}
 	res, err := archiveAllPendingCmd.Run(context.Background(), r.client, keys, argv...).Result()
@@ -1340,11 +1342,12 @@ func (r *RDB) ArchiveTask(qname, id string) error {
 		base.AllGroups(qname),
 	}
 	now := r.clock.Now()
+	cutoff, maxSize := r.sharedArchiveTrimArgs(now)
 	argv := []interface{}{
 		id,
 		now.Unix(),
-		now.AddDate(0, 0, -r.archivedExpirationInDays).Unix(),
-		r.maxArchiveSize,
+		cutoff,
+		maxSize,
 		base.QueueKeyPrefix(qname),
 		base.GroupKeyPrefix(qname),
 	}
@@ -1406,10 +1409,11 @@ func (r *RDB) archiveAll(src, dst, qname string) (int64, error) {
 		dst,
 	}
 	now := r.clock.Now()
+	cutoff, maxSize := r.sharedArchiveTrimArgs(now)
 	argv := []interface{}{
 		now.Unix(),
-		now.AddDate(0, 0, -r.archivedExpirationInDays).Unix(),
-		r.maxArchiveSize,
+		cutoff,
+		maxSize,
 		base.TaskKeyPrefix(qname),
 		qname,
 	}

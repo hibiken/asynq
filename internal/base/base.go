@@ -36,8 +36,9 @@ const (
 	AllServers    = "asynq:servers"    // ZSET
 	AllWorkers    = "asynq:workers"    // ZSET
 	AllSchedulers = "asynq:schedulers" // ZSET
-	AllQueues     = "asynq:queues"     // SET
-	CancelChannel = "asynq:cancel"     // PubSub channel
+	AllQueues         = "asynq:queues"          // SET
+	CancelChannel     = "asynq:cancel"          // PubSub channel
+	ArchiveConfigKey  = "asynq:archive_config"  // HASH shared archive retention settings
 )
 
 // TaskState denotes the state of a task.
