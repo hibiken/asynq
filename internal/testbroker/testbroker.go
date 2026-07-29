@@ -163,6 +163,15 @@ func (tb *TestBroker) DeleteExpiredCompletedTasks(qname string, batchSize int) e
 	return tb.real.DeleteExpiredCompletedTasks(qname, batchSize)
 }
 
+func (tb *TestBroker) WriteArchiveConfig(ctx context.Context, cfg base.ArchiveConfig) error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.WriteArchiveConfig(ctx, cfg)
+}
+
 func (tb *TestBroker) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()

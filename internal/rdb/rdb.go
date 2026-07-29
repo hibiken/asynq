@@ -25,19 +25,93 @@ const statsTTL = 90 * 24 * time.Hour // 90 days
 // LeaseDuration is the duration used to initially create a lease and to extend it thereafter.
 const LeaseDuration = 30 * time.Second
 
+// DefaultMaxArchiveSize is the default maximum number of tasks kept in the archive set.
+const DefaultMaxArchiveSize = 10000
+
+// DefaultArchivedExpirationInDays is the default number of days before an archived task is deleted.
+const DefaultArchivedExpirationInDays = 90
+
+// RDBConfig holds RDB configuration options.
+type RDBConfig struct {
+	// MaxArchiveSize is the maximum number of tasks to keep in the archive set.
+	// Zero or negative values fall back to DefaultMaxArchiveSize.
+	MaxArchiveSize int
+
+	// ArchivedExpirationInDays is the number of days before an archived task is deleted.
+	// Zero or negative values fall back to DefaultArchivedExpirationInDays.
+	ArchivedExpirationInDays int
+}
+
+func normalizeConfig(cfg RDBConfig) RDBConfig {
+	if cfg.MaxArchiveSize <= 0 {
+		cfg.MaxArchiveSize = DefaultMaxArchiveSize
+	}
+	if cfg.ArchivedExpirationInDays <= 0 {
+		cfg.ArchivedExpirationInDays = DefaultArchivedExpirationInDays
+	}
+	return cfg
+}
+
 // RDB is a client interface to query and mutate task queues.
 type RDB struct {
 	client          redis.UniversalClient
 	clock           timeutil.Clock
 	queuesPublished sync.Map
+	archiveConfig   RDBConfig
 }
 
 // NewRDB returns a new instance of RDB.
-func NewRDB(client redis.UniversalClient) *RDB {
-	return &RDB{
-		client: client,
-		clock:  timeutil.NewRealClock(),
+//
+// An optional RDBConfig customizes archive retention.
+func NewRDB(client redis.UniversalClient, config ...RDBConfig) *RDB {
+	var cfg RDBConfig
+	if len(config) > 0 {
+		cfg = config[0]
 	}
+	cfg = normalizeConfig(cfg)
+	return &RDB{
+		client:        client,
+		clock:         timeutil.NewRealClock(),
+		archiveConfig: cfg,
+	}
+}
+
+// WriteArchiveConfig persists global archive retention settings.
+func (r *RDB) WriteArchiveConfig(ctx context.Context, cfg base.ArchiveConfig) error {
+	normalized := normalizeConfig(RDBConfig{
+		MaxArchiveSize:           cfg.MaxArchiveSize,
+		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+	})
+	return r.client.HSet(ctx, base.ArchiveConfigKey, map[string]interface{}{
+		"max_archive_size":            normalized.MaxArchiveSize,
+		"archived_expiration_in_days": normalized.ArchivedExpirationInDays,
+	}).Err()
+}
+
+// LoadArchiveConfigFromRedis loads archive settings from Redis into this instance's
+// in-memory config. Call once at startup; archiveTrimArgs does not read from Redis.
+func (r *RDB) LoadArchiveConfigFromRedis(ctx context.Context) error {
+	vals, err := r.client.HGetAll(ctx, base.ArchiveConfigKey).Result()
+	if err != nil {
+		return err
+	}
+	if len(vals) == 0 {
+		return nil
+	}
+	cfg := r.archiveConfig
+	if n := cast.ToInt(vals["max_archive_size"]); n > 0 {
+		cfg.MaxArchiveSize = n
+	}
+	if n := cast.ToInt(vals["archived_expiration_in_days"]); n > 0 {
+		cfg.ArchivedExpirationInDays = n
+	}
+	r.archiveConfig = normalizeConfig(cfg)
+	return nil
+}
+
+// archiveTrimArgs returns the cutoff timestamp and max archive size to trim an archive with.
+func (r *RDB) archiveTrimArgs(now time.Time) (cutoff int64, maxSize int) {
+	return now.AddDate(0, 0, -r.archiveConfig.ArchivedExpirationInDays).Unix(), r.archiveConfig.MaxArchiveSize
 }
 
 // Close closes the connection with redis server.
@@ -948,11 +1022,6 @@ func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.T
 	return r.runScript(ctx, op, retryCmd, keys, argv...)
 }
 
-const (
-	maxArchiveSize           = 10000 // maximum number of tasks in archive
-	archivedExpirationInDays = 90    // number of days before an archived task gets deleted permanently
-)
-
 // KEYS[1] -> asynq:{<qname>}:t:<task_id>
 // KEYS[2] -> asynq:{<qname>}:active
 // KEYS[3] -> asynq:{<qname>}:lease
@@ -986,7 +1055,7 @@ if #old > 0 then
 	redis.call("ZREM", KEYS[4], unpack(old))
 end
 
-local extra = redis.call("ZRANGE", KEYS[4], 0, -ARGV[5])
+local extra = redis.call("ZRANGE", KEYS[4], 0, -ARGV[5]-1)
 if #extra > 0 then
 	for _, id in ipairs(extra) do
 		redis.call("DEL", KEYS[9] .. id)
@@ -1025,7 +1094,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 	if err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode message: %v", err))
 	}
-	cutoff := now.AddDate(0, 0, -archivedExpirationInDays)
+	cutoff, maxSize := r.archiveTrimArgs(now)
 	expireAt := now.Add(statsTTL)
 	keys := []string{
 		base.TaskKey(msg.Queue, msg.ID),
@@ -1042,8 +1111,8 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 		msg.ID,
 		encoded,
 		now.Unix(),
-		cutoff.Unix(),
-		maxArchiveSize,
+		cutoff,
+		maxSize,
 		expireAt.Unix(),
 		int64(math.MaxInt64),
 	}

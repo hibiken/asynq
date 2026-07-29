@@ -1174,7 +1174,7 @@ for _, id in ipairs(ids) do
 	redis.call("HSET", ARGV[4] .. id, "state", "archived")
 end
 redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
+redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3]-1)
 redis.call("DEL", KEYS[1])
 redis.call("SREM", KEYS[3], ARGV[5])
 return table.getn(ids)
@@ -1194,10 +1194,11 @@ func (r *RDB) ArchiveAllAggregatingTasks(qname, gname string) (int64, error) {
 		base.AllGroups(qname),
 	}
 	now := r.clock.Now()
+	cutoff, maxSize := r.archiveTrimArgs(now)
 	argv := []interface{}{
 		now.Unix(),
-		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
-		maxArchiveSize,
+		cutoff,
+		maxSize,
 		base.TaskKeyPrefix(qname),
 		gname,
 	}
@@ -1233,7 +1234,7 @@ for _, id in ipairs(ids) do
 	redis.call("HSET", ARGV[4] .. id, "state", "archived")
 end
 redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
+redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3]-1)
 redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
 
@@ -1250,10 +1251,11 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 		base.ArchivedKey(qname),
 	}
 	now := r.clock.Now()
+	cutoff, maxSize := r.archiveTrimArgs(now)
 	argv := []interface{}{
 		now.Unix(),
-		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
-		maxArchiveSize,
+		cutoff,
+		maxSize,
 		base.TaskKeyPrefix(qname),
 	}
 	res, err := archiveAllPendingCmd.Run(context.Background(), r.client, keys, argv...).Result()
@@ -1318,7 +1320,7 @@ end
 redis.call("ZADD", KEYS[2], ARGV[2], ARGV[1])
 redis.call("HSET", KEYS[1], "state", "archived")
 redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[3])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[4])
+redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[4]-1)
 return 1
 `)
 
@@ -1340,11 +1342,12 @@ func (r *RDB) ArchiveTask(qname, id string) error {
 		base.AllGroups(qname),
 	}
 	now := r.clock.Now()
+	cutoff, maxSize := r.archiveTrimArgs(now)
 	argv := []interface{}{
 		id,
 		now.Unix(),
-		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
-		maxArchiveSize,
+		cutoff,
+		maxSize,
 		base.QueueKeyPrefix(qname),
 		base.GroupKeyPrefix(qname),
 	}
@@ -1393,7 +1396,7 @@ for _, id in ipairs(ids) do
 	redis.call("HSET", ARGV[4] .. id, "state", "archived")
 end
 redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
+redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3]-1)
 redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
 
@@ -1406,10 +1409,11 @@ func (r *RDB) archiveAll(src, dst, qname string) (int64, error) {
 		dst,
 	}
 	now := r.clock.Now()
+	cutoff, maxSize := r.archiveTrimArgs(now)
 	argv := []interface{}{
 		now.Unix(),
-		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
-		maxArchiveSize,
+		cutoff,
+		maxSize,
 		base.TaskKeyPrefix(qname),
 		qname,
 	}

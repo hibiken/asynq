@@ -32,7 +32,8 @@ import (
 // If a task exhausts its retries, it will be moved to the archive and
 // will be kept in the archive set.
 // Note that the archive size is finite and once it reaches its max size,
-// oldest tasks in the archive will be deleted.
+// oldest tasks in the archive will be deleted. Use Config.MaxArchiveSize
+// and Config.ArchivedExpirationInDays to configure archive retention.
 type Server struct {
 	logger *log.Logger
 
@@ -40,6 +41,8 @@ type Server struct {
 	// When a Server has been created with an existing Redis connection, we do
 	// not want to close it.
 	sharedConnection bool
+
+	archiveSettings base.ArchiveConfig
 
 	state *serverState
 
@@ -252,6 +255,17 @@ type Config struct {
 	// If unset or zero, default batch size of 100 is used.
 	// Make sure to not put a big number as the batch size to prevent a long-running script.
 	JanitorBatchSize int
+
+	// MaxArchiveSize specifies the maximum number of tasks to keep in the archive set.
+	//
+	// When the archive exceeds this limit, the oldest archived tasks are deleted.
+	// If unset, zero, or negative, default size of 10000 is used.
+	MaxArchiveSize int
+
+	// ArchivedExpirationInDays specifies the number of days before an archived task is deleted.
+	//
+	// If unset, zero, or negative, default of 90 days is used.
+	ArchivedExpirationInDays int
 }
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
@@ -424,6 +438,8 @@ const (
 	defaultJanitorInterval = 8 * time.Second
 
 	defaultJanitorBatchSize = 100
+
+	queueConfigWriteTimeout = 5 * time.Second
 )
 
 // NewServer returns a new Server given a redis connection option
@@ -503,7 +519,14 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	}
 	logger.SetLevel(toInternalLogLevel(loglevel))
 
-	rdb := rdb.NewRDB(c)
+	archiveSettings := base.ArchiveConfig{
+		MaxArchiveSize:           cfg.MaxArchiveSize,
+		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+	}
+	rdb := rdb.NewRDB(c, rdb.RDBConfig{
+		MaxArchiveSize:           cfg.MaxArchiveSize,
+		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+	})
 	starting := make(chan *workerInfo)
 	finished := make(chan *base.TaskMessage)
 	syncCh := make(chan *syncRequest)
@@ -606,6 +629,7 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		logger:           logger,
 		broker:           rdb,
 		sharedConnection: true,
+		archiveSettings:  archiveSettings,
 		state:            srvState,
 		forwarder:        forwarder,
 		processor:        processor,
@@ -687,6 +711,12 @@ func (srv *Server) Start(handler Handler) error {
 		return err
 	}
 	srv.logger.Info("Starting processing")
+
+	ctx, cancel := context.WithTimeout(context.Background(), queueConfigWriteTimeout)
+	if err := srv.broker.WriteArchiveConfig(ctx, srv.archiveSettings); err != nil {
+		srv.logger.Warnf("Could not persist archive settings: %v", err)
+	}
+	cancel()
 
 	srv.heartbeater.start(&srv.wg)
 	srv.healthchecker.start(&srv.wg)
