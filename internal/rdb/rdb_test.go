@@ -2400,7 +2400,7 @@ func TestArchiveTrim(t *testing.T) {
 	errMsg := "SMTP server not responding"
 
 	maxArchiveSet := make([]base.Z, 0)
-	for i := 0; i < maxArchiveSize-1; i++ {
+	for i := 0; i < DefaultMaxArchiveSize-1; i++ {
 		maxArchiveSet = append(maxArchiveSet, base.Z{Message: &base.TaskMessage{
 			ID:      uuid.NewString(),
 			Type:    "generate_csv",
@@ -2456,7 +2456,7 @@ func TestArchiveTrim(t *testing.T) {
 			},
 			archived: map[string][]base.Z{
 				"default": {
-					{Message: t2, Score: now.Add(-time.Hour * 24 * (archivedExpirationInDays + 1)).Unix()},
+					{Message: t2, Score: now.Add(-time.Hour * 24 * (DefaultArchivedExpirationInDays + 1)).Unix()},
 				},
 			},
 			wantArchived: map[string][]base.Z{
@@ -2527,6 +2527,123 @@ func TestArchiveTrim(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestArchiveWithCustomMaxArchiveSize(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	const customMaxArchiveSize = 5
+
+	r.SetMaxArchiveSize(customMaxArchiveSize)
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	t1 := &base.TaskMessage{
+		ID:      uuid.NewString(),
+		Type:    "send_email",
+		Payload: nil,
+		Queue:   "default",
+		Retry:   25,
+		Retried: 0,
+		Timeout: 180,
+	}
+	errMsg := "SMTP server not responding"
+
+	archived := make([]base.Z, 0, customMaxArchiveSize-1)
+	for i := 0; i < customMaxArchiveSize-1; i++ {
+		archived = append(archived, base.Z{Message: &base.TaskMessage{
+			ID:      uuid.NewString(),
+			Type:    "generate_csv",
+			Payload: nil,
+			Queue:   "default",
+			Retry:   25,
+			Retried: 0,
+			Timeout: 60,
+		}, Score: now.Add(-time.Hour + -time.Second*time.Duration(i)).Unix()})
+	}
+
+	wantArchived := make([]base.Z, 0, customMaxArchiveSize)
+	wantArchived = append(wantArchived, base.Z{Message: h.TaskMessageWithError(*t1, errMsg, now), Score: now.Unix()})
+	wantArchived = append(wantArchived, archived[:len(archived)-1]...)
+
+	h.FlushDB(t, r.client)
+	h.SeedAllActiveQueues(t, r.client, map[string][]*base.TaskMessage{
+		"default": {t1},
+	})
+	h.SeedAllLease(t, r.client, map[string][]base.Z{
+		"default": {{Message: t1, Score: now.Add(10 * time.Second).Unix()}},
+	})
+	h.SeedAllArchivedQueues(t, r.client, map[string][]base.Z{
+		"default": archived,
+	})
+
+	if err := r.Archive(context.Background(), t1, errMsg); err != nil {
+		t.Fatalf("(*RDB).Archive() = %v, want nil", err)
+	}
+
+	gotArchived := h.GetArchivedEntries(t, r.client, "default")
+	if diff := cmp.Diff(wantArchived, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt, timeCmpOpt); diff != "" {
+		t.Errorf("mismatch found in archived set: (-want, +got):\n%s", diff)
+	}
+}
+
+func TestArchiveWithCustomArchivedExpirationInDays(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	const customArchivedExpirationInDays = 30
+
+	r.SetArchivedExpirationInDays(customArchivedExpirationInDays)
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	t1 := &base.TaskMessage{
+		ID:      uuid.NewString(),
+		Type:    "send_email",
+		Payload: nil,
+		Queue:   "default",
+		Retry:   25,
+		Retried: 25,
+		Timeout: 1800,
+	}
+	t2 := &base.TaskMessage{
+		ID:      uuid.NewString(),
+		Type:    "reindex",
+		Payload: nil,
+		Queue:   "default",
+		Retry:   25,
+		Retried: 0,
+		Timeout: 3000,
+	}
+	errMsg := "SMTP server not responding"
+
+	h.FlushDB(t, r.client)
+	h.SeedAllActiveQueues(t, r.client, map[string][]*base.TaskMessage{
+		"default": {t1},
+	})
+	h.SeedAllLease(t, r.client, map[string][]base.Z{
+		"default": {{Message: t1, Score: now.Add(10 * time.Second).Unix()}},
+	})
+	h.SeedAllArchivedQueues(t, r.client, map[string][]base.Z{
+		"default": {
+			{Message: t2, Score: now.Add(-time.Hour * 24 * (customArchivedExpirationInDays + 1)).Unix()},
+		},
+	})
+
+	if err := r.Archive(context.Background(), t1, errMsg); err != nil {
+		t.Fatalf("(*RDB).Archive() = %v, want nil", err)
+	}
+
+	wantArchived := []base.Z{
+		{Message: h.TaskMessageWithError(*t1, errMsg, now), Score: now.Unix()},
+	}
+	gotArchived := h.GetArchivedEntries(t, r.client, "default")
+	if diff := cmp.Diff(wantArchived, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt, timeCmpOpt); diff != "" {
+		t.Errorf("mismatch found in archived set: (-want, +got):\n%s", diff)
 	}
 }
 
