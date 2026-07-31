@@ -27,6 +27,7 @@ const LeaseDuration = 30 * time.Second
 
 // RDB is a client interface to query and mutate task queues.
 type RDB struct {
+	clientMu        sync.RWMutex
 	client          redis.UniversalClient
 	clock           timeutil.Clock
 	queuesPublished sync.Map
@@ -42,12 +43,22 @@ func NewRDB(client redis.UniversalClient) *RDB {
 
 // Close closes the connection with redis server.
 func (r *RDB) Close() error {
-	return r.client.Close()
+	return r.Client().Close()
 }
 
 // Client returns the reference to underlying redis client.
 func (r *RDB) Client() redis.UniversalClient {
+	r.clientMu.RLock()
+	defer r.clientMu.RUnlock()
 	return r.client
+}
+
+// ReplaceClient switches the Redis client used by this RDB.
+// Calls already in progress may complete through the previous Redis client.
+func (r *RDB) ReplaceClient(client redis.UniversalClient) {
+	r.clientMu.Lock()
+	defer r.clientMu.Unlock()
+	r.client = client
 }
 
 // SetClock sets the clock used by RDB to the given clock.
@@ -59,7 +70,7 @@ func (r *RDB) SetClock(c timeutil.Clock) {
 
 // Ping checks the connection with redis server.
 func (r *RDB) Ping() error {
-	return r.client.Ping(context.Background()).Err()
+	return r.Client().Ping(context.Background()).Err()
 }
 
 func (r *RDB) runScript(ctx context.Context, op errors.Op, script *redis.Script, keys []string, args ...interface{}) error {
@@ -115,7 +126,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
 	if _, found := r.queuesPublished.Load(msg.Queue); !found {
-		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+		if err := r.Client().SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
 			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 		}
 		r.queuesPublished.Store(msg.Queue, true)
@@ -184,7 +195,7 @@ func (r *RDB) BatchEnqueue(ctx context.Context, items []base.BatchEnqueueItem) (
 		}
 	}
 
-	pipe := r.client.Pipeline()
+	pipe := r.Client().Pipeline()
 
 	// Track which pipeline slot holds each item's script result.
 	scriptIdxs := make([]int, 0, len(items))
@@ -292,7 +303,7 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 		return errors.E(op, errors.Internal, "cannot encode task message: %v", err)
 	}
 	if _, found := r.queuesPublished.Load(msg.Queue); !found {
-		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+		if err := r.Client().SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
 			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 		}
 		r.queuesPublished.Store(msg.Queue, true)
@@ -650,7 +661,7 @@ func (r *RDB) AddToGroup(ctx context.Context, msg *base.TaskMessage, groupKey st
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
 	if _, found := r.queuesPublished.Load(msg.Queue); !found {
-		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+		if err := r.Client().SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
 			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 		}
 		r.queuesPublished.Store(msg.Queue, true)
@@ -715,7 +726,7 @@ func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, group
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
 	if _, found := r.queuesPublished.Load(msg.Queue); !found {
-		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+		if err := r.Client().SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
 			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 		}
 		r.queuesPublished.Store(msg.Queue, true)
@@ -775,7 +786,7 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
 	}
 	if _, found := r.queuesPublished.Load(msg.Queue); !found {
-		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+		if err := r.Client().SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
 			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 		}
 		r.queuesPublished.Store(msg.Queue, true)
@@ -837,7 +848,7 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode task message: %v", err))
 	}
 	if _, found := r.queuesPublished.Load(msg.Queue); !found {
-		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
+		if err := r.Client().SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
 			return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 		}
 		r.queuesPublished.Store(msg.Queue, true)
@@ -1134,7 +1145,7 @@ func (r *RDB) forwardAll(qname string) (err error) {
 // ListGroups returns a list of all known groups in the given queue.
 func (r *RDB) ListGroups(qname string) ([]string, error) {
 	var op errors.Op = "RDB.ListGroups"
-	groups, err := r.client.SMembers(context.Background(), base.AllGroups(qname)).Result()
+	groups, err := r.Client().SMembers(context.Background(), base.AllGroups(qname)).Result()
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "smembers", Err: err})
 	}
@@ -1309,7 +1320,7 @@ func (r *RDB) ReadAggregationSet(qname, gname, setID string) ([]*base.TaskMessag
 		}
 		msgs = append(msgs, msg)
 	}
-	deadlineUnix, err := r.client.ZScore(ctx, base.AllAggregationSets(qname), aggSetKey).Result()
+	deadlineUnix, err := r.Client().ZScore(ctx, base.AllAggregationSets(qname), aggSetKey).Result()
 	if err != nil {
 		return nil, time.Time{}, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zscore", Err: err})
 	}
@@ -1474,7 +1485,7 @@ func (r *RDB) ExtendLease(qname string, ids ...string) (expirationTime time.Time
 	}
 	// Use XX option to only update elements that already exist; Don't add new elements
 	// TODO: Consider adding GT option to ensure we only "extend" the lease. Ceveat is that GT is supported from redis v6.2.0 or above.
-	err = r.client.ZAddXX(context.Background(), base.LeaseKey(qname), zs...).Err()
+	err = r.Client().ZAddXX(context.Background(), base.LeaseKey(qname), zs...).Err()
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -1516,10 +1527,10 @@ func (r *RDB) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo
 	}
 	skey := base.ServerInfoKey(info.Host, info.PID, info.ServerID)
 	wkey := base.WorkersKey(info.Host, info.PID, info.ServerID)
-	if err := r.client.ZAdd(ctx, base.AllServers, redis.Z{Score: float64(exp.Unix()), Member: skey}).Err(); err != nil {
+	if err := r.Client().ZAdd(ctx, base.AllServers, redis.Z{Score: float64(exp.Unix()), Member: skey}).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "sadd", Err: err})
 	}
-	if err := r.client.ZAdd(ctx, base.AllWorkers, redis.Z{Score: float64(exp.Unix()), Member: wkey}).Err(); err != nil {
+	if err := r.Client().ZAdd(ctx, base.AllWorkers, redis.Z{Score: float64(exp.Unix()), Member: wkey}).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zadd", Err: err})
 	}
 	return r.runScript(ctx, op, writeServerStateCmd, []string{skey, wkey}, args...)
@@ -1538,10 +1549,10 @@ func (r *RDB) ClearServerState(host string, pid int, serverID string) error {
 	ctx := context.Background()
 	skey := base.ServerInfoKey(host, pid, serverID)
 	wkey := base.WorkersKey(host, pid, serverID)
-	if err := r.client.ZRem(ctx, base.AllServers, skey).Err(); err != nil {
+	if err := r.Client().ZRem(ctx, base.AllServers, skey).Err(); err != nil {
 		return errors.E(op, errors.Internal, &errors.RedisCommandError{Command: "zrem", Err: err})
 	}
-	if err := r.client.ZRem(ctx, base.AllWorkers, wkey).Err(); err != nil {
+	if err := r.Client().ZRem(ctx, base.AllWorkers, wkey).Err(); err != nil {
 		return errors.E(op, errors.Internal, &errors.RedisCommandError{Command: "zrem", Err: err})
 	}
 	return r.runScript(ctx, op, clearServerStateCmd, []string{skey, wkey})
@@ -1572,7 +1583,7 @@ func (r *RDB) WriteSchedulerEntries(schedulerID string, entries []*base.Schedule
 	}
 	exp := r.clock.Now().Add(ttl).UTC()
 	key := base.SchedulerEntriesKey(schedulerID)
-	err := r.client.ZAdd(ctx, base.AllSchedulers, redis.Z{Score: float64(exp.Unix()), Member: key}).Err()
+	err := r.Client().ZAdd(ctx, base.AllSchedulers, redis.Z{Score: float64(exp.Unix()), Member: key}).Err()
 	if err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zadd", Err: err})
 	}
@@ -1584,10 +1595,10 @@ func (r *RDB) ClearSchedulerEntries(schedulerID string) error {
 	var op errors.Op = "rdb.ClearSchedulerEntries"
 	ctx := context.Background()
 	key := base.SchedulerEntriesKey(schedulerID)
-	if err := r.client.ZRem(ctx, base.AllSchedulers, key).Err(); err != nil {
+	if err := r.Client().ZRem(ctx, base.AllSchedulers, key).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "zrem", Err: err})
 	}
-	if err := r.client.Del(ctx, key).Err(); err != nil {
+	if err := r.Client().Del(ctx, key).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "del", Err: err})
 	}
 	return nil
@@ -1597,7 +1608,7 @@ func (r *RDB) ClearSchedulerEntries(schedulerID string) error {
 func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
 	var op errors.Op = "rdb.CancelationPubSub"
 	ctx := context.Background()
-	pubsub := r.client.Subscribe(ctx, base.CancelChannel)
+	pubsub := r.Client().Subscribe(ctx, base.CancelChannel)
 	_, err := pubsub.Receive(ctx)
 	if err != nil {
 		pubsub.Close()
@@ -1611,7 +1622,7 @@ func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
 func (r *RDB) PublishCancelation(id string) error {
 	var op errors.Op = "rdb.PublishCancelation"
 	ctx := context.Background()
-	if err := r.client.Publish(ctx, base.CancelChannel, id).Err(); err != nil {
+	if err := r.Client().Publish(ctx, base.CancelChannel, id).Err(); err != nil {
 		return errors.E(op, errors.Unknown, fmt.Sprintf("redis pubsub publish error: %v", err))
 	}
 	return nil
@@ -1653,7 +1664,7 @@ func (r *RDB) ClearSchedulerHistory(entryID string) error {
 	var op errors.Op = "rdb.ClearSchedulerHistory"
 	ctx := context.Background()
 	key := base.SchedulerHistoryKey(entryID)
-	if err := r.client.Del(ctx, key).Err(); err != nil {
+	if err := r.Client().Del(ctx, key).Err(); err != nil {
 		return errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "del", Err: err})
 	}
 	return nil
@@ -1664,7 +1675,7 @@ func (r *RDB) WriteResult(qname, taskID string, data []byte) (int, error) {
 	var op errors.Op = "rdb.WriteResult"
 	ctx := context.Background()
 	taskKey := base.TaskKey(qname, taskID)
-	if err := r.client.HSet(ctx, taskKey, "result", data).Err(); err != nil {
+	if err := r.Client().HSet(ctx, taskKey, "result", data).Err(); err != nil {
 		return 0, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "hset", Err: err})
 	}
 	return len(data), nil

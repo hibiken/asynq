@@ -19,7 +19,7 @@ import (
 
 // AllQueues returns a list of all queue names.
 func (r *RDB) AllQueues() ([]string, error) {
-	return r.client.SMembers(context.Background(), base.AllQueues).Result()
+	return r.Client().SMembers(context.Background(), base.AllQueues).Result()
 }
 
 // Stats represents a state of queues at a certain time.
@@ -419,7 +419,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 
 // RedisInfo returns a map of redis info.
 func (r *RDB) RedisInfo() (map[string]string, error) {
-	res, err := r.client.Info(context.Background()).Result()
+	res, err := r.Client().Info(context.Background()).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +428,7 @@ func (r *RDB) RedisInfo() (map[string]string, error) {
 
 // RedisClusterInfo returns a map of redis cluster info.
 func (r *RDB) RedisClusterInfo() (map[string]string, error) {
-	res, err := r.client.ClusterInfo(context.Background()).Result()
+	res, err := r.Client().ClusterInfo(context.Background()).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -819,7 +819,7 @@ func (r *RDB) ListAggregating(qname, gname string, pgn Pagination) ([]*base.Task
 
 // Reports whether a queue with the given name exists.
 func (r *RDB) queueExists(qname string) (bool, error) {
-	return r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
+	return r.Client().SIsMember(context.Background(), base.AllQueues, qname).Result()
 }
 
 // KEYS[1] -> key for ids set (e.g. asynq:{<qname>}:scheduled)
@@ -1931,7 +1931,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 	}
 	switch n {
 	case 1:
-		if err := r.client.SRem(context.Background(), base.AllQueues, qname).Err(); err != nil {
+		if err := r.Client().SRem(context.Background(), base.AllQueues, qname).Err(); err != nil {
 			return errors.E(op, errors.Unknown, err)
 		}
 		r.queuesPublished.Delete(qname)
@@ -1965,7 +1965,7 @@ func (r *RDB) ListServers() ([]*base.ServerInfo, error) {
 	}
 	var servers []*base.ServerInfo
 	for _, key := range keys {
-		data, err := r.client.Get(context.Background(), key).Result()
+		data, err := r.Client().Get(context.Background(), key).Result()
 		if err != nil {
 			continue // skip bad data
 		}
@@ -1999,7 +1999,7 @@ func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
 	}
 	var workers []*base.WorkerInfo
 	for _, key := range keys {
-		data, err := r.client.HVals(context.Background(), key).Result()
+		data, err := r.Client().HVals(context.Background(), key).Result()
 		if err != nil {
 			continue // skip bad data
 		}
@@ -2034,7 +2034,7 @@ func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
 	}
 	var entries []*base.SchedulerEntry
 	for _, key := range keys {
-		data, err := r.client.LRange(context.Background(), key, 0, -1).Result()
+		data, err := r.Client().LRange(context.Background(), key, 0, -1).Result()
 		if err != nil {
 			continue // skip bad data
 		}
@@ -2052,7 +2052,7 @@ func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
 // ListSchedulerEnqueueEvents returns the list of scheduler enqueue events.
 func (r *RDB) ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*base.SchedulerEnqueueEvent, error) {
 	key := base.SchedulerHistoryKey(entryID)
-	zs, err := r.client.ZRevRangeWithScores(context.Background(), key, pgn.start(), pgn.stop()).Result()
+	zs, err := r.Client().ZRevRangeWithScores(context.Background(), key, pgn.start(), pgn.stop()).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -2074,7 +2074,7 @@ func (r *RDB) ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*bas
 // Pause pauses processing of tasks from the given queue.
 func (r *RDB) Pause(qname string) error {
 	key := base.PausedKey(qname)
-	ok, err := r.client.SetNX(context.Background(), key, r.clock.Now().Unix(), 0).Result()
+	ok, err := r.Client().SetNX(context.Background(), key, r.clock.Now().Unix(), 0).Result()
 	if err != nil {
 		return err
 	}
@@ -2087,7 +2087,7 @@ func (r *RDB) Pause(qname string) error {
 // Unpause resumes processing of tasks from the given queue.
 func (r *RDB) Unpause(qname string) error {
 	key := base.PausedKey(qname)
-	deleted, err := r.client.Del(context.Background(), key).Result()
+	deleted, err := r.Client().Del(context.Background(), key).Result()
 	if err != nil {
 		return err
 	}
@@ -2100,7 +2100,7 @@ func (r *RDB) Unpause(qname string) error {
 // ClusterKeySlot returns an integer identifying the hash slot the given queue hashes to.
 func (r *RDB) ClusterKeySlot(qname string) (int64, error) {
 	key := base.PendingKey(qname)
-	return r.client.ClusterKeySlot(context.Background(), key).Result()
+	return r.Client().ClusterKeySlot(context.Background(), key).Result()
 }
 
 // ClusterNodes returns a list of nodes the given queue belongs to.
@@ -2109,7 +2109,7 @@ func (r *RDB) ClusterNodes(qname string) ([]redis.ClusterNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	clusterSlots, err := r.client.ClusterSlots(context.Background()).Result()
+	clusterSlots, err := r.Client().ClusterSlots(context.Background()).Result()
 	if err != nil {
 		return nil, err
 	}

@@ -73,6 +73,11 @@ func NewPeriodicTaskManager(opts PeriodicTaskManagerOpts) (*PeriodicTaskManager,
 	}, nil
 }
 
+// ReplaceRedisClient switches the Redis client used by this PeriodicTaskManager.
+func (m *PeriodicTaskManager) ReplaceRedisClient(c redis.UniversalClient) error {
+	return m.s.ReplaceRedisClient(c)
+}
+
 // PeriodicTaskConfigProvider provides configs for periodic tasks.
 // GetConfigs will be called by a PeriodicTaskManager periodically to
 // sync the scheduler's entries with the configs returned by the provider.

@@ -71,11 +71,15 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 // Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
 func NewSchedulerFromRedisClient(c redis.UniversalClient, opts *SchedulerOpts) *Scheduler {
 	scheduler := newScheduler(opts)
-
 	scheduler.rdb = rdb.NewRDB(c)
 	scheduler.client = NewClientFromRedisClient(c)
-
 	return scheduler
+}
+
+// ReplaceRedisClient switches the Redis client used by this Scheduler.
+func (s *Scheduler) ReplaceRedisClient(c redis.UniversalClient) error {
+	s.rdb.ReplaceClient(c)
+	return s.client.ReplaceRedisClient(c)
 }
 
 func newScheduler(opts *SchedulerOpts) *Scheduler {

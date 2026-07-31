@@ -619,6 +619,17 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	}
 }
 
+// ReplaceRedisClient switches the Redis client used by this Server and all of
+// its Redis-backed subcomponents.
+func (srv *Server) ReplaceRedisClient(c redis.UniversalClient) error {
+	broker, ok := srv.broker.(*rdb.RDB)
+	if !ok {
+		return fmt.Errorf("asynq: cannot replace Redis client for broker type %T", srv.broker)
+	}
+	broker.ReplaceClient(c)
+	return nil
+}
+
 // A Handler processes tasks.
 //
 // ProcessTask should return nil if the processing of a task

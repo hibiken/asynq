@@ -49,6 +49,16 @@ func NewClientFromRedisClient(c redis.UniversalClient) *Client {
 	return &Client{broker: rdb.NewRDB(c), sharedConnection: true}
 }
 
+// ReplaceRedisClient switches the Redis client used by this Client.
+func (c *Client) ReplaceRedisClient(redisClient redis.UniversalClient) error {
+	broker, ok := c.broker.(*rdb.RDB)
+	if !ok {
+		return fmt.Errorf("asynq: cannot replace Redis client for broker type %T", c.broker)
+	}
+	broker.ReplaceClient(redisClient)
+	return nil
+}
+
 type OptionType int
 
 const (
