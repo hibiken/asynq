@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hibiken/asynq/internal/base"
@@ -26,24 +27,37 @@ type Inspector struct {
 	sharedConnection bool
 }
 
+var (
+	_inspectorMutex = new(sync.Mutex)
+	_inspector      *Inspector
+)
+
 // New returns a new instance of Inspector.
 func NewInspector(r RedisConnOpt) *Inspector {
 	c, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("inspeq: unsupported RedisConnOpt type %T", r))
 	}
-	inspector := NewInspectorFromRedisClient(c)
-	inspector.sharedConnection = false
-	return inspector
+	_inspectorMutex.Lock()
+	defer _inspectorMutex.Unlock()
+	_inspector = NewInspectorFromRedisClient(c)
+	_inspector.sharedConnection = false
+	return _inspector
 }
 
 // NewInspectorFromRedisClient returns a new instance of Inspector given a redis.UniversalClient
 // Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
 func NewInspectorFromRedisClient(c redis.UniversalClient) *Inspector {
-	return &Inspector{
-		rdb:              rdb.NewRDB(c),
-		sharedConnection: true,
-	}
+	_inspectorMutex.Lock()
+	defer _inspectorMutex.Unlock()
+	_inspector = &Inspector{rdb: rdb.NewRDB(c), sharedConnection: true}
+	return _inspector
+}
+
+func ReplaceInspectorRedisClient(c redis.UniversalClient) {
+	_inspectorMutex.Lock()
+	defer _inspectorMutex.Unlock()
+	_inspector.rdb = rdb.NewRDB(c)
 }
 
 // Close closes the connection with redis.

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hibiken/asynq/internal/rdb"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -44,6 +45,11 @@ type PeriodicTaskManagerOpts struct {
 
 const defaultSyncInterval = 3 * time.Minute
 
+var (
+	_periodicTaskManagerMutex = new(sync.Mutex)
+	_periodicTaskManager      *PeriodicTaskManager
+)
+
 // NewPeriodicTaskManager returns a new PeriodicTaskManager instance.
 // The given opts should specify the RedisConnOp and PeriodicTaskConfigProvider at minimum.
 func NewPeriodicTaskManager(opts PeriodicTaskManagerOpts) (*PeriodicTaskManager, error) {
@@ -64,13 +70,20 @@ func NewPeriodicTaskManager(opts PeriodicTaskManagerOpts) (*PeriodicTaskManager,
 	if syncInterval == 0 {
 		syncInterval = defaultSyncInterval
 	}
-	return &PeriodicTaskManager{
+	_periodicTaskManager = &PeriodicTaskManager{
 		s:            scheduler,
 		p:            opts.PeriodicTaskConfigProvider,
 		syncInterval: syncInterval,
 		done:         make(chan struct{}),
 		m:            make(map[string]string),
-	}, nil
+	}
+	return _periodicTaskManager, nil
+}
+
+func ReplacePeriodicTaskManagerRedisClient(c redis.UniversalClient) {
+	_periodicTaskManagerMutex.Lock()
+	defer _periodicTaskManagerMutex.Unlock()
+	_periodicTaskManager.s.rdb = rdb.NewRDB(c)
 }
 
 // PeriodicTaskConfigProvider provides configs for periodic tasks.

@@ -66,16 +66,27 @@ func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
 	return scheduler
 }
 
+var (
+	_schedulerMutex = new(sync.Mutex)
+	_scheduler      *Scheduler
+)
+
 // NewSchedulerFromRedisClient returns a new instance of Scheduler given a redis.UniversalClient
 // The parameter opts is optional, defaults will be used if opts is set to nil.
 // Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
 func NewSchedulerFromRedisClient(c redis.UniversalClient, opts *SchedulerOpts) *Scheduler {
-	scheduler := newScheduler(opts)
+	_schedulerMutex.Lock()
+	defer _schedulerMutex.Unlock()
+	_scheduler = newScheduler(opts)
+	_scheduler.rdb = rdb.NewRDB(c)
+	_scheduler.client = NewClientFromRedisClient(c)
+	return _scheduler
+}
 
-	scheduler.rdb = rdb.NewRDB(c)
-	scheduler.client = NewClientFromRedisClient(c)
-
-	return scheduler
+func ReplaceSchedulerRedisClient(c redis.UniversalClient) {
+	_schedulerMutex.Lock()
+	defer _schedulerMutex.Unlock()
+	_scheduler.rdb = rdb.NewRDB(c)
 }
 
 func newScheduler(opts *SchedulerOpts) *Scheduler {
