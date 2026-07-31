@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"maps"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,37 +32,31 @@ type Client struct {
 	sharedConnection bool
 }
 
-var (
-	_clientMutex = new(sync.Mutex)
-	_client      *Client
-)
-
 // NewClient returns a new Client instance given a redis connection option.
 func NewClient(r RedisConnOpt) *Client {
 	redisClient, ok := r.MakeRedisClient().(redis.UniversalClient)
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
-	_clientMutex.Lock()
-	defer _clientMutex.Unlock()
-	_client = NewClientFromRedisClient(redisClient)
-	_client.sharedConnection = false
-	return _client
+	client := NewClientFromRedisClient(redisClient)
+	client.sharedConnection = false
+	return client
 }
 
 // NewClientFromRedisClient returns a new instance of Client given a redis.UniversalClient
 // Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
 func NewClientFromRedisClient(c redis.UniversalClient) *Client {
-	_clientMutex.Lock()
-	defer _clientMutex.Unlock()
-	_client = &Client{broker: rdb.NewRDB(c), sharedConnection: true}
-	return _client
+	return &Client{broker: rdb.NewRDB(c), sharedConnection: true}
 }
 
-func ReplaceRedisClient(c redis.UniversalClient) {
-	_clientMutex.Lock()
-	defer _clientMutex.Unlock()
-	_client.broker = rdb.NewRDB(c)
+// ReplaceRedisClient switches the Redis client used by this Client.
+func (c *Client) ReplaceRedisClient(redisClient redis.UniversalClient) error {
+	broker, ok := c.broker.(*rdb.RDB)
+	if !ok {
+		return fmt.Errorf("asynq: cannot replace Redis client for broker type %T", c.broker)
+	}
+	broker.ReplaceClient(redisClient)
+	return nil
 }
 
 type OptionType int

@@ -438,11 +438,6 @@ func NewServer(r RedisConnOpt, cfg Config) *Server {
 	return server
 }
 
-var (
-	_serverMutex = new(sync.Mutex)
-	_server      *Server
-)
-
 // NewServerFromRedisClient returns a new instance of Server given a redis.UniversalClient
 // and server configuration
 // Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
@@ -607,7 +602,7 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		maxSize:         cfg.GroupMaxSize,
 		groupAggregator: cfg.GroupAggregator,
 	})
-	_server = &Server{
+	return &Server{
 		logger:           logger,
 		broker:           rdb,
 		sharedConnection: true,
@@ -622,22 +617,17 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		janitor:          janitor,
 		aggregator:       aggregator,
 	}
-	return _server
 }
 
-func ReplaceServerRedisClient(c redis.UniversalClient) {
-	_serverMutex.Lock()
-	defer _serverMutex.Unlock()
-	rdb := rdb.NewRDB(c)
-	_server.broker = rdb
-	_server.aggregator.broker = rdb
-	_server.forwarder.broker = rdb
-	_server.processor.broker = rdb
-	_server.recoverer.broker = rdb
-	_server.subscriber.broker = rdb
-	_server.heartbeater.broker = rdb
-	_server.healthchecker.broker = rdb
-	_server.janitor.broker = rdb
+// ReplaceRedisClient switches the Redis client used by this Server and all of
+// its Redis-backed subcomponents.
+func (srv *Server) ReplaceRedisClient(c redis.UniversalClient) error {
+	broker, ok := srv.broker.(*rdb.RDB)
+	if !ok {
+		return fmt.Errorf("asynq: cannot replace Redis client for broker type %T", srv.broker)
+	}
+	broker.ReplaceClient(c)
+	return nil
 }
 
 // A Handler processes tasks.

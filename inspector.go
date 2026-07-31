@@ -38,26 +38,20 @@ func NewInspector(r RedisConnOpt) *Inspector {
 	if !ok {
 		panic(fmt.Sprintf("inspeq: unsupported RedisConnOpt type %T", r))
 	}
-	_inspectorMutex.Lock()
-	defer _inspectorMutex.Unlock()
-	_inspector = NewInspectorFromRedisClient(c)
-	_inspector.sharedConnection = false
-	return _inspector
+	inspector := NewInspectorFromRedisClient(c)
+	inspector.sharedConnection = false
+	return inspector
 }
 
 // NewInspectorFromRedisClient returns a new instance of Inspector given a redis.UniversalClient
 // Warning: The underlying redis connection pool will not be closed by Asynq, you are responsible for closing it.
 func NewInspectorFromRedisClient(c redis.UniversalClient) *Inspector {
-	_inspectorMutex.Lock()
-	defer _inspectorMutex.Unlock()
-	_inspector = &Inspector{rdb: rdb.NewRDB(c), sharedConnection: true}
-	return _inspector
+	return &Inspector{rdb: rdb.NewRDB(c), sharedConnection: true}
 }
 
-func ReplaceInspectorRedisClient(c redis.UniversalClient) {
-	_inspectorMutex.Lock()
-	defer _inspectorMutex.Unlock()
-	_inspector.rdb = rdb.NewRDB(c)
+// ReplaceRedisClient switches the Redis client used by this Inspector.
+func (i *Inspector) ReplaceRedisClient(c redis.UniversalClient) {
+	i.rdb.ReplaceClient(c)
 }
 
 // Close closes the connection with redis.
