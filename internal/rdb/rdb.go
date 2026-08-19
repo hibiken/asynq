@@ -885,9 +885,9 @@ var retryCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[2], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-if redis.call("ZREM", KEYS[3], ARGV[1]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
+-- Best-effort: task is already out of active (LREM above), so a missing
+-- lease entry must not abort the transition. See #1144.
+redis.call("ZREM", KEYS[3], ARGV[1])
 redis.call("ZADD", KEYS[4], ARGV[3], ARGV[1])
 redis.call("HSET", KEYS[1], "msg", ARGV[2], "state", "retry")
 if tonumber(ARGV[5]) == 1 then
@@ -974,9 +974,8 @@ var archiveCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[2], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-if redis.call("ZREM", KEYS[3], ARGV[1]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
+-- Best-effort — see retryCmd. Already out of active; don't strand it.
+redis.call("ZREM", KEYS[3], ARGV[1])
 redis.call("ZADD", KEYS[4], ARGV[3], ARGV[1])
 local old = redis.call("ZRANGE", KEYS[4], "-inf", ARGV[4], "BYSCORE")
 if #old > 0 then
