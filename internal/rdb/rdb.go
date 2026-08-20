@@ -398,12 +398,9 @@ var doneCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
-if redis.call("DEL", KEYS[3]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
+-- Lease/hash cleanup best-effort from here — see retryCmd for why.
+redis.call("ZREM", KEYS[2], ARGV[1])
+redis.call("DEL", KEYS[3])
 local n = redis.call("INCR", KEYS[4])
 if tonumber(n) == 1 then
 	redis.call("EXPIREAT", KEYS[4], ARGV[2])
@@ -431,12 +428,9 @@ var doneUniqueCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
-if redis.call("DEL", KEYS[3]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
+-- Lease/hash cleanup best-effort from here — see retryCmd for why.
+redis.call("ZREM", KEYS[2], ARGV[1])
+redis.call("DEL", KEYS[3])
 local n = redis.call("INCR", KEYS[4])
 if tonumber(n) == 1 then
 	redis.call("EXPIREAT", KEYS[4], ARGV[2])
@@ -495,9 +489,10 @@ var markAsCompleteCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
+-- Lease cleanup best-effort — see retryCmd. The ZADD below stays a hard
+-- check: a task ID already present in the completed set while still
+-- being found in active is a real anomaly, not the missing-lease case.
+redis.call("ZREM", KEYS[2], ARGV[1])
 if redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1]) ~= 1 then
   return redis.error_reply("INTERNAL")
 end
@@ -532,9 +527,8 @@ var markAsCompleteUniqueCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
+-- Lease cleanup best-effort — see markAsCompleteCmd.
+redis.call("ZREM", KEYS[2], ARGV[1])
 if redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1]) ~= 1 then
   return redis.error_reply("INTERNAL")
 end
@@ -599,9 +593,8 @@ var requeueCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
+-- Best-effort — see retryCmd. Already out of active; don't strand it.
+redis.call("ZREM", KEYS[2], ARGV[1])
 redis.call("RPUSH", KEYS[3], ARGV[1])
 redis.call("HSET", KEYS[4], "state", "pending")
 return redis.status_reply("OK")`)
@@ -885,9 +878,9 @@ var retryCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[2], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-if redis.call("ZREM", KEYS[3], ARGV[1]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
+-- Best-effort: task is already out of active (LREM above), so a missing
+-- lease entry must not abort the transition. See #1144.
+redis.call("ZREM", KEYS[3], ARGV[1])
 redis.call("ZADD", KEYS[4], ARGV[3], ARGV[1])
 redis.call("HSET", KEYS[1], "msg", ARGV[2], "state", "retry")
 if tonumber(ARGV[5]) == 1 then
@@ -974,9 +967,8 @@ var archiveCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[2], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-if redis.call("ZREM", KEYS[3], ARGV[1]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
+-- Best-effort — see retryCmd. Already out of active; don't strand it.
+redis.call("ZREM", KEYS[3], ARGV[1])
 redis.call("ZADD", KEYS[4], ARGV[3], ARGV[1])
 local old = redis.call("ZRANGE", KEYS[4], "-inf", ARGV[4], "BYSCORE")
 if #old > 0 then
