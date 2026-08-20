@@ -1461,8 +1461,16 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 var extendLeaseCmd = redis.NewScript(`
 local missing = {}
 for i = 2, #ARGV do
-  if redis.call("ZADD", KEYS[1], "XX", "CH", ARGV[1], ARGV[i]) == 0 then
-    table.insert(missing, ARGV[i])
+  local id = ARGV[i]
+  if redis.call("ZSCORE", KEYS[1], id) == false then
+    -- Unambiguous: doesn't exist, XX would silently no-op for it anyway.
+    -- (Not using ZADD's XX+CH return value for this: CH reports 0 for
+    -- both "doesn't exist" and "exists but score is already this exact
+    -- value" — indistinguishable when two heartbeat ticks round to the
+    -- same Unix second, which would misreport a healthy lease as gone.)
+    table.insert(missing, id)
+  else
+    redis.call("ZADD", KEYS[1], "XX", ARGV[1], id)
   end
 end
 return missing
