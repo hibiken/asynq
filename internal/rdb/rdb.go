@@ -489,9 +489,10 @@ var markAsCompleteCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
+-- Lease cleanup best-effort — see retryCmd. The ZADD below stays a hard
+-- check: a task ID already present in the completed set while still
+-- being found in active is a real anomaly, not the missing-lease case.
+redis.call("ZREM", KEYS[2], ARGV[1])
 if redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1]) ~= 1 then
   return redis.error_reply("INTERNAL")
 end
@@ -526,9 +527,8 @@ var markAsCompleteUniqueCmd = redis.NewScript(`
 if redis.call("LREM", KEYS[1], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
-if redis.call("ZREM", KEYS[2], ARGV[1]) == 0 then
-  return redis.error_reply("NOT FOUND")
-end
+-- Lease cleanup best-effort — see markAsCompleteCmd.
+redis.call("ZREM", KEYS[2], ARGV[1])
 if redis.call("ZADD", KEYS[3], ARGV[3], ARGV[1]) ~= 1 then
   return redis.error_reply("INTERNAL")
 end

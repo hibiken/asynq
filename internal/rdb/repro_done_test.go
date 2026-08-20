@@ -28,8 +28,16 @@ func TestDone_NoLeaseEntry(t *testing.T) {
 			msg := h.NewTaskMessage("scenario_task", nil)
 			if tc.unique {
 				msg.UniqueKey = base.UniqueKey(msg.Queue, msg.Type, msg.Payload)
-				if err := r.client.SetNX(context.Background(), msg.UniqueKey, msg.ID, 0).Err(); err != nil {
+				// Check the actual result, not just the error — SetNX
+				// returns false (no error) if the key already existed,
+				// which would otherwise let this test proceed without
+				// ever having genuinely acquired the lock it claims to.
+				ok, err := r.client.SetNX(context.Background(), msg.UniqueKey, msg.ID, 0).Result()
+				if err != nil {
 					t.Fatalf("failed to seed uniqueness lock: %v", err)
+				}
+				if !ok {
+					t.Fatalf("precondition failed: uniqueness lock was not actually acquired")
 				}
 			}
 
