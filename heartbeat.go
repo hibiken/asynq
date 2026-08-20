@@ -188,12 +188,31 @@ func (h *heartbeater) beat() {
 	}
 
 	for qname, ids := range idsByQueue {
-		expirationTime, err := h.broker.ExtendLease(qname, ids...)
+		expirationTime, missingIDs, err := h.broker.ExtendLease(qname, ids...)
 		if err != nil {
 			h.logger.Errorf("Failed to extend lease for tasks %v: %v", ids, err)
 			continue
 		}
+		missing := make(map[string]bool, len(missingIDs))
+		for _, id := range missingIDs {
+			missing[id] = true
+		}
+		if len(missingIDs) != 0 {
+			// Redis has no lease entry for these — most likely already
+			// reclaimed elsewhere (e.g. by the recoverer) while this
+			// call was in flight. Do NOT reset their local lease: reset
+			// would make the worker believe it still holds a lease that
+			// Redis no longer has, indefinitely, since ZADD's XX option
+			// silently no-ops instead of erroring for a missing member.
+			// Leaving the local deadline alone lets it expire on its own
+			// terms, so the existing IsValid()/NotifyExpiration() path
+			// above correctly signals the processor to stop.
+			h.logger.Warnf("Could not extend lease for tasks %v: no lease entry in redis", missingIDs)
+		}
 		for _, id := range ids {
+			if missing[id] {
+				continue
+			}
 			if l := h.workers[id].lease; !l.Reset(expirationTime) {
 				h.logger.Warnf("Lease reset failed for %s; lease deadline: %v", id, l.Deadline())
 			}
