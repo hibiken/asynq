@@ -1458,19 +1458,43 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 
 // ExtendLease extends the lease for the given tasks by LeaseDuration (30s).
 // It returns a new expiration time if the operation was successful.
-func (r *RDB) ExtendLease(qname string, ids ...string) (expirationTime time.Time, err error) {
+var extendLeaseCmd = redis.NewScript(`
+local missing = {}
+for i = 2, #ARGV do
+  if redis.call("ZADD", KEYS[1], "XX", "CH", ARGV[1], ARGV[i]) == 0 then
+    table.insert(missing, ARGV[i])
+  end
+end
+return missing
+`)
+
+// ExtendLease extends the lease for the given tasks by LeaseDuration (30s).
+// It returns the new expiration time on success.
+//
+// Some of the given ids may no longer have a lease entry in Redis — e.g.
+// the task was already reclaimed by the recoverer while this call was in
+// flight. Those ids are returned in missingIDs. The caller must not treat
+// a missing id as having a valid, extended lease: ZADD's XX option leaves
+// non-existent members untouched rather than erroring, so without this
+// check the call reports success while silently doing nothing for them.
+func (r *RDB) ExtendLease(qname string, ids ...string) (expirationTime time.Time, missingIDs []string, err error) {
+	var op errors.Op = "rdb.ExtendLease"
 	expireAt := r.clock.Now().Add(LeaseDuration)
-	var zs []redis.Z
+	argv := make([]interface{}, 0, len(ids)+1)
+	argv = append(argv, expireAt.Unix())
 	for _, id := range ids {
-		zs = append(zs, redis.Z{Member: id, Score: float64(expireAt.Unix())})
+		argv = append(argv, id)
 	}
-	// Use XX option to only update elements that already exist; Don't add new elements
-	// TODO: Consider adding GT option to ensure we only "extend" the lease. Ceveat is that GT is supported from redis v6.2.0 or above.
-	err = r.client.ZAddXX(context.Background(), base.LeaseKey(qname), zs...).Err()
+	res, err := extendLeaseCmd.Run(context.Background(), r.client,
+		[]string{base.LeaseKey(qname)}, argv...).Result()
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, nil, errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
 	}
-	return expireAt, nil
+	missing, err := cast.ToStringSliceE(res)
+	if err != nil {
+		return time.Time{}, nil, errors.E(op, errors.Internal, fmt.Sprintf("cast error: Lua script returned unexpected value: %v", res))
+	}
+	return expireAt, missing, nil
 }
 
 // KEYS[1]  -> asynq:servers:{<host:pid:sid>}

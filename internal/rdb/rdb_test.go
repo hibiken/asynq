@@ -3017,6 +3017,7 @@ func TestExtendLease(t *testing.T) {
 		ids                []string
 		wantExpirationTime time.Time
 		wantLease          map[string][]base.Z
+		wantMissing        []string
 	}{
 		{
 			desc: "Should extends lease for a single message in a queue",
@@ -3083,6 +3084,10 @@ func TestExtendLease(t *testing.T) {
 					{Message: t1, Score: now.Add(LeaseDuration).Unix()},
 				},
 			},
+			// t2 has no existing lease entry, so XX must leave it
+			// untouched rather than creating one — and the caller must
+			// be told which id that was, not just get a silent success.
+			wantMissing: []string{t2.ID},
 		},
 	}
 
@@ -3090,12 +3095,15 @@ func TestExtendLease(t *testing.T) {
 		h.FlushDB(t, r.client)
 		h.SeedAllLease(t, r.client, tc.lease)
 
-		gotExpirationTime, err := r.ExtendLease(tc.qname, tc.ids...)
+		gotExpirationTime, gotMissing, err := r.ExtendLease(tc.qname, tc.ids...)
 		if err != nil {
 			t.Fatalf("%s: ExtendLease(%q, %v) returned error: %v", tc.desc, tc.qname, tc.ids, err)
 		}
 		if gotExpirationTime != tc.wantExpirationTime {
 			t.Errorf("%s: ExtendLease(%q, %v) returned expirationTime %v, want %v", tc.desc, tc.qname, tc.ids, gotExpirationTime, tc.wantExpirationTime)
+		}
+		if diff := cmp.Diff(tc.wantMissing, gotMissing, h.SortStringSliceOpt); diff != "" {
+			t.Errorf("%s: ExtendLease(%q, %v) returned missing %v, want %v", tc.desc, tc.qname, tc.ids, gotMissing, tc.wantMissing)
 		}
 
 		for qname, want := range tc.wantLease {
