@@ -3684,3 +3684,36 @@ func TestInspectorGroups(t *testing.T) {
 		})
 	}
 }
+
+// Regression test for https://github.com/hibiken/asynq/issues/661
+func TestInspectorReturnsErrQueueNotFound(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	inspector := NewInspector(getRedisConnOpt(t))
+	defer inspector.Close()
+
+	const qname = "nonexistent"
+	tests := []struct {
+		desc string
+		call func() error
+	}{
+		{"GetQueueInfo", func() error { _, err := inspector.GetQueueInfo(qname); return err }},
+		{"History", func() error { _, err := inspector.History(qname, 7); return err }},
+		{"DeleteAllScheduledTasks", func() error { _, err := inspector.DeleteAllScheduledTasks(qname); return err }},
+		{"DeleteAllRetryTasks", func() error { _, err := inspector.DeleteAllRetryTasks(qname); return err }},
+		{"DeleteAllArchivedTasks", func() error { _, err := inspector.DeleteAllArchivedTasks(qname); return err }},
+		{"DeleteAllCompletedTasks", func() error { _, err := inspector.DeleteAllCompletedTasks(qname); return err }},
+		{"RunAllScheduledTasks", func() error { _, err := inspector.RunAllScheduledTasks(qname); return err }},
+		{"RunAllRetryTasks", func() error { _, err := inspector.RunAllRetryTasks(qname); return err }},
+		{"RunAllArchivedTasks", func() error { _, err := inspector.RunAllArchivedTasks(qname); return err }},
+		{"ArchiveAllScheduledTasks", func() error { _, err := inspector.ArchiveAllScheduledTasks(qname); return err }},
+		{"ArchiveAllRetryTasks", func() error { _, err := inspector.ArchiveAllRetryTasks(qname); return err }},
+	}
+
+	for _, tc := range tests {
+		err := tc.call()
+		if !errors.Is(err, ErrQueueNotFound) {
+			t.Errorf("%s(%q) returned error %v, want error wrapping ErrQueueNotFound", tc.desc, qname, err)
+		}
+	}
+}
