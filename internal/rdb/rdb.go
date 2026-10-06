@@ -64,7 +64,7 @@ func (r *RDB) Ping() error {
 
 func (r *RDB) runScript(ctx context.Context, op errors.Op, script *redis.Script, keys []string, args ...interface{}) error {
 	if err := script.Run(ctx, r.client, keys, args...).Err(); err != nil {
-		return errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
+		return errors.E(op, errors.Internal, fmt.Errorf("redis eval error: %w", err))
 	}
 	return nil
 }
@@ -73,7 +73,7 @@ func (r *RDB) runScript(ctx context.Context, op errors.Op, script *redis.Script,
 func (r *RDB) runScriptWithErrorCode(ctx context.Context, op errors.Op, script *redis.Script, keys []string, args ...interface{}) (int64, error) {
 	res, err := script.Run(ctx, r.client, keys, args...).Result()
 	if err != nil {
-		return 0, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+		return 0, errors.E(op, errors.Unknown, fmt.Errorf("redis eval error: %w", err))
 	}
 	n, ok := res.(int64)
 	if !ok {
@@ -112,7 +112,7 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 	var op errors.Op = "rdb.Enqueue"
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
-		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
+		return errors.E(op, errors.Unknown, fmt.Errorf("cannot encode message: %w", err))
 	}
 	if _, found := r.queuesPublished.Load(msg.Queue); !found {
 		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
@@ -175,12 +175,12 @@ func (r *RDB) BatchEnqueue(ctx context.Context, items []base.BatchEnqueueItem) (
 	}
 	if needsEnqueue {
 		if err := enqueueCmd.Load(ctx, r.client).Err(); err != nil {
-			return 0, errors.E(op, errors.Unknown, fmt.Sprintf("failed to load enqueue script: %v", err))
+			return 0, errors.E(op, errors.Unknown, fmt.Errorf("failed to load enqueue script: %w", err))
 		}
 	}
 	if needsSchedule {
 		if err := scheduleCmd.Load(ctx, r.client).Err(); err != nil {
-			return 0, errors.E(op, errors.Unknown, fmt.Sprintf("failed to load schedule script: %v", err))
+			return 0, errors.E(op, errors.Unknown, fmt.Errorf("failed to load schedule script: %w", err))
 		}
 	}
 
@@ -199,7 +199,7 @@ func (r *RDB) BatchEnqueue(ctx context.Context, items []base.BatchEnqueueItem) (
 	for _, item := range items {
 		encoded, err := base.EncodeMessage(item.Msg)
 		if err != nil {
-			return 0, errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
+			return 0, errors.E(op, errors.Unknown, fmt.Errorf("cannot encode message: %w", err))
 		}
 		if _, found := r.queuesPublished.Load(item.Msg.Queue); !found {
 			pipe.SAdd(ctx, base.AllQueues, item.Msg.Queue)
@@ -232,7 +232,7 @@ func (r *RDB) BatchEnqueue(ctx context.Context, items []base.BatchEnqueueItem) (
 		for _, q := range newQueues {
 			r.queuesPublished.Delete(q)
 		}
-		return 0, errors.E(op, errors.Unknown, fmt.Sprintf("redis pipeline error: %v", err))
+		return 0, errors.E(op, errors.Unknown, fmt.Errorf("redis pipeline error: %w", err))
 	}
 
 	enqueued := 0
@@ -371,14 +371,14 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, leaseExpirationT
 		if err == redis.Nil {
 			continue
 		} else if err != nil {
-			return nil, time.Time{}, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+			return nil, time.Time{}, errors.E(op, errors.Unknown, fmt.Errorf("redis eval error: %w", err))
 		}
 		encoded, err := cast.ToStringE(res)
 		if err != nil {
 			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cast error: unexpected return value from Lua script: %v", res))
 		}
 		if msg, err = base.DecodeMessage([]byte(encoded)); err != nil {
-			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cannot decode message: %v", err))
+			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Errorf("cannot decode message: %w", err))
 		}
 		return msg, leaseExpirationTime, nil
 	}
@@ -564,7 +564,7 @@ func (r *RDB) MarkAsComplete(ctx context.Context, msg *base.TaskMessage) error {
 	msg.CompletedAt = now.Unix()
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
-		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
+		return errors.E(op, errors.Unknown, fmt.Errorf("cannot encode message: %w", err))
 	}
 	keys := []string{
 		base.ActiveKey(msg.Queue),
@@ -647,7 +647,7 @@ func (r *RDB) AddToGroup(ctx context.Context, msg *base.TaskMessage, groupKey st
 	var op errors.Op = "rdb.AddToGroup"
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
-		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
+		return errors.E(op, errors.Unknown, fmt.Errorf("cannot encode message: %w", err))
 	}
 	if _, found := r.queuesPublished.Load(msg.Queue); !found {
 		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
@@ -712,7 +712,7 @@ func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, group
 	var op errors.Op = "rdb.AddToGroupUnique"
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
-		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
+		return errors.E(op, errors.Unknown, fmt.Errorf("cannot encode message: %w", err))
 	}
 	if _, found := r.queuesPublished.Load(msg.Queue); !found {
 		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
@@ -772,7 +772,7 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 	var op errors.Op = "rdb.Schedule"
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
-		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
+		return errors.E(op, errors.Unknown, fmt.Errorf("cannot encode message: %w", err))
 	}
 	if _, found := r.queuesPublished.Load(msg.Queue); !found {
 		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
@@ -834,7 +834,7 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 	var op errors.Op = "rdb.ScheduleUnique"
 	encoded, err := base.EncodeMessage(msg)
 	if err != nil {
-		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode task message: %v", err))
+		return errors.E(op, errors.Internal, fmt.Errorf("cannot encode task message: %w", err))
 	}
 	if _, found := r.queuesPublished.Load(msg.Queue); !found {
 		if err := r.client.SAdd(ctx, base.AllQueues, msg.Queue).Err(); err != nil {
@@ -924,7 +924,7 @@ func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.T
 	modified.LastFailedAt = now.Unix()
 	encoded, err := base.EncodeMessage(&modified)
 	if err != nil {
-		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode message: %v", err))
+		return errors.E(op, errors.Internal, fmt.Errorf("cannot encode message: %w", err))
 	}
 	expireAt := now.Add(statsTTL)
 	keys := []string{
@@ -1023,7 +1023,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 	modified.LastFailedAt = now.Unix()
 	encoded, err := base.EncodeMessage(&modified)
 	if err != nil {
-		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode message: %v", err))
+		return errors.E(op, errors.Internal, fmt.Errorf("cannot encode message: %w", err))
 	}
 	cutoff := now.AddDate(0, 0, -archivedExpirationInDays)
 	expireAt := now.Add(statsTTL)
@@ -1103,7 +1103,7 @@ func (r *RDB) forward(delayedKey, pendingKey, taskKeyPrefix, groupKeyPrefix stri
 	}
 	res, err := forwardCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
-		return 0, errors.E(errors.Internal, fmt.Sprintf("redis eval error: %v", err))
+		return 0, errors.E(errors.Internal, fmt.Errorf("redis eval error: %w", err))
 	}
 	n, err := cast.ToIntE(res)
 	if err != nil {
@@ -1295,7 +1295,7 @@ func (r *RDB) ReadAggregationSet(qname, gname, setID string) ([]*base.TaskMessag
 	res, err := readAggregationSetCmd.Run(ctx, r.client,
 		[]string{aggSetKey}, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
-		return nil, time.Time{}, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+		return nil, time.Time{}, errors.E(op, errors.Unknown, fmt.Errorf("redis eval error: %w", err))
 	}
 	data, err := cast.ToStringSliceE(res)
 	if err != nil {
@@ -1305,7 +1305,7 @@ func (r *RDB) ReadAggregationSet(qname, gname, setID string) ([]*base.TaskMessag
 	for _, s := range data {
 		msg, err := base.DecodeMessage([]byte(s))
 		if err != nil {
-			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cannot decode message: %v", err))
+			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Errorf("cannot decode message: %w", err))
 		}
 		msgs = append(msgs, msg)
 	}
@@ -1413,7 +1413,7 @@ func (r *RDB) deleteExpiredCompletedTasks(qname string, batchSize int) (int64, e
 	}
 	res, err := deleteExpiredCompletedTasksCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
-		return 0, errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
+		return 0, errors.E(op, errors.Internal, fmt.Errorf("redis eval error: %w", err))
 	}
 	n, ok := res.(int64)
 	if !ok {
@@ -1447,7 +1447,7 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 			[]string{base.LeaseKey(qname)},
 			cutoff.Unix(), base.TaskKeyPrefix(qname)).Result()
 		if err != nil {
-			return nil, errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
+			return nil, errors.E(op, errors.Internal, fmt.Errorf("redis eval error: %w", err))
 		}
 		data, err := cast.ToStringSliceE(res)
 		if err != nil {
@@ -1456,7 +1456,7 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 		for _, s := range data {
 			msg, err := base.DecodeMessage([]byte(s))
 			if err != nil {
-				return nil, errors.E(op, errors.Internal, fmt.Sprintf("cannot decode message: %v", err))
+				return nil, errors.E(op, errors.Internal, fmt.Errorf("cannot decode message: %w", err))
 			}
 			msgs = append(msgs, msg)
 		}
@@ -1503,7 +1503,7 @@ func (r *RDB) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo
 	ctx := context.Background()
 	bytes, err := base.EncodeServerInfo(info)
 	if err != nil {
-		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode server info: %v", err))
+		return errors.E(op, errors.Internal, fmt.Errorf("cannot encode server info: %w", err))
 	}
 	exp := r.clock.Now().Add(ttl).UTC()
 	args := []interface{}{ttl.Seconds(), bytes} // args to the lua script
@@ -1601,7 +1601,7 @@ func (r *RDB) CancelationPubSub() (*redis.PubSub, error) {
 	_, err := pubsub.Receive(ctx)
 	if err != nil {
 		pubsub.Close()
-		return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis pubsub receive error: %v", err))
+		return nil, errors.E(op, errors.Unknown, fmt.Errorf("redis pubsub receive error: %w", err))
 	}
 	return pubsub, nil
 }
@@ -1612,7 +1612,7 @@ func (r *RDB) PublishCancelation(id string) error {
 	var op errors.Op = "rdb.PublishCancelation"
 	ctx := context.Background()
 	if err := r.client.Publish(ctx, base.CancelChannel, id).Err(); err != nil {
-		return errors.E(op, errors.Unknown, fmt.Sprintf("redis pubsub publish error: %v", err))
+		return errors.E(op, errors.Unknown, fmt.Errorf("redis pubsub publish error: %w", err))
 	}
 	return nil
 }
@@ -1635,7 +1635,7 @@ func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerE
 	ctx := context.Background()
 	data, err := base.EncodeSchedulerEnqueueEvent(event)
 	if err != nil {
-		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode scheduler enqueue event: %v", err))
+		return errors.E(op, errors.Internal, fmt.Errorf("cannot encode scheduler enqueue event: %w", err))
 	}
 	keys := []string{
 		base.SchedulerHistoryKey(entryID),

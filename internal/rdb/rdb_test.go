@@ -62,6 +62,25 @@ func setup(tb testing.TB) (r *RDB) {
 	return r
 }
 
+func TestRunScriptKeepsContextError(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	h.FlushDB(t, r.client)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := r.runScript(ctx, "rdb.Test", enqueueCmd, []string{"k1", "k2"}, "payload", "id", 0)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("runScript with a canceled context = %v, want an error that wraps context.Canceled", err)
+	}
+
+	_, err = r.runScriptWithErrorCode(ctx, "rdb.Test", enqueueCmd, []string{"k1", "k2"}, "payload", "id", 0)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("runScriptWithErrorCode with a canceled context = %v, want an error that wraps context.Canceled", err)
+	}
+}
+
 func TestEnqueue(t *testing.T) {
 	r := setup(t)
 	defer r.Close()

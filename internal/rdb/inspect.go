@@ -354,7 +354,7 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 	}
 	res, err := memoryUsageCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
-		return 0, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+		return 0, errors.E(op, errors.Unknown, fmt.Errorf("redis eval error: %w", err))
 	}
 	usg, err := cast.ToInt64E(res)
 	if err != nil {
@@ -399,7 +399,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 	}
 	res, err := historicalStatsCmd.Run(context.Background(), r.client, keys).Result()
 	if err != nil {
-		return nil, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+		return nil, errors.E(op, errors.Unknown, fmt.Errorf("redis eval error: %w", err))
 	}
 	data, err := cast.ToIntSliceE(res)
 	if err != nil {
@@ -1485,7 +1485,7 @@ func (r *RDB) UpdateTaskPayload(qname, id string, payload []byte) error {
 
 	encoded, err := base.EncodeMessage(taskInfo.Message)
 	if err != nil {
-		return errors.E(op, errors.Unknown, fmt.Sprintf("cannot encode message: %v", err))
+		return errors.E(op, errors.Unknown, fmt.Errorf("cannot encode message: %w", err))
 	}
 	keys := []string{
 		base.TaskKey(qname, id),
