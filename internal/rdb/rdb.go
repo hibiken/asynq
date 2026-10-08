@@ -1621,13 +1621,20 @@ func (r *RDB) PublishCancelation(id string) error {
 // ARGV[1] -> enqueued_at timestamp
 // ARGV[2] -> serialized SchedulerEnqueueEvent data
 // ARGV[3] -> max number of events to be persisted
+// ARGV[4] -> TTL of the history key in seconds
 var recordSchedulerEnqueueEventCmd = redis.NewScript(`
 redis.call("ZREMRANGEBYRANK", KEYS[1], 0, -ARGV[3])
 redis.call("ZADD", KEYS[1], ARGV[1], ARGV[2])
+redis.call("EXPIRE", KEYS[1], ARGV[4])
 return redis.status_reply("OK")`)
 
 // Maximum number of enqueue events to store per entry.
 const maxEvents = 1000
+
+// TTL of a scheduler entry's enqueue history. It is refreshed on every recorded
+// event, so that history left behind by a scheduler that did not shut down
+// cleanly is eventually removed.
+const schedulerHistoryTTL = 90 * 24 * time.Hour // 90 days
 
 // RecordSchedulerEnqueueEvent records the time when the given task was enqueued.
 func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerEnqueueEvent) error {
@@ -1644,6 +1651,7 @@ func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerE
 		event.EnqueuedAt.Unix(),
 		data,
 		maxEvents,
+		int(schedulerHistoryTTL.Seconds()),
 	}
 	return r.runScript(ctx, op, recordSchedulerEnqueueEventCmd, keys, argv...)
 }
