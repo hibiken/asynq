@@ -469,10 +469,13 @@ func (opt RedisClusterClientOpt) MakeRedisClient() interface{} {
 // Three URI schemes are supported, which are redis:, rediss:, redis-socket:, and redis-sentinel:.
 // Supported formats are:
 //
-//	redis://[:password@]host[:port][/dbnumber]
-//	rediss://[:password@]host[:port][/dbnumber]
-//	redis-socket://[:password@]path[?db=dbnumber]
-//	redis-sentinel://[:password@]host1[:port][,host2:[:port]][,hostN:[:port]][/dbnumber][?master=masterName]
+//	redis://[[username][:password]@]host[:port][/dbnumber]
+//	rediss://[[username][:password]@]host[:port][/dbnumber]
+//	redis-socket://[[username][:password]@]path[?db=dbnumber]
+//	redis-sentinel://[[username][:password]@]host1[:port][,host2:[:port]][,hostN:[:port]][/dbnumber][?master=masterName]
+//
+// For redis-sentinel:, the username and password are used to authenticate with
+// the sentinels (SentinelUsername and SentinelPassword).
 func ParseRedisURI(uri string) (RedisConnOpt, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
@@ -516,6 +519,7 @@ func parseRedisURI(u *url.URL) (RedisConnOpt, error) {
 	}
 
 	redisConnOpt.Addr = u.Host
+	redisConnOpt.Username = u.User.Username()
 	redisConnOpt.Password = password
 	redisConnOpt.DB = db
 
@@ -540,7 +544,7 @@ func parseRedisSocketURI(u *url.URL) (RedisConnOpt, error) {
 	if v, ok := u.User.Password(); ok {
 		password = v
 	}
-	return RedisClientOpt{Network: "unix", Addr: u.Path, DB: db, Password: password}, nil
+	return RedisClientOpt{Network: "unix", Addr: u.Path, DB: db, Username: u.User.Username(), Password: password}, nil
 }
 
 func parseRedisSentinelURI(u *url.URL) (RedisConnOpt, error) {
@@ -559,7 +563,7 @@ func parseRedisSentinelURI(u *url.URL) (RedisConnOpt, error) {
 	if v, ok := u.User.Password(); ok {
 		password = v
 	}
-	return RedisFailoverClientOpt{MasterName: master, SentinelAddrs: addrs, SentinelPassword: password, DB: db}, nil
+	return RedisFailoverClientOpt{MasterName: master, SentinelAddrs: addrs, SentinelUsername: u.User.Username(), SentinelPassword: password, DB: db}, nil
 }
 
 // ResultWriter is a client interface to write result data for a task.
