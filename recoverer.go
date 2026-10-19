@@ -89,6 +89,14 @@ func (r *recoverer) recover() {
 func (r *recoverer) recoverLeaseExpiredTasks() {
 	// Get all tasks which have expired 30 seconds ago or earlier to accommodate certain amount of clock skew.
 	cutoff := time.Now().Add(-30 * time.Second)
+
+	if n, err := r.broker.ReclaimOrphanedActiveTasks(cutoff, r.queues...); err != nil {
+		r.logger.Warnf("recoverer: could not reclaim orphaned active tasks: %v", err)
+	} else if n > 0 {
+		r.logger.Warnf("recoverer: found %d orphaned active task(s) with no lease entry; re-leasing for recovery "+
+			"(likely caused by lease-key eviction, a Redis restore/failover, or external mutation)", n)
+	}
+
 	msgs, err := r.broker.ListLeaseExpired(cutoff, r.queues...)
 	if err != nil {
 		r.logger.Warnf("recoverer: could not list lease expired tasks: %v", err)
