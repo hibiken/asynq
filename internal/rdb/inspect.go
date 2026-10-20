@@ -478,7 +478,7 @@ func (r *RDB) checkQueueExists(qname string) error {
 // Tuple of {msg, state, nextProcessAt, result}
 // msg: encoded task message
 // state: string describing the state of the task
-// nextProcessAt: unix time in seconds, zero if not applicable.
+// nextProcessAt: unix time in microseconds, zero if not applicable.
 // result: result data associated with the task
 //
 // If the task key doesn't exist, it returns error with a message "NOT FOUND"
@@ -505,7 +505,7 @@ func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 	keys := []string{base.TaskKey(qname, id)}
 	argv := []interface{}{
 		id,
-		r.clock.Now().Unix(),
+		r.clock.Now().UnixMicro(),
 		base.QueueKeyPrefix(qname),
 	}
 	res, err := getTaskInfoCmd.Run(context.Background(), r.client, keys, argv...).Result()
@@ -530,7 +530,7 @@ func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 	if err != nil {
 		return nil, errors.E(op, errors.Internal, "unexpected value returned from Lua script")
 	}
-	processAtUnix, err := cast.ToInt64E(vals[2])
+	processAtMicro, err := cast.ToInt64E(vals[2])
 	if err != nil {
 		return nil, errors.E(op, errors.Internal, "unexpected value returned from Lua script")
 	}
@@ -547,8 +547,8 @@ func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 		return nil, errors.E(op, errors.CanonicalCode(err), err)
 	}
 	var nextProcessAt time.Time
-	if processAtUnix != 0 {
-		nextProcessAt = time.Unix(processAtUnix, 0)
+	if processAtMicro != 0 {
+		nextProcessAt = time.UnixMicro(processAtMicro)
 	}
 	var result []byte
 	if len(resultStr) > 0 {
@@ -876,7 +876,7 @@ func (r *RDB) listZSetEntries(qname string, state base.TaskState, key string, pg
 		}
 		var nextProcessAt time.Time
 		if state == base.TaskStateScheduled || state == base.TaskStateRetry {
-			nextProcessAt = time.Unix(score, 0)
+			nextProcessAt = time.UnixMicro(score)
 		}
 		var resBytes []byte
 		if len(resStr) > 0 {

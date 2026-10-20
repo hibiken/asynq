@@ -549,12 +549,12 @@ func TestGetTaskInfo(t *testing.T) {
 			"custom":  {m5},
 		},
 		scheduled: map[string][]base.Z{
-			"default": {{Message: m2, Score: fiveMinsFromNow.Unix()}},
+			"default": {{Message: m2, Score: fiveMinsFromNow.UnixMicro()}},
 			"custom":  {},
 		},
 		retry: map[string][]base.Z{
 			"default": {},
-			"custom":  {{Message: m3, Score: oneHourFromNow.Unix()}},
+			"custom":  {{Message: m3, Score: oneHourFromNow.UnixMicro()}},
 		},
 		archived: map[string][]base.Z{
 			"default": {},
@@ -688,12 +688,12 @@ func TestGetTaskInfoError(t *testing.T) {
 			"custom":  {m5},
 		},
 		scheduled: map[string][]base.Z{
-			"default": {{Message: m2, Score: fiveMinsFromNow.Unix()}},
+			"default": {{Message: m2, Score: fiveMinsFromNow.UnixMicro()}},
 			"custom":  {},
 		},
 		retry: map[string][]base.Z{
 			"default": {},
-			"custom":  {{Message: m3, Score: oneHourFromNow.Unix()}},
+			"custom":  {{Message: m3, Score: oneHourFromNow.UnixMicro()}},
 		},
 		archived: map[string][]base.Z{
 			"default": {},
@@ -1004,12 +1004,12 @@ func TestListScheduled(t *testing.T) {
 		{
 			scheduled: map[string][]base.Z{
 				"default": {
-					{Message: m1, Score: p1.Unix()},
-					{Message: m2, Score: p2.Unix()},
-					{Message: m3, Score: p3.Unix()},
+					{Message: m1, Score: p1.UnixMicro()},
+					{Message: m2, Score: p2.UnixMicro()},
+					{Message: m3, Score: p3.UnixMicro()},
 				},
 				"custom": {
-					{Message: m4, Score: p4.Unix()},
+					{Message: m4, Score: p4.UnixMicro()},
 				},
 			},
 			qname: "default",
@@ -1023,12 +1023,12 @@ func TestListScheduled(t *testing.T) {
 		{
 			scheduled: map[string][]base.Z{
 				"default": {
-					{Message: m1, Score: p1.Unix()},
-					{Message: m2, Score: p2.Unix()},
-					{Message: m3, Score: p3.Unix()},
+					{Message: m1, Score: p1.UnixMicro()},
+					{Message: m2, Score: p2.UnixMicro()},
+					{Message: m3, Score: p3.UnixMicro()},
 				},
 				"custom": {
-					{Message: m4, Score: p4.Unix()},
+					{Message: m4, Score: p4.UnixMicro()},
 				},
 			},
 			qname: "custom",
@@ -1162,11 +1162,11 @@ func TestListRetry(t *testing.T) {
 		{
 			retry: map[string][]base.Z{
 				"default": {
-					{Message: m1, Score: p1.Unix()},
-					{Message: m2, Score: p2.Unix()},
+					{Message: m1, Score: p1.UnixMicro()},
+					{Message: m2, Score: p2.UnixMicro()},
 				},
 				"custom": {
-					{Message: m3, Score: p3.Unix()},
+					{Message: m3, Score: p3.UnixMicro()},
 				},
 			},
 			qname: "default",
@@ -1178,11 +1178,11 @@ func TestListRetry(t *testing.T) {
 		{
 			retry: map[string][]base.Z{
 				"default": {
-					{Message: m1, Score: p1.Unix()},
-					{Message: m2, Score: p2.Unix()},
+					{Message: m1, Score: p1.UnixMicro()},
+					{Message: m2, Score: p2.UnixMicro()},
 				},
 				"custom": {
-					{Message: m3, Score: p3.Unix()},
+					{Message: m3, Score: p3.UnixMicro()},
 				},
 			},
 			qname: "custom",
