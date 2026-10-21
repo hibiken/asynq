@@ -20,6 +20,7 @@ var (
 	flagRedisDB       int
 	flagRedisPassword string
 	flagRedisUsername string
+	flagKeyPrefix     string
 	flagPort          int
 )
 
@@ -28,6 +29,7 @@ func init() {
 	flag.IntVar(&flagRedisDB, "redis-db", 0, "redis DB number to use")
 	flag.StringVar(&flagRedisPassword, "redis-password", "", "password used to connect to redis server")
 	flag.StringVar(&flagRedisUsername, "redis-username", "", "username used to connect to redis server")
+	flag.StringVar(&flagKeyPrefix, "key-prefix", "", "redis key prefix for namespacing (default is 'asynq')")
 	flag.IntVar(&flagPort, "port", 9876, "port to use for the HTTP server")
 }
 
@@ -37,10 +39,11 @@ func main() {
 	reg := prometheus.NewPedanticRegistry()
 
 	inspector := asynq.NewInspector(asynq.RedisClientOpt{
-		Addr:     flagRedisAddr,
-		DB:       flagRedisDB,
-		Password: flagRedisPassword,
-		Username: flagRedisUsername,
+		Addr:      flagRedisAddr,
+		DB:        flagRedisDB,
+		Password:  flagRedisPassword,
+		Username:  flagRedisUsername,
+		KeyPrefix: flagKeyPrefix,
 	})
 
 	reg.MustRegister(
