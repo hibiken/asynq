@@ -46,6 +46,14 @@ func NewInspectorFromRedisClient(c redis.UniversalClient) *Inspector {
 	}
 }
 
+// SetLocation sets the time zone location used by the Inspector to determine
+// the date boundary for daily processed/failed stats queries.
+//
+// By default, the Inspector uses time.UTC.
+func (i *Inspector) SetLocation(loc *time.Location) {
+	i.rdb.SetLocation(loc)
+}
+
 // Close closes the connection with redis.
 func (i *Inspector) Close() error {
 	if i.sharedConnection {
