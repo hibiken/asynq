@@ -5579,3 +5579,38 @@ func TestUnpauseError(t *testing.T) {
 		}
 	}
 }
+
+// Regression test for https://github.com/hibiken/asynq/issues/515
+func TestRecordSchedulerEnqueueEventSetsTTL(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	var (
+		entryID = "entry123"
+		key     = base.SchedulerHistoryKey(entryID)
+		ctx     = context.Background()
+	)
+
+	record := func(taskID string) {
+		t.Helper()
+		event := base.SchedulerEnqueueEvent{TaskID: taskID, EnqueuedAt: time.Now()}
+		if err := r.RecordSchedulerEnqueueEvent(entryID, &event); err != nil {
+			t.Fatalf("RecordSchedulerEnqueueEvent failed: %v", err)
+		}
+	}
+
+	record("task1")
+	got := r.client.TTL(ctx, key).Val()
+	if got <= 0 || got > schedulerHistoryTTL {
+		t.Errorf("TTL of %q = %v, want a positive value up to %v", key, got, schedulerHistoryTTL)
+	}
+
+	// Recording another event should refresh the TTL.
+	if err := r.client.Expire(ctx, key, time.Minute).Err(); err != nil {
+		t.Fatalf("EXPIRE failed: %v", err)
+	}
+	record("task2")
+	got = r.client.TTL(ctx, key).Val()
+	if got <= time.Minute || got > schedulerHistoryTTL {
+		t.Errorf("TTL of %q after second event = %v, want it refreshed to about %v", key, got, schedulerHistoryTTL)
+	}
+}
