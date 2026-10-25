@@ -307,7 +307,7 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.SetVersionTemplate(versionOutput)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "Config file to set flag defaut values (default is $HOME/.asynq.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "Config file to set flag default values (default is $HOME/.asynq.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&uri, "uri", "u", "127.0.0.1:6379", "Redis server URI")
 	rootCmd.PersistentFlags().IntVarP(&db, "db", "n", 0, "Redis database number (default is 0)")
 	rootCmd.PersistentFlags().StringVarP(&password, "password", "p", "", "Password to use when connecting to redis server")

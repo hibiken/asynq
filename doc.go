@@ -3,7 +3,7 @@
 // that can be found in the LICENSE file.
 
 /*
-Package asynq provides a framework for Redis based distrubted task queue.
+Package asynq provides a framework for Redis based distributed task queue.
 
 Asynq uses Redis as a message broker. To connect to redis,
 specify the connection using one of RedisConnOpt types.
