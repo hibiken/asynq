@@ -3,6 +3,7 @@
 package asynq
 
 import (
+	"context"
 	"os"
 	"os/signal"
 
@@ -15,14 +16,14 @@ import (
 //
 // Note: Currently SIGTSTP is not supported for windows build.
 func (srv *Server) waitForSignals() {
-	srv.logger.Info("Send signal TERM or INT to terminate the process")
+	srv.logger.InfoContext(context.Background(), "Send signal TERM or INT to terminate the process", "component", "server")
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, windows.SIGTERM, windows.SIGINT)
 	<-sigs
 }
 
 func (s *Scheduler) waitForSignals() {
-	s.logger.Info("Send signal TERM or INT to stop the scheduler")
+	s.logger.InfoContext(context.Background(), "Send signal TERM or INT to stop the scheduler", "component", "scheduler")
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, windows.SIGTERM, windows.SIGINT)
 	<-sigs

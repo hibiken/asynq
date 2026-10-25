@@ -90,6 +90,13 @@ type processorParams struct {
 	finished          chan<- *base.TaskMessage
 }
 
+func (p *processor) logCtx() context.Context {
+	if p.baseCtxFn != nil {
+		return p.baseCtxFn()
+	}
+	return context.Background()
+}
+
 // newProcessor constructs a new processor.
 func newProcessor(params processorParams) *processor {
 	queues := normalizeQueues(params.queues)
@@ -126,7 +133,7 @@ func newProcessor(params processorParams) *processor {
 // It's safe to call this method multiple times.
 func (p *processor) stop() {
 	p.once.Do(func() {
-		p.logger.Debug("Processor shutting down...")
+		p.logger.DebugContext(p.logCtx(), "Processor shutting down", "component", "processor")
 		// Unblock if processor is waiting for sema token.
 		close(p.quit)
 		// Signal the processor goroutine to stop processing tasks
@@ -141,12 +148,12 @@ func (p *processor) shutdown() {
 
 	time.AfterFunc(p.shutdownTimeout, func() { close(p.abort) })
 
-	p.logger.Info("Waiting for all workers to finish...")
+	p.logger.InfoContext(p.logCtx(), "Waiting for all workers to finish", "component", "processor")
 	// block until all workers have released the token
 	for i := 0; i < cap(p.sema); i++ {
 		p.sema <- struct{}{}
 	}
-	p.logger.Info("All workers have finished")
+	p.logger.InfoContext(p.logCtx(), "All workers have finished", "component", "processor")
 }
 
 func (p *processor) start(wg *sync.WaitGroup) {
@@ -156,7 +163,7 @@ func (p *processor) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-p.done:
-				p.logger.Debug("Processor done")
+				p.logger.DebugContext(p.logCtx(), "Processor done", "component", "processor")
 				return
 			default:
 				p.exec()
@@ -176,7 +183,7 @@ func (p *processor) exec() {
 		msg, leaseExpirationTime, err := p.broker.Dequeue(qnames...)
 		switch {
 		case errors.Is(err, errors.ErrNoProcessableTask):
-			p.logger.Debug("All queues are empty")
+			p.logger.DebugContext(p.logCtx(), "All queues are empty", "component", "processor")
 			// Queues are empty, this is a normal behavior.
 			// Sleep to avoid slamming redis and let scheduler move tasks into queues.
 			// Note: We are not using blocking pop operation and polling queues instead.
@@ -187,7 +194,7 @@ func (p *processor) exec() {
 			return
 		case err != nil:
 			if p.errLogLimiter.Allow() {
-				p.logger.Errorf("Dequeue error: %v", err)
+				p.logger.ErrorContext(p.logCtx(), "Dequeue error", "component", "processor", "error", err)
 			}
 			<-p.sema // release token
 			return
@@ -237,8 +244,8 @@ func (p *processor) exec() {
 			select {
 			case <-p.abort:
 				// time is up, push the message back to queue and quit this worker goroutine.
-				p.logger.Warnf("Quitting worker. task id=%s", msg.ID)
-				p.requeue(lease, msg)
+				p.logger.WarnContext(ctx, "Quitting worker", "component", "processor", "task_id", msg.ID)
+				p.requeue(ctx, lease, msg)
 				return
 			case <-lease.Done():
 				cancel()
@@ -252,13 +259,13 @@ func (p *processor) exec() {
 					p.handleFailedMessage(ctx, lease, msg, resErr)
 					return
 				}
-				p.handleSucceededMessage(lease, msg)
+				p.handleSucceededMessage(ctx, lease, msg)
 			}
 		}()
 	}
 }
 
-func (p *processor) requeue(l *base.Lease, msg *base.TaskMessage) {
+func (p *processor) requeue(ctx context.Context, l *base.Lease, msg *base.TaskMessage) {
 	if !l.IsValid() {
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
 		return
@@ -267,21 +274,21 @@ func (p *processor) requeue(l *base.Lease, msg *base.TaskMessage) {
 	defer cancel()
 	err := p.broker.Requeue(ctx, msg)
 	if err != nil {
-		p.logger.Errorf("Could not push task id=%s back to queue: %v", msg.ID, err)
+		p.logger.ErrorContext(ctx, "Could not push task back to queue", "component", "processor", "task_id", msg.ID, "error", err)
 	} else {
-		p.logger.Infof("Pushed task id=%s back to queue", msg.ID)
+		p.logger.InfoContext(ctx, "Pushed task back to queue", "component", "processor", "task_id", msg.ID)
 	}
 }
 
-func (p *processor) handleSucceededMessage(l *base.Lease, msg *base.TaskMessage) {
+func (p *processor) handleSucceededMessage(ctx context.Context, l *base.Lease, msg *base.TaskMessage) {
 	if msg.Retention > 0 {
-		p.markAsComplete(l, msg)
+		p.markAsComplete(ctx, l, msg)
 	} else {
-		p.markAsDone(l, msg)
+		p.markAsDone(ctx, l, msg)
 	}
 }
 
-func (p *processor) markAsComplete(l *base.Lease, msg *base.TaskMessage) {
+func (p *processor) markAsComplete(ctx context.Context, l *base.Lease, msg *base.TaskMessage) {
 	if !l.IsValid() {
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
 		return
@@ -292,7 +299,7 @@ func (p *processor) markAsComplete(l *base.Lease, msg *base.TaskMessage) {
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s type=%q from %q to %q:  %+v",
 			msg.ID, msg.Type, base.ActiveKey(msg.Queue), base.CompletedKey(msg.Queue), err)
-		p.logger.Warnf("%s; Will retry syncing", errMsg)
+		p.logger.WarnContext(ctx, "Will retry syncing", "component", "processor", "error", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.broker.MarkAsComplete(ctx, msg)
@@ -303,7 +310,7 @@ func (p *processor) markAsComplete(l *base.Lease, msg *base.TaskMessage) {
 	}
 }
 
-func (p *processor) markAsDone(l *base.Lease, msg *base.TaskMessage) {
+func (p *processor) markAsDone(ctx context.Context, l *base.Lease, msg *base.TaskMessage) {
 	if !l.IsValid() {
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
 		return
@@ -313,7 +320,7 @@ func (p *processor) markAsDone(l *base.Lease, msg *base.TaskMessage) {
 	err := p.broker.Done(ctx, msg)
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not remove task id=%s type=%q from %q err: %+v", msg.ID, msg.Type, base.ActiveKey(msg.Queue), err)
-		p.logger.Warnf("%s; Will retry syncing", errMsg)
+		p.logger.WarnContext(ctx, "Will retry syncing", "component", "processor", "error", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.broker.Done(ctx, msg)
@@ -338,17 +345,17 @@ func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg 
 	}
 	switch {
 	case errors.Is(err, RevokeTask):
-		p.logger.Warnf("revoke task id=%s", msg.ID)
-		p.markAsDone(l, msg)
+		p.logger.WarnContext(ctx, "revoke task", "component", "processor", "task_id", msg.ID)
+		p.markAsDone(ctx, l, msg)
 	case msg.Retried >= msg.Retry || errors.Is(err, SkipRetry):
-		p.logger.Warnf("Retry exhausted for task id=%s", msg.ID)
-		p.archive(l, msg, err)
+		p.logger.WarnContext(ctx, "Retry exhausted for task", "component", "processor", "task_id", msg.ID)
+		p.archive(ctx, l, msg, err)
 	default:
-		p.retry(l, msg, err, p.isFailureFunc(err))
+		p.retry(ctx, l, msg, err, p.isFailureFunc(err))
 	}
 }
 
-func (p *processor) retry(l *base.Lease, msg *base.TaskMessage, e error, isFailure bool) {
+func (p *processor) retry(ctx context.Context, l *base.Lease, msg *base.TaskMessage, e error, isFailure bool) {
 	if !l.IsValid() {
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
 		return
@@ -360,7 +367,7 @@ func (p *processor) retry(l *base.Lease, msg *base.TaskMessage, e error, isFailu
 	err := p.broker.Retry(ctx, msg, retryAt, e.Error(), isFailure)
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.ActiveKey(msg.Queue), base.RetryKey(msg.Queue))
-		p.logger.Warnf("%s; Will retry syncing", errMsg)
+		p.logger.WarnContext(ctx, "Will retry syncing", "component", "processor", "error", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.broker.Retry(ctx, msg, retryAt, e.Error(), isFailure)
@@ -371,7 +378,7 @@ func (p *processor) retry(l *base.Lease, msg *base.TaskMessage, e error, isFailu
 	}
 }
 
-func (p *processor) archive(l *base.Lease, msg *base.TaskMessage, e error) {
+func (p *processor) archive(ctx context.Context, l *base.Lease, msg *base.TaskMessage, e error) {
 	if !l.IsValid() {
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
 		return
@@ -381,7 +388,7 @@ func (p *processor) archive(l *base.Lease, msg *base.TaskMessage, e error) {
 	err := p.broker.Archive(ctx, msg, e.Error())
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.ActiveKey(msg.Queue), base.ArchivedKey(msg.Queue))
-		p.logger.Warnf("%s; Will retry syncing", errMsg)
+		p.logger.WarnContext(ctx, "Will retry syncing", "component", "processor", "error", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
 				return p.broker.Archive(ctx, msg, e.Error())
@@ -424,7 +431,7 @@ func (p *processor) queues() []string {
 func (p *processor) perform(ctx context.Context, task *Task) (err error) {
 	defer func() {
 		if x := recover(); x != nil {
-			p.logger.Errorf("recovering from panic. See the stack trace below for details:\n%s", string(debug.Stack()))
+			p.logger.ErrorContext(ctx, "recovering from panic", "component", "processor", "stack", string(debug.Stack()))
 			_, file, line, ok := runtime.Caller(1) // skip the first frame (panic itself)
 			if ok && strings.Contains(file, "runtime/") {
 				// The panic came from the runtime, most likely due to incorrect
@@ -523,7 +530,7 @@ func gcd(xs ...int) int {
 // computeDeadline returns the given task's deadline,
 func (p *processor) computeDeadline(msg *base.TaskMessage) time.Time {
 	if msg.Timeout == 0 && msg.Deadline == 0 {
-		p.logger.Errorf("asynq: internal error: both timeout and deadline are not set for the task message: %s", msg.ID)
+		p.logger.ErrorContext(p.logCtx(), "asynq: internal error: both timeout and deadline are not set for the task message", "component", "processor", "task_id", msg.ID)
 		return p.clock.Now().Add(defaultTimeout)
 	}
 	if msg.Timeout != 0 && msg.Deadline != 0 {

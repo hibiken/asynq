@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"sort"
@@ -134,7 +135,7 @@ func (mgr *PeriodicTaskManager) Start() error {
 		for {
 			select {
 			case <-mgr.done:
-				mgr.s.logger.Debugf("Stopping syncer goroutine")
+				mgr.s.logger.DebugContext(context.Background(), "Stopping syncer goroutine", "component", "periodic_task_manager")
 				ticker.Stop()
 				return
 			case <-ticker.C:
@@ -161,7 +162,7 @@ func (mgr *PeriodicTaskManager) Run() error {
 	}
 	mgr.s.waitForSignals()
 	mgr.Shutdown()
-	mgr.s.logger.Debugf("PeriodicTaskManager exiting")
+	mgr.s.logger.DebugContext(context.Background(), "PeriodicTaskManager exiting", "component", "periodic_task_manager")
 	return nil
 }
 
@@ -183,36 +184,36 @@ func (mgr *PeriodicTaskManager) add(configs []*PeriodicTaskConfig) {
 	for _, c := range configs {
 		entryID, err := mgr.s.Register(c.Cronspec, c.Task, c.Opts...)
 		if err != nil {
-			mgr.s.logger.Errorf("Failed to register periodic task: cronspec=%q task=%q err=%v",
-				c.Cronspec, c.Task.Type(), err)
+			mgr.s.logger.ErrorContext(context.Background(), "Failed to register periodic task",
+				"component", "periodic_task_manager", "cronspec", c.Cronspec, "task_type", c.Task.Type(), "error", err)
 			continue
 		}
 		mgr.m[c.hash()] = entryID
-		mgr.s.logger.Infof("Successfully registered periodic task: cronspec=%q task=%q, entryID=%s",
-			c.Cronspec, c.Task.Type(), entryID)
+		mgr.s.logger.InfoContext(context.Background(), "Successfully registered periodic task",
+			"component", "periodic_task_manager", "cronspec", c.Cronspec, "task_type", c.Task.Type(), "entry_id", entryID)
 	}
 }
 
 func (mgr *PeriodicTaskManager) remove(removed map[string]string) {
 	for hash, entryID := range removed {
 		if err := mgr.s.Unregister(entryID); err != nil {
-			mgr.s.logger.Errorf("Failed to unregister periodic task: %v", err)
+			mgr.s.logger.ErrorContext(context.Background(), "Failed to unregister periodic task", "component", "periodic_task_manager", "error", err)
 			continue
 		}
 		delete(mgr.m, hash)
-		mgr.s.logger.Infof("Successfully unregistered periodic task: entryID=%s", entryID)
+		mgr.s.logger.InfoContext(context.Background(), "Successfully unregistered periodic task", "component", "periodic_task_manager", "entry_id", entryID)
 	}
 }
 
 func (mgr *PeriodicTaskManager) sync() {
 	configs, err := mgr.p.GetConfigs()
 	if err != nil {
-		mgr.s.logger.Errorf("Failed to get periodic task configs: %v", err)
+		mgr.s.logger.ErrorContext(context.Background(), "Failed to get periodic task configs", "component", "periodic_task_manager", "error", err)
 		return
 	}
 	for _, c := range configs {
 		if err := validatePeriodicTaskConfig(c); err != nil {
-			mgr.s.logger.Errorf("Failed to sync: GetConfigs returned an invalid config: %v", err)
+			mgr.s.logger.ErrorContext(context.Background(), "Failed to sync: GetConfigs returned an invalid config", "component", "periodic_task_manager", "error", err)
 			return
 		}
 	}

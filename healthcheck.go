@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -50,7 +51,7 @@ func (hc *healthchecker) shutdown() {
 		return
 	}
 
-	hc.logger.Debug("Healthchecker shutting down...")
+	hc.logger.DebugContext(context.Background(), "Healthchecker shutting down", "component", "healthchecker")
 	// Signal the healthchecker goroutine to stop.
 	hc.done <- struct{}{}
 }
@@ -67,7 +68,7 @@ func (hc *healthchecker) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-hc.done:
-				hc.logger.Debug("Healthchecker done")
+				hc.logger.DebugContext(context.Background(), "Healthchecker done", "component", "healthchecker")
 				timer.Stop()
 				return
 			case <-timer.C:
