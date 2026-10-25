@@ -237,6 +237,12 @@ type Config struct {
 	// If unset or zero, no size limit is used.
 	GroupMaxSize int
 
+	// GroupConfigs specifies per-group configuration overrides for task aggregation.
+	// Each key is a group name and the value is a GroupConfig that overrides the global
+	// GroupGracePeriod, GroupMaxDelay, and GroupMaxSize settings for that group.
+	// Zero-valued fields in a GroupConfig fall back to the global Config values.
+	GroupConfigs map[string]GroupConfig
+
 	// GroupAggregator specifies the aggregation function used to aggregate multiple tasks in a group into one task.
 	//
 	// If unset or nil, the group aggregation feature will be disabled on the server.
@@ -252,6 +258,23 @@ type Config struct {
 	// If unset or zero, default batch size of 100 is used.
 	// Make sure to not put a big number as the batch size to prevent a long-running script.
 	JanitorBatchSize int
+}
+
+// GroupConfig specifies per-group configuration overrides for task aggregation.
+// Zero-valued fields fall back to the global Config values (GroupGracePeriod, GroupMaxDelay, GroupMaxSize).
+type GroupConfig struct {
+	// GracePeriod overrides Config.GroupGracePeriod for this group.
+	// Minimum duration is 1 second. If set to a value less than a second, NewServer will panic.
+	// If zero, falls back to Config.GroupGracePeriod.
+	GracePeriod time.Duration
+
+	// MaxDelay overrides Config.GroupMaxDelay for this group.
+	// If zero, falls back to Config.GroupMaxDelay.
+	MaxDelay time.Duration
+
+	// MaxSize overrides Config.GroupMaxSize for this group.
+	// If zero, falls back to Config.GroupMaxSize.
+	MaxSize int
 }
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
@@ -496,6 +519,11 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	if groupGracePeriod < time.Second {
 		panic("GroupGracePeriod cannot be less than a second")
 	}
+	for gname, gcfg := range cfg.GroupConfigs {
+		if gcfg.GracePeriod != 0 && gcfg.GracePeriod < time.Second {
+			panic(fmt.Sprintf("GroupConfigs[%q].GracePeriod cannot be less than a second", gname))
+		}
+	}
 	logger := log.NewLogger(cfg.Logger)
 	loglevel := cfg.LogLevel
 	if loglevel == level_unspecified {
@@ -601,6 +629,7 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		maxDelay:        cfg.GroupMaxDelay,
 		maxSize:         cfg.GroupMaxSize,
 		groupAggregator: cfg.GroupAggregator,
+		groupConfigs:    cfg.GroupConfigs,
 	})
 	return &Server{
 		logger:           logger,
