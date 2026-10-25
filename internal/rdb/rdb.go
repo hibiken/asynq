@@ -267,7 +267,7 @@ func (r *RDB) BatchEnqueue(ctx context.Context, items []base.BatchEnqueueItem) (
 // Returns 0 if task ID conflicts with another task
 // Returns -1 if task unique key already exists
 var enqueueUniqueCmd = redis.NewScript(`
-local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
+local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "PX", ARGV[2])
 if not ok then
   return -1
 end
@@ -304,7 +304,7 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 	}
 	argv := []interface{}{
 		msg.ID,
-		int(ttl.Seconds()),
+		int(ttl.Milliseconds()),
 		encoded,
 		r.clock.Now().UnixNano(),
 	}
@@ -692,7 +692,7 @@ func (r *RDB) AddToGroup(ctx context.Context, msg *base.TaskMessage, groupKey st
 // Returns 0 if task ID already exists
 // Returns -1 if task unique key already exists
 var addToGroupUniqueCmd = redis.NewScript(`
-local ok = redis.call("SET", KEYS[4], ARGV[2], "NX", "EX", ARGV[5])
+local ok = redis.call("SET", KEYS[4], ARGV[2], "NX", "PX", ARGV[5])
 if not ok then
   return -1
 end
@@ -731,7 +731,7 @@ func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, group
 		msg.ID,
 		r.clock.Now().Unix(),
 		groupKey,
-		int(ttl.Seconds()),
+		int(ttl.Milliseconds()),
 	}
 	n, err := r.runScriptWithErrorCode(ctx, op, addToGroupUniqueCmd, keys, argv...)
 	if err != nil {
@@ -813,7 +813,7 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 // Returns 0 if task ID already exists
 // Returns -1 if task unique key already exists
 var scheduleUniqueCmd = redis.NewScript(`
-local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "EX", ARGV[2])
+local ok = redis.call("SET", KEYS[1], ARGV[1], "NX", "PX", ARGV[2])
 if not ok then
   return -1
 end
@@ -849,7 +849,7 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 	}
 	argv := []interface{}{
 		msg.ID,
-		int(ttl.Seconds()),
+		int(ttl.Milliseconds()),
 		processAt.Unix(),
 		encoded,
 	}
