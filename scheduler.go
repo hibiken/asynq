@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -301,7 +302,10 @@ func (s *Scheduler) Shutdown() {
 	s.wg.Wait()
 
 	s.clearHistory()
-	if err := s.client.Close(); err != nil {
+	if err := s.client.Close(); err != nil && !errors.Is(err, ErrSharedConnection) {
+		// A shared redis connection isn't asynq's to close; the caller
+		// owns it and will close it themselves, so don't log that as an
+		// error. Anything else is a real failure.
 		s.logger.Errorf("Failed to close redis client connection: %v", err)
 	}
 	s.logger.Info("Scheduler stopped")
