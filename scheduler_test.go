@@ -232,3 +232,33 @@ func TestSchedulerPostAndPreEnqueueHandler(t *testing.T) {
 	}
 	postMu.Unlock()
 }
+
+func TestSchedulerRegisterWithTimezone(t *testing.T) {
+	r := setup(t)
+
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scheduler := NewScheduler(getRedisConnOpt(t), &SchedulerOpts{Location: time.UTC})
+	if _, err := scheduler.RegisterWithTimezone("@every 3s", NewTask("task-tz", nil), loc); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scheduler.Start(); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(10 * time.Second)
+	scheduler.Shutdown()
+
+	want := []*base.TaskMessage{
+		{Type: "task-tz", Payload: nil, Retry: defaultMaxRetry, Timeout: int64(defaultTimeout.Seconds()), Queue: "default"},
+		{Type: "task-tz", Payload: nil, Retry: defaultMaxRetry, Timeout: int64(defaultTimeout.Seconds()), Queue: "default"},
+		{Type: "task-tz", Payload: nil, Retry: defaultMaxRetry, Timeout: int64(defaultTimeout.Seconds()), Queue: "default"},
+	}
+	got := testutil.GetPendingMessages(t, r, "default")
+	if diff := cmp.Diff(want, got, testutil.IgnoreIDOpt); diff != "" {
+		t.Errorf("mismatch in queue %q: (-want,+got)\n%s", "default", diff)
+	}
+}
