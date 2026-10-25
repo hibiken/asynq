@@ -392,6 +392,12 @@ func createInspector() *asynq.Inspector {
 	return asynq.NewInspector(getRedisConnOpt())
 }
 
+func closeInspector(i *asynq.Inspector) {
+	if err := i.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to close inspector: %v\n", err)
+	}
+}
+
 func getRedisConnOpt() asynq.RedisConnOpt {
 	if viper.GetBool("cluster") {
 		addrs := strings.Split(viper.GetString("cluster_addrs"), ",")
