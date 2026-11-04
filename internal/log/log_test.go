@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"runtime"
 	"testing"
 )
 
@@ -384,5 +385,44 @@ func TestLoggerWithSameOrHigherLevels(t *testing.T) {
 		if buf.String() == "" {
 			t.Errorf("logger.%s did not output log message when level is set to %v", tc.op, tc.level)
 		}
+	}
+}
+
+// stackDepthRecorder logs call stack depth to verify consistent depth between non-format and format methods.
+type stackDepthRecorder struct {
+	depth int
+}
+
+func (s *stackDepthRecorder) record() {
+	var pcs [32]uintptr
+	s.depth = runtime.Callers(1, pcs[:])
+}
+
+func (s *stackDepthRecorder) Debug(args ...interface{}) { s.record() }
+func (s *stackDepthRecorder) Info(args ...interface{})  { s.record() }
+func (s *stackDepthRecorder) Warn(args ...interface{})  { s.record() }
+func (s *stackDepthRecorder) Error(args ...interface{}) { s.record() }
+func (s *stackDepthRecorder) Fatal(args ...interface{}) { s.record() }
+
+func TestLoggerCallStackDepth(t *testing.T) {
+	rec := &stackDepthRecorder{}
+	logger := NewLogger(rec)
+
+	logger.Info("plain")
+	depthPlain := rec.depth
+
+	logger.Infof("formatted %s", "arg")
+	depthFormatted := rec.depth
+
+	if depthPlain != depthFormatted {
+		t.Errorf("call stack depth mismatch: Info=%d, Infof=%d; expected equal depth", depthPlain, depthFormatted)
+	}
+
+	logger.Debug("plain")
+	depthPlain = rec.depth
+	logger.Debugf("formatted %s", "arg")
+	depthFormatted = rec.depth
+	if depthPlain != depthFormatted {
+		t.Errorf("call stack depth mismatch: Debug=%d, Debugf=%d; expected equal depth", depthPlain, depthFormatted)
 	}
 }
