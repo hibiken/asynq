@@ -316,6 +316,67 @@ func TestPeriodicTaskManager(t *testing.T) {
 	}
 }
 
+// panicOnceConfigProvider is a PeriodicTaskConfigProvider whose GetConfigs
+// panics on its first call and returns the configured cfgs on every
+// subsequent call.
+type panicOnceConfigProvider struct {
+	mu       sync.Mutex
+	cfgs     []*PeriodicTaskConfig
+	panicked bool
+}
+
+func (p *panicOnceConfigProvider) GetConfigs() ([]*PeriodicTaskConfig, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.panicked {
+		p.panicked = true
+		panic("boom")
+	}
+	return p.cfgs, nil
+}
+
+func TestPeriodicTaskManagerWhenProviderPanics(t *testing.T) {
+	// Make sure that a panic in the user-provided
+	// PeriodicTaskConfigProvider.GetConfigs doesn't crash the syncer
+	// goroutine (and with it, the process), and that a later,
+	// non-panicking sync still registers the configs.
+	cfgs := []*PeriodicTaskConfig{
+		{Task: NewTask("task1", nil), Cronspec: "* * * * 1"},
+	}
+	const syncInterval = 1 * time.Second
+	provider := &panicOnceConfigProvider{cfgs: cfgs}
+	mgr, err := NewPeriodicTaskManager(PeriodicTaskManagerOpts{
+		RedisConnOpt:               getRedisConnOpt(t),
+		PeriodicTaskConfigProvider: provider,
+		SyncInterval:               syncInterval,
+	})
+	if err != nil {
+		t.Fatalf("Failed to initialize PeriodicTaskManager: %v", err)
+	}
+
+	// Start calls GetConfigs synchronously via initialSync; the first call
+	// panics, so Start is expected to surface that as an error rather than
+	// crash the process.
+	if err := mgr.Start(); err == nil {
+		t.Fatalf("Start did not return an error despite the provider panicking on the first call")
+	}
+
+	// GetConfigs no longer panics from here on; call Start again to bring
+	// up the syncer goroutine and confirm it runs normally afterward.
+	if err := mgr.Start(); err != nil {
+		t.Fatalf("Failed to start PeriodicTaskManager on retry: %v", err)
+	}
+	defer mgr.Shutdown()
+
+	got := extractCronEntries(mgr.s)
+	want := []*cronEntry{
+		{Cronspec: "* * * * 1", TaskType: "task1"},
+	}
+	if diff := cmp.Diff(want, got, sortCronEntry); diff != "" {
+		t.Errorf("Diff found in scheduler's registered entries: %s", diff)
+	}
+}
+
 func extractCronEntries(s *Scheduler) []*cronEntry {
 	var out []*cronEntry
 	for _, e := range s.cron.Entries() {

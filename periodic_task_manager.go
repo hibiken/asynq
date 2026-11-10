@@ -7,6 +7,7 @@ package asynq
 import (
 	"crypto/sha256"
 	"fmt"
+	"runtime/debug"
 	"sort"
 	"sync"
 	"time"
@@ -165,8 +166,22 @@ func (mgr *PeriodicTaskManager) Run() error {
 	return nil
 }
 
+// safeGetConfigs invokes the user-provided PeriodicTaskConfigProvider,
+// recovering from any panic so that a misbehaving provider cannot crash the
+// syncer goroutine (and with it, the whole process). A panic is reported
+// back as an error, the same way a provider-returned error is.
+func (mgr *PeriodicTaskManager) safeGetConfigs() (configs []*PeriodicTaskConfig, err error) {
+	defer func() {
+		if x := recover(); x != nil {
+			mgr.s.logger.Errorf("recovering from panic in PeriodicTaskConfigProvider.GetConfigs. See the stack trace below for details:\n%s", string(debug.Stack()))
+			configs, err = nil, fmt.Errorf("panic in PeriodicTaskConfigProvider.GetConfigs: %v", x)
+		}
+	}()
+	return mgr.p.GetConfigs()
+}
+
 func (mgr *PeriodicTaskManager) initialSync() error {
-	configs, err := mgr.p.GetConfigs()
+	configs, err := mgr.safeGetConfigs()
 	if err != nil {
 		return fmt.Errorf("initial call to GetConfigs failed: %w", err)
 	}
@@ -205,7 +220,7 @@ func (mgr *PeriodicTaskManager) remove(removed map[string]string) {
 }
 
 func (mgr *PeriodicTaskManager) sync() {
-	configs, err := mgr.p.GetConfigs()
+	configs, err := mgr.safeGetConfigs()
 	if err != nil {
 		mgr.s.logger.Errorf("Failed to get periodic task configs: %v", err)
 		return
