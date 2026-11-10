@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"context"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -158,7 +159,12 @@ func (a *aggregator) aggregate(t time.Time) {
 			for i, m := range msgs {
 				tasks[i] = NewTaskWithHeaders(m.Type, m.Payload, m.Headers)
 			}
-			aggregatedTask := a.ga.Aggregate(gname, tasks)
+			aggregatedTask, ok := a.safeAggregate(gname, tasks)
+			if !ok {
+				// The user-provided GroupAggregator panicked; skip this group
+				// for this round rather than taking down the whole aggregator.
+				continue
+			}
 			ctx, cancel := context.WithDeadline(context.Background(), deadline)
 			if _, err := a.client.EnqueueContext(ctx, aggregatedTask, Queue(qname)); err != nil {
 				a.logger.Errorf("Failed to enqueue aggregated task (queue=%q, group=%q, setID=%q): %v",
@@ -173,4 +179,18 @@ func (a *aggregator) aggregate(t time.Time) {
 			cancel()
 		}
 	}
+}
+
+// safeAggregate invokes the user-provided GroupAggregator, recovering from
+// any panic so that a misbehaving aggregator cannot crash the aggregator
+// goroutine (and with it, the whole process). The second return value
+// reports whether the call completed without panicking.
+func (a *aggregator) safeAggregate(gname string, tasks []*Task) (res *Task, ok bool) {
+	defer func() {
+		if x := recover(); x != nil {
+			a.logger.Errorf("recovering from panic in group aggregator. See the stack trace below for details:\n%s", string(debug.Stack()))
+			res, ok = nil, false
+		}
+	}()
+	return a.ga.Aggregate(gname, tasks), true
 }

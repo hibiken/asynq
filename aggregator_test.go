@@ -163,3 +163,79 @@ func TestAggregator(t *testing.T) {
 		wg.Wait()
 	}
 }
+
+func TestAggregatorWhenGroupAggregatorPanics(t *testing.T) {
+	// Make sure that a panic in the user-provided GroupAggregator doesn't
+	// crash the aggregator goroutine (and with it, the process), and that
+	// a later, non-panicking group in the same run still gets aggregated.
+	r := setup(t)
+	defer r.Close()
+	rdbClient := rdb.NewRDB(r)
+	client := Client{broker: rdbClient}
+	h.FlushDB(t, r)
+
+	var calledMu sync.Mutex
+	called := make(map[string]int)
+	aggregateFunc := func(gname string, tasks []*Task) *Task {
+		calledMu.Lock()
+		called[gname]++
+		calledMu.Unlock()
+		if gname == "panicky-group" {
+			panic("boom")
+		}
+		return NewTask(gname, nil, MaxRetry(len(tasks)))
+	}
+
+	aggregator := newAggregator(aggregatorParams{
+		logger:          testLogger,
+		broker:          rdbClient,
+		queues:          []string{"default"},
+		gracePeriod:     1 * time.Second,
+		maxDelay:        0,
+		maxSize:         0,
+		groupAggregator: GroupAggregatorFunc(aggregateFunc),
+	})
+
+	var wg sync.WaitGroup
+	aggregator.start(&wg)
+
+	for _, task := range []*Task{
+		NewTask("task1", nil, Group("panicky-group")),
+		NewTask("task2", nil, Group("ok-group")),
+	} {
+		if _, err := client.Enqueue(task); err != nil {
+			t.Fatalf("Client Enqueue failed: %v", err)
+		}
+	}
+
+	// Wait long enough for the aggregation check to run at least twice;
+	// if the panic were not recovered, the aggregator goroutine would die
+	// on the first tick and "ok-group" would never get aggregated either.
+	time.Sleep(defaultAggregationCheckInterval + 3*time.Second)
+
+	aggregator.shutdown()
+	wg.Wait()
+
+	calledMu.Lock()
+	defer calledMu.Unlock()
+	if called["panicky-group"] == 0 {
+		t.Errorf("GroupAggregator was not called for %q", "panicky-group")
+	}
+	if called["ok-group"] == 0 {
+		t.Errorf("GroupAggregator was not called for %q; aggregator goroutine likely died after the panic", "ok-group")
+	}
+
+	gotPending := h.GetPendingMessages(t, r, "default")
+	foundOKGroup := false
+	for _, m := range gotPending {
+		if m.Type == "ok-group" {
+			foundOKGroup = true
+		}
+		if m.Type == "panicky-group" {
+			t.Errorf("panicky-group's aggregated task was enqueued despite GroupAggregator panicking")
+		}
+	}
+	if !foundOKGroup {
+		t.Errorf("ok-group's aggregated task was not enqueued; want it present in pending")
+	}
+}
