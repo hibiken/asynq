@@ -681,6 +681,16 @@ func (srv *Server) Start(handler Handler) error {
 	if handler == nil {
 		return fmt.Errorf("asynq: server cannot run with nil handler")
 	}
+
+	// Automatically inject Chain Middleware
+	if mux, ok := handler.(*ServeMux); ok {
+		internalClient := &Client{
+			broker:           srv.broker,
+			sharedConnection: true,
+		}
+		mux.Use(chainMiddleware(internalClient))
+	}
+
 	srv.processor.handler = handler
 
 	if err := srv.start(); err != nil {
