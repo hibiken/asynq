@@ -274,3 +274,110 @@ func TestRecoverer(t *testing.T) {
 		}
 	}
 }
+
+func TestRecovererRecoversOrphanedActiveTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	rdbClient := rdb.NewRDB(r)
+
+	// t1 is below its max retry count and should be retried.
+	t1 := h.NewTaskMessageWithQueue("task1", nil, "default")
+	// t2 has reached its max retry count and should be archived.
+	t2 := h.NewTaskMessageWithQueue("task2", nil, "default")
+	t2.Retried = t2.Retry
+
+	tests := []struct {
+		desc         string
+		active       map[string][]*base.TaskMessage
+		lease        map[string][]base.Z
+		wantActive   map[string][]*base.TaskMessage
+		wantRetry    map[string][]*base.TaskMessage
+		wantArchived map[string][]*base.TaskMessage
+	}{
+		{
+			desc: "orphaned active task with no lease entry is retried",
+			active: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			lease: map[string][]base.Z{
+				"default": {},
+			},
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantRetry: map[string][]*base.TaskMessage{
+				"default": {t1},
+			},
+			wantArchived: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+		},
+		{
+			desc: "orphaned active task at max retry with no lease entry is archived",
+			active: map[string][]*base.TaskMessage{
+				"default": {t2},
+			},
+			lease: map[string][]base.Z{
+				"default": {},
+			},
+			wantActive: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantRetry: map[string][]*base.TaskMessage{
+				"default": {},
+			},
+			wantArchived: map[string][]*base.TaskMessage{
+				"default": {t2},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r)
+		h.SeedAllActiveQueues(t, r, tc.active)
+		h.SeedAllLease(t, r, tc.lease)
+
+		recoverer := newRecoverer(recovererParams{
+			logger:         testLogger,
+			broker:         rdbClient,
+			queues:         []string{"default"},
+			interval:       1 * time.Second,
+			retryDelayFunc: func(n int, err error, task *Task) time.Duration { return 30 * time.Second },
+			isFailureFunc:  defaultIsFailureFunc,
+		})
+
+		var wg sync.WaitGroup
+		recoverer.start(&wg)
+		runTime := time.Now()
+		time.Sleep(2 * time.Second)
+		recoverer.shutdown()
+
+		for qname, want := range tc.wantActive {
+			gotActive := h.GetActiveMessages(t, r, qname)
+			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q; (-want,+got)\n%s", tc.desc, base.ActiveKey(qname), diff)
+			}
+		}
+		cmpOpt := h.EquateInt64Approx(2) // allow up to two-second difference in `LastFailedAt`
+		for qname, msgs := range tc.wantRetry {
+			gotRetry := h.GetRetryMessages(t, r, qname)
+			var wantRetry []*base.TaskMessage
+			for _, msg := range msgs {
+				wantRetry = append(wantRetry, h.TaskMessageAfterRetry(*msg, ErrLeaseExpired.Error(), runTime))
+			}
+			if diff := cmp.Diff(wantRetry, gotRetry, h.SortMsgOpt, cmpOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q: (-want, +got)\n%s", tc.desc, base.RetryKey(qname), diff)
+			}
+		}
+		for qname, msgs := range tc.wantArchived {
+			gotArchived := h.GetArchivedMessages(t, r, qname)
+			var wantArchived []*base.TaskMessage
+			for _, msg := range msgs {
+				wantArchived = append(wantArchived, h.TaskMessageWithError(*msg, ErrLeaseExpired.Error(), runTime))
+			}
+			if diff := cmp.Diff(wantArchived, gotArchived, h.SortMsgOpt, cmpOpt); diff != "" {
+				t.Errorf("%s; mismatch found in %q: (-want, +got)\n%s", tc.desc, base.ArchivedKey(qname), diff)
+			}
+		}
+	}
+}
