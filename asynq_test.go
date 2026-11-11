@@ -115,6 +115,18 @@ func TestParseRedisURI(t *testing.T) {
 			RedisClientOpt{Addr: "localhost:6379", Password: "mypassword"},
 		},
 		{
+			"redis://myuser:mypassword@localhost:6379",
+			RedisClientOpt{Addr: "localhost:6379", Username: "myuser", Password: "mypassword"},
+		},
+		{
+			"rediss://myuser:mypassword@localhost:6379/2",
+			RedisClientOpt{Addr: "localhost:6379", Username: "myuser", Password: "mypassword", DB: 2, TLSConfig: &tls.Config{ServerName: "localhost"}},
+		},
+		{
+			"redis://myuser@localhost:6379",
+			RedisClientOpt{Addr: "localhost:6379", Username: "myuser"},
+		},
+		{
 			"redis://:mypassword@127.0.0.1:6379/11",
 			RedisClientOpt{Addr: "127.0.0.1:6379", Password: "mypassword", DB: 11},
 		},
@@ -125,6 +137,10 @@ func TestParseRedisURI(t *testing.T) {
 		{
 			"redis-socket://:mypassword@/var/run/redis/redis.sock",
 			RedisClientOpt{Network: "unix", Addr: "/var/run/redis/redis.sock", Password: "mypassword"},
+		},
+		{
+			"redis-socket://myuser:mypassword@/var/run/redis/redis.sock",
+			RedisClientOpt{Network: "unix", Addr: "/var/run/redis/redis.sock", Username: "myuser", Password: "mypassword"},
 		},
 		{
 			"redis-socket:///var/run/redis/redis.sock?db=7",
@@ -146,6 +162,15 @@ func TestParseRedisURI(t *testing.T) {
 			RedisFailoverClientOpt{
 				MasterName:       "mymaster",
 				SentinelAddrs:    []string{"localhost:5000", "localhost:5001", "localhost:5002"},
+				SentinelPassword: "mypassword",
+			},
+		},
+		{
+			"redis-sentinel://myuser:mypassword@localhost:5000,localhost:5001,localhost:5002?master=mymaster",
+			RedisFailoverClientOpt{
+				MasterName:       "mymaster",
+				SentinelAddrs:    []string{"localhost:5000", "localhost:5001", "localhost:5002"},
+				SentinelUsername: "myuser",
 				SentinelPassword: "mypassword",
 			},
 		},
