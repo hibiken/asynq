@@ -37,6 +37,7 @@ type Scheduler struct {
 	preEnqueueFunc    func(task *Task, opts []Option)
 	postEnqueueFunc   func(info *TaskInfo, err error)
 	errHandler        func(task *Task, opts []Option, err error)
+	historyTTL        time.Duration
 
 	// guards idmap
 	mu sync.Mutex
@@ -111,6 +112,7 @@ func newScheduler(opts *SchedulerOpts) *Scheduler {
 		preEnqueueFunc:    opts.PreEnqueueFunc,
 		postEnqueueFunc:   opts.PostEnqueueFunc,
 		errHandler:        opts.EnqueueErrorHandler,
+		historyTTL:        opts.EnqueueHistoryTTL,
 		idmap:             make(map[string]cron.EntryID),
 	}
 }
@@ -161,6 +163,22 @@ type SchedulerOpts struct {
 	// EnqueueErrorHandler gets called when scheduler cannot enqueue a registered task
 	// due to an error.
 	EnqueueErrorHandler func(task *Task, opts []Option, err error)
+
+	// EnqueueHistoryTTL specifies how long the enqueue history of each scheduler entry
+	// is kept in redis after the last time the entry enqueued a task.
+	//
+	// The history is shown by Inspector.ListSchedulerEnqueueEvents and the CLI.
+	// The expiration is refreshed every time the entry enqueues a task.
+	//
+	// If unset, zero or a negative value, the history never expires. It is only deleted
+	// when the scheduler shuts down cleanly, so the history of a scheduler that is killed
+	// or fails to clean up stays in redis forever.
+	//
+	// Note: If an entry enqueues tasks less often than this value, its history
+	// expires between runs.
+	//
+	// By default, EnqueueHistoryTTL is zero (the history never expires).
+	EnqueueHistoryTTL time.Duration
 }
 
 // enqueueJob encapsulates the job of enqueuing a task and recording the event.
@@ -176,6 +194,7 @@ type enqueueJob struct {
 	preEnqueueFunc  func(task *Task, opts []Option)
 	postEnqueueFunc func(info *TaskInfo, err error)
 	errHandler      func(task *Task, opts []Option, err error)
+	historyTTL      time.Duration
 }
 
 func (j *enqueueJob) Run() {
@@ -197,7 +216,10 @@ func (j *enqueueJob) Run() {
 		TaskID:     info.ID,
 		EnqueuedAt: time.Now().In(j.location),
 	}
-	err = j.rdb.RecordSchedulerEnqueueEvent(j.id.String(), event)
+	// Warning: with a zero historyTTL (the default) the history key never expires
+	// and is only deleted by ClearSchedulerHistory on a clean shutdown.
+	// See SchedulerOpts.EnqueueHistoryTTL.
+	err = j.rdb.RecordSchedulerEnqueueEvent(j.id.String(), event, j.historyTTL)
 	if err != nil {
 		j.logger.Warnf("scheduler could not record enqueue event of enqueued task %s: %v", info.ID, err)
 	}
@@ -218,6 +240,7 @@ func (s *Scheduler) Register(cronspec string, task *Task, opts ...Option) (entry
 		preEnqueueFunc:  s.preEnqueueFunc,
 		postEnqueueFunc: s.postEnqueueFunc,
 		errHandler:      s.errHandler,
+		historyTTL:      s.historyTTL,
 	}
 	cronID, err := s.cron.AddJob(cronspec, job)
 	if err != nil {
