@@ -73,12 +73,17 @@ func NewTaskWithHeaders(typename string, payload []byte, headers map[string]stri
 	}
 }
 
-// newTask creates a task with the given typename, payload and ResultWriter.
-func newTask(typename string, payload []byte, w *ResultWriter) *Task {
+// newTask creates a task with the given typename, payload, headers and ResultWriter.
+// The headers map is used as is; a nil map is replaced by an empty one so that
+// handlers can always read from and write to Task.Headers().
+func newTask(typename string, payload []byte, headers map[string]string, w *ResultWriter) *Task {
+	if headers == nil {
+		headers = make(map[string]string)
+	}
 	return &Task{
 		typename: typename,
 		payload:  payload,
-		headers:  make(map[string]string),
+		headers:  headers,
 		w:        w,
 	}
 }
@@ -261,7 +266,7 @@ func (s TaskState) String() string {
 type RedisConnOpt interface {
 	// MakeRedisClient returns a new redis client instance.
 	// Return value is intentionally opaque to hide the implementation detail of redis client.
-	MakeRedisClient() interface{}
+	MakeRedisClient() any
 }
 
 // RedisClientOpt is used to create a redis client that connects
@@ -315,7 +320,7 @@ type RedisClientOpt struct {
 	TLSConfig *tls.Config
 }
 
-func (opt RedisClientOpt) MakeRedisClient() interface{} {
+func (opt RedisClientOpt) MakeRedisClient() any {
 	return redis.NewClient(&redis.Options{
 		Network:      opt.Network,
 		Addr:         opt.Addr,
@@ -389,7 +394,7 @@ type RedisFailoverClientOpt struct {
 	TLSConfig *tls.Config
 }
 
-func (opt RedisFailoverClientOpt) MakeRedisClient() interface{} {
+func (opt RedisFailoverClientOpt) MakeRedisClient() any {
 	return redis.NewFailoverClient(&redis.FailoverOptions{
 		MasterName:       opt.MasterName,
 		SentinelAddrs:    opt.SentinelAddrs,
@@ -450,7 +455,7 @@ type RedisClusterClientOpt struct {
 	TLSConfig *tls.Config
 }
 
-func (opt RedisClusterClientOpt) MakeRedisClient() interface{} {
+func (opt RedisClusterClientOpt) MakeRedisClient() any {
 	return redis.NewClusterClient(&redis.ClusterOptions{
 		Addrs:        opt.Addrs,
 		MaxRedirects: opt.MaxRedirects,

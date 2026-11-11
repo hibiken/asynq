@@ -22,9 +22,18 @@ var errRedisDown = errors.New("testutil: redis is down")
 type TestBroker struct {
 	mu       sync.Mutex
 	sleeping bool
+	// delay is an artificial latency applied to WriteServerState.
+	delay time.Duration
 
 	// real broker
 	real base.Broker
+}
+
+// SetDelay makes WriteServerState slow, to simulate a laggy redis.
+func (tb *TestBroker) SetDelay(d time.Duration) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	tb.delay = d
 }
 
 // Make sure TestBroker implements Broker interface at compile time.
@@ -183,10 +192,14 @@ func (tb *TestBroker) ExtendLease(qname string, ids ...string) (time.Time, error
 
 func (tb *TestBroker) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo, ttl time.Duration) error {
 	tb.mu.Lock()
-	defer tb.mu.Unlock()
-	if tb.sleeping {
+	delay := tb.delay
+	sleeping := tb.sleeping
+	tb.mu.Unlock()
+	if sleeping {
 		return errRedisDown
 	}
+	// Simulate a slow redis without holding the broker lock.
+	time.Sleep(delay)
 	return tb.real.WriteServerState(info, workers, ttl)
 }
 
@@ -305,4 +318,7 @@ func (tb *TestBroker) ReclaimStaleAggregationSets(qname string) error {
 		return errRedisDown
 	}
 	return tb.real.ReclaimStaleAggregationSets(qname)
+}
+
+func (tb *TestBroker) SetTaskProber(prober base.TaskProber) {
 }

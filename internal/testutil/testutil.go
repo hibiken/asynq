@@ -137,7 +137,7 @@ func NewLeaseWithClock(expirationTime time.Time, clock timeutil.Clock) *base.Lea
 }
 
 // JSON serializes the given key-value pairs into stream of bytes in JSON.
-func JSON(kv map[string]interface{}) []byte {
+func JSON(kv map[string]any) []byte {
 	b, err := json.Marshal(kv)
 	if err != nil {
 		panic(err)
@@ -353,7 +353,7 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string,
 			tb.Fatal(err)
 		}
 		taskKey := base.TaskKey(msg.Queue, msg.ID)
-		data := map[string]interface{}{
+		data := map[string]any{
 			"msg":        encoded,
 			"state":      state.String(),
 			"unique_key": msg.UniqueKey,
@@ -382,7 +382,7 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string,
 			tb.Fatal(err)
 		}
 		taskKey := base.TaskKey(msg.Queue, msg.ID)
-		data := map[string]interface{}{
+		data := map[string]any{
 			"msg":        encoded,
 			"state":      state.String(),
 			"unique_key": msg.UniqueKey,
@@ -549,7 +549,7 @@ func SeedTasks(tb testing.TB, r redis.UniversalClient, taskData []*TaskSeedData)
 		msg := data.Msg
 		ctx := context.Background()
 		key := base.TaskKey(msg.Queue, msg.ID)
-		v := map[string]interface{}{
+		v := map[string]any{
 			"msg":        MustMarshal(tb, msg),
 			"state":      data.State.String(),
 			"unique_key": msg.UniqueKey,

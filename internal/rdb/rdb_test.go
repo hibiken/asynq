@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"flag"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,8 +66,8 @@ func setup(tb testing.TB) (r *RDB) {
 func TestEnqueue(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	t1 := h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"to": "exampleuser@gmail.com", "from": "noreply@example.com"}))
-	t2 := h.NewTaskMessageWithQueue("generate_csv", h.JSON(map[string]interface{}{}), "csv")
+	t1 := h.NewTaskMessage("send_email", h.JSON(map[string]any{"to": "exampleuser@gmail.com", "from": "noreply@example.com"}))
+	t2 := h.NewTaskMessageWithQueue("generate_csv", h.JSON(map[string]any{}), "csv")
 	t3 := h.NewTaskMessageWithQueue("sync", nil, "low")
 
 	enqueueTime := time.Now()
@@ -164,8 +165,8 @@ func TestBatchEnqueue(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 
-	t1 := h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"to": "user@example.com"}))
-	t2 := h.NewTaskMessageWithQueue("generate_csv", h.JSON(map[string]interface{}{}), "csv")
+	t1 := h.NewTaskMessage("send_email", h.JSON(map[string]any{"to": "user@example.com"}))
+	t2 := h.NewTaskMessageWithQueue("generate_csv", h.JSON(map[string]any{}), "csv")
 	t3 := h.NewTaskMessageWithQueue("sync", nil, "low")
 
 	enqueueTime := time.Now()
@@ -191,13 +192,7 @@ func TestBatchEnqueue(t *testing.T) {
 			msg := item.Msg
 			pendingKey := base.PendingKey(msg.Queue)
 			pendingIDs := r.client.LRange(context.Background(), pendingKey, 0, -1).Val()
-			found := false
-			for _, id := range pendingIDs {
-				if id == msg.ID {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(pendingIDs, msg.ID)
 			if !found {
 				t.Errorf("task %s not found in pending list %s", msg.ID, pendingKey)
 			}
@@ -369,9 +364,9 @@ func TestEnqueueUnique(t *testing.T) {
 	m1 := base.TaskMessage{
 		ID:        uuid.NewString(),
 		Type:      "email",
-		Payload:   h.JSON(map[string]interface{}{"user_id": json.Number("123")}),
+		Payload:   h.JSON(map[string]any{"user_id": json.Number("123")}),
 		Queue:     base.DefaultQueueName,
-		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]interface{}{"user_id": 123})),
+		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]any{"user_id": 123})),
 	}
 
 	enqueueTime := time.Now()
@@ -504,7 +499,7 @@ func TestDequeue(t *testing.T) {
 	t1 := &base.TaskMessage{
 		ID:       uuid.NewString(),
 		Type:     "send_email",
-		Payload:  h.JSON(map[string]interface{}{"subject": "hello!"}),
+		Payload:  h.JSON(map[string]any{"subject": "hello!"}),
 		Queue:    "default",
 		Timeout:  1800,
 		Deadline: 0,
@@ -740,7 +735,7 @@ func TestDequeueIgnoresPausedQueues(t *testing.T) {
 	t1 := &base.TaskMessage{
 		ID:       uuid.NewString(),
 		Type:     "send_email",
-		Payload:  h.JSON(map[string]interface{}{"subject": "hello!"}),
+		Payload:  h.JSON(map[string]any{"subject": "hello!"}),
 		Queue:    "default",
 		Timeout:  1800,
 		Deadline: 0,
@@ -1604,7 +1599,7 @@ func TestAddToGroupUniqueTaskIdConflictError(t *testing.T) {
 func TestSchedule(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
-	msg := h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"subject": "hello"}))
+	msg := h.NewTaskMessage("send_email", h.JSON(map[string]any{"subject": "hello"}))
 	tests := []struct {
 		msg       *base.TaskMessage
 		processAt time.Time
@@ -1704,9 +1699,9 @@ func TestScheduleUnique(t *testing.T) {
 	m1 := base.TaskMessage{
 		ID:        uuid.NewString(),
 		Type:      "email",
-		Payload:   h.JSON(map[string]interface{}{"user_id": 123}),
+		Payload:   h.JSON(map[string]any{"user_id": 123}),
 		Queue:     base.DefaultQueueName,
-		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]interface{}{"user_id": 123})),
+		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]any{"user_id": 123})),
 	}
 
 	tests := []struct {
@@ -1832,7 +1827,7 @@ func TestRetry(t *testing.T) {
 	t1 := &base.TaskMessage{
 		ID:      uuid.NewString(),
 		Type:    "send_email",
-		Payload: h.JSON(map[string]interface{}{"subject": "Hola!"}),
+		Payload: h.JSON(map[string]any{"subject": "Hola!"}),
 		Retried: 10,
 		Timeout: 1800,
 		Queue:   "default",
@@ -1840,7 +1835,7 @@ func TestRetry(t *testing.T) {
 	t2 := &base.TaskMessage{
 		ID:      uuid.NewString(),
 		Type:    "gen_thumbnail",
-		Payload: h.JSON(map[string]interface{}{"path": "some/path/to/image.jpg"}),
+		Payload: h.JSON(map[string]any{"path": "some/path/to/image.jpg"}),
 		Timeout: 3000,
 		Queue:   "default",
 	}
@@ -2003,7 +1998,7 @@ func TestRetryWithNonFailureError(t *testing.T) {
 	t1 := &base.TaskMessage{
 		ID:      uuid.NewString(),
 		Type:    "send_email",
-		Payload: h.JSON(map[string]interface{}{"subject": "Hola!"}),
+		Payload: h.JSON(map[string]any{"subject": "Hola!"}),
 		Retried: 10,
 		Timeout: 1800,
 		Queue:   "default",
@@ -2011,7 +2006,7 @@ func TestRetryWithNonFailureError(t *testing.T) {
 	t2 := &base.TaskMessage{
 		ID:      uuid.NewString(),
 		Type:    "gen_thumbnail",
-		Payload: h.JSON(map[string]interface{}{"path": "some/path/to/image.jpg"}),
+		Payload: h.JSON(map[string]any{"path": "some/path/to/image.jpg"}),
 		Timeout: 3000,
 		Queue:   "default",
 	}
@@ -2400,7 +2395,7 @@ func TestArchiveTrim(t *testing.T) {
 	errMsg := "SMTP server not responding"
 
 	maxArchiveSet := make([]base.Z, 0)
-	for i := 0; i < maxArchiveSize-1; i++ {
+	for i := range maxArchiveSize - 1 {
 		maxArchiveSet = append(maxArchiveSet, base.Z{Message: &base.TaskMessage{
 			ID:      uuid.NewString(),
 			Type:    "generate_csv",
@@ -3182,8 +3177,8 @@ func TestWriteServerStateWithWorkers(t *testing.T) {
 		pid      = 4242
 		serverID = "server123"
 
-		msg1 = h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"user_id": "123"}))
-		msg2 = h.NewTaskMessage("gen_thumbnail", h.JSON(map[string]interface{}{"path": "some/path/to/imgfile"}))
+		msg1 = h.NewTaskMessage("send_email", h.JSON(map[string]any{"user_id": "123"}))
+		msg2 = h.NewTaskMessage("gen_thumbnail", h.JSON(map[string]any{"path": "some/path/to/imgfile"}))
 
 		ttl = 5 * time.Second
 	)
@@ -3294,8 +3289,8 @@ func TestClearServerState(t *testing.T) {
 		otherPID      = 9876
 		otherServerID = "server987"
 
-		msg1 = h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"user_id": "123"}))
-		msg2 = h.NewTaskMessage("gen_thumbnail", h.JSON(map[string]interface{}{"path": "some/path/to/imgfile"}))
+		msg1 = h.NewTaskMessage("send_email", h.JSON(map[string]any{"user_id": "123"}))
+		msg2 = h.NewTaskMessage("gen_thumbnail", h.JSON(map[string]any{"path": "some/path/to/imgfile"}))
 
 		ttl = 5 * time.Second
 	)

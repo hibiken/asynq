@@ -62,15 +62,12 @@ const (
 )
 
 func newAggregator(params aggregatorParams) *aggregator {
-	interval := defaultAggregationCheckInterval
-	if params.gracePeriod < interval {
-		interval = params.gracePeriod
-	}
+	interval := min(params.gracePeriod, defaultAggregationCheckInterval)
 	return &aggregator{
 		logger:      params.logger,
 		broker:      params.broker,
 		client:      &Client{broker: params.broker},
-		done:        make(chan struct{}),
+		done:        make(chan struct{}, 1), // 緩衝 1：shutdown 只投遞訊號，不等待迴圈處理完當前工作
 		queues:      params.queues,
 		gracePeriod: params.gracePeriod,
 		maxDelay:    params.maxDelay,

@@ -114,12 +114,33 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 
 		h.started = h.clock.Now()
 
-		h.beat()
+		// At most one asynchronous flush is in flight at any time. The redis
+		// round trips happen outside this loop so that a slow redis cannot
+		// block the starting/finished channels (and with them the processor).
+		flushing := false
+		flushDone := make(chan struct{}, 1)
+		startFlush := func() {
+			if flushing {
+				h.logger.Warn("Previous heartbeat is still in progress; skipping this beat")
+				return
+			}
+			flushing = true
+			s := h.snapshot()
+			go func() {
+				h.flush(s)
+				flushDone <- struct{}{}
+			}()
+		}
+
+		startFlush() // initial heartbeat, so the server shows up right away
 
 		timer := time.NewTimer(h.interval)
 		for {
 			select {
 			case <-h.done:
+				if flushing {
+					<-flushDone // do not write server state after clearing it
+				}
 				if err := h.broker.ClearServerState(h.host, h.pid, h.serverID); err != nil {
 					h.logger.Errorf("Failed to clear server state: %v", err)
 				}
@@ -128,8 +149,11 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 				return
 
 			case <-timer.C:
-				h.beat()
+				startFlush()
 				timer.Reset(h.interval)
+
+			case <-flushDone:
+				flushing = false
 
 			case w := <-h.starting:
 				h.workers[w.msg.ID] = w
@@ -142,27 +166,51 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 }
 
 // beat extends lease for workers and writes server/worker info to redis.
+// It performs the redis round trips synchronously; the heartbeater goroutine
+// uses snapshot/flush separately so that a slow redis does not block it.
 func (h *heartbeater) beat() {
+	h.flush(h.snapshot())
+}
+
+// leaseRef pairs a task ID with the lease the worker holds for it.
+type leaseRef struct {
+	id    string
+	lease *base.Lease
+}
+
+// beatSnapshot is a point-in-time copy of everything needed for one heartbeat,
+// so the redis I/O can run without touching heartbeater-confined state.
+type beatSnapshot struct {
+	info base.ServerInfo
+	ws   []*base.WorkerInfo
+	// leases to extend, grouped by queue.
+	leases map[string][]leaseRef
+}
+
+// snapshot collects the heartbeat data. It does no I/O and must be called
+// from the heartbeater goroutine.
+func (h *heartbeater) snapshot() *beatSnapshot {
 	h.state.mu.Lock()
 	srvStatus := h.state.value.String()
 	h.state.mu.Unlock()
 
-	info := base.ServerInfo{
-		Host:              h.host,
-		PID:               h.pid,
-		ServerID:          h.serverID,
-		Concurrency:       h.concurrency,
-		Queues:            h.queues,
-		StrictPriority:    h.strictPriority,
-		Status:            srvStatus,
-		Started:           h.started,
-		ActiveWorkerCount: len(h.workers),
+	s := &beatSnapshot{
+		info: base.ServerInfo{
+			Host:              h.host,
+			PID:               h.pid,
+			ServerID:          h.serverID,
+			Concurrency:       h.concurrency,
+			Queues:            h.queues,
+			StrictPriority:    h.strictPriority,
+			Status:            srvStatus,
+			Started:           h.started,
+			ActiveWorkerCount: len(h.workers),
+		},
+		leases: make(map[string][]leaseRef),
 	}
 
-	var ws []*base.WorkerInfo
-	idsByQueue := make(map[string][]string)
 	for id, w := range h.workers {
-		ws = append(ws, &base.WorkerInfo{
+		s.ws = append(s.ws, &base.WorkerInfo{
 			Host:     h.host,
 			PID:      h.pid,
 			ServerID: h.serverID,
@@ -175,27 +223,36 @@ func (h *heartbeater) beat() {
 		})
 		// Check lease before adding to the set to make sure not to extend the lease if the lease is already expired.
 		if w.lease.IsValid() {
-			idsByQueue[w.msg.Queue] = append(idsByQueue[w.msg.Queue], id)
+			s.leases[w.msg.Queue] = append(s.leases[w.msg.Queue], leaseRef{id: id, lease: w.lease})
 		} else {
 			w.lease.NotifyExpiration() // notify processor if the lease is expired
 		}
 	}
+	return s
+}
 
+// flush writes the snapshot to redis and extends the leases.
+// It only uses the snapshot, so it is safe to run outside the heartbeater goroutine.
+func (h *heartbeater) flush(s *beatSnapshot) {
 	// Note: Set TTL to be long enough so that it won't expire before we write again
 	// and short enough to expire quickly once the process is shut down or killed.
-	if err := h.broker.WriteServerState(&info, ws, h.interval*2); err != nil {
+	if err := h.broker.WriteServerState(&s.info, s.ws, h.interval*2); err != nil {
 		h.logger.Errorf("Failed to write server state data: %v", err)
 	}
 
-	for qname, ids := range idsByQueue {
+	for qname, refs := range s.leases {
+		ids := make([]string, len(refs))
+		for i, ref := range refs {
+			ids[i] = ref.id
+		}
 		expirationTime, err := h.broker.ExtendLease(qname, ids...)
 		if err != nil {
 			h.logger.Errorf("Failed to extend lease for tasks %v: %v", ids, err)
 			continue
 		}
-		for _, id := range ids {
-			if l := h.workers[id].lease; !l.Reset(expirationTime) {
-				h.logger.Warnf("Lease reset failed for %s; lease deadline: %v", id, l.Deadline())
+		for _, ref := range refs {
+			if !ref.lease.Reset(expirationTime) {
+				h.logger.Warnf("Lease reset failed for %s; lease deadline: %v", ref.id, ref.lease.Deadline())
 			}
 		}
 	}

@@ -37,7 +37,7 @@ func newSubscriber(params subscriberParams) *subscriber {
 	return &subscriber{
 		logger:       params.logger,
 		broker:       params.broker,
-		done:         make(chan struct{}),
+		done:         make(chan struct{}, 1), // 緩衝 1：shutdown 只投遞訊號，不等待迴圈處理完當前工作
 		cancelations: params.cancelations,
 		retryTimeout: 5 * time.Second,
 	}

@@ -16,20 +16,20 @@ import (
 // Base supports logging at various log levels.
 type Base interface {
 	// Debug logs a message at Debug level.
-	Debug(args ...interface{})
+	Debug(args ...any)
 
 	// Info logs a message at Info level.
-	Info(args ...interface{})
+	Info(args ...any)
 
 	// Warn logs a message at Warning level.
-	Warn(args ...interface{})
+	Warn(args ...any)
 
 	// Error logs a message at Error level.
-	Error(args ...interface{})
+	Error(args ...any)
 
 	// Fatal logs a message at Fatal level
 	// and process will exit with status set to 1.
-	Fatal(args ...interface{})
+	Fatal(args ...any)
 }
 
 // baseLogger is a wrapper object around log.Logger from the standard library.
@@ -39,34 +39,34 @@ type baseLogger struct {
 }
 
 // Debug logs a message at Debug level.
-func (l *baseLogger) Debug(args ...interface{}) {
+func (l *baseLogger) Debug(args ...any) {
 	l.prefixPrint("DEBUG: ", args...)
 }
 
 // Info logs a message at Info level.
-func (l *baseLogger) Info(args ...interface{}) {
+func (l *baseLogger) Info(args ...any) {
 	l.prefixPrint("INFO: ", args...)
 }
 
 // Warn logs a message at Warning level.
-func (l *baseLogger) Warn(args ...interface{}) {
+func (l *baseLogger) Warn(args ...any) {
 	l.prefixPrint("WARN: ", args...)
 }
 
 // Error logs a message at Error level.
-func (l *baseLogger) Error(args ...interface{}) {
+func (l *baseLogger) Error(args ...any) {
 	l.prefixPrint("ERROR: ", args...)
 }
 
 // Fatal logs a message at Fatal level
 // and process will exit with status set to 1.
-func (l *baseLogger) Fatal(args ...interface{}) {
+func (l *baseLogger) Fatal(args ...any) {
 	l.prefixPrint("FATAL: ", args...)
 	os.Exit(1)
 }
 
-func (l *baseLogger) prefixPrint(prefix string, args ...interface{}) {
-	args = append([]interface{}{prefix}, args...)
+func (l *baseLogger) prefixPrint(prefix string, args ...any) {
+	args = append([]any{prefix}, args...)
 	l.Print(args...)
 }
 
@@ -148,58 +148,58 @@ func (l *Logger) canLogAt(v Level) bool {
 	return v >= l.level
 }
 
-func (l *Logger) Debug(args ...interface{}) {
+func (l *Logger) Debug(args ...any) {
 	if !l.canLogAt(DebugLevel) {
 		return
 	}
 	l.base.Debug(args...)
 }
 
-func (l *Logger) Info(args ...interface{}) {
+func (l *Logger) Info(args ...any) {
 	if !l.canLogAt(InfoLevel) {
 		return
 	}
 	l.base.Info(args...)
 }
 
-func (l *Logger) Warn(args ...interface{}) {
+func (l *Logger) Warn(args ...any) {
 	if !l.canLogAt(WarnLevel) {
 		return
 	}
 	l.base.Warn(args...)
 }
 
-func (l *Logger) Error(args ...interface{}) {
+func (l *Logger) Error(args ...any) {
 	if !l.canLogAt(ErrorLevel) {
 		return
 	}
 	l.base.Error(args...)
 }
 
-func (l *Logger) Fatal(args ...interface{}) {
+func (l *Logger) Fatal(args ...any) {
 	if !l.canLogAt(FatalLevel) {
 		return
 	}
 	l.base.Fatal(args...)
 }
 
-func (l *Logger) Debugf(format string, args ...interface{}) {
+func (l *Logger) Debugf(format string, args ...any) {
 	l.Debug(fmt.Sprintf(format, args...))
 }
 
-func (l *Logger) Infof(format string, args ...interface{}) {
+func (l *Logger) Infof(format string, args ...any) {
 	l.Info(fmt.Sprintf(format, args...))
 }
 
-func (l *Logger) Warnf(format string, args ...interface{}) {
+func (l *Logger) Warnf(format string, args ...any) {
 	l.Warn(fmt.Sprintf(format, args...))
 }
 
-func (l *Logger) Errorf(format string, args ...interface{}) {
+func (l *Logger) Errorf(format string, args ...any) {
 	l.Error(fmt.Sprintf(format, args...))
 }
 
-func (l *Logger) Fatalf(format string, args ...interface{}) {
+func (l *Logger) Fatalf(format string, args ...any) {
 	l.Fatal(fmt.Sprintf(format, args...))
 }
 
