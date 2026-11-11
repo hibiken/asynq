@@ -232,3 +232,33 @@ func TestSchedulerPostAndPreEnqueueHandler(t *testing.T) {
 	}
 	postMu.Unlock()
 }
+
+func TestSchedulerEnqueueHistoryTTL(t *testing.T) {
+	tests := []struct {
+		desc string
+		opts *SchedulerOpts
+		want time.Duration
+	}{
+		{desc: "nil opts", opts: nil, want: 0},
+		{desc: "unset", opts: &SchedulerOpts{}, want: 0},
+		{desc: "set", opts: &SchedulerOpts{EnqueueHistoryTTL: 24 * time.Hour}, want: 24 * time.Hour},
+	}
+
+	for _, tc := range tests {
+		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:0"})
+		scheduler := NewSchedulerFromRedisClient(redisClient, tc.opts)
+
+		entryID, err := scheduler.Register("@every 1h", NewTask("foo", nil))
+		if err != nil {
+			t.Fatalf("%s: Register returned error: %v", tc.desc, err)
+		}
+		job, ok := scheduler.cron.Entry(scheduler.idmap[entryID]).Job.(*enqueueJob)
+		if !ok {
+			t.Fatalf("%s: registered cron job is not an *enqueueJob", tc.desc)
+		}
+		if job.historyTTL != tc.want {
+			t.Errorf("%s: historyTTL = %v, want %v", tc.desc, job.historyTTL, tc.want)
+		}
+		redisClient.Close()
+	}
+}

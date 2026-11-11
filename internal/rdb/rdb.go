@@ -1621,21 +1621,35 @@ func (r *RDB) PublishCancelation(id string) error {
 // ARGV[1] -> enqueued_at timestamp
 // ARGV[2] -> serialized SchedulerEnqueueEvent data
 // ARGV[3] -> max number of events to be persisted
+// ARGV[4] -> TTL of the history key in seconds; 0 means no expiration
 var recordSchedulerEnqueueEventCmd = redis.NewScript(`
 redis.call("ZREMRANGEBYRANK", KEYS[1], 0, -ARGV[3])
 redis.call("ZADD", KEYS[1], ARGV[1], ARGV[2])
+if tonumber(ARGV[4]) > 0 then
+	redis.call("EXPIRE", KEYS[1], ARGV[4])
+end
 return redis.status_reply("OK")`)
 
 // Maximum number of enqueue events to store per entry.
 const maxEvents = 1000
 
 // RecordSchedulerEnqueueEvent records the time when the given task was enqueued.
-func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerEnqueueEvent) error {
+//
+// If ttl is positive, the expiration of the entry's history key is set to ttl,
+// and it is refreshed every time an event is recorded. If ttl is zero or
+// negative, the key never expires and is only removed by ClearSchedulerHistory,
+// so history of a scheduler that does not shut down cleanly stays in redis.
+func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerEnqueueEvent, ttl time.Duration) error {
 	var op errors.Op = "rdb.RecordSchedulerEnqueueEvent"
 	ctx := context.Background()
 	data, err := base.EncodeSchedulerEnqueueEvent(event)
 	if err != nil {
 		return errors.E(op, errors.Internal, fmt.Sprintf("cannot encode scheduler enqueue event: %v", err))
+	}
+	// Round a positive ttl up to whole seconds, so that it never becomes 0 (no expiration).
+	var ttlSeconds int64
+	if ttl > 0 {
+		ttlSeconds = int64((ttl + time.Second - 1) / time.Second)
 	}
 	keys := []string{
 		base.SchedulerHistoryKey(entryID),
@@ -1644,6 +1658,7 @@ func (r *RDB) RecordSchedulerEnqueueEvent(entryID string, event *base.SchedulerE
 		event.EnqueuedAt.Unix(),
 		data,
 		maxEvents,
+		ttlSeconds,
 	}
 	return r.runScript(ctx, op, recordSchedulerEnqueueEventCmd, keys, argv...)
 }

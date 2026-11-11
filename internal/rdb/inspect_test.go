@@ -5411,7 +5411,7 @@ loop:
 		h.FlushDB(t, r.client)
 
 		for _, e := range tc.events {
-			if err := r.RecordSchedulerEnqueueEvent(tc.entryID, e); err != nil {
+			if err := r.RecordSchedulerEnqueueEvent(tc.entryID, e, 0); err != nil {
 				t.Errorf("RecordSchedulerEnqueueEvent(%q, %v) failed: %v", tc.entryID, e, err)
 				continue loop
 			}
@@ -5442,7 +5442,7 @@ func TestRecordSchedulerEnqueueEventTrimsDataSet(t *testing.T) {
 			TaskID:     fmt.Sprintf("task%d", i),
 			EnqueuedAt: now.Add(-time.Duration(i) * time.Second),
 		}
-		if err := r.RecordSchedulerEnqueueEvent(entryID, &event); err != nil {
+		if err := r.RecordSchedulerEnqueueEvent(entryID, &event, 0); err != nil {
 			t.Fatalf("RecordSchedulerEnqueueEvent failed: %v", err)
 		}
 	}
@@ -5457,7 +5457,7 @@ func TestRecordSchedulerEnqueueEventTrimsDataSet(t *testing.T) {
 		TaskID:     "latest",
 		EnqueuedAt: now,
 	}
-	if err := r.RecordSchedulerEnqueueEvent(entryID, &event); err != nil {
+	if err := r.RecordSchedulerEnqueueEvent(entryID, &event, 0); err != nil {
 		t.Fatalf("RecordSchedulerEnqueueEvent failed: %v", err)
 	}
 	if n := r.client.ZCard(context.Background(), key).Val(); n != maxEvents {
@@ -5577,5 +5577,55 @@ func TestUnpauseError(t *testing.T) {
 		if err == nil {
 			t.Errorf("%s; Unpause(%q) returned nil: want error", tc.desc, tc.qname)
 		}
+	}
+}
+
+// Regression test for https://github.com/hibiken/asynq/issues/515
+func TestRecordSchedulerEnqueueEventTTL(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	var (
+		entryID = "entry123"
+		key     = base.SchedulerHistoryKey(entryID)
+		ctx     = context.Background()
+		ttl     = 24 * time.Hour
+	)
+
+	record := func(taskID string, ttl time.Duration) {
+		t.Helper()
+		event := base.SchedulerEnqueueEvent{TaskID: taskID, EnqueuedAt: time.Now()}
+		if err := r.RecordSchedulerEnqueueEvent(entryID, &event, ttl); err != nil {
+			t.Fatalf("RecordSchedulerEnqueueEvent failed: %v", err)
+		}
+	}
+
+	// A zero ttl keeps the previous behavior: the key never expires.
+	h.FlushDB(t, r.client)
+	record("task1", 0)
+	if got := r.client.TTL(ctx, key).Val(); got != -1 {
+		t.Errorf("TTL of %q with zero ttl = %v, want -1 (no expiration)", key, got)
+	}
+
+	// A positive ttl sets the expiration of the key.
+	h.FlushDB(t, r.client)
+	record("task1", ttl)
+	if got := r.client.TTL(ctx, key).Val(); got <= 0 || got > ttl {
+		t.Errorf("TTL of %q = %v, want a positive value up to %v", key, got, ttl)
+	}
+
+	// Recording another event refreshes the expiration.
+	if err := r.client.Expire(ctx, key, time.Minute).Err(); err != nil {
+		t.Fatalf("EXPIRE failed: %v", err)
+	}
+	record("task2", ttl)
+	if got := r.client.TTL(ctx, key).Val(); got <= time.Minute || got > ttl {
+		t.Errorf("TTL of %q after second event = %v, want it refreshed to about %v", key, got, ttl)
+	}
+
+	// A positive ttl shorter than a second still sets an expiration.
+	h.FlushDB(t, r.client)
+	record("task1", 500*time.Millisecond)
+	if got := r.client.TTL(ctx, key).Val(); got <= 0 {
+		t.Errorf("TTL of %q with sub-second ttl = %v, want a positive value", key, got)
 	}
 }
