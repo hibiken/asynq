@@ -38,7 +38,16 @@ const (
 	AllSchedulers = "asynq:schedulers" // ZSET
 	AllQueues     = "asynq:queues"     // SET
 	CancelChannel = "asynq:cancel"     // PubSub channel
+
+	// ArchiveConfigKey holds global archive retention settings.
+	ArchiveConfigKey = "asynq:archive_config"
 )
+
+// ArchiveConfig holds archive retention settings.
+type ArchiveConfig struct {
+	MaxArchiveSize           int
+	ArchivedExpirationInDays int
+}
 
 // TaskState denotes the state of a task.
 type TaskState int
@@ -725,8 +734,9 @@ type Broker interface {
 	DeleteAggregationSet(ctx context.Context, qname, gname, aggregationSetID string) error
 	ReclaimStaleAggregationSets(qname string) error
 
-	// Task retention related method
+	// Task retention related methods
 	DeleteExpiredCompletedTasks(qname string, batchSize int) error
+	WriteArchiveConfig(ctx context.Context, cfg ArchiveConfig) error
 
 	// Lease related methods
 	ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*TaskMessage, error)
