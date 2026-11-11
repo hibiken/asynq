@@ -91,6 +91,7 @@ func (r *RDB) runScriptWithErrorCode(ctx context.Context, op errors.Op, script *
 // ARGV[1] -> task message data
 // ARGV[2] -> task ID
 // ARGV[3] -> current unix time in nsec
+// ARGV[4] -> sync group
 //
 // Output:
 // Returns 1 if successfully enqueued
@@ -99,11 +100,16 @@ var enqueueCmd = redis.NewScript(`
 if redis.call("EXISTS", KEYS[1]) == 1 then
 	return 0
 end
+
 redis.call("HSET", KEYS[1],
            "msg", ARGV[1],
            "state", "pending",
-           "pending_since", ARGV[3])
+           "pending_since", ARGV[3],
+		   "sync_group", ARGV[4])
+
 redis.call("LPUSH", KEYS[2], ARGV[2])
+
+
 return 1
 `)
 
@@ -128,7 +134,9 @@ func (r *RDB) Enqueue(ctx context.Context, msg *base.TaskMessage) error {
 		encoded,
 		msg.ID,
 		r.clock.Now().UnixNano(),
+		msg.SynchronizationKey,
 	}
+
 	n, err := r.runScriptWithErrorCode(ctx, op, enqueueCmd, keys, argv...)
 	if err != nil {
 		return err
@@ -213,14 +221,24 @@ func (r *RDB) BatchEnqueue(ctx context.Context, items []base.BatchEnqueueItem) (
 				base.TaskKey(item.Msg.Queue, item.Msg.ID),
 				base.PendingKey(item.Msg.Queue),
 			}
-			argv := []interface{}{encoded, item.Msg.ID, now}
+			argv := []interface{}{
+				encoded,
+				item.Msg.ID,
+				now,
+				item.Msg.SynchronizationKey,
+			}
 			enqueueCmd.Run(ctx, pipe, keys, argv...)
 		} else {
 			keys := []string{
 				base.TaskKey(item.Msg.Queue, item.Msg.ID),
 				base.ScheduledKey(item.Msg.Queue),
 			}
-			argv := []interface{}{encoded, item.ProcessAt.Unix(), item.Msg.ID}
+			argv := []interface{}{
+				encoded,
+				item.ProcessAt.Unix(),
+				item.Msg.ID,
+				item.Msg.SynchronizationKey,
+			}
 			scheduleCmd.Run(ctx, pipe, keys, argv...)
 		}
 		scriptIdxs = append(scriptIdxs, pipeLen)
@@ -326,9 +344,13 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 // KEYS[2] -> asynq:{<qname>}:paused
 // KEYS[3] -> asynq:{<qname>}:active
 // KEYS[4] -> asynq:{<qname>}:lease
+// KEYS[5] -> asynq:{<qname>}:scheduled
 // --
 // ARGV[1] -> initial lease expiration Unix time
 // ARGV[2] -> task key prefix
+// ARGV[3] -> sync group prefix
+// ARGV[4] -> Group lock prefix
+// ARGV[5] -> (current_unix_time + 5) used for re-scheduling tasks when synchronous group is locked
 //
 // Output:
 // Returns nil if no processable task is found in the given queue.
@@ -338,16 +360,36 @@ func (r *RDB) EnqueueUnique(ctx context.Context, msg *base.TaskMessage, ttl time
 // calling RPOPLPUSH to pop a task from the queue.
 var dequeueCmd = redis.NewScript(`
 if redis.call("EXISTS", KEYS[2]) == 0 then
-	local id = redis.call("RPOPLPUSH", KEYS[1], KEYS[3])
-	if id then
-		local key = ARGV[2] .. id
-		redis.call("HSET", key, "state", "active")
-		redis.call("HDEL", key, "pending_since")
-		redis.call("ZADD", KEYS[4], ARGV[1], id)
-		return redis.call("HGET", key, "msg")
-	end
+    local id = redis.call("RPOP", KEYS[1])
+
+    if id then
+        local key = ARGV[2] .. id 
+        
+        local syncgroup = redis.call("HGET", key, "sync_group")
+        
+        if syncgroup and syncgroup ~= false and syncgroup ~= "" then
+            local lock = ARGV[4] .. syncgroup
+            
+            if redis.call("EXISTS", lock) == 1 then
+                redis.call("ZADD", KEYS[5], ARGV[5], id)
+                redis.call("HSET", key, "state", "scheduled")
+                return nil
+            end
+
+            redis.call("SET", lock, id, "EXAT", ARGV[1])
+        end
+
+        redis.call("LPUSH", KEYS[3], id)
+        redis.call("HSET", key, "state", "active")
+        redis.call("HDEL", key, "pending_since")
+        redis.call("ZADD", KEYS[4], ARGV[1], id)
+        
+        return redis.call("HGET", key, "msg")
+    end
 end
-return nil`)
+
+return nil
+`)
 
 // Dequeue queries given queues in order and pops a task message
 // off a queue if one exists and returns the message and its lease expiration time.
@@ -361,11 +403,15 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, leaseExpirationT
 			base.PausedKey(qname),
 			base.ActiveKey(qname),
 			base.LeaseKey(qname),
+			base.ScheduledKey(qname),
 		}
 		leaseExpirationTime = r.clock.Now().Add(LeaseDuration)
 		argv := []interface{}{
 			leaseExpirationTime.Unix(),
 			base.TaskKeyPrefix(qname),
+			base.SyncGroupPrefix(qname),
+			base.SyncGroupLockPrefix(qname),
+			time.Now().Add(5 * time.Second).Unix(),
 		}
 		res, err := dequeueCmd.Run(context.Background(), r.client, keys, argv...).Result()
 		if err == redis.Nil {
@@ -390,6 +436,7 @@ func (r *RDB) Dequeue(qnames ...string) (msg *base.TaskMessage, leaseExpirationT
 // KEYS[3] -> asynq:{<qname>}:t:<task_id>
 // KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[5] -> asynq:{<qname>}:processed
+// KEYS[6] -> lock:asynq:{<qname>}:<sync_group>
 // -------
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
@@ -414,6 +461,11 @@ if tonumber(total) == tonumber(ARGV[3]) then
 else
 	redis.call("INCR", KEYS[5])
 end
+
+if redis.call("GET", KEYS[6]) == ARGV[1] then
+  redis.call("DEL", KEYS[6])
+end
+
 return redis.status_reply("OK")
 `)
 
@@ -422,7 +474,7 @@ return redis.status_reply("OK")
 // KEYS[3] -> asynq:{<qname>}:t:<task_id>
 // KEYS[4] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[5] -> asynq:{<qname>}:processed
-// KEYS[6] -> unique key
+// KEYS[6] -> unique key or lock:asynq:{<qname>}:<sync_group>
 // -------
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
@@ -447,6 +499,7 @@ if tonumber(total) == tonumber(ARGV[3]) then
 else
 	redis.call("INCR", KEYS[5])
 end
+
 if redis.call("GET", KEYS[6]) == ARGV[1] then
   redis.call("DEL", KEYS[6])
 end
@@ -466,6 +519,7 @@ func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
 		base.ProcessedKey(msg.Queue, now),
 		base.ProcessedTotalKey(msg.Queue),
 	}
+
 	argv := []interface{}{
 		msg.ID,
 		expireAt.Unix(),
@@ -476,6 +530,8 @@ func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
 		keys = append(keys, msg.UniqueKey)
 		return r.runScript(ctx, op, doneUniqueCmd, keys, argv...)
 	}
+
+	keys = append(keys, base.SyncGroupLockKey(msg.Queue, msg.SynchronizationKey))
 	return r.runScript(ctx, op, doneCmd, keys, argv...)
 }
 
@@ -485,6 +541,7 @@ func (r *RDB) Done(ctx context.Context, msg *base.TaskMessage) error {
 // KEYS[4] -> asynq:{<qname>}:t:<task_id>
 // KEYS[5] -> asynq:{<qname>}:processed:<yyyy-mm-dd>
 // KEYS[6] -> asynq:{<qname>}:processed
+// KEYS[7] -> lock:asynq:{<qname>}:<sync_group> or unique key
 //
 // ARGV[1] -> task ID
 // ARGV[2] -> stats expiration timestamp
@@ -511,6 +568,9 @@ if tonumber(total) == tonumber(ARGV[5]) then
 	redis.call("SET", KEYS[6], 1)
 else
 	redis.call("INCR", KEYS[6])
+end
+if redis.call("GET", KEYS[7]) == ARGV[1] then
+  redis.call("DEL", KEYS[7])
 end
 return redis.status_reply("OK")
 `)
@@ -586,6 +646,8 @@ func (r *RDB) MarkAsComplete(ctx context.Context, msg *base.TaskMessage) error {
 		keys = append(keys, msg.UniqueKey)
 		return r.runScript(ctx, op, markAsCompleteUniqueCmd, keys, argv...)
 	}
+
+	keys = append(keys, base.SyncGroupLockKey(msg.Queue, msg.SynchronizationKey))
 	return r.runScript(ctx, op, markAsCompleteCmd, keys, argv...)
 }
 
@@ -752,6 +814,7 @@ func (r *RDB) AddToGroupUnique(ctx context.Context, msg *base.TaskMessage, group
 // ARGV[1] -> task message data
 // ARGV[2] -> process_at time in Unix time
 // ARGV[3] -> task ID
+// ARGV[4] -> sync group
 //
 // Output:
 // Returns 1 if successfully enqueued
@@ -762,7 +825,8 @@ if redis.call("EXISTS", KEYS[1]) == 1 then
 end
 redis.call("HSET", KEYS[1],
            "msg", ARGV[1],
-           "state", "scheduled")
+           "state", "scheduled",
+		   "sync_group", ARGV[4])
 redis.call("ZADD", KEYS[2], ARGV[2], ARGV[3])
 return 1
 `)
@@ -788,6 +852,7 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 		encoded,
 		processAt.Unix(),
 		msg.ID,
+		msg.SynchronizationKey,
 	}
 	n, err := r.runScriptWithErrorCode(ctx, op, scheduleCmd, keys, argv...)
 	if err != nil {
@@ -874,6 +939,7 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 // KEYS[6] -> asynq:{<qname>}:failed:<yyyy-mm-dd>
 // KEYS[7] -> asynq:{<qname>}:processed
 // KEYS[8] -> asynq:{<qname>}:failed
+// KEYS[9] -> lock:asynq:{<qname>}:<sync_group>
 // -------
 // ARGV[1] -> task ID
 // ARGV[2] -> updated base.TaskMessage value
@@ -908,6 +974,11 @@ if tonumber(ARGV[5]) == 1 then
     	redis.call("INCR", KEYS[8])
     end
 end
+
+if redis.call("GET", KEYS[9]) == ARGV[1] then
+  redis.call("DEL", KEYS[9])
+end
+
 return redis.status_reply("OK")`)
 
 // Retry moves the task from active to retry queue.
@@ -936,6 +1007,7 @@ func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.T
 		base.FailedKey(msg.Queue, now),
 		base.ProcessedTotalKey(msg.Queue),
 		base.FailedTotalKey(msg.Queue),
+		base.SyncGroupLockKey(msg.Queue, msg.SynchronizationKey),
 	}
 	argv := []interface{}{
 		msg.ID,
@@ -962,6 +1034,7 @@ const (
 // KEYS[7] -> asynq:{<qname>}:processed
 // KEYS[8] -> asynq:{<qname>}:failed
 // KEYS[9] -> asynq:{<qname>}:t:
+// KEYS[10] -> lock:asynq:{<qname>}:<sync_group>
 // -------
 // ARGV[1] -> task ID
 // ARGV[2] -> updated base.TaskMessage value
@@ -1011,6 +1084,11 @@ else
   	redis.call("INCR", KEYS[7])
    	redis.call("INCR", KEYS[8])
 end
+
+if redis.call("GET", KEYS[10]) == ARGV[1] then
+  redis.call("DEL", KEYS[10])
+end
+
 return redis.status_reply("OK")`)
 
 // Archive sends the given task to archive, attaching the error message to the task.
@@ -1037,6 +1115,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 		base.ProcessedTotalKey(msg.Queue),
 		base.FailedTotalKey(msg.Queue),
 		base.TaskKeyPrefix(msg.Queue),
+		base.SyncGroupKey(msg.Queue, msg.ID),
 	}
 	argv := []interface{}{
 		msg.ID,
@@ -1472,6 +1551,7 @@ func (r *RDB) ExtendLease(qname string, ids ...string) (expirationTime time.Time
 	for _, id := range ids {
 		zs = append(zs, redis.Z{Member: id, Score: float64(expireAt.Unix())})
 	}
+
 	// Use XX option to only update elements that already exist; Don't add new elements
 	// TODO: Consider adding GT option to ensure we only "extend" the lease. Ceveat is that GT is supported from redis v6.2.0 or above.
 	err = r.client.ZAddXX(context.Background(), base.LeaseKey(qname), zs...).Err()
@@ -1479,6 +1559,21 @@ func (r *RDB) ExtendLease(qname string, ids ...string) (expirationTime time.Time
 		return time.Time{}, err
 	}
 	return expireAt, nil
+}
+
+// ExtendSyncLock extends the lease for the given sync groups by LeaseDuration (30s).
+func (r *RDB) ExtendSyncLock(qname string, syncgroups ...string) (err error) {
+	pipe := r.client.Pipeline()
+	ctx := context.Background()
+
+	for _, sg := range syncgroups {
+		lockKey := base.SyncGroupLockKey(qname, sg)
+
+		pipe.Expire(ctx, lockKey, LeaseDuration)
+	}
+
+	_, err = pipe.Exec(ctx)
+	return err
 }
 
 // KEYS[1]  -> asynq:servers:{<host:pid:sid>}

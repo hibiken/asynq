@@ -181,6 +181,15 @@ func (tb *TestBroker) ExtendLease(qname string, ids ...string) (time.Time, error
 	return tb.real.ExtendLease(qname, ids...)
 }
 
+func (tb *TestBroker) ExtendSyncLock(qname string, syncgroups ...string) (err error) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.ExtendSyncLock(qname, syncgroups...)
+}
+
 func (tb *TestBroker) WriteServerState(info *base.ServerInfo, workers []*base.WorkerInfo, ttl time.Duration) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()

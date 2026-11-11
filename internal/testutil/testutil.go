@@ -115,6 +115,19 @@ func NewTaskMessage(taskType string, payload []byte) *base.TaskMessage {
 	return NewTaskMessageWithQueue(taskType, payload, base.DefaultQueueName)
 }
 
+func NewTaskMessageWithSyncKey(taskType string, payload []byte, queue, syncKey string) *base.TaskMessage {
+	return &base.TaskMessage{
+		ID:                 uuid.NewString(),
+		Type:               taskType,
+		Queue:              queue,
+		Retry:              25,
+		Payload:            payload,
+		SynchronizationKey: syncKey,
+		Timeout:            1800, // default timeout of 30 mins
+		Deadline:           0,    // no deadline
+	}
+}
+
 // NewTaskMessageWithQueue returns a new instance of TaskMessage given a
 // task type, payload and queue name.
 func NewTaskMessageWithQueue(taskType string, payload []byte, qname string) *base.TaskMessage {
@@ -358,6 +371,7 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string,
 			"state":      state.String(),
 			"unique_key": msg.UniqueKey,
 			"group":      msg.GroupKey,
+			"sync_group": msg.SynchronizationKey,
 		}
 		if err := c.HSet(context.Background(), taskKey, data).Err(); err != nil {
 			tb.Fatal(err)
@@ -387,6 +401,7 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string,
 			"state":      state.String(),
 			"unique_key": msg.UniqueKey,
 			"group":      msg.GroupKey,
+			"sync_group": msg.SynchronizationKey,
 		}
 		if err := c.HSet(context.Background(), taskKey, data).Err(); err != nil {
 			tb.Fatal(err)
