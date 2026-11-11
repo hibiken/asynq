@@ -7,6 +7,8 @@ package asynq
 import (
 	"context"
 	"errors"
+	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -1931,5 +1933,72 @@ func TestBatchEnqueueContext_BrokerError(t *testing.T) {
 		if res.TaskInfo != nil {
 			t.Errorf("results[%d].TaskInfo = %v, want nil on broker error", i, res.TaskInfo)
 		}
+	}
+}
+
+// timeoutError is a net.Error used to simulate a network timeout from Redis.
+type timeoutError struct{}
+
+func (timeoutError) Error() string   { return "i/o timeout" }
+func (timeoutError) Timeout() bool   { return true }
+func (timeoutError) Temporary() bool { return true }
+
+// evalErrorHook is a redis.Hook that lets SADD succeed and fails every
+// EVAL/EVALSHA command with err, without talking to a Redis server.
+type evalErrorHook struct {
+	err error
+}
+
+func (h evalErrorHook) DialHook(next redis.DialHook) redis.DialHook { return next }
+
+func (h evalErrorHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		switch cmd.Name() {
+		case "sadd":
+			cmd.(*redis.IntCmd).SetVal(1)
+			return nil
+		case "eval", "evalsha":
+			cmd.SetErr(h.err)
+			return h.err
+		}
+		return next(ctx, cmd)
+	}
+}
+
+func (h evalErrorHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return next
+}
+
+// Regression test for https://github.com/hibiken/asynq/issues/1166
+func TestClientEnqueuePreservesRedisError(t *testing.T) {
+	tests := []struct {
+		desc string
+		opts []Option
+	}{
+		{desc: "pending task", opts: nil},
+		{desc: "scheduled task", opts: []Option{ProcessIn(time.Hour)}},
+	}
+
+	for _, tc := range tests {
+		redisErr := timeoutError{}
+		redisClient := redis.NewClient(&redis.Options{Addr: "localhost:0"})
+		redisClient.AddHook(evalErrorHook{err: redisErr})
+		client := NewClientFromRedisClient(redisClient)
+
+		_, err := client.EnqueueContext(context.Background(), NewTask("foo", nil), tc.opts...)
+		if err == nil {
+			t.Fatalf("%s: EnqueueContext returned nil error, want error", tc.desc)
+		}
+		if !errors.Is(err, redisErr) {
+			t.Errorf("%s: errors.Is(err, redisErr) = false, want true; err = %v", tc.desc, err)
+		}
+		var netErr net.Error
+		if !errors.As(err, &netErr) || !netErr.Timeout() {
+			t.Errorf("%s: errors.As(err, *net.Error) did not find a timeout error; err = %v", tc.desc, err)
+		}
+		if want := "redis eval error: i/o timeout"; !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: err.Error() = %q, want it to contain %q", tc.desc, err.Error(), want)
+		}
+		redisClient.Close()
 	}
 }
