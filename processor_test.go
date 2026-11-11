@@ -401,14 +401,14 @@ func TestProcessorRetry(t *testing.T) {
 		time.Sleep(tc.wait)   // FIXME: This makes test flaky.
 		p.shutdown()
 
-		cmpOpt := h.EquateInt64Approx(int64(tc.wait.Seconds())) // allow up to a wait-second difference in zset score
+		cmpOpt := h.EquateInt64Approx(tc.wait.Microseconds()) // allow up to a wait-second difference in zset score (scheduled/retry scores are in microseconds)
 		gotRetry := h.GetRetryEntries(t, r, base.DefaultQueueName)
 		var wantRetry []base.Z // Note: construct wantRetry here since `LastFailedAt` and ZSCORE is relative to each test run.
 		for _, msg := range tc.wantRetry {
 			wantRetry = append(wantRetry,
 				base.Z{
 					Message: h.TaskMessageAfterRetry(*msg, tc.wantErrMsg, runTime),
-					Score:   runTime.Add(tc.delay).Unix(),
+					Score:   runTime.Add(tc.delay).UnixMicro(),
 				})
 		}
 		if diff := cmp.Diff(wantRetry, gotRetry, h.SortZSetEntryOpt, cmpOpt); diff != "" {

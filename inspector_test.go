@@ -511,12 +511,12 @@ func TestInspectorGetTaskInfo(t *testing.T) {
 			"custom":  {m5},
 		},
 		scheduled: map[string][]base.Z{
-			"default": {{Message: m2, Score: fiveMinsFromNow.Unix()}},
+			"default": {{Message: m2, Score: fiveMinsFromNow.UnixMicro()}},
 			"custom":  {},
 		},
 		retry: map[string][]base.Z{
 			"default": {},
-			"custom":  {{Message: m3, Score: oneHourFromNow.Unix()}},
+			"custom":  {{Message: m3, Score: oneHourFromNow.UnixMicro()}},
 		},
 		archived: map[string][]base.Z{
 			"default": {},
@@ -635,12 +635,12 @@ func TestInspectorGetTaskInfoError(t *testing.T) {
 			"custom":  {m5},
 		},
 		scheduled: map[string][]base.Z{
-			"default": {{Message: m2, Score: fiveMinsFromNow.Unix()}},
+			"default": {{Message: m2, Score: fiveMinsFromNow.UnixMicro()}},
 			"custom":  {},
 		},
 		retry: map[string][]base.Z{
 			"default": {},
-			"custom":  {{Message: m3, Score: oneHourFromNow.Unix()}},
+			"custom":  {{Message: m3, Score: oneHourFromNow.UnixMicro()}},
 		},
 		archived: map[string][]base.Z{
 			"default": {},
@@ -847,7 +847,7 @@ func createScheduledTask(z base.Z) *TaskInfo {
 	return newTaskInfo(
 		z.Message,
 		base.TaskStateScheduled,
-		time.Unix(z.Score, 0),
+		time.UnixMicro(z.Score),
 		nil,
 	)
 }
@@ -860,10 +860,10 @@ func TestInspectorListScheduledTasks(t *testing.T) {
 	m3 := h.NewTaskMessage("task3", nil)
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 	now := time.Now()
-	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
-	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
-	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
-	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
+	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).UnixMicro()}
+	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).UnixMicro()}
+	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).UnixMicro()}
+	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).UnixMicro()}
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
@@ -917,7 +917,7 @@ func createRetryTask(z base.Z) *TaskInfo {
 	return newTaskInfo(
 		z.Message,
 		base.TaskStateRetry,
-		time.Unix(z.Score, 0),
+		time.UnixMicro(z.Score),
 		nil,
 	)
 }
@@ -930,10 +930,10 @@ func TestInspectorListRetryTasks(t *testing.T) {
 	m3 := h.NewTaskMessage("task3", nil)
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 	now := time.Now()
-	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
-	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
-	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
-	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
+	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).UnixMicro()}
+	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).UnixMicro()}
+	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).UnixMicro()}
+	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).UnixMicro()}
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
@@ -1410,10 +1410,10 @@ func TestInspectorDeleteAllScheduledTasks(t *testing.T) {
 	m3 := h.NewTaskMessage("task3", nil)
 	m4 := h.NewTaskMessageWithQueue("task3", nil, "custom")
 	now := time.Now()
-	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
-	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
-	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
-	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
+	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).UnixMicro()}
+	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).UnixMicro()}
+	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).UnixMicro()}
+	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).UnixMicro()}
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
@@ -1476,10 +1476,10 @@ func TestInspectorDeleteAllRetryTasks(t *testing.T) {
 	m3 := h.NewTaskMessage("task3", nil)
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 	now := time.Now()
-	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
-	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
-	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
-	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
+	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).UnixMicro()}
+	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).UnixMicro()}
+	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).UnixMicro()}
+	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).UnixMicro()}
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
@@ -1542,10 +1542,10 @@ func TestInspectorDeleteAllArchivedTasks(t *testing.T) {
 	m3 := h.NewTaskMessage("task3", nil)
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 	now := time.Now()
-	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
-	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
-	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
-	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
+	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).UnixMicro()}
+	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).UnixMicro()}
+	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).UnixMicro()}
+	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).UnixMicro()}
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
@@ -1785,10 +1785,10 @@ func TestInspectorArchiveAllScheduledTasks(t *testing.T) {
 	m3 := h.NewTaskMessage("task3", nil)
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 	now := time.Now()
-	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
-	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
-	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
-	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
+	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).UnixMicro()}
+	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).UnixMicro()}
+	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).UnixMicro()}
+	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).UnixMicro()}
 
 	inspector := NewInspector(getRedisConnOpt(t))
 	inspector.rdb.SetClock(timeutil.NewSimulatedClock(now))
@@ -1915,10 +1915,10 @@ func TestInspectorArchiveAllRetryTasks(t *testing.T) {
 	m3 := h.NewTaskMessage("task3", nil)
 	m4 := h.NewTaskMessageWithQueue("task4", nil, "custom")
 	now := time.Now()
-	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
-	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
-	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
-	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
+	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).UnixMicro()}
+	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).UnixMicro()}
+	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).UnixMicro()}
+	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).UnixMicro()}
 
 	inspector := NewInspector(getRedisConnOpt(t))
 	inspector.rdb.SetClock(timeutil.NewSimulatedClock(now))
@@ -2029,10 +2029,10 @@ func TestInspectorRunAllScheduledTasks(t *testing.T) {
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "low")
 	m4 := h.NewTaskMessage("task4", nil)
 	now := time.Now()
-	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
-	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
-	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
-	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
+	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).UnixMicro()}
+	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).UnixMicro()}
+	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).UnixMicro()}
+	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).UnixMicro()}
 
 	inspector := NewInspector(getRedisConnOpt(t))
 
@@ -2146,10 +2146,10 @@ func TestInspectorRunAllRetryTasks(t *testing.T) {
 	m3 := h.NewTaskMessageWithQueue("task3", nil, "low")
 	m4 := h.NewTaskMessage("task2", nil)
 	now := time.Now()
-	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).Unix()}
-	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).Unix()}
-	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).Unix()}
-	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).Unix()}
+	z1 := base.Z{Message: m1, Score: now.Add(5 * time.Minute).UnixMicro()}
+	z2 := base.Z{Message: m2, Score: now.Add(15 * time.Minute).UnixMicro()}
+	z3 := base.Z{Message: m3, Score: now.Add(2 * time.Minute).UnixMicro()}
+	z4 := base.Z{Message: m4, Score: now.Add(2 * time.Minute).UnixMicro()}
 
 	inspector := NewInspector(getRedisConnOpt(t))
 

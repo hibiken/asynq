@@ -108,7 +108,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 							Timeout:  int64(defaultTimeout.Seconds()),
 							Deadline: noDeadline.Unix(),
 						},
-						Score: oneHourLater.Unix(),
+						Score: oneHourLater.UnixMicro(),
 					},
 				},
 			},
@@ -141,7 +141,7 @@ func TestClientEnqueueWithProcessAtOption(t *testing.T) {
 		}
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt, cmpopts.EquateEmpty(), h.EquateInt64Approx(2_000_000)); diff != "" {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledKey(qname), diff)
 			}
 		}
@@ -600,7 +600,7 @@ func TestClientEnqueueWithGroupOption(t *testing.T) {
 							Deadline: noDeadline.Unix(),
 							GroupKey: "mygroup",
 						},
-						Score: now.Add(30 * time.Minute).Unix(),
+						Score: now.Add(30 * time.Minute).UnixMicro(),
 					},
 				},
 			},
@@ -642,7 +642,7 @@ func TestClientEnqueueWithGroupOption(t *testing.T) {
 
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt, cmpopts.EquateEmpty(), h.EquateInt64Approx(2_000_000)); diff != "" {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledKey(qname), diff)
 			}
 		}
@@ -792,7 +792,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 							Timeout:  int64(defaultTimeout.Seconds()),
 							Deadline: noDeadline.Unix(),
 						},
-						Score: time.Now().Add(time.Hour).Unix(),
+						Score: time.Now().Add(time.Hour).UnixMicro(),
 					},
 				},
 			},
@@ -859,7 +859,7 @@ func TestClientEnqueueWithProcessInOption(t *testing.T) {
 		}
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt, cmpopts.EquateEmpty(), h.EquateInt64Approx(2_000_000)); diff != "" {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledKey(qname), diff)
 			}
 		}
@@ -1487,7 +1487,7 @@ func TestClientEnqueueWithHeadersScheduled(t *testing.T) {
 							Timeout:  int64(defaultTimeout.Seconds()),
 							Deadline: noDeadline.Unix(),
 						},
-						Score: oneHourLater.Unix(),
+						Score: oneHourLater.UnixMicro(),
 					},
 				},
 			},
@@ -1515,7 +1515,7 @@ func TestClientEnqueueWithHeadersScheduled(t *testing.T) {
 
 		for qname, want := range tc.wantScheduled {
 			gotScheduled := h.GetScheduledEntries(t, r, qname)
-			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt, cmpopts.EquateEmpty()); diff != "" {
+			if diff := cmp.Diff(want, gotScheduled, h.IgnoreIDOpt, cmpopts.EquateEmpty(), h.EquateInt64Approx(2_000_000)); diff != "" {
 				t.Errorf("%s;\nmismatch found in %q; (-want,+got)\n%s", tc.desc, base.ScheduledKey(qname), diff)
 			}
 		}

@@ -220,7 +220,7 @@ func (r *RDB) BatchEnqueue(ctx context.Context, items []base.BatchEnqueueItem) (
 				base.TaskKey(item.Msg.Queue, item.Msg.ID),
 				base.ScheduledKey(item.Msg.Queue),
 			}
-			argv := []interface{}{encoded, item.ProcessAt.Unix(), item.Msg.ID}
+			argv := []interface{}{encoded, item.ProcessAt.UnixMicro(), item.Msg.ID}
 			scheduleCmd.Run(ctx, pipe, keys, argv...)
 		}
 		scriptIdxs = append(scriptIdxs, pipeLen)
@@ -786,7 +786,7 @@ func (r *RDB) Schedule(ctx context.Context, msg *base.TaskMessage, processAt tim
 	}
 	argv := []interface{}{
 		encoded,
-		processAt.Unix(),
+		processAt.UnixMicro(),
 		msg.ID,
 	}
 	n, err := r.runScriptWithErrorCode(ctx, op, scheduleCmd, keys, argv...)
@@ -850,7 +850,7 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 	argv := []interface{}{
 		msg.ID,
 		int(ttl.Seconds()),
-		processAt.Unix(),
+		processAt.UnixMicro(),
 		encoded,
 	}
 	n, err := r.runScriptWithErrorCode(ctx, op, scheduleUniqueCmd, keys, argv...)
@@ -940,7 +940,7 @@ func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.T
 	argv := []interface{}{
 		msg.ID,
 		encoded,
-		processAt.Unix(),
+		processAt.UnixMicro(),
 		expireAt.Unix(),
 		isFailure,
 		int64(math.MaxInt64),
@@ -1064,10 +1064,11 @@ func (r *RDB) ForwardIfReady(qnames ...string) error {
 
 // KEYS[1] -> source queue (e.g. asynq:{<qname>:scheduled or asynq:{<qname>}:retry})
 // KEYS[2] -> asynq:{<qname>}:pending
-// ARGV[1] -> current unix time in seconds
+// ARGV[1] -> current unix time in microseconds
 // ARGV[2] -> task key prefix
 // ARGV[3] -> current unix time in nsec
 // ARGV[4] -> group key prefix
+// ARGV[5] -> current unix time in seconds (used as the group set score)
 // Note: Script moves tasks up to 100 at a time to keep the runtime of script short.
 var forwardCmd = redis.NewScript(`
 local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, 100)
@@ -1075,7 +1076,7 @@ for _, id in ipairs(ids) do
 	local taskKey = ARGV[2] .. id
 	local group = redis.call("HGET", taskKey, "group")
 	if group and group ~= '' then
-	    redis.call("ZADD", ARGV[4] .. group, ARGV[1], id)
+	    redis.call("ZADD", ARGV[4] .. group, ARGV[5], id)
 		redis.call("ZREM", KEYS[1], id)
 		redis.call("HSET", taskKey,
 				   "state", "aggregating")
@@ -1096,10 +1097,11 @@ func (r *RDB) forward(delayedKey, pendingKey, taskKeyPrefix, groupKeyPrefix stri
 	now := r.clock.Now()
 	keys := []string{delayedKey, pendingKey}
 	argv := []interface{}{
-		now.Unix(),
+		now.UnixMicro(),
 		taskKeyPrefix,
 		now.UnixNano(),
 		groupKeyPrefix,
+		now.Unix(),
 	}
 	res, err := forwardCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {

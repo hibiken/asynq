@@ -1632,9 +1632,9 @@ func TestSchedule(t *testing.T) {
 			t.Errorf("Redis ZSET %q member: got %v, want %v", scheduledKey, got, tc.msg.ID)
 			continue
 		}
-		if got := int64(zs[0].Score); got != tc.processAt.Unix() {
+		if got := int64(zs[0].Score); got != tc.processAt.UnixMicro() {
 			t.Errorf("Redis ZSET %q score: got %d, want %d",
-				scheduledKey, got, tc.processAt.Unix())
+				scheduledKey, got, tc.processAt.UnixMicro())
 			continue
 		}
 
@@ -1740,9 +1740,9 @@ func TestScheduleUnique(t *testing.T) {
 				scheduledKey, got, tc.msg.ID)
 			continue
 		}
-		if got := int64(zs[0].Score); got != tc.processAt.Unix() {
+		if got := int64(zs[0].Score); got != tc.processAt.UnixMicro() {
 			t.Errorf("Redis ZSET %q score: got %d, want %d",
-				scheduledKey, got, tc.processAt.Unix())
+				scheduledKey, got, tc.processAt.UnixMicro())
 			continue
 		}
 
@@ -1879,7 +1879,7 @@ func TestRetry(t *testing.T) {
 				"default": {{Message: t1, Score: now.Add(10 * time.Second).Unix()}, {Message: t2, Score: now.Add(10 * time.Second).Unix()}},
 			},
 			retry: map[string][]base.Z{
-				"default": {{Message: t3, Score: now.Add(time.Minute).Unix()}},
+				"default": {{Message: t3, Score: now.Add(time.Minute).UnixMicro()}},
 			},
 			msg:       t1,
 			processAt: now.Add(5 * time.Minute),
@@ -1892,8 +1892,8 @@ func TestRetry(t *testing.T) {
 			},
 			wantRetry: map[string][]base.Z{
 				"default": {
-					{Message: h.TaskMessageAfterRetry(*t1, errMsg, now), Score: now.Add(5 * time.Minute).Unix()},
-					{Message: t3, Score: now.Add(time.Minute).Unix()},
+					{Message: h.TaskMessageAfterRetry(*t1, errMsg, now), Score: now.Add(5 * time.Minute).UnixMicro()},
+					{Message: t3, Score: now.Add(time.Minute).UnixMicro()},
 				},
 			},
 		},
@@ -1924,7 +1924,7 @@ func TestRetry(t *testing.T) {
 			wantRetry: map[string][]base.Z{
 				"default": {},
 				"custom": {
-					{Message: h.TaskMessageAfterRetry(*t4, errMsg, now), Score: now.Add(5 * time.Minute).Unix()},
+					{Message: h.TaskMessageAfterRetry(*t4, errMsg, now), Score: now.Add(5 * time.Minute).UnixMicro()},
 				},
 			},
 		},
@@ -2050,7 +2050,7 @@ func TestRetryWithNonFailureError(t *testing.T) {
 				"default": {{Message: t1, Score: now.Add(10 * time.Second).Unix()}, {Message: t2, Score: now.Add(10 * time.Second).Unix()}},
 			},
 			retry: map[string][]base.Z{
-				"default": {{Message: t3, Score: now.Add(time.Minute).Unix()}},
+				"default": {{Message: t3, Score: now.Add(time.Minute).UnixMicro()}},
 			},
 			msg:       t1,
 			processAt: now.Add(5 * time.Minute),
@@ -2064,8 +2064,8 @@ func TestRetryWithNonFailureError(t *testing.T) {
 			wantRetry: map[string][]base.Z{
 				"default": {
 					// Task message should include the error message but without incrementing the retry count.
-					{Message: h.TaskMessageWithError(*t1, errMsg, now), Score: now.Add(5 * time.Minute).Unix()},
-					{Message: t3, Score: now.Add(time.Minute).Unix()},
+					{Message: h.TaskMessageWithError(*t1, errMsg, now), Score: now.Add(5 * time.Minute).UnixMicro()},
+					{Message: t3, Score: now.Add(time.Minute).UnixMicro()},
 				},
 			},
 		},
@@ -2097,7 +2097,7 @@ func TestRetryWithNonFailureError(t *testing.T) {
 				"default": {},
 				"custom": {
 					// Task message should include the error message but without incrementing the retry count.
-					{Message: h.TaskMessageWithError(*t4, errMsg, now), Score: now.Add(5 * time.Minute).Unix()},
+					{Message: h.TaskMessageWithError(*t4, errMsg, now), Score: now.Add(5 * time.Minute).UnixMicro()},
 				},
 			},
 		},
@@ -2562,12 +2562,12 @@ func TestForwardIfReadyWithGroup(t *testing.T) {
 		{
 			scheduled: map[string][]base.Z{
 				"default": {
-					{Message: t1, Score: secondAgo.Unix()},
-					{Message: t2, Score: secondAgo.Unix()},
+					{Message: t1, Score: secondAgo.UnixMicro()},
+					{Message: t2, Score: secondAgo.UnixMicro()},
 				},
 			},
 			retry: map[string][]base.Z{
-				"default": {{Message: t3, Score: secondAgo.Unix()}},
+				"default": {{Message: t3, Score: secondAgo.UnixMicro()}},
 			},
 			qnames: []string{"default"},
 			wantPending: map[string][]*base.TaskMessage{
@@ -2588,14 +2588,14 @@ func TestForwardIfReadyWithGroup(t *testing.T) {
 		},
 		{
 			scheduled: map[string][]base.Z{
-				"default":  {{Message: t1, Score: secondAgo.Unix()}},
-				"critical": {{Message: t4, Score: secondAgo.Unix()}},
+				"default":  {{Message: t1, Score: secondAgo.UnixMicro()}},
+				"critical": {{Message: t4, Score: secondAgo.UnixMicro()}},
 				"low":      {},
 			},
 			retry: map[string][]base.Z{
 				"default":  {},
 				"critical": {},
-				"low":      {{Message: t5, Score: secondAgo.Unix()}},
+				"low":      {{Message: t5, Score: secondAgo.UnixMicro()}},
 			},
 			qnames: []string{"default", "critical", "low"},
 			wantPending: map[string][]*base.TaskMessage{
@@ -2696,12 +2696,12 @@ func TestForwardIfReady(t *testing.T) {
 		{
 			scheduled: map[string][]base.Z{
 				"default": {
-					{Message: t1, Score: secondAgo.Unix()},
-					{Message: t2, Score: secondAgo.Unix()},
+					{Message: t1, Score: secondAgo.UnixMicro()},
+					{Message: t2, Score: secondAgo.UnixMicro()},
 				},
 			},
 			retry: map[string][]base.Z{
-				"default": {{Message: t3, Score: secondAgo.Unix()}},
+				"default": {{Message: t3, Score: secondAgo.UnixMicro()}},
 			},
 			qnames: []string{"default"},
 			wantPending: map[string][]*base.TaskMessage{
@@ -2717,12 +2717,12 @@ func TestForwardIfReady(t *testing.T) {
 		{
 			scheduled: map[string][]base.Z{
 				"default": {
-					{Message: t1, Score: hourFromNow.Unix()},
-					{Message: t2, Score: secondAgo.Unix()},
+					{Message: t1, Score: hourFromNow.UnixMicro()},
+					{Message: t2, Score: secondAgo.UnixMicro()},
 				},
 			},
 			retry: map[string][]base.Z{
-				"default": {{Message: t3, Score: secondAgo.Unix()}},
+				"default": {{Message: t3, Score: secondAgo.UnixMicro()}},
 			},
 			qnames: []string{"default"},
 			wantPending: map[string][]*base.TaskMessage{
@@ -2738,12 +2738,12 @@ func TestForwardIfReady(t *testing.T) {
 		{
 			scheduled: map[string][]base.Z{
 				"default": {
-					{Message: t1, Score: hourFromNow.Unix()},
-					{Message: t2, Score: hourFromNow.Unix()},
+					{Message: t1, Score: hourFromNow.UnixMicro()},
+					{Message: t2, Score: hourFromNow.UnixMicro()},
 				},
 			},
 			retry: map[string][]base.Z{
-				"default": {{Message: t3, Score: hourFromNow.Unix()}},
+				"default": {{Message: t3, Score: hourFromNow.UnixMicro()}},
 			},
 			qnames: []string{"default"},
 			wantPending: map[string][]*base.TaskMessage{
@@ -2758,14 +2758,14 @@ func TestForwardIfReady(t *testing.T) {
 		},
 		{
 			scheduled: map[string][]base.Z{
-				"default":  {{Message: t1, Score: secondAgo.Unix()}},
-				"critical": {{Message: t4, Score: secondAgo.Unix()}},
+				"default":  {{Message: t1, Score: secondAgo.UnixMicro()}},
+				"critical": {{Message: t4, Score: secondAgo.UnixMicro()}},
 				"low":      {},
 			},
 			retry: map[string][]base.Z{
 				"default":  {},
 				"critical": {},
-				"low":      {{Message: t5, Score: secondAgo.Unix()}},
+				"low":      {{Message: t5, Score: secondAgo.UnixMicro()}},
 			},
 			qnames: []string{"default", "critical", "low"},
 			wantPending: map[string][]*base.TaskMessage{
@@ -2825,6 +2825,50 @@ func TestForwardIfReady(t *testing.T) {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryKey(qname), diff)
 			}
 		}
+	}
+}
+
+// Regression test for https://github.com/hibiken/asynq/issues/1071:
+// a scheduled task must not be forwarded before its sub-second process-at time.
+// Scores were previously stored with second precision, so a task scheduled for
+// HH:MM:SS.900 would be forwarded as early as HH:MM:SS.000.
+func TestForwardIfReadyHonorsSubSecondProcessAt(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	msg := h.NewTaskMessage("send_email", nil)
+
+	// Truncate to a whole second so the "before" clock and the process-at time
+	// fall within the same second — the case that exposed the precision bug.
+	base := time.Now().Truncate(time.Second)
+	processAt := base.Add(900 * time.Millisecond)
+
+	if err := r.Schedule(context.Background(), msg, processAt); err != nil {
+		t.Fatalf("(*RDB).Schedule failed: %v", err)
+	}
+
+	// Clock is at base+500ms — before processAt (base+900ms) but in the same second.
+	// With second-precision scores this task would be forwarded early.
+	r.SetClock(timeutil.NewSimulatedClock(base.Add(500 * time.Millisecond)))
+	if err := r.ForwardIfReady(msg.Queue); err != nil {
+		t.Fatalf("(*RDB).ForwardIfReady failed: %v", err)
+	}
+	if got := h.GetScheduledMessages(t, r.client, msg.Queue); len(got) != 1 {
+		t.Fatalf("task forwarded before its process-at time: scheduled queue has %d tasks, want 1", len(got))
+	}
+	if got := h.GetPendingMessages(t, r.client, msg.Queue); len(got) != 0 {
+		t.Fatalf("task forwarded early: pending queue has %d tasks, want 0", len(got))
+	}
+
+	// Advance past processAt; the task should now be forwarded to pending.
+	r.SetClock(timeutil.NewSimulatedClock(base.Add(950 * time.Millisecond)))
+	if err := r.ForwardIfReady(msg.Queue); err != nil {
+		t.Fatalf("(*RDB).ForwardIfReady failed: %v", err)
+	}
+	if got := h.GetPendingMessages(t, r.client, msg.Queue); len(got) != 1 {
+		t.Fatalf("task not forwarded after its process-at time: pending queue has %d tasks, want 1", len(got))
+	}
+	if got := h.GetScheduledMessages(t, r.client, msg.Queue); len(got) != 0 {
+		t.Fatalf("task remained scheduled after its process-at time: scheduled queue has %d tasks, want 0", len(got))
 	}
 }
 
