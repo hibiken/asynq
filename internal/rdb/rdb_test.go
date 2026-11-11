@@ -3017,6 +3017,7 @@ func TestExtendLease(t *testing.T) {
 		ids                []string
 		wantExpirationTime time.Time
 		wantLease          map[string][]base.Z
+		wantMissing        []string
 	}{
 		{
 			desc: "Should extends lease for a single message in a queue",
@@ -3083,6 +3084,10 @@ func TestExtendLease(t *testing.T) {
 					{Message: t1, Score: now.Add(LeaseDuration).Unix()},
 				},
 			},
+			// t2 has no existing lease entry, so XX must leave it
+			// untouched rather than creating one — and the caller must
+			// be told which id that was, not just get a silent success.
+			wantMissing: []string{t2.ID},
 		},
 	}
 
@@ -3090,12 +3095,15 @@ func TestExtendLease(t *testing.T) {
 		h.FlushDB(t, r.client)
 		h.SeedAllLease(t, r.client, tc.lease)
 
-		gotExpirationTime, err := r.ExtendLease(tc.qname, tc.ids...)
+		gotExpirationTime, gotMissing, err := r.ExtendLease(tc.qname, tc.ids...)
 		if err != nil {
 			t.Fatalf("%s: ExtendLease(%q, %v) returned error: %v", tc.desc, tc.qname, tc.ids, err)
 		}
 		if gotExpirationTime != tc.wantExpirationTime {
 			t.Errorf("%s: ExtendLease(%q, %v) returned expirationTime %v, want %v", tc.desc, tc.qname, tc.ids, gotExpirationTime, tc.wantExpirationTime)
+		}
+		if diff := cmp.Diff(tc.wantMissing, gotMissing, h.SortStringSliceOpt); diff != "" {
+			t.Errorf("%s: ExtendLease(%q, %v) returned missing %v, want %v", tc.desc, tc.qname, tc.ids, gotMissing, tc.wantMissing)
 		}
 
 		for qname, want := range tc.wantLease {
@@ -3104,6 +3112,48 @@ func TestExtendLease(t *testing.T) {
 				t.Errorf("%s: mismatch found in %q: (-want,+got):\n%s", tc.desc, base.LeaseKey(qname), diff)
 			}
 		}
+	}
+}
+
+// Regression test for a real bug caught in review on the ExtendLease fix
+// itself: an earlier version detected "missing" by checking whether
+// ZADD's XX+CH return value was 0. CH reports 0 for a member that
+// doesn't exist AND for a member that exists but whose score is being
+// set to the exact value it already has — indistinguishable from each
+// other. Two heartbeat ticks landing in the same Unix second (plausible:
+// expireAt.Unix() is second-granularity) would extend a perfectly
+// healthy lease to the same expiry twice, and the second call would
+// wrongly report that task as missing.
+func TestExtendLease_SameScoreIsNotReportedMissing(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	msg := h.NewTaskMessageWithQueue("task1", nil, "default")
+	h.SeedAllLease(t, r.client, map[string][]base.Z{
+		"default": {{Message: msg, Score: now.Add(5 * time.Second).Unix()}},
+	})
+
+	_, missing1, err := r.ExtendLease("default", msg.ID)
+	if err != nil {
+		t.Fatalf("first ExtendLease call returned error: %v", err)
+	}
+	if len(missing1) != 0 {
+		t.Fatalf("first call reported missing=%v, want none — this call is the baseline, not the regression", missing1)
+	}
+
+	// Second call, same simulated clock — same expireAt.Unix() as the
+	// first call, so the score being written is identical to what's
+	// already there. This is exactly the case CH can't distinguish from
+	// "doesn't exist."
+	_, missing2, err := r.ExtendLease("default", msg.ID)
+	if err != nil {
+		t.Fatalf("second ExtendLease call returned error: %v", err)
+	}
+	if len(missing2) != 0 {
+		t.Errorf("second call (same second, unchanged score) reported missing=%v, want none — "+
+			"a healthy lease got misreported as gone", missing2)
 	}
 }
 
