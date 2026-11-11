@@ -1659,13 +1659,30 @@ func (r *RDB) ClearSchedulerHistory(entryID string) error {
 	return nil
 }
 
+// KEYS[1] -> asynq:{<qname>}:t:<task_id>
+// ARGV[1] -> task result data
+var writeResultCmd = redis.NewScript(`
+if redis.call("EXISTS", KEYS[1]) == 0 then
+	return 0
+end
+redis.call("HSET", KEYS[1], "result", ARGV[1])
+return 1
+`)
+
 // WriteResult writes the given result data for the specified task.
 func (r *RDB) WriteResult(qname, taskID string, data []byte) (int, error) {
 	var op errors.Op = "rdb.WriteResult"
-	ctx := context.Background()
 	taskKey := base.TaskKey(qname, taskID)
-	if err := r.client.HSet(ctx, taskKey, "result", data).Err(); err != nil {
-		return 0, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "hset", Err: err})
+	n, err := r.runScriptWithErrorCode(context.Background(), op, writeResultCmd, []string{taskKey}, data)
+	if err != nil {
+		return 0, err
 	}
-	return len(data), nil
+	switch n {
+	case 1:
+		return len(data), nil
+	case 0:
+		return 0, errors.E(op, errors.NotFound, &errors.TaskNotFoundError{Queue: qname, ID: taskID})
+	default:
+		return 0, errors.E(op, errors.Internal, fmt.Sprintf("unexpected return value from writeResultCmd script: %d", n))
+	}
 }
