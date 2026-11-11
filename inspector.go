@@ -138,13 +138,15 @@ type QueueInfo struct {
 }
 
 // GetQueueInfo returns current information of the given queue.
+//
+// If a queue with the given name doesn't exist, it returns an error wrapping ErrQueueNotFound.
 func (i *Inspector) GetQueueInfo(queue string) (*QueueInfo, error) {
 	if err := base.ValidateQueueName(queue); err != nil {
 		return nil, err
 	}
 	stats, err := i.rdb.CurrentStats(queue)
 	if err != nil {
-		return nil, err
+		return nil, convertQueueNotFoundError(err)
 	}
 	return &QueueInfo{
 		Queue:          stats.Queue,
@@ -182,13 +184,15 @@ type DailyStats struct {
 }
 
 // History returns a list of stats from the last n days.
+//
+// If a queue with the given name doesn't exist, it returns an error wrapping ErrQueueNotFound.
 func (i *Inspector) History(queue string, n int) ([]*DailyStats, error) {
 	if err := base.ValidateQueueName(queue); err != nil {
 		return nil, err
 	}
 	stats, err := i.rdb.HistoricalStats(queue, n)
 	if err != nil {
-		return nil, err
+		return nil, convertQueueNotFoundError(err)
 	}
 	var res []*DailyStats
 	for _, s := range stats {
@@ -212,6 +216,15 @@ var (
 	// ErrTaskNotFound indicates that the specified task cannot be found in the queue.
 	ErrTaskNotFound = errors.New("task not found")
 )
+
+// convertQueueNotFoundError returns an error wrapping ErrQueueNotFound if err
+// indicates that the queue does not exist. Otherwise it returns err unchanged.
+func convertQueueNotFoundError(err error) error {
+	if errors.IsQueueNotFound(err) {
+		return fmt.Errorf("asynq: %w", ErrQueueNotFound)
+	}
+	return err
+}
 
 // DeleteQueue removes the specified queue.
 //
@@ -541,7 +554,7 @@ func (i *Inspector) DeleteAllScheduledTasks(queue string) (int, error) {
 		return 0, err
 	}
 	n, err := i.rdb.DeleteAllScheduledTasks(queue)
-	return int(n), err
+	return int(n), convertQueueNotFoundError(err)
 }
 
 // DeleteAllRetryTasks deletes all retry tasks from the specified queue,
@@ -551,7 +564,7 @@ func (i *Inspector) DeleteAllRetryTasks(queue string) (int, error) {
 		return 0, err
 	}
 	n, err := i.rdb.DeleteAllRetryTasks(queue)
-	return int(n), err
+	return int(n), convertQueueNotFoundError(err)
 }
 
 // DeleteAllArchivedTasks deletes all archived tasks from the specified queue,
@@ -561,7 +574,7 @@ func (i *Inspector) DeleteAllArchivedTasks(queue string) (int, error) {
 		return 0, err
 	}
 	n, err := i.rdb.DeleteAllArchivedTasks(queue)
-	return int(n), err
+	return int(n), convertQueueNotFoundError(err)
 }
 
 // DeleteAllCompletedTasks deletes all completed tasks from the specified queue,
@@ -571,7 +584,7 @@ func (i *Inspector) DeleteAllCompletedTasks(queue string) (int, error) {
 		return 0, err
 	}
 	n, err := i.rdb.DeleteAllCompletedTasks(queue)
-	return int(n), err
+	return int(n), convertQueueNotFoundError(err)
 }
 
 // DeleteAllAggregatingTasks deletes all tasks from the specified group,
@@ -639,7 +652,7 @@ func (i *Inspector) RunAllScheduledTasks(queue string) (int, error) {
 		return 0, err
 	}
 	n, err := i.rdb.RunAllScheduledTasks(queue)
-	return int(n), err
+	return int(n), convertQueueNotFoundError(err)
 }
 
 // RunAllRetryTasks schedules all retry tasks from the given queue to run,
@@ -649,7 +662,7 @@ func (i *Inspector) RunAllRetryTasks(queue string) (int, error) {
 		return 0, err
 	}
 	n, err := i.rdb.RunAllRetryTasks(queue)
-	return int(n), err
+	return int(n), convertQueueNotFoundError(err)
 }
 
 // RunAllArchivedTasks schedules all archived tasks from the given queue to run,
@@ -659,7 +672,7 @@ func (i *Inspector) RunAllArchivedTasks(queue string) (int, error) {
 		return 0, err
 	}
 	n, err := i.rdb.RunAllArchivedTasks(queue)
-	return int(n), err
+	return int(n), convertQueueNotFoundError(err)
 }
 
 // RunAllAggregatingTasks schedules all tasks from the given grou to run.
@@ -712,7 +725,7 @@ func (i *Inspector) ArchiveAllScheduledTasks(queue string) (int, error) {
 		return 0, err
 	}
 	n, err := i.rdb.ArchiveAllScheduledTasks(queue)
-	return int(n), err
+	return int(n), convertQueueNotFoundError(err)
 }
 
 // ArchiveAllRetryTasks archives all retry tasks from the given queue,
@@ -722,7 +735,7 @@ func (i *Inspector) ArchiveAllRetryTasks(queue string) (int, error) {
 		return 0, err
 	}
 	n, err := i.rdb.ArchiveAllRetryTasks(queue)
-	return int(n), err
+	return int(n), convertQueueNotFoundError(err)
 }
 
 // ArchiveAllAggregatingTasks archives all tasks from the given group,
