@@ -44,7 +44,7 @@ Task queues are used as a mechanism to distribute work across multiple machines.
 
 ## Stability and Compatibility
 
-**Status**: The library relatively stable and is currently undergoing **moderate development** with less frequent breaking API changes.
+**Status**: The library is relatively stable and is currently undergoing **moderate development** with less frequent breaking API changes.
 
 > ☝️ **Important Note**: Current major version is zero (`v0.x.x`) to accommodate rapid development and fast iteration while getting early feedback from users (_feedback on APIs are appreciated!_). The public API could change without a major version update before `v1.0.0` release.
 
