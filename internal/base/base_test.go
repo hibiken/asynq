@@ -321,7 +321,7 @@ func TestSchedulerHistoryKey(t *testing.T) {
 	}
 }
 
-func toBytes(m map[string]interface{}) []byte {
+func toBytes(m map[string]any) []byte {
 	b, err := json.Marshal(m)
 	if err != nil {
 		panic(err)
@@ -330,12 +330,12 @@ func toBytes(m map[string]interface{}) []byte {
 }
 
 func TestUniqueKey(t *testing.T) {
-	payload1 := toBytes(map[string]interface{}{"a": 123, "b": "hello", "c": true})
-	payload2 := toBytes(map[string]interface{}{"b": "hello", "c": true, "a": 123})
-	payload3 := toBytes(map[string]interface{}{
+	payload1 := toBytes(map[string]any{"a": 123, "b": "hello", "c": true})
+	payload2 := toBytes(map[string]any{"b": "hello", "c": true, "a": 123})
+	payload3 := toBytes(map[string]any{
 		"address": map[string]string{"line": "123 Main St", "city": "Boston", "state": "MA"},
 		"names":   []string{"bob", "mike", "rob"}})
-	payload4 := toBytes(map[string]interface{}{
+	payload4 := toBytes(map[string]any{
 		"time":     time.Date(2020, time.July, 28, 0, 0, 0, 0, time.UTC),
 		"duration": time.Hour})
 
@@ -505,7 +505,7 @@ func TestMessageEncoding(t *testing.T) {
 		{
 			in: &TaskMessage{
 				Type:      "task1",
-				Payload:   toBytes(map[string]interface{}{"a": 1, "b": "hello!", "c": true}),
+				Payload:   toBytes(map[string]any{"a": 1, "b": "hello!", "c": true}),
 				ID:        id,
 				Queue:     "default",
 				GroupKey:  "mygroup",
@@ -517,7 +517,7 @@ func TestMessageEncoding(t *testing.T) {
 			},
 			out: &TaskMessage{
 				Type:      "task1",
-				Payload:   toBytes(map[string]interface{}{"a": json.Number("1"), "b": "hello!", "c": true}),
+				Payload:   toBytes(map[string]any{"a": json.Number("1"), "b": "hello!", "c": true}),
 				ID:        id,
 				Queue:     "default",
 				GroupKey:  "mygroup",
@@ -596,7 +596,7 @@ func TestWorkerInfoEncoding(t *testing.T) {
 				ServerID: "abc123",
 				ID:       uuid.NewString(),
 				Type:     "taskA",
-				Payload:  toBytes(map[string]interface{}{"foo": "bar"}),
+				Payload:  toBytes(map[string]any{"foo": "bar"}),
 				Queue:    "default",
 				Started:  time.Now().Add(-3 * time.Hour),
 				Deadline: time.Now().Add(30 * time.Second),
@@ -631,7 +631,7 @@ func TestSchedulerEntryEncoding(t *testing.T) {
 				ID:      uuid.NewString(),
 				Spec:    "* * * * *",
 				Type:    "task_A",
-				Payload: toBytes(map[string]interface{}{"foo": "bar"}),
+				Payload: toBytes(map[string]any{"foo": "bar"}),
 				Opts:    []string{"Queue('email')"},
 				Next:    time.Now().Add(30 * time.Second).UTC(),
 				Prev:    time.Now().Add(-2 * time.Minute).UTC(),

@@ -25,3 +25,4 @@ vendor
 # Ignore editor config files
 .vscode
 .idea
+.codebuddy/

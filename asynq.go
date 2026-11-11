@@ -73,12 +73,17 @@ func NewTaskWithHeaders(typename string, payload []byte, headers map[string]stri
 	}
 }
 
-// newTask creates a task with the given typename, payload and ResultWriter.
-func newTask(typename string, payload []byte, w *ResultWriter) *Task {
+// newTask creates a task with the given typename, payload, headers and ResultWriter.
+// The headers map is used as is; a nil map is replaced by an empty one so that
+// handlers can always read from and write to Task.Headers().
+func newTask(typename string, payload []byte, headers map[string]string, w *ResultWriter) *Task {
+	if headers == nil {
+		headers = make(map[string]string)
+	}
 	return &Task{
 		typename: typename,
 		payload:  payload,
-		headers:  make(map[string]string),
+		headers:  headers,
 		w:        w,
 	}
 }

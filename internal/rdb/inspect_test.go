@@ -739,7 +739,7 @@ func TestListPending(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 
-	m1 := h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"subject": "hello"}))
+	m1 := h.NewTaskMessage("send_email", h.JSON(map[string]any{"subject": "hello"}))
 	m2 := h.NewTaskMessage("reindex", nil)
 	m3 := h.NewTaskMessageWithQueue("important_notification", nil, "critical")
 	m4 := h.NewTaskMessageWithQueue("minor_notification", nil, "low")
@@ -812,7 +812,7 @@ func TestListPendingPagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	var msgs []*base.TaskMessage
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
 		msgs = append(msgs, msg)
 	}
@@ -820,7 +820,7 @@ func TestListPendingPagination(t *testing.T) {
 	h.SeedPendingQueue(t, r.client, msgs, "default")
 
 	msgs = []*base.TaskMessage(nil) // empty list
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := h.NewTaskMessageWithQueue(fmt.Sprintf("custom %d", i), nil, "custom")
 		msgs = append(msgs, msg)
 	}
@@ -931,7 +931,7 @@ func TestListActivePagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	var msgs []*base.TaskMessage
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
 		msgs = append(msgs, msg)
 	}
@@ -1066,7 +1066,7 @@ func TestListScheduledPagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	// create 100 tasks with an increasing number of wait time.
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
 		if err := r.Schedule(context.Background(), msg, time.Now().Add(time.Duration(i)*time.Second)); err != nil {
 			t.Fatal(err)
@@ -1223,7 +1223,7 @@ func TestListRetryPagination(t *testing.T) {
 	// create 100 tasks with an increasing number of wait time.
 	now := time.Now()
 	var seed []base.Z
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
 		processAt := now.Add(time.Duration(i) * time.Second)
 		seed = append(seed, base.Z{Message: msg, Score: processAt.Unix()})
@@ -1374,7 +1374,7 @@ func TestListArchivedPagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	var entries []base.Z
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
 		entries = append(entries, base.Z{Message: msg, Score: int64(i)})
 	}
@@ -1514,7 +1514,7 @@ func TestListCompletedPagination(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
 	var entries []base.Z
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
 		entries = append(entries, base.Z{Message: msg, Score: int64(i)})
 	}
@@ -1676,7 +1676,7 @@ func TestListAggregatingPagination(t *testing.T) {
 	}
 
 	now := time.Now()
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		msg := h.NewTaskMessageBuilder().SetType(fmt.Sprintf("task%d", i)).SetGroup("mygroup").Build()
 		fxt.tasks = append(fxt.tasks, &h.TaskSeedData{
 			Msg: msg, State: base.TaskStateAggregating,
@@ -4266,9 +4266,9 @@ func TestDeleteTaskWithUniqueLock(t *testing.T) {
 	m1 := &base.TaskMessage{
 		ID:        uuid.NewString(),
 		Type:      "email",
-		Payload:   h.JSON(map[string]interface{}{"user_id": json.Number("123")}),
+		Payload:   h.JSON(map[string]any{"user_id": json.Number("123")}),
 		Queue:     base.DefaultQueueName,
-		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]interface{}{"user_id": 123})),
+		UniqueKey: base.UniqueKey(base.DefaultQueueName, "email", h.JSON(map[string]any{"user_id": 123})),
 	}
 	t1 := time.Now().Add(3 * time.Hour)
 
@@ -5256,9 +5256,9 @@ func TestListWorkers(t *testing.T) {
 		pid      = 4567
 		serverID = "server123"
 
-		m1 = h.NewTaskMessage("send_email", h.JSON(map[string]interface{}{"user_id": "abc123"}))
-		m2 = h.NewTaskMessage("gen_thumbnail", h.JSON(map[string]interface{}{"path": "some/path/to/image/file"}))
-		m3 = h.NewTaskMessage("reindex", h.JSON(map[string]interface{}{}))
+		m1 = h.NewTaskMessage("send_email", h.JSON(map[string]any{"user_id": "abc123"}))
+		m2 = h.NewTaskMessage("gen_thumbnail", h.JSON(map[string]any{"path": "some/path/to/image/file"}))
+		m3 = h.NewTaskMessage("reindex", h.JSON(map[string]any{}))
 	)
 
 	tests := []struct {
@@ -5341,7 +5341,7 @@ func TestWriteListClearSchedulerEntries(t *testing.T) {
 		{
 			Spec:    "@every 20m",
 			Type:    "bar",
-			Payload: h.JSON(map[string]interface{}{"fiz": "baz"}),
+			Payload: h.JSON(map[string]any{"fiz": "baz"}),
 			Opts:    nil,
 			Next:    now.Add(1 * time.Minute),
 			Prev:    now.Add(-19 * time.Minute),

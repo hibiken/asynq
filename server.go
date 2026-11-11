@@ -735,11 +735,14 @@ func (srv *Server) Start(handler Handler) error {
 	if handler == nil {
 		return fmt.Errorf("asynq: server cannot run with nil handler")
 	}
-	srv.processor.handler = handler
 
+	// The state check must come first: a rejected Start call (already running,
+	// stopped or closed) must not touch the handler that workers are using.
+	// Workers are only launched below, after the handler has been set.
 	if err := srv.start(); err != nil {
 		return err
 	}
+	srv.processor.handler = handler
 	srv.logger.Info("Starting processing")
 
 	srv.heartbeater.start(&srv.wg)
@@ -803,6 +806,9 @@ func (srv *Server) Shutdown() {
 
 	if !srv.sharedConnection {
 		srv.broker.Close()
+	} else if s, ok := srv.broker.(interface{ StopTaskProbers() }); ok {
+		// The redis client is owned by the caller; only release what we created.
+		s.StopTaskProbers()
 	}
 	srv.logger.Info("Exiting")
 }
@@ -831,9 +837,12 @@ func (srv *Server) Stop() {
 //
 // This is an alternative to the HealthCheckFunc available in the Config object.
 func (srv *Server) Ping() error {
+	// Only read the state under the lock; the network round trip must not hold
+	// it, otherwise a slow redis would also block the heartbeater.
 	srv.state.mu.Lock()
-	defer srv.state.mu.Unlock()
-	if srv.state.value == srvStateClosed {
+	closed := srv.state.value == srvStateClosed
+	srv.state.mu.Unlock()
+	if closed {
 		return nil
 	}
 

@@ -28,6 +28,7 @@ var taskCmpOpts = []cmp.Option{
 	sortTaskOpt,                               // sort the tasks
 	cmp.AllowUnexported(Task{}),               // allow typename, payload fields to be compared
 	cmpopts.IgnoreFields(Task{}, "opts", "w"), // ignore opts, w fields
+	cmpopts.EquateEmpty(),                     // handlers always get a non-nil (possibly empty) headers map
 }
 
 // fakeHeartbeater receives from starting and finished channels and do nothing.

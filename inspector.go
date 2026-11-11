@@ -293,10 +293,12 @@ func composeListOptions(opts ...ListOption) listOption {
 
 // PageSize returns an option to specify the page size for list operation.
 //
-// Negative page size is treated as zero.
+// A page size that is zero or negative is ignored and the default page size
+// (30) is used. List operations never return an unbounded number of tasks
+// unless a sufficiently large page size is requested explicitly.
 func PageSize(n int) ListOption {
-	if n < 0 {
-		n = 0
+	if n <= 0 {
+		n = defaultPageSize
 	}
 	return pageSizeOpt(n)
 }
@@ -304,9 +306,9 @@ func PageSize(n int) ListOption {
 // Page returns an option to specify the page number for list operation.
 // The value 1 fetches the first page.
 //
-// Negative page number is treated as one.
+// A page number that is zero or negative is treated as one.
 func Page(n int) ListOption {
-	if n < 0 {
+	if n < 1 {
 		n = 1
 	}
 	return pageNumOpt(n)

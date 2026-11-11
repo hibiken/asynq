@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -70,8 +71,8 @@ func (mux *ServeMux) Handler(t *Task) (h Handler, pattern string) {
 	if h == nil {
 		h, pattern = NotFoundHandler(), ""
 	}
-	for i := len(mux.mws) - 1; i >= 0; i-- {
-		h = mux.mws[i](h)
+	for _, v := range slices.Backward(mux.mws) {
+		h = v(h)
 	}
 	return h, pattern
 }

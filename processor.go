@@ -172,6 +172,14 @@ func (p *processor) exec() {
 	case <-p.quit:
 		return
 	case p.sema <- struct{}{}: // acquire token
+		// When quit and sema are both ready, select picks one at random, so a
+		// stop request may lose the race. Re-check it before pulling a task.
+		select {
+		case <-p.quit:
+			<-p.sema // release token
+			return
+		default:
+		}
 		qnames := p.queues()
 		msg, leaseExpirationTime, err := p.broker.Dequeue(qnames...)
 		switch {
@@ -182,7 +190,13 @@ func (p *processor) exec() {
 			// Note: We are not using blocking pop operation and polling queues instead.
 			// This adds significant load to redis.
 			jitter := rand.N(p.taskCheckInterval)
-			time.Sleep(p.taskCheckInterval/2 + jitter)
+			timer := time.NewTimer(p.taskCheckInterval/2 + jitter)
+			select {
+			case <-timer.C:
+			case <-p.quit:
+				// Stop was requested; do not keep the shutdown waiting.
+				timer.Stop()
+			}
 			<-p.sema // release token
 			return
 		case err != nil:
@@ -195,6 +209,11 @@ func (p *processor) exec() {
 
 		lease := base.NewLease(leaseExpirationTime)
 		deadline := p.computeDeadline(msg)
+		// Register the cancel func right after Dequeue, before the (possibly
+		// blocking) handshake with the heartbeater, so that a cancelation
+		// message arriving in between is not dropped.
+		ctx, cancel := asynqcontext.New(p.safeBaseContext(), msg, deadline)
+		p.cancelations.Add(msg.ID, cancel)
 		p.starting <- &workerInfo{msg, time.Now(), deadline, lease}
 		go func() {
 			defer func() {
@@ -202,8 +221,6 @@ func (p *processor) exec() {
 				<-p.sema // release token
 			}()
 
-			ctx, cancel := asynqcontext.New(p.baseCtxFn(), msg, deadline)
-			p.cancelations.Add(msg.ID, cancel)
 			defer func() {
 				cancel()
 				p.cancelations.Delete(msg.ID)
@@ -223,6 +240,7 @@ func (p *processor) exec() {
 				task := newTask(
 					msg.Type,
 					msg.Payload,
+					msg.Headers,
 					&ResultWriter{
 						id:     msg.ID,
 						qname:  msg.Queue,
@@ -230,7 +248,6 @@ func (p *processor) exec() {
 						ctx:    ctx,
 					},
 				)
-				task.headers = msg.Headers
 				resCh <- p.perform(ctx, task)
 			}()
 
@@ -281,6 +298,17 @@ func (p *processor) handleSucceededMessage(l *base.Lease, msg *base.TaskMessage)
 	}
 }
 
+// withSyncContext adapts fn into a retryable sync operation. Every invocation
+// gets a fresh context bounded by deadline, because the context of the
+// original (failed) attempt is canceled as soon as that attempt returns.
+func withSyncContext(deadline time.Time, fn func(ctx context.Context) error) func() error {
+	return func() error {
+		ctx, cancel := context.WithDeadline(context.Background(), deadline)
+		defer cancel()
+		return fn(ctx)
+	}
+}
+
 func (p *processor) markAsComplete(l *base.Lease, msg *base.TaskMessage) {
 	if !l.IsValid() {
 		// If lease is not valid, do not write to redis; Let recoverer take care of it.
@@ -294,9 +322,9 @@ func (p *processor) markAsComplete(l *base.Lease, msg *base.TaskMessage) {
 			msg.ID, msg.Type, base.ActiveKey(msg.Queue), base.CompletedKey(msg.Queue), err)
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
-			fn: func() error {
+			fn: withSyncContext(l.Deadline(), func(ctx context.Context) error {
 				return p.broker.MarkAsComplete(ctx, msg)
-			},
+			}),
 			errMsg:   errMsg,
 			deadline: l.Deadline(),
 		}
@@ -315,9 +343,9 @@ func (p *processor) markAsDone(l *base.Lease, msg *base.TaskMessage) {
 		errMsg := fmt.Sprintf("Could not remove task id=%s type=%q from %q err: %+v", msg.ID, msg.Type, base.ActiveKey(msg.Queue), err)
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
-			fn: func() error {
+			fn: withSyncContext(l.Deadline(), func(ctx context.Context) error {
 				return p.broker.Done(ctx, msg)
-			},
+			}),
 			errMsg:   errMsg,
 			deadline: l.Deadline(),
 		}
@@ -340,7 +368,7 @@ func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg 
 		}
 	}
 	if p.errHandler != nil {
-		p.errHandler.HandleError(ctx, NewTaskWithHeaders(msg.Type, msg.Payload, msg.Headers), err)
+		p.safeHandleError(ctx, NewTaskWithHeaders(msg.Type, msg.Payload, msg.Headers), err)
 	}
 	switch {
 	case errors.Is(err, RevokeTask):
@@ -350,8 +378,52 @@ func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg 
 		p.logger.Warnf("Retry exhausted for task id=%s", msg.ID)
 		p.archive(l, msg, err)
 	default:
-		p.retry(l, msg, err, p.isFailureFunc(err))
+		p.retry(l, msg, err, p.safeIsFailure(err))
 	}
+}
+
+// The callbacks below are supplied by the application and run on worker
+// goroutines. A panic in any of them would take down the whole process (only
+// the task handler itself is guarded by perform), so each one is recovered and
+// replaced by a safe fallback so the task still reaches a terminal/retry state.
+
+func (p *processor) safeBaseContext() (ctx context.Context) {
+	defer func() {
+		if x := recover(); x != nil {
+			p.logger.Errorf("recovered from panic in BaseContext: %v\n%s", x, debug.Stack())
+			ctx = context.Background()
+		}
+	}()
+	return p.baseCtxFn()
+}
+
+func (p *processor) safeHandleError(ctx context.Context, task *Task, err error) {
+	defer func() {
+		if x := recover(); x != nil {
+			p.logger.Errorf("recovered from panic in ErrorHandler: %v\n%s", x, debug.Stack())
+		}
+	}()
+	p.errHandler.HandleError(ctx, task, err)
+}
+
+func (p *processor) safeIsFailure(err error) (isFailure bool) {
+	defer func() {
+		if x := recover(); x != nil {
+			p.logger.Errorf("recovered from panic in IsFailure: %v\n%s", x, debug.Stack())
+			isFailure = true // count it, like the default behavior
+		}
+	}()
+	return p.isFailureFunc(err)
+}
+
+func (p *processor) safeRetryDelay(n int, err error, task *Task) (d time.Duration) {
+	defer func() {
+		if x := recover(); x != nil {
+			p.logger.Errorf("recovered from panic in RetryDelayFunc: %v\n%s", x, debug.Stack())
+			d = DefaultRetryDelayFunc(n, err, task)
+		}
+	}()
+	return p.retryDelayFunc(n, err, task)
 }
 
 func (p *processor) retry(l *base.Lease, msg *base.TaskMessage, e error, isFailure bool) {
@@ -361,16 +433,16 @@ func (p *processor) retry(l *base.Lease, msg *base.TaskMessage, e error, isFailu
 	}
 	ctx, cancel := context.WithDeadline(context.Background(), l.Deadline())
 	defer cancel()
-	d := p.retryDelayFunc(msg.Retried, e, NewTaskWithHeaders(msg.Type, msg.Payload, msg.Headers))
+	d := p.safeRetryDelay(msg.Retried, e, NewTaskWithHeaders(msg.Type, msg.Payload, msg.Headers))
 	retryAt := time.Now().Add(d)
 	err := p.broker.Retry(ctx, msg, retryAt, e.Error(), isFailure)
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.ActiveKey(msg.Queue), base.RetryKey(msg.Queue))
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
-			fn: func() error {
+			fn: withSyncContext(l.Deadline(), func(ctx context.Context) error {
 				return p.broker.Retry(ctx, msg, retryAt, e.Error(), isFailure)
-			},
+			}),
 			errMsg:   errMsg,
 			deadline: l.Deadline(),
 		}
@@ -389,9 +461,9 @@ func (p *processor) archive(l *base.Lease, msg *base.TaskMessage, e error) {
 		errMsg := fmt.Sprintf("Could not move task id=%s from %q to %q", msg.ID, base.ActiveKey(msg.Queue), base.ArchivedKey(msg.Queue))
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
-			fn: func() error {
+			fn: withSyncContext(l.Deadline(), func(ctx context.Context) error {
 				return p.broker.Archive(ctx, msg, e.Error())
-			},
+			}),
 			errMsg:   errMsg,
 			deadline: l.Deadline(),
 		}

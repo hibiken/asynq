@@ -54,8 +54,8 @@ const (
 )
 
 type TaskProber interface {
-	Changed(map[string]interface{})
-	Result(state TaskState, raw *TaskInfo) (string, interface{})
+	Changed(map[string]any)
+	Result(state TaskState, raw *TaskInfo) (string, any)
 }
 
 func (s TaskState) String() string {
@@ -203,7 +203,8 @@ func SchedulerHistoryKey(entryID string) string {
 
 // UniqueKey returns a redis key with the given type, payload, and queue name.
 func UniqueKey(qname, tasktype string, payload []byte) string {
-	if payload == nil {
+	// A nil and an empty payload are the same payload.
+	if len(payload) == 0 {
 		return QueueKeyPrefix(qname) + "unique:" + tasktype + ":"
 	}
 	checksum := md5.Sum(payload)

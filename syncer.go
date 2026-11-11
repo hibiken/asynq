@@ -56,12 +56,20 @@ func (s *syncer) start(wg *sync.WaitGroup) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		// A ticker keeps a fixed cadence. Re-creating a timer on every loop
+		// iteration (time.After) would be reset by each incoming request, so
+		// a steady stream of requests could starve the periodic retry.
+		ticker := time.NewTicker(s.interval)
+		defer ticker.Stop()
 		var requests []*syncRequest
 		for {
 			select {
 			case <-s.done:
 				// Try sync one last time before shutting down.
 				for _, req := range requests {
+					if req.deadline.Before(time.Now()) {
+						continue // drop stale request
+					}
 					if err := req.fn(); err != nil {
 						s.logger.Error(req.errMsg)
 					}
@@ -70,7 +78,7 @@ func (s *syncer) start(wg *sync.WaitGroup) {
 				return
 			case req := <-s.requestsCh:
 				requests = append(requests, req)
-			case <-time.After(s.interval):
+			case <-ticker.C:
 				var temp []*syncRequest
 				for _, req := range requests {
 					if req.deadline.Before(time.Now()) {

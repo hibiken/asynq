@@ -131,10 +131,23 @@ func (id taskIDOption) Value() any       { return string(id) }
 //
 // Zero duration means no limit.
 //
+// Timeouts are stored with a granularity of one second; a positive timeout that
+// is not a whole number of seconds is rounded up (e.g. 500ms becomes 1s) so
+// that it is never shorter than requested and never collapses to "no limit".
+//
 // If there's a conflicting Deadline option, whichever comes earliest
 // will be used.
 func Timeout(d time.Duration) Option {
 	return timeoutOption(d)
+}
+
+// timeoutSeconds converts a timeout to whole seconds, rounding positive
+// durations up.
+func timeoutSeconds(d time.Duration) int64 {
+	if d <= 0 {
+		return int64(d / time.Second)
+	}
+	return int64((d + time.Second - 1) / time.Second)
 }
 
 func (d timeoutOption) String() string   { return fmt.Sprintf("Timeout(%v)", time.Duration(d)) }
@@ -166,8 +179,10 @@ func (t deadlineOption) Value() any       { return time.Time(t) }
 //
 // Uniqueness of a task is based on the following properties:
 //   - Task Type
-//   - Task Payload
+//   - Task Payload (a nil and an empty payload are equivalent)
 //   - Queue Name
+//
+// Task headers are not part of the uniqueness key.
 func Unique(ttl time.Duration) Option {
 	return uniqueOption(ttl)
 }
@@ -273,7 +288,6 @@ func composeOptions(opts ...Option) (option, error) {
 	res := option{
 		retry:     defaultMaxRetry,
 		queue:     base.DefaultQueueName,
-		taskID:    uuid.NewString(),
 		timeout:   0, // do not set to defaultTimeout here
 		deadline:  time.Time{},
 		processAt: time.Now(),
@@ -324,7 +338,33 @@ func composeOptions(opts ...Option) (option, error) {
 			// ignore unexpected option
 		}
 	}
+	if res.taskID == "" {
+		// Generated lazily: callers that supply TaskID do not pay for the entropy read.
+		res.taskID = uuid.NewString()
+	}
 	return res, nil
+}
+
+// mergeOptions returns task options followed by the enqueue-time options in a
+// freshly allocated slice. Appending to task.opts directly could write into a
+// backing array shared with other goroutines enqueuing the same *Task.
+func mergeOptions(taskOpts, opts []Option) []Option {
+	merged := make([]Option, 0, len(taskOpts)+len(opts))
+	merged = append(merged, taskOpts...)
+	return append(merged, opts...)
+}
+
+// messageHeaders returns a copy of the task headers with the Header options applied.
+// It returns nil if there are no headers at all.
+func messageHeaders(task *Task, optHeaders map[string]string) map[string]string {
+	headers := maps.Clone(task.Headers())
+	if len(optHeaders) > 0 {
+		if headers == nil {
+			headers = make(map[string]string, len(optHeaders))
+		}
+		maps.Copy(headers, optHeaders)
+	}
+	return headers
 }
 
 // isBlank returns true if the given s is empty or consist of all whitespaces.
@@ -390,7 +430,7 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 		return nil, fmt.Errorf("task typename cannot be empty")
 	}
 	// merge task options with the options provided at enqueue time.
-	opts = append(task.opts, opts...)
+	opts = mergeOptions(task.opts, opts)
 	opt, err := composeOptions(opts...)
 	if err != nil {
 		return nil, err
@@ -415,20 +455,14 @@ func (c *Client) EnqueueContext(ctx context.Context, task *Task, opts ...Option)
 		ID:        opt.taskID,
 		Type:      task.Type(),
 		Payload:   task.Payload(),
-		Headers:   maps.Clone(task.Headers()),
+		Headers:   messageHeaders(task, opt.headers),
 		Queue:     opt.queue,
 		Retry:     opt.retry,
 		Deadline:  deadline.Unix(),
-		Timeout:   int64(timeout.Seconds()),
+		Timeout:   timeoutSeconds(timeout),
 		UniqueKey: uniqueKey,
 		GroupKey:  opt.group,
 		Retention: int64(opt.retention.Seconds()),
-	}
-	if len(opt.headers) > 0 {
-		if msg.Headers == nil {
-			msg.Headers = make(map[string]string)
-		}
-		maps.Copy(msg.Headers, opt.headers)
 	}
 	now := time.Now()
 	var state base.TaskState
@@ -519,7 +553,7 @@ func (c *Client) BatchEnqueueContext(ctx context.Context, tasks []*Task, opts ..
 			results[i] = BatchEnqueueResult{Err: fmt.Errorf("task typename cannot be empty")}
 			continue
 		}
-		merged := append(task.opts, opts...)
+		merged := mergeOptions(task.opts, opts)
 		opt, err := composeOptions(merged...)
 		if err != nil {
 			results[i] = BatchEnqueueResult{Err: err}
@@ -548,11 +582,11 @@ func (c *Client) BatchEnqueueContext(ctx context.Context, tasks []*Task, opts ..
 			ID:        opt.taskID,
 			Type:      task.Type(),
 			Payload:   task.Payload(),
-			Headers:   task.Headers(),
+			Headers:   messageHeaders(task, opt.headers),
 			Queue:     opt.queue,
 			Retry:     opt.retry,
 			Deadline:  deadline.Unix(),
-			Timeout:   int64(timeout.Seconds()),
+			Timeout:   timeoutSeconds(timeout),
 			Retention: int64(opt.retention.Seconds()),
 		}
 

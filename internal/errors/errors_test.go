@@ -88,7 +88,7 @@ func TestErrorAs(t *testing.T) {
 	tests := []struct {
 		desc   string
 		err    error
-		target interface{}
+		target any
 		want   bool
 	}{
 		{
