@@ -265,3 +265,16 @@ func TestLogLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestServerWithLocation(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Skip("could not load Asia/Shanghai timezone, skipping")
+	}
+	srv := NewServer(getRedisConnOpt(t), Config{
+		Concurrency: 10,
+		LogLevel:    testLogLevel,
+		Location:    loc,
+	})
+	srv.Shutdown()
+}

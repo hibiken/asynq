@@ -62,6 +62,21 @@ func setup(tb testing.TB) (r *RDB) {
 	return r
 }
 
+func TestSetLocation(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	// Test non-nil location.
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Skip("could not load Asia/Shanghai timezone, skipping")
+	}
+	r.SetLocation(loc)
+
+	// Test nil location falls back to UTC.
+	r.SetLocation(nil)
+}
+
 func TestEnqueue(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
