@@ -44,6 +44,12 @@ type Scheduler struct {
 	// to avoid using cron.EntryID as the public API of
 	// the Scheduler.
 	idmap map[string]cron.EntryID
+
+	leaderName    string
+	leaseDuration time.Duration
+	leaderMu      sync.RWMutex
+	isLeader      bool
+	leaderToken   int64
 }
 
 const defaultHeartbeatInterval = 10 * time.Second
@@ -100,6 +106,11 @@ func newScheduler(opts *SchedulerOpts) *Scheduler {
 		loc = time.UTC
 	}
 
+	leaderName := opts.SharedKey
+	if leaderName == "" {
+		leaderName = "default"
+	}
+
 	return &Scheduler{
 		id:                generateSchedulerID(),
 		state:             &serverState{value: srvStateNew},
@@ -112,6 +123,8 @@ func newScheduler(opts *SchedulerOpts) *Scheduler {
 		postEnqueueFunc:   opts.PostEnqueueFunc,
 		errHandler:        opts.EnqueueErrorHandler,
 		idmap:             make(map[string]cron.EntryID),
+		leaderName:        leaderName,
+		leaseDuration:     heartbeatInterval * 2,
 	}
 }
 
@@ -161,6 +174,14 @@ type SchedulerOpts struct {
 	// EnqueueErrorHandler gets called when scheduler cannot enqueue a registered task
 	// due to an error.
 	EnqueueErrorHandler func(task *Task, opts []Option, err error)
+
+	// SharedKey groups scheduler instances that coordinate leadership through Redis so that
+	// only one instance enqueues each scheduled task. Run multiple instances with the same
+	// SharedKey for high availability: exactly one acts as leader at a time and the others
+	// take over automatically on failover.
+	//
+	// If unset, "default" is used.
+	SharedKey string
 }
 
 // enqueueJob encapsulates the job of enqueuing a task and recording the event.
@@ -176,9 +197,13 @@ type enqueueJob struct {
 	preEnqueueFunc  func(task *Task, opts []Option)
 	postEnqueueFunc func(info *TaskInfo, err error)
 	errHandler      func(task *Task, opts []Option, err error)
+	scheduler       *Scheduler
 }
 
 func (j *enqueueJob) Run() {
+	if j.scheduler != nil && !j.scheduler.canEnqueue() {
+		return
+	}
 	if j.preEnqueueFunc != nil {
 		j.preEnqueueFunc(j.task, j.opts)
 	}
@@ -218,6 +243,7 @@ func (s *Scheduler) Register(cronspec string, task *Task, opts ...Option) (entry
 		preEnqueueFunc:  s.preEnqueueFunc,
 		postEnqueueFunc: s.postEnqueueFunc,
 		errHandler:      s.errHandler,
+		scheduler:       s,
 	}
 	cronID, err := s.cron.AddJob(cronspec, job)
 	if err != nil {
@@ -262,10 +288,57 @@ func (s *Scheduler) Start() error {
 	}
 	s.logger.Info("Scheduler starting")
 	s.logger.Infof("Scheduler timezone is set to %v", s.location)
+	s.acquireOrRenewLeadership()
 	s.cron.Start()
 	s.wg.Add(1)
 	go s.runHeartbeater()
 	return nil
+}
+
+// acquireOrRenewLeadership tries to acquire leadership if this instance is not the leader,
+// or extends the lease if it already is. Loss of the lease clears the local leadership state.
+func (s *Scheduler) acquireOrRenewLeadership() {
+	s.leaderMu.Lock()
+	defer s.leaderMu.Unlock()
+	if s.isLeader {
+		token, ok, err := s.rdb.RenewSchedulerLeader(s.leaderName, s.id, s.leaseDuration)
+		if err != nil || !ok {
+			s.isLeader = false
+			s.leaderToken = 0
+			return
+		}
+		s.leaderToken = token
+		return
+	}
+	token, ok, err := s.rdb.AcquireSchedulerLeader(s.leaderName, s.id, s.leaseDuration)
+	if err != nil || !ok {
+		return
+	}
+	s.isLeader = true
+	s.leaderToken = token
+}
+
+// canEnqueue reports whether this instance may enqueue on the current tick. It skips the
+// enqueue only when another instance affirmatively holds leadership. When leadership cannot be
+// determined because Redis is unreachable it returns true so that the enqueue is still attempted
+// and its failure surfaces through the normal error path rather than being silently dropped.
+func (s *Scheduler) canEnqueue() bool {
+	s.leaderMu.RLock()
+	leader := s.isLeader
+	token := s.leaderToken
+	s.leaderMu.RUnlock()
+	if leader {
+		ok, err := s.rdb.IsSchedulerLeader(s.leaderName, s.id, token)
+		if err != nil {
+			return true
+		}
+		return ok
+	}
+	heldByOther, err := s.rdb.SchedulerLeaderHeldByOther(s.leaderName, s.id)
+	if err != nil {
+		return true
+	}
+	return !heldByOther
 }
 
 // Checks server state and returns an error if pre-condition is not met.
@@ -300,6 +373,9 @@ func (s *Scheduler) Shutdown() {
 	<-ctx.Done()
 	s.wg.Wait()
 
+	if err := s.rdb.ReleaseSchedulerLeader(s.leaderName, s.id); err != nil {
+		s.logger.Warnf("Failed to release scheduler leadership: %v", err)
+	}
 	s.clearHistory()
 	if err := s.client.Close(); err != nil {
 		s.logger.Errorf("Failed to close redis client connection: %v", err)
@@ -320,6 +396,7 @@ func (s *Scheduler) runHeartbeater() {
 			ticker.Stop()
 			return
 		case <-ticker.C:
+			s.acquireOrRenewLeadership()
 			s.beat()
 		}
 	}

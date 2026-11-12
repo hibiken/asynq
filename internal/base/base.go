@@ -196,6 +196,18 @@ func SchedulerHistoryKey(entryID string) string {
 	return "asynq:scheduler_history:" + entryID
 }
 
+// SchedulerLeaderKey returns a redis key holding the ID of the current scheduler leader
+// for the given shared scheduler name.
+func SchedulerLeaderKey(schedulerName string) string {
+	return "asynq:scheduler_leader:" + schedulerName
+}
+
+// SchedulerLeaderTokenKey returns a redis key holding the monotonic fencing token
+// for the given shared scheduler name.
+func SchedulerLeaderTokenKey(schedulerName string) string {
+	return "asynq:scheduler_leader:" + schedulerName + ":token"
+}
+
 // UniqueKey returns a redis key with the given type, payload, and queue name.
 func UniqueKey(qname, tasktype string, payload []byte) string {
 	if payload == nil {

@@ -1669,3 +1669,138 @@ func (r *RDB) WriteResult(qname, taskID string, data []byte) (int, error) {
 	}
 	return len(data), nil
 }
+
+var acquireSchedulerLeaderCmd = redis.NewScript(`
+if redis.call("SET", KEYS[1], ARGV[1], "NX", "PX", ARGV[2]) then
+	return redis.call("INCR", KEYS[2])
+end
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+	redis.call("PEXPIRE", KEYS[1], ARGV[2])
+	local t = redis.call("GET", KEYS[2])
+	if t then
+		return tonumber(t)
+	end
+	return 0
+end
+return -1
+`)
+
+// AcquireSchedulerLeader attempts to acquire scheduler leadership for the given shared name.
+// If no instance currently holds leadership it becomes the leader and a new fencing token is
+// issued. If it already holds leadership the lease is extended. It returns the current fencing
+// token and true when this instance holds leadership, or false when another instance holds it.
+func (r *RDB) AcquireSchedulerLeader(schedulerName, schedulerID string, lease time.Duration) (int64, bool, error) {
+	var op errors.Op = "rdb.AcquireSchedulerLeader"
+	keys := []string{
+		base.SchedulerLeaderKey(schedulerName),
+		base.SchedulerLeaderTokenKey(schedulerName),
+	}
+	res, err := acquireSchedulerLeaderCmd.Run(context.Background(), r.client, keys,
+		schedulerID, lease.Milliseconds()).Result()
+	if err != nil {
+		return 0, false, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+	}
+	token, err := cast.ToInt64E(res)
+	if err != nil {
+		return 0, false, errors.E(op, errors.Internal, fmt.Sprintf("cast error: %v", res))
+	}
+	if token < 0 {
+		return 0, false, nil
+	}
+	return token, true, nil
+}
+
+var renewSchedulerLeaderCmd = redis.NewScript(`
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+	redis.call("PEXPIRE", KEYS[1], ARGV[2])
+	local t = redis.call("GET", KEYS[2])
+	if t then
+		return tonumber(t)
+	end
+	return 0
+end
+return -1
+`)
+
+// RenewSchedulerLeader extends the leadership lease if this instance still holds it.
+// It returns the current fencing token and true on success, or false if leadership was lost.
+func (r *RDB) RenewSchedulerLeader(schedulerName, schedulerID string, lease time.Duration) (int64, bool, error) {
+	var op errors.Op = "rdb.RenewSchedulerLeader"
+	keys := []string{
+		base.SchedulerLeaderKey(schedulerName),
+		base.SchedulerLeaderTokenKey(schedulerName),
+	}
+	res, err := renewSchedulerLeaderCmd.Run(context.Background(), r.client, keys,
+		schedulerID, lease.Milliseconds()).Result()
+	if err != nil {
+		return 0, false, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+	}
+	token, err := cast.ToInt64E(res)
+	if err != nil {
+		return 0, false, errors.E(op, errors.Internal, fmt.Sprintf("cast error: %v", res))
+	}
+	if token < 0 {
+		return 0, false, nil
+	}
+	return token, true, nil
+}
+
+var releaseSchedulerLeaderCmd = redis.NewScript(`
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+	return redis.call("DEL", KEYS[1])
+end
+return 0
+`)
+
+// ReleaseSchedulerLeader releases leadership for the given shared name if this instance
+// currently holds it, allowing another instance to take over without waiting for lease expiry.
+func (r *RDB) ReleaseSchedulerLeader(schedulerName, schedulerID string) error {
+	var op errors.Op = "rdb.ReleaseSchedulerLeader"
+	keys := []string{base.SchedulerLeaderKey(schedulerName)}
+	if err := releaseSchedulerLeaderCmd.Run(context.Background(), r.client, keys, schedulerID).Err(); err != nil {
+		return errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+	}
+	return nil
+}
+
+var checkSchedulerLeaderCmd = redis.NewScript(`
+if redis.call("GET", KEYS[1]) == ARGV[1] and redis.call("GET", KEYS[2]) == ARGV[2] then
+	return 1
+end
+return 0
+`)
+
+// IsSchedulerLeader reports whether this instance currently holds scheduler leadership
+// for the given shared name with the given fencing token. A stale token, or a lease that
+// has since been taken over by another instance, returns false.
+func (r *RDB) IsSchedulerLeader(schedulerName, schedulerID string, token int64) (bool, error) {
+	var op errors.Op = "rdb.IsSchedulerLeader"
+	keys := []string{
+		base.SchedulerLeaderKey(schedulerName),
+		base.SchedulerLeaderTokenKey(schedulerName),
+	}
+	res, err := checkSchedulerLeaderCmd.Run(context.Background(), r.client, keys,
+		schedulerID, token).Result()
+	if err != nil {
+		return false, errors.E(op, errors.Unknown, fmt.Sprintf("redis eval error: %v", err))
+	}
+	n, err := cast.ToInt64E(res)
+	if err != nil {
+		return false, errors.E(op, errors.Internal, fmt.Sprintf("cast error: %v", res))
+	}
+	return n == 1, nil
+}
+
+// SchedulerLeaderHeldByOther reports whether a different instance currently holds scheduler
+// leadership for the given shared name. It returns false when no instance holds leadership.
+func (r *RDB) SchedulerLeaderHeldByOther(schedulerName, schedulerID string) (bool, error) {
+	var op errors.Op = "rdb.SchedulerLeaderHeldByOther"
+	res, err := r.client.Get(context.Background(), base.SchedulerLeaderKey(schedulerName)).Result()
+	if err == redis.Nil {
+		return false, nil
+	}
+	if err != nil {
+		return false, errors.E(op, errors.Unknown, &errors.RedisCommandError{Command: "get", Err: err})
+	}
+	return res != "" && res != schedulerID, nil
+}
