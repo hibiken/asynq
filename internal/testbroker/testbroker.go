@@ -136,6 +136,15 @@ func (tb *TestBroker) Retry(ctx context.Context, msg *base.TaskMessage, processA
 	return tb.real.Retry(ctx, msg, processAt, errMsg, isFailure)
 }
 
+func (tb *TestBroker) RetryIfLeaseMatches(ctx context.Context, msg *base.TaskMessage, processAt time.Time, errMsg string, isFailure bool, expectedLease int64) error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.RetryIfLeaseMatches(ctx, msg, processAt, errMsg, isFailure, expectedLease)
+}
+
 func (tb *TestBroker) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string) error {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
@@ -143,6 +152,15 @@ func (tb *TestBroker) Archive(ctx context.Context, msg *base.TaskMessage, errMsg
 		return errRedisDown
 	}
 	return tb.real.Archive(ctx, msg, errMsg)
+}
+
+func (tb *TestBroker) ArchiveIfLeaseMatches(ctx context.Context, msg *base.TaskMessage, errMsg string, expectedLease int64) error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.ArchiveIfLeaseMatches(ctx, msg, errMsg, expectedLease)
 }
 
 func (tb *TestBroker) ForwardIfReady(qnames ...string) error {
@@ -170,6 +188,15 @@ func (tb *TestBroker) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*b
 		return nil, errRedisDown
 	}
 	return tb.real.ListLeaseExpired(cutoff, qnames...)
+}
+
+func (tb *TestBroker) ClaimLeaseExpired(cutoff, claimUntil time.Time, qnames ...string) ([]*base.TaskMessage, error) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return nil, errRedisDown
+	}
+	return tb.real.ClaimLeaseExpired(cutoff, claimUntil, qnames...)
 }
 
 func (tb *TestBroker) ExtendLease(qname string, ids ...string) (time.Time, error) {

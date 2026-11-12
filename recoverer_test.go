@@ -274,3 +274,69 @@ func TestRecoverer(t *testing.T) {
 		}
 	}
 }
+
+func TestRecovererConcurrent(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	rdbClient := rdb.NewRDB(r)
+
+	t1 := h.NewTaskMessageWithQueue("task1", nil, "default")
+	t2 := h.NewTaskMessageWithQueue("task2", nil, "default")
+	t2.Retried = t2.Retry
+
+	now := time.Now()
+	h.FlushDB(t, r)
+	h.SeedAllActiveQueues(t, r, map[string][]*base.TaskMessage{
+		"default": {t1, t2},
+	})
+	h.SeedAllLease(t, r, map[string][]base.Z{
+		"default": {
+			{Message: t1, Score: now.Add(-1 * time.Minute).Unix()},
+			{Message: t2, Score: now.Add(-1 * time.Minute).Unix()},
+		},
+	})
+
+	const numWorkers = 4
+	recoverers := make([]*recoverer, numWorkers)
+	for i := 0; i < numWorkers; i++ {
+		recoverers[i] = newRecoverer(recovererParams{
+			logger:         testLogger,
+			broker:         rdbClient,
+			queues:         []string{"default"},
+			interval:       200 * time.Millisecond,
+			retryDelayFunc: func(n int, err error, task *Task) time.Duration { return 30 * time.Second },
+			isFailureFunc:  defaultIsFailureFunc,
+		})
+	}
+
+	var wg sync.WaitGroup
+	for _, rec := range recoverers {
+		rec.start(&wg)
+	}
+	runTime := time.Now()
+	time.Sleep(1 * time.Second)
+	for _, rec := range recoverers {
+		rec.shutdown()
+	}
+	wg.Wait()
+
+	if gotActive := h.GetActiveMessages(t, r, "default"); len(gotActive) != 0 {
+		t.Errorf("active queue = %v, want empty", gotActive)
+	}
+	if gotLease := h.GetLeaseEntries(t, r, "default"); len(gotLease) != 0 {
+		t.Errorf("lease entries = %v, want empty", gotLease)
+	}
+
+	cmpOpt := h.EquateInt64Approx(2)
+	gotRetry := h.GetRetryMessages(t, r, "default")
+	wantRetry := []*base.TaskMessage{h.TaskMessageAfterRetry(*t1, ErrLeaseExpired.Error(), runTime)}
+	if diff := cmp.Diff(wantRetry, gotRetry, h.SortMsgOpt, cmpOpt); diff != "" {
+		t.Errorf("retry queue mismatch (-want,+got):\n%s", diff)
+	}
+
+	gotArchived := h.GetArchivedMessages(t, r, "default")
+	wantArchived := []*base.TaskMessage{h.TaskMessageWithError(*t2, ErrLeaseExpired.Error(), runTime)}
+	if diff := cmp.Diff(wantArchived, gotArchived, h.SortMsgOpt, cmpOpt); diff != "" {
+		t.Errorf("archived queue mismatch (-want,+got):\n%s", diff)
+	}
+}
