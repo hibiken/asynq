@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -72,9 +73,21 @@ func (hc *healthchecker) start(wg *sync.WaitGroup) {
 				return
 			case <-timer.C:
 				err := hc.broker.Ping()
-				hc.healthcheckFunc(err)
+				hc.safeCall(err)
 				timer.Reset(hc.interval)
 			}
 		}
 	}()
+}
+
+// safeCall invokes the user-provided healthcheckFunc, recovering from any
+// panic so that a misbehaving callback cannot crash the healthchecker
+// goroutine (and with it, the whole process).
+func (hc *healthchecker) safeCall(err error) {
+	defer func() {
+		if x := recover(); x != nil {
+			hc.logger.Errorf("recovering from panic in healthcheck func. See the stack trace below for details:\n%s", string(debug.Stack()))
+		}
+	}()
+	hc.healthcheckFunc(err)
 }
