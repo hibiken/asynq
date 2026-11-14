@@ -5579,3 +5579,96 @@ func TestUnpauseError(t *testing.T) {
 		}
 	}
 }
+
+// Tasks trimmed from the archive by the Inspector's archive operations should
+// also have their task hash deleted.
+// Regression test for https://github.com/hibiken/asynq/issues/730
+func TestArchiveOperationsDeleteTrimmedTasks(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+	const qname = "default"
+
+	tests := []struct {
+		desc    string
+		seed    func(msg *base.TaskMessage)
+		archive func(msg *base.TaskMessage) error
+	}{
+		{
+			desc: "ArchiveTask",
+			seed: func(msg *base.TaskMessage) {
+				h.SeedScheduledQueue(t, r.client, []base.Z{{Message: msg, Score: now.Add(time.Hour).Unix()}}, qname)
+			},
+			archive: func(msg *base.TaskMessage) error { return r.ArchiveTask(qname, msg.ID) },
+		},
+		{
+			desc: "ArchiveAllPendingTasks",
+			seed: func(msg *base.TaskMessage) {
+				h.SeedPendingQueue(t, r.client, []*base.TaskMessage{msg}, qname)
+			},
+			archive: func(*base.TaskMessage) error { _, err := r.ArchiveAllPendingTasks(qname); return err },
+		},
+		{
+			desc: "ArchiveAllScheduledTasks",
+			seed: func(msg *base.TaskMessage) {
+				h.SeedScheduledQueue(t, r.client, []base.Z{{Message: msg, Score: now.Add(time.Hour).Unix()}}, qname)
+			},
+			archive: func(*base.TaskMessage) error { _, err := r.ArchiveAllScheduledTasks(qname); return err },
+		},
+		{
+			desc: "ArchiveAllRetryTasks",
+			seed: func(msg *base.TaskMessage) {
+				h.SeedRetryQueue(t, r.client, []base.Z{{Message: msg, Score: now.Add(time.Hour).Unix()}}, qname)
+			},
+			archive: func(*base.TaskMessage) error { _, err := r.ArchiveAllRetryTasks(qname); return err },
+		},
+		{
+			desc: "ArchiveAllAggregatingTasks",
+			seed: func(msg *base.TaskMessage) {
+				h.SeedGroup(t, r.client, []base.Z{{Message: msg, Score: now.Add(-time.Minute).Unix()}}, qname, msg.GroupKey)
+			},
+			archive: func(msg *base.TaskMessage) error { _, err := r.ArchiveAllAggregatingTasks(qname, msg.GroupKey); return err },
+		},
+	}
+
+	for _, tc := range tests {
+		h.FlushDB(t, r.client)
+
+		// An expired archived task, which is trimmed by the cutoff timestamp.
+		expired := h.NewTaskMessageBuilder().SetQueue(qname).SetType("expired").Build()
+		archived := []base.Z{{Message: expired, Score: now.AddDate(0, 0, -archivedExpirationInDays-1).Unix()}}
+		// A full archive, so that archiving one more task trims the oldest one by size.
+		var oldest *base.TaskMessage
+		for i := 0; i < maxArchiveSize-1; i++ {
+			msg := h.NewTaskMessageBuilder().SetQueue(qname).SetType("archived").Build()
+			archived = append(archived, base.Z{Message: msg, Score: now.Add(-time.Hour - time.Duration(i)*time.Second).Unix()})
+			oldest = msg
+		}
+		h.SeedArchivedQueue(t, r.client, archived, qname)
+
+		target := h.NewTaskMessageBuilder().SetQueue(qname).SetType("target").SetGroup("group1").Build()
+		tc.seed(target)
+
+		if err := tc.archive(target); err != nil {
+			t.Fatalf("%s: archive failed: %v", tc.desc, err)
+		}
+
+		ctx := context.Background()
+		for _, trimmed := range []*base.TaskMessage{expired, oldest} {
+			if err := r.client.ZScore(ctx, base.ArchivedKey(qname), trimmed.ID).Err(); err != redis.Nil {
+				t.Errorf("%s: task %s (%s) is still in the archive, want it trimmed", tc.desc, trimmed.ID, trimmed.Type)
+			}
+			if n := r.client.Exists(ctx, base.TaskKey(qname, trimmed.ID)).Val(); n != 0 {
+				t.Errorf("%s: task key of trimmed task %s (%s) still exists, want it deleted", tc.desc, trimmed.ID, trimmed.Type)
+			}
+		}
+		if n := r.client.Exists(ctx, base.TaskKey(qname, target.ID)).Val(); n != 1 {
+			t.Errorf("%s: task key of archived task %s does not exist", tc.desc, target.ID)
+		}
+		if got := r.client.ZCard(ctx, base.ArchivedKey(qname)).Val(); got != maxArchiveSize-1 {
+			t.Errorf("%s: archive size = %d, want %d", tc.desc, got, maxArchiveSize-1)
+		}
+	}
+}
+

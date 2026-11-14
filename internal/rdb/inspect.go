@@ -1173,7 +1173,13 @@ for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
 	redis.call("HSET", ARGV[4] .. id, "state", "archived")
 end
+for _, id in ipairs(redis.call("ZRANGE", KEYS[2], "-inf", ARGV[2], "BYSCORE")) do
+	redis.call("DEL", ARGV[4] .. id)
+end
 redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
+for _, id in ipairs(redis.call("ZRANGE", KEYS[2], 0, -ARGV[3])) do
+	redis.call("DEL", ARGV[4] .. id)
+end
 redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
 redis.call("DEL", KEYS[1])
 redis.call("SREM", KEYS[3], ARGV[5])
@@ -1232,7 +1238,13 @@ for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
 	redis.call("HSET", ARGV[4] .. id, "state", "archived")
 end
+for _, id in ipairs(redis.call("ZRANGE", KEYS[2], "-inf", ARGV[2], "BYSCORE")) do
+	redis.call("DEL", ARGV[4] .. id)
+end
 redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
+for _, id in ipairs(redis.call("ZRANGE", KEYS[2], 0, -ARGV[3])) do
+	redis.call("DEL", ARGV[4] .. id)
+end
 redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
 redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
@@ -1317,7 +1329,13 @@ else
 end
 redis.call("ZADD", KEYS[2], ARGV[2], ARGV[1])
 redis.call("HSET", KEYS[1], "state", "archived")
+for _, id in ipairs(redis.call("ZRANGE", KEYS[2], "-inf", ARGV[3], "BYSCORE")) do
+	redis.call("DEL", ARGV[5] .. "t:" .. id)
+end
 redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[3])
+for _, id in ipairs(redis.call("ZRANGE", KEYS[2], 0, -ARGV[4])) do
+	redis.call("DEL", ARGV[5] .. "t:" .. id)
+end
 redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[4])
 return 1
 `)
@@ -1392,7 +1410,13 @@ for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
 	redis.call("HSET", ARGV[4] .. id, "state", "archived")
 end
+for _, id in ipairs(redis.call("ZRANGE", KEYS[2], "-inf", ARGV[2], "BYSCORE")) do
+	redis.call("DEL", ARGV[4] .. id)
+end
 redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
+for _, id in ipairs(redis.call("ZRANGE", KEYS[2], 0, -ARGV[3])) do
+	redis.call("DEL", ARGV[4] .. id)
+end
 redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
 redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
