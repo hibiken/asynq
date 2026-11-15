@@ -163,6 +163,15 @@ func (tb *TestBroker) DeleteExpiredCompletedTasks(qname string, batchSize int) e
 	return tb.real.DeleteExpiredCompletedTasks(qname, batchSize)
 }
 
+func (tb *TestBroker) TrimArchive(qname string, batchSize int) error {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	if tb.sleeping {
+		return errRedisDown
+	}
+	return tb.real.TrimArchive(qname, batchSize)
+}
+
 func (tb *TestBroker) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()

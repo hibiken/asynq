@@ -62,6 +62,30 @@ func setup(tb testing.TB) (r *RDB) {
 	return r
 }
 
+func setupWithArchive(tb testing.TB, maxArchiveSize, archivedExpirationInDays int) (r *RDB) {
+	tb.Helper()
+	cfg := RDBConfig{
+		MaxArchiveSize:           maxArchiveSize,
+		ArchivedExpirationInDays: archivedExpirationInDays,
+	}
+	if useRedisCluster {
+		addrs := strings.Split(redisClusterAddrs, ",")
+		if len(addrs) == 0 {
+			tb.Fatal("No redis cluster addresses provided. Please set addresses using --redis_cluster_addrs flag.")
+		}
+		r = NewRDB(redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs: addrs,
+		}), cfg)
+	} else {
+		r = NewRDB(redis.NewClient(&redis.Options{
+			Addr: redisAddr,
+			DB:   redisDB,
+		}), cfg)
+	}
+	h.FlushDB(tb, r.client)
+	return r
+}
+
 func TestEnqueue(t *testing.T) {
 	r := setup(t)
 	defer r.Close()
@@ -2400,7 +2424,7 @@ func TestArchiveTrim(t *testing.T) {
 	errMsg := "SMTP server not responding"
 
 	maxArchiveSet := make([]base.Z, 0)
-	for i := 0; i < maxArchiveSize-1; i++ {
+	for i := 0; i < DefaultMaxArchiveSize; i++ {
 		maxArchiveSet = append(maxArchiveSet, base.Z{Message: &base.TaskMessage{
 			ID:      uuid.NewString(),
 			Type:    "generate_csv",
@@ -2456,7 +2480,7 @@ func TestArchiveTrim(t *testing.T) {
 			},
 			archived: map[string][]base.Z{
 				"default": {
-					{Message: t2, Score: now.Add(-time.Hour * 24 * (archivedExpirationInDays + 1)).Unix()},
+					{Message: t2, Score: now.AddDate(0, 0, -(DefaultArchivedExpirationInDays + 1)).Unix()},
 				},
 			},
 			wantArchived: map[string][]base.Z{
@@ -2527,6 +2551,275 @@ func TestArchiveTrim(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestNewRDBArchiveConfig(t *testing.T) {
+	r := NewRDB(nil)
+	if r.archiveConfig.MaxArchiveSize != DefaultMaxArchiveSize {
+		t.Errorf("MaxArchiveSize = %d, want %d", r.archiveConfig.MaxArchiveSize, DefaultMaxArchiveSize)
+	}
+	if r.archiveConfig.ArchivedExpirationInDays != DefaultArchivedExpirationInDays {
+		t.Errorf("ArchivedExpirationInDays = %d, want %d", r.archiveConfig.ArchivedExpirationInDays, DefaultArchivedExpirationInDays)
+	}
+
+	r = NewRDB(nil, RDBConfig{MaxArchiveSize: -1, ArchivedExpirationInDays: -5})
+	if r.archiveConfig.MaxArchiveSize != DefaultMaxArchiveSize {
+		t.Errorf("MaxArchiveSize = %d, want default for negative input", r.archiveConfig.MaxArchiveSize)
+	}
+	if r.archiveConfig.ArchivedExpirationInDays != DefaultArchivedExpirationInDays {
+		t.Errorf("ArchivedExpirationInDays = %d, want default for negative input", r.archiveConfig.ArchivedExpirationInDays)
+	}
+
+	r = NewRDB(nil, RDBConfig{MaxArchiveSize: 500, ArchivedExpirationInDays: 30})
+	if r.archiveConfig.MaxArchiveSize != 500 {
+		t.Errorf("MaxArchiveSize = %d, want 500", r.archiveConfig.MaxArchiveSize)
+	}
+	if r.archiveConfig.ArchivedExpirationInDays != 30 {
+		t.Errorf("ArchivedExpirationInDays = %d, want 30", r.archiveConfig.ArchivedExpirationInDays)
+	}
+}
+
+// Archiving from the inspector moves tasks and leaves the archive over the limit.
+// TrimArchive, which the server janitor calls, brings it back and drops the oldest task.
+func TestArchiveAllPendingTasksLeavesTrimToJanitor(t *testing.T) {
+	const customMaxArchiveSize = 3
+
+	r := setupWithArchive(t, customMaxArchiveSize, 0)
+	defer r.Close()
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	archived := make([]base.Z, customMaxArchiveSize)
+	for i := 0; i < customMaxArchiveSize; i++ {
+		archived[i] = base.Z{
+			Message: h.NewTaskMessage("old", nil),
+			Score:   now.Add(-time.Hour * time.Duration(i+1)).Unix(),
+		}
+	}
+	oldest := archived[customMaxArchiveSize-1].Message
+	fresh := h.NewTaskMessage("fresh", nil)
+
+	h.SeedAllArchivedQueues(t, r.client, map[string][]base.Z{
+		"default": archived,
+	})
+	h.SeedAllPendingQueues(t, r.client, map[string][]*base.TaskMessage{
+		"default": {fresh},
+	})
+
+	if _, err := r.ArchiveAllPendingTasks("default"); err != nil {
+		t.Fatalf("ArchiveAllPendingTasks() = %v, want nil", err)
+	}
+	if got := len(h.GetArchivedEntries(t, r.client, "default")); got != customMaxArchiveSize+1 {
+		t.Fatalf("archived set size after archive = %d, want %d", got, customMaxArchiveSize+1)
+	}
+
+	if err := r.TrimArchive("default", 1); err != nil {
+		t.Fatalf("TrimArchive() = %v, want nil", err)
+	}
+	got := h.GetArchivedEntries(t, r.client, "default")
+	if len(got) != customMaxArchiveSize {
+		t.Fatalf("archived set size after trim = %d, want %d", len(got), customMaxArchiveSize)
+	}
+	for _, entry := range got {
+		if entry.Message.ID == oldest.ID {
+			t.Errorf("oldest task %s still in archive", oldest.ID)
+		}
+	}
+	if n := r.client.Exists(context.Background(), base.TaskKey("default", oldest.ID)).Val(); n != 0 {
+		t.Errorf("trimmed task %s still has a task hash", oldest.ID)
+	}
+	foundFresh := false
+	for _, entry := range got {
+		if entry.Message.ID == fresh.ID {
+			foundFresh = true
+		}
+	}
+	if !foundFresh {
+		t.Errorf("newly archived task %s was trimmed", fresh.ID)
+	}
+}
+
+func TestTrimArchiveDeletesExpiredTasks(t *testing.T) {
+	const expirationDays = 30
+
+	r := setupWithArchive(t, 100, expirationDays)
+	defer r.Close()
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	expired := h.NewTaskMessage("expired", nil)
+	kept := h.NewTaskMessage("kept", nil)
+	h.SeedAllArchivedQueues(t, r.client, map[string][]base.Z{
+		"default": {
+			{Message: expired, Score: now.AddDate(0, 0, -(expirationDays + 1)).Unix()},
+			{Message: kept, Score: now.Add(-time.Hour).Unix()},
+		},
+	})
+
+	if err := r.TrimArchive("default", 100); err != nil {
+		t.Fatalf("TrimArchive() = %v, want nil", err)
+	}
+
+	got := h.GetArchivedEntries(t, r.client, "default")
+	if len(got) != 1 || got[0].Message.ID != kept.ID {
+		t.Fatalf("archive = %v, want only %s", got, kept.ID)
+	}
+	if n := r.client.Exists(context.Background(), base.TaskKey("default", expired.ID)).Val(); n != 0 {
+		t.Errorf("expired task %s still has a task hash", expired.ID)
+	}
+}
+
+func TestArchiveWithCustomMaxArchiveSize(t *testing.T) {
+	r := setupWithArchive(t, 5, 0)
+	defer r.Close()
+
+	const customMaxArchiveSize = 5
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	t1 := &base.TaskMessage{
+		ID:      uuid.NewString(),
+		Type:    "send_email",
+		Payload: nil,
+		Queue:   "default",
+		Retry:   25,
+		Retried: 0,
+		Timeout: 180,
+	}
+	errMsg := "SMTP server not responding"
+
+	// Fill the archive to the configured limit so that archiving one more task
+	// has to drop exactly the oldest entry.
+	archived := make([]base.Z, 0, customMaxArchiveSize)
+	for i := 0; i < customMaxArchiveSize; i++ {
+		archived = append(archived, base.Z{Message: &base.TaskMessage{
+			ID:      uuid.NewString(),
+			Type:    "generate_csv",
+			Payload: nil,
+			Queue:   "default",
+			Retry:   25,
+			Retried: 0,
+			Timeout: 60,
+		}, Score: now.Add(-time.Hour + -time.Second*time.Duration(i)).Unix()})
+	}
+
+	wantArchived := make([]base.Z, 0, customMaxArchiveSize)
+	wantArchived = append(wantArchived, base.Z{Message: h.TaskMessageWithError(*t1, errMsg, now), Score: now.Unix()})
+	wantArchived = append(wantArchived, archived[:len(archived)-1]...)
+
+	h.FlushDB(t, r.client)
+	h.SeedAllActiveQueues(t, r.client, map[string][]*base.TaskMessage{
+		"default": {t1},
+	})
+	h.SeedAllLease(t, r.client, map[string][]base.Z{
+		"default": {{Message: t1, Score: now.Add(10 * time.Second).Unix()}},
+	})
+	h.SeedAllArchivedQueues(t, r.client, map[string][]base.Z{
+		"default": archived,
+	})
+
+	if err := r.Archive(context.Background(), t1, errMsg); err != nil {
+		t.Fatalf("(*RDB).Archive() = %v, want nil", err)
+	}
+
+	gotArchived := h.GetArchivedEntries(t, r.client, "default")
+	if diff := cmp.Diff(wantArchived, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt, timeCmpOpt); diff != "" {
+		t.Errorf("mismatch found in archived set: (-want, +got):\n%s", diff)
+	}
+}
+
+// The trim used to keep MaxArchiveSize-1 tasks, which made MaxArchiveSize of 1
+// drop the whole archive, including the task that was just archived.
+func TestArchiveWithMaxArchiveSizeOfOne(t *testing.T) {
+	r := setupWithArchive(t, 1, 0)
+	defer r.Close()
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	t1 := h.NewTaskMessage("send_email", nil)
+	t2 := h.NewTaskMessage("reindex", nil)
+	errMsg := "SMTP server not responding"
+
+	h.SeedAllActiveQueues(t, r.client, map[string][]*base.TaskMessage{
+		"default": {t1},
+	})
+	h.SeedAllLease(t, r.client, map[string][]base.Z{
+		"default": {{Message: t1, Score: now.Add(10 * time.Second).Unix()}},
+	})
+	h.SeedAllArchivedQueues(t, r.client, map[string][]base.Z{
+		"default": {{Message: t2, Score: now.Add(-time.Hour).Unix()}},
+	})
+
+	if err := r.Archive(context.Background(), t1, errMsg); err != nil {
+		t.Fatalf("(*RDB).Archive() = %v, want nil", err)
+	}
+
+	wantArchived := []base.Z{
+		{Message: h.TaskMessageWithError(*t1, errMsg, now), Score: now.Unix()},
+	}
+	gotArchived := h.GetArchivedEntries(t, r.client, "default")
+	if diff := cmp.Diff(wantArchived, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt, timeCmpOpt); diff != "" {
+		t.Errorf("mismatch found in archived set: (-want, +got):\n%s", diff)
+	}
+}
+
+func TestArchiveWithCustomArchivedExpirationInDays(t *testing.T) {
+	const customArchivedExpirationInDays = 30
+
+	r := setupWithArchive(t, 0, customArchivedExpirationInDays)
+	defer r.Close()
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	t1 := &base.TaskMessage{
+		ID:      uuid.NewString(),
+		Type:    "send_email",
+		Payload: nil,
+		Queue:   "default",
+		Retry:   25,
+		Retried: 25,
+		Timeout: 1800,
+	}
+	t2 := &base.TaskMessage{
+		ID:      uuid.NewString(),
+		Type:    "reindex",
+		Payload: nil,
+		Queue:   "default",
+		Retry:   25,
+		Retried: 0,
+		Timeout: 3000,
+	}
+	errMsg := "SMTP server not responding"
+
+	h.FlushDB(t, r.client)
+	h.SeedAllActiveQueues(t, r.client, map[string][]*base.TaskMessage{
+		"default": {t1},
+	})
+	h.SeedAllLease(t, r.client, map[string][]base.Z{
+		"default": {{Message: t1, Score: now.Add(10 * time.Second).Unix()}},
+	})
+	h.SeedAllArchivedQueues(t, r.client, map[string][]base.Z{
+		"default": {
+			{Message: t2, Score: now.AddDate(0, 0, -(customArchivedExpirationInDays + 1)).Unix()},
+		},
+	})
+
+	if err := r.Archive(context.Background(), t1, errMsg); err != nil {
+		t.Fatalf("(*RDB).Archive() = %v, want nil", err)
+	}
+
+	wantArchived := []base.Z{
+		{Message: h.TaskMessageWithError(*t1, errMsg, now), Score: now.Unix()},
+	}
+	gotArchived := h.GetArchivedEntries(t, r.client, "default")
+	if diff := cmp.Diff(wantArchived, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt, timeCmpOpt); diff != "" {
+		t.Errorf("mismatch found in archived set: (-want, +got):\n%s", diff)
 	}
 }
 

@@ -725,8 +725,9 @@ type Broker interface {
 	DeleteAggregationSet(ctx context.Context, qname, gname, aggregationSetID string) error
 	ReclaimStaleAggregationSets(qname string) error
 
-	// Task retention related method
+	// Task retention related methods
 	DeleteExpiredCompletedTasks(qname string, batchSize int) error
+	TrimArchive(qname string, batchSize int) error
 
 	// Lease related methods
 	ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*TaskMessage, error)

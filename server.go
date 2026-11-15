@@ -32,7 +32,8 @@ import (
 // If a task exhausts its retries, it will be moved to the archive and
 // will be kept in the archive set.
 // Note that the archive size is finite and once it reaches its max size,
-// oldest tasks in the archive will be deleted.
+// oldest tasks in the archive will be deleted. Use Config.MaxArchiveSize
+// and Config.ArchivedExpirationInDays to configure archive retention.
 type Server struct {
 	logger *log.Logger
 
@@ -242,16 +243,31 @@ type Config struct {
 	// If unset or nil, the group aggregation feature will be disabled on the server.
 	GroupAggregator GroupAggregator
 
-	// JanitorInterval specifies the average interval of janitor checks for expired completed tasks.
+	// JanitorInterval specifies the average interval of janitor checks.
+	// Each check deletes expired completed tasks and trims the archive.
 	//
 	// If unset or zero, default interval of 8 seconds is used.
 	JanitorInterval time.Duration
 
-	// JanitorBatchSize specifies the number of expired completed tasks to be deleted in one run.
+	// JanitorBatchSize specifies how many tasks the janitor deletes in one script run.
+	// This applies to expired completed tasks and to archived tasks past the retention limit.
 	//
 	// If unset or zero, default batch size of 100 is used.
 	// Make sure to not put a big number as the batch size to prevent a long-running script.
 	JanitorBatchSize int
+
+	// MaxArchiveSize specifies the maximum number of tasks to keep in the archive set.
+	//
+	// The janitor deletes the oldest archived tasks once the archive exceeds this limit.
+	// Archiving a task from this server applies the same limit immediately.
+	// If unset, zero, or negative, default size of 10000 is used.
+	MaxArchiveSize int
+
+	// ArchivedExpirationInDays specifies the number of days before an archived task is deleted.
+	//
+	// The janitor deletes archived tasks older than this.
+	// If unset, zero, or negative, default of 90 days is used.
+	ArchivedExpirationInDays int
 }
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
@@ -503,7 +519,10 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	}
 	logger.SetLevel(toInternalLogLevel(loglevel))
 
-	rdb := rdb.NewRDB(c)
+	rdb := rdb.NewRDB(c, rdb.RDBConfig{
+		MaxArchiveSize:           cfg.MaxArchiveSize,
+		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
+	})
 	starting := make(chan *workerInfo)
 	finished := make(chan *base.TaskMessage)
 	syncCh := make(chan *syncRequest)

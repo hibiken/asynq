@@ -1160,10 +1160,8 @@ func (r *RDB) ArchiveAllScheduledTasks(qname string) (int64, error) {
 // KEYS[3] -> asynq:{<qname>}:groups
 // -------
 // ARGV[1] -> current timestamp
-// ARGV[2] -> cutoff timestamp (e.g., 90 days ago)
-// ARGV[3] -> max number of tasks in archive (e.g., 100)
-// ARGV[4] -> task key prefix (asynq:{<qname>}:t:)
-// ARGV[5] -> group name
+// ARGV[2] -> task key prefix (asynq:{<qname>}:t:)
+// ARGV[3] -> group name
 //
 // Output:
 // integer: Number of tasks archived
@@ -1171,12 +1169,10 @@ var archiveAllAggregatingCmd = redis.NewScript(`
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
-	redis.call("HSET", ARGV[4] .. id, "state", "archived")
+	redis.call("HSET", ARGV[2] .. id, "state", "archived")
 end
-redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
 redis.call("DEL", KEYS[1])
-redis.call("SREM", KEYS[3], ARGV[5])
+redis.call("SREM", KEYS[3], ARGV[3])
 return table.getn(ids)
 `)
 
@@ -1196,8 +1192,6 @@ func (r *RDB) ArchiveAllAggregatingTasks(qname, gname string) (int64, error) {
 	now := r.clock.Now()
 	argv := []interface{}{
 		now.Unix(),
-		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
-		maxArchiveSize,
 		base.TaskKeyPrefix(qname),
 		gname,
 	}
@@ -1220,9 +1214,7 @@ func (r *RDB) ArchiveAllAggregatingTasks(qname, gname string) (int64, error) {
 // KEYS[2] -> asynq:{<qname>}:archived
 // --
 // ARGV[1] -> current timestamp
-// ARGV[2] -> cutoff timestamp (e.g., 90 days ago)
-// ARGV[3] -> max number of tasks in archive (e.g., 100)
-// ARGV[4] -> task key prefix (asynq:{<qname>}:t:)
+// ARGV[2] -> task key prefix (asynq:{<qname>}:t:)
 //
 // Output:
 // integer: Number of tasks archived
@@ -1230,10 +1222,8 @@ var archiveAllPendingCmd = redis.NewScript(`
 local ids = redis.call("LRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
-	redis.call("HSET", ARGV[4] .. id, "state", "archived")
+	redis.call("HSET", ARGV[2] .. id, "state", "archived")
 end
-redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
 redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
 
@@ -1252,8 +1242,6 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 	now := r.clock.Now()
 	argv := []interface{}{
 		now.Unix(),
-		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
-		maxArchiveSize,
 		base.TaskKeyPrefix(qname),
 	}
 	res, err := archiveAllPendingCmd.Run(context.Background(), r.client, keys, argv...).Result()
@@ -1276,10 +1264,8 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 // --
 // ARGV[1] -> id of the task to archive
 // ARGV[2] -> current timestamp
-// ARGV[3] -> cutoff timestamp (e.g., 90 days ago)
-// ARGV[4] -> max number of tasks in archived state (e.g., 100)
-// ARGV[5] -> queue key prefix (asynq:{<qname>}:)
-// ARGV[6] -> group key prefix (asynq:{<qname>}:g:)
+// ARGV[3] -> queue key prefix (asynq:{<qname>}:)
+// ARGV[4] -> group key prefix (asynq:{<qname>}:g:)
 //
 // Output:
 // Numeric code indicating the status:
@@ -1300,25 +1286,23 @@ if state == "archived" then
 	return -1
 end
 if state == "pending" then
-	if redis.call("LREM", ARGV[5] .. state, 1, ARGV[1]) == 0 then
-		return redis.error_reply("task id not found in list " .. tostring(ARGV[5] .. state))
+	if redis.call("LREM", ARGV[3] .. state, 1, ARGV[1]) == 0 then
+		return redis.error_reply("task id not found in list " .. tostring(ARGV[3] .. state))
 	end
 elseif state == "aggregating" then
-	if redis.call("ZREM", ARGV[6] .. group, ARGV[1]) == 0 then
-		return redis.error_reply("task id not found in zset " .. tostring(ARGV[6] .. group))
+	if redis.call("ZREM", ARGV[4] .. group, ARGV[1]) == 0 then
+		return redis.error_reply("task id not found in zset " .. tostring(ARGV[4] .. group))
 	end
-	if redis.call("ZCARD", ARGV[6] .. group) == 0 then
+	if redis.call("ZCARD", ARGV[4] .. group) == 0 then
 		redis.call("SREM", KEYS[3], group)
 	end
 else
-	if redis.call("ZREM", ARGV[5] .. state, ARGV[1]) == 0 then
-		return redis.error_reply("task id not found in zset " .. tostring(ARGV[5] .. state))
+	if redis.call("ZREM", ARGV[3] .. state, ARGV[1]) == 0 then
+		return redis.error_reply("task id not found in zset " .. tostring(ARGV[3] .. state))
 	end
 end
 redis.call("ZADD", KEYS[2], ARGV[2], ARGV[1])
 redis.call("HSET", KEYS[1], "state", "archived")
-redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[3])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[4])
 return 1
 `)
 
@@ -1343,8 +1327,6 @@ func (r *RDB) ArchiveTask(qname, id string) error {
 	argv := []interface{}{
 		id,
 		now.Unix(),
-		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
-		maxArchiveSize,
 		base.QueueKeyPrefix(qname),
 		base.GroupKeyPrefix(qname),
 	}
@@ -1380,9 +1362,7 @@ func (r *RDB) ArchiveTask(qname, id string) error {
 // KEYS[2] -> asynq:{<qname>}:archived
 // --
 // ARGV[1] -> current timestamp
-// ARGV[2] -> cutoff timestamp (e.g., 90 days ago)
-// ARGV[3] -> max number of tasks in archive (e.g., 100)
-// ARGV[4] -> task key prefix (asynq:{<qname>}:t:)
+// ARGV[2] -> task key prefix (asynq:{<qname>}:t:)
 //
 // Output:
 // integer: number of tasks archived
@@ -1390,10 +1370,8 @@ var archiveAllCmd = redis.NewScript(`
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
-	redis.call("HSET", ARGV[4] .. id, "state", "archived")
+	redis.call("HSET", ARGV[2] .. id, "state", "archived")
 end
-redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
 redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
 
@@ -1408,10 +1386,7 @@ func (r *RDB) archiveAll(src, dst, qname string) (int64, error) {
 	now := r.clock.Now()
 	argv := []interface{}{
 		now.Unix(),
-		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
-		maxArchiveSize,
 		base.TaskKeyPrefix(qname),
-		qname,
 	}
 	res, err := archiveAllCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
