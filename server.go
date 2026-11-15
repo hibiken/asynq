@@ -42,8 +42,6 @@ type Server struct {
 	// not want to close it.
 	sharedConnection bool
 
-	archiveSettings base.ArchiveConfig
-
 	state *serverState
 
 	// wait group to wait for all goroutines to finish.
@@ -245,12 +243,14 @@ type Config struct {
 	// If unset or nil, the group aggregation feature will be disabled on the server.
 	GroupAggregator GroupAggregator
 
-	// JanitorInterval specifies the average interval of janitor checks for expired completed tasks.
+	// JanitorInterval specifies the average interval of janitor checks.
+	// Each check deletes expired completed tasks and trims the archive.
 	//
 	// If unset or zero, default interval of 8 seconds is used.
 	JanitorInterval time.Duration
 
-	// JanitorBatchSize specifies the number of expired completed tasks to be deleted in one run.
+	// JanitorBatchSize specifies how many tasks the janitor deletes in one script run.
+	// This applies to expired completed tasks and to archived tasks past the retention limit.
 	//
 	// If unset or zero, default batch size of 100 is used.
 	// Make sure to not put a big number as the batch size to prevent a long-running script.
@@ -258,12 +258,14 @@ type Config struct {
 
 	// MaxArchiveSize specifies the maximum number of tasks to keep in the archive set.
 	//
-	// When the archive exceeds this limit, the oldest archived tasks are deleted.
+	// The janitor deletes the oldest archived tasks once the archive exceeds this limit.
+	// Archiving a task from this server applies the same limit immediately.
 	// If unset, zero, or negative, default size of 10000 is used.
 	MaxArchiveSize int
 
 	// ArchivedExpirationInDays specifies the number of days before an archived task is deleted.
 	//
+	// The janitor deletes archived tasks older than this.
 	// If unset, zero, or negative, default of 90 days is used.
 	ArchivedExpirationInDays int
 }
@@ -438,8 +440,6 @@ const (
 	defaultJanitorInterval = 8 * time.Second
 
 	defaultJanitorBatchSize = 100
-
-	queueConfigWriteTimeout = 5 * time.Second
 )
 
 // NewServer returns a new Server given a redis connection option
@@ -519,10 +519,6 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	}
 	logger.SetLevel(toInternalLogLevel(loglevel))
 
-	archiveSettings := base.ArchiveConfig{
-		MaxArchiveSize:           cfg.MaxArchiveSize,
-		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
-	}
 	rdb := rdb.NewRDB(c, rdb.RDBConfig{
 		MaxArchiveSize:           cfg.MaxArchiveSize,
 		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
@@ -629,7 +625,6 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		logger:           logger,
 		broker:           rdb,
 		sharedConnection: true,
-		archiveSettings:  archiveSettings,
 		state:            srvState,
 		forwarder:        forwarder,
 		processor:        processor,
@@ -711,12 +706,6 @@ func (srv *Server) Start(handler Handler) error {
 		return err
 	}
 	srv.logger.Info("Starting processing")
-
-	ctx, cancel := context.WithTimeout(context.Background(), queueConfigWriteTimeout)
-	if err := srv.broker.WriteArchiveConfig(ctx, srv.archiveSettings); err != nil {
-		srv.logger.Warnf("Could not persist archive settings: %v", err)
-	}
-	cancel()
 
 	srv.heartbeater.start(&srv.wg)
 	srv.healthchecker.start(&srv.wg)

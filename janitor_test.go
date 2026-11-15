@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -87,5 +88,47 @@ func TestJanitor(t *testing.T) {
 				t.Errorf("diff found in %q after running janitor: (-want, +got)\n%s", base.CompletedKey(qname), diff)
 			}
 		}
+	}
+}
+
+func TestJanitorTrimsArchive(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+
+	const maxArchiveSize = 2
+	rdbClient := rdb.NewRDB(r, rdb.RDBConfig{MaxArchiveSize: maxArchiveSize})
+
+	now := time.Now()
+	oldest := h.NewTaskMessageWithQueue("old", nil, "default")
+	middle := h.NewTaskMessageWithQueue("middle", nil, "default")
+	newest := h.NewTaskMessageWithQueue("newest", nil, "default")
+	h.SeedAllArchivedQueues(t, r, map[string][]base.Z{
+		"default": {
+			{Message: oldest, Score: now.Add(-3 * time.Hour).Unix()},
+			{Message: middle, Score: now.Add(-2 * time.Hour).Unix()},
+			{Message: newest, Score: now.Add(-time.Hour).Unix()},
+		},
+	})
+
+	janitor := newJanitor(janitorParams{
+		logger:    testLogger,
+		broker:    rdbClient,
+		queues:    []string{"default"},
+		interval:  time.Hour,
+		batchSize: 1,
+	})
+	janitor.exec()
+
+	got := h.GetArchivedEntries(t, r, "default")
+	if len(got) != maxArchiveSize {
+		t.Fatalf("archived set size = %d, want %d", len(got), maxArchiveSize)
+	}
+	for _, entry := range got {
+		if entry.Message.ID == oldest.ID {
+			t.Errorf("oldest task %s still in archive", oldest.ID)
+		}
+	}
+	if n := r.Exists(context.Background(), base.TaskKey("default", oldest.ID)).Val(); n != 0 {
+		t.Errorf("trimmed task %s still has a task hash", oldest.ID)
 	}
 }

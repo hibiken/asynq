@@ -12,9 +12,9 @@ import (
 	"github.com/hibiken/asynq/internal/log"
 )
 
-// A janitor is responsible for deleting expired completed tasks from the specified
-// queues. It periodically checks for any expired tasks in the completed set, and
-// deletes them.
+// A janitor deletes expired completed tasks and trims archives for the specified queues.
+// It periodically checks each queue, deletes completed tasks whose retention has passed,
+// and deletes archived tasks past the server's archive limits.
 type janitor struct {
 	logger *log.Logger
 	broker base.Broker
@@ -28,7 +28,7 @@ type janitor struct {
 	// average interval between checks.
 	avgInterval time.Duration
 
-	// number of tasks to be deleted when janitor runs to delete the expired completed tasks.
+	// number of tasks deleted in one script run, for completed tasks and for the archive.
 	batchSize int
 }
 
@@ -81,6 +81,9 @@ func (j *janitor) exec() {
 		if err := j.broker.DeleteExpiredCompletedTasks(qname, j.batchSize); err != nil {
 			j.logger.Errorf("Failed to delete expired completed tasks from queue %q: %v",
 				qname, err)
+		}
+		if err := j.broker.TrimArchive(qname, j.batchSize); err != nil {
+			j.logger.Errorf("Failed to trim archive for queue %q: %v", qname, err)
 		}
 	}
 }

@@ -2580,29 +2580,95 @@ func TestNewRDBArchiveConfig(t *testing.T) {
 	}
 }
 
-// Covers the trim in archiveAllPendingCmd, which enforces the max archive size
-// through a different Lua script than (*RDB).Archive.
-func TestArchiveAllPendingTasksTrimsToMaxArchiveSize(t *testing.T) {
+// Archiving from the inspector moves tasks and leaves the archive over the limit.
+// TrimArchive, which the server janitor calls, brings it back and drops the oldest task.
+func TestArchiveAllPendingTasksLeavesTrimToJanitor(t *testing.T) {
 	const customMaxArchiveSize = 3
 
 	r := setupWithArchive(t, customMaxArchiveSize, 0)
 	defer r.Close()
-	r.SetClock(timeutil.NewSimulatedClock(time.Now()))
 
-	var pending []*base.TaskMessage
-	for i := 0; i < 10; i++ {
-		pending = append(pending, h.NewTaskMessage("send_email", nil))
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	archived := make([]base.Z, customMaxArchiveSize)
+	for i := 0; i < customMaxArchiveSize; i++ {
+		archived[i] = base.Z{
+			Message: h.NewTaskMessage("old", nil),
+			Score:   now.Add(-time.Hour * time.Duration(i+1)).Unix(),
+		}
 	}
+	oldest := archived[customMaxArchiveSize-1].Message
+	fresh := h.NewTaskMessage("fresh", nil)
+
+	h.SeedAllArchivedQueues(t, r.client, map[string][]base.Z{
+		"default": archived,
+	})
 	h.SeedAllPendingQueues(t, r.client, map[string][]*base.TaskMessage{
-		"default": pending,
+		"default": {fresh},
 	})
 
 	if _, err := r.ArchiveAllPendingTasks("default"); err != nil {
 		t.Fatalf("ArchiveAllPendingTasks() = %v, want nil", err)
 	}
+	if got := len(h.GetArchivedEntries(t, r.client, "default")); got != customMaxArchiveSize+1 {
+		t.Fatalf("archived set size after archive = %d, want %d", got, customMaxArchiveSize+1)
+	}
 
-	if got := len(h.GetArchivedEntries(t, r.client, "default")); got != customMaxArchiveSize {
-		t.Errorf("archived set size = %d, want %d", got, customMaxArchiveSize)
+	if err := r.TrimArchive("default", 1); err != nil {
+		t.Fatalf("TrimArchive() = %v, want nil", err)
+	}
+	got := h.GetArchivedEntries(t, r.client, "default")
+	if len(got) != customMaxArchiveSize {
+		t.Fatalf("archived set size after trim = %d, want %d", len(got), customMaxArchiveSize)
+	}
+	for _, entry := range got {
+		if entry.Message.ID == oldest.ID {
+			t.Errorf("oldest task %s still in archive", oldest.ID)
+		}
+	}
+	if n := r.client.Exists(context.Background(), base.TaskKey("default", oldest.ID)).Val(); n != 0 {
+		t.Errorf("trimmed task %s still has a task hash", oldest.ID)
+	}
+	foundFresh := false
+	for _, entry := range got {
+		if entry.Message.ID == fresh.ID {
+			foundFresh = true
+		}
+	}
+	if !foundFresh {
+		t.Errorf("newly archived task %s was trimmed", fresh.ID)
+	}
+}
+
+func TestTrimArchiveDeletesExpiredTasks(t *testing.T) {
+	const expirationDays = 30
+
+	r := setupWithArchive(t, 100, expirationDays)
+	defer r.Close()
+
+	now := time.Now()
+	r.SetClock(timeutil.NewSimulatedClock(now))
+
+	expired := h.NewTaskMessage("expired", nil)
+	kept := h.NewTaskMessage("kept", nil)
+	h.SeedAllArchivedQueues(t, r.client, map[string][]base.Z{
+		"default": {
+			{Message: expired, Score: now.AddDate(0, 0, -(expirationDays + 1)).Unix()},
+			{Message: kept, Score: now.Add(-time.Hour).Unix()},
+		},
+	})
+
+	if err := r.TrimArchive("default", 100); err != nil {
+		t.Fatalf("TrimArchive() = %v, want nil", err)
+	}
+
+	got := h.GetArchivedEntries(t, r.client, "default")
+	if len(got) != 1 || got[0].Message.ID != kept.ID {
+		t.Fatalf("archive = %v, want only %s", got, kept.ID)
+	}
+	if n := r.client.Exists(context.Background(), base.TaskKey("default", expired.ID)).Val(); n != 0 {
+		t.Errorf("expired task %s still has a task hash", expired.ID)
 	}
 }
 
@@ -2754,33 +2820,6 @@ func TestArchiveWithCustomArchivedExpirationInDays(t *testing.T) {
 	gotArchived := h.GetArchivedEntries(t, r.client, "default")
 	if diff := cmp.Diff(wantArchived, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt, timeCmpOpt); diff != "" {
 		t.Errorf("mismatch found in archived set: (-want, +got):\n%s", diff)
-	}
-}
-
-func TestLoadArchiveConfigFromRedis(t *testing.T) {
-	r := setup(t)
-	defer r.Close()
-
-	if err := r.WriteArchiveConfig(context.Background(), base.ArchiveConfig{
-		MaxArchiveSize:           777,
-		ArchivedExpirationInDays: 7,
-	}); err != nil {
-		t.Fatalf("WriteArchiveConfig() = %v", err)
-	}
-
-	inspector := NewRDB(r.client)
-	if err := inspector.LoadArchiveConfigFromRedis(context.Background()); err != nil {
-		t.Fatalf("LoadArchiveConfigFromRedis() = %v", err)
-	}
-
-	now := time.Now()
-	if _, maxSize := inspector.archiveTrimArgs(now); maxSize != 777 {
-		t.Errorf("maxSize = %d, want 777", maxSize)
-	}
-	cutoff, _ := inspector.archiveTrimArgs(now)
-	wantCutoff := now.AddDate(0, 0, -7).Unix()
-	if cutoff != wantCutoff {
-		t.Errorf("cutoff = %d, want %d", cutoff, wantCutoff)
 	}
 }
 

@@ -76,39 +76,6 @@ func NewRDB(client redis.UniversalClient, config ...RDBConfig) *RDB {
 	}
 }
 
-// WriteArchiveConfig persists global archive retention settings.
-func (r *RDB) WriteArchiveConfig(ctx context.Context, cfg base.ArchiveConfig) error {
-	normalized := normalizeConfig(RDBConfig{
-		MaxArchiveSize:           cfg.MaxArchiveSize,
-		ArchivedExpirationInDays: cfg.ArchivedExpirationInDays,
-	})
-	return r.client.HSet(ctx, base.ArchiveConfigKey, map[string]interface{}{
-		"max_archive_size":            normalized.MaxArchiveSize,
-		"archived_expiration_in_days": normalized.ArchivedExpirationInDays,
-	}).Err()
-}
-
-// LoadArchiveConfigFromRedis loads archive settings from Redis into this instance's
-// in-memory config. Call once at startup; archiveTrimArgs does not read from Redis.
-func (r *RDB) LoadArchiveConfigFromRedis(ctx context.Context) error {
-	vals, err := r.client.HGetAll(ctx, base.ArchiveConfigKey).Result()
-	if err != nil {
-		return err
-	}
-	if len(vals) == 0 {
-		return nil
-	}
-	cfg := r.archiveConfig
-	if n := cast.ToInt(vals["max_archive_size"]); n > 0 {
-		cfg.MaxArchiveSize = n
-	}
-	if n := cast.ToInt(vals["archived_expiration_in_days"]); n > 0 {
-		cfg.ArchivedExpirationInDays = n
-	}
-	r.archiveConfig = normalizeConfig(cfg)
-	return nil
-}
-
 // archiveTrimArgs returns the cutoff timestamp and max archive size to trim an archive with.
 func (r *RDB) archiveTrimArgs(now time.Time) (cutoff int64, maxSize int) {
 	return now.AddDate(0, 0, -r.archiveConfig.ArchivedExpirationInDays).Unix(), r.archiveConfig.MaxArchiveSize
@@ -1481,6 +1448,73 @@ func (r *RDB) deleteExpiredCompletedTasks(qname string, batchSize int) (int64, e
 		batchSize,
 	}
 	res, err := deleteExpiredCompletedTasksCmd.Run(context.Background(), r.client, keys, argv...).Result()
+	if err != nil {
+		return 0, errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
+	}
+	n, ok := res.(int64)
+	if !ok {
+		return 0, errors.E(op, errors.Internal, fmt.Sprintf("unexpected return value from Lua script: %v", res))
+	}
+	return n, nil
+}
+
+// KEYS[1] -> asynq:{<qname>}:archived
+// ARGV[1] -> cutoff timestamp (unix seconds); tasks scored at or below this are expired
+// ARGV[2] -> max number of tasks to keep
+// ARGV[3] -> task key prefix
+// ARGV[4] -> batch size
+//
+// Returns the number of tasks deleted. Expired tasks are removed before the size cap is applied.
+var trimArchiveCmd = redis.NewScript(`
+local batch = tonumber(ARGV[4])
+if batch == nil or batch <= 0 then
+	return 0
+end
+local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, batch)
+if table.getn(ids) == 0 then
+	local excess = redis.call("ZCARD", KEYS[1]) - tonumber(ARGV[2])
+	if excess <= 0 then
+		return 0
+	end
+	if excess > batch then
+		excess = batch
+	end
+	ids = redis.call("ZRANGE", KEYS[1], 0, excess - 1)
+end
+for _, id in ipairs(ids) do
+	redis.call("DEL", ARGV[3] .. id)
+	redis.call("ZREM", KEYS[1], id)
+end
+return table.getn(ids)`)
+
+// TrimArchive deletes archived tasks that are past this RDB's retention settings.
+// Tasks older than ArchivedExpirationInDays are deleted first. If the archive is still
+// larger than MaxArchiveSize, the oldest remaining tasks are deleted.
+// batchSize bounds how many tasks one script run deletes. The call repeats until the archive fits.
+func (r *RDB) TrimArchive(qname string, batchSize int) error {
+	for {
+		n, err := r.trimArchive(qname, batchSize)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return nil
+		}
+	}
+}
+
+func (r *RDB) trimArchive(qname string, batchSize int) (int64, error) {
+	var op errors.Op = "rdb.TrimArchive"
+	now := r.clock.Now()
+	cutoff, maxSize := r.archiveTrimArgs(now)
+	keys := []string{base.ArchivedKey(qname)}
+	argv := []interface{}{
+		cutoff,
+		maxSize,
+		base.TaskKeyPrefix(qname),
+		batchSize,
+	}
+	res, err := trimArchiveCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
 		return 0, errors.E(op, errors.Internal, fmt.Sprintf("redis eval error: %v", err))
 	}
