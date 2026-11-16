@@ -2999,6 +2999,100 @@ func TestListLeaseExpired(t *testing.T) {
 	}
 }
 
+func TestClaimLeaseExpired(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	cutoff := now.Add(-30 * time.Second)
+	claimUntil := now
+
+	t1 := h.NewTaskMessageWithQueue("task1", nil, "default")
+	t2 := h.NewTaskMessageWithQueue("task2", nil, "default")
+
+	h.FlushDB(t, r.client)
+	h.SeedAllActiveQueues(t, r.client, map[string][]*base.TaskMessage{
+		"default": {t1, t2},
+	})
+	h.SeedAllLease(t, r.client, map[string][]base.Z{
+		"default": {
+			{Message: t1, Score: now.Add(-1 * time.Minute).Unix()},
+			{Message: t2, Score: now.Add(20 * time.Second).Unix()},
+		},
+	})
+
+	got, err := r.ClaimLeaseExpired(cutoff, claimUntil, "default")
+	if err != nil {
+		t.Fatalf("ClaimLeaseExpired returned error: %v", err)
+	}
+	if diff := cmp.Diff([]*base.TaskMessage{t1}, got, h.SortMsgOpt); diff != "" {
+		t.Errorf("first ClaimLeaseExpired mismatch (-want,+got):\n%s", diff)
+	}
+
+	// Second concurrent claim with the same cutoff must not receive t1 again.
+	gotSecond, err := r.ClaimLeaseExpired(cutoff, claimUntil, "default")
+	if err != nil {
+		t.Fatalf("second ClaimLeaseExpired returned error: %v", err)
+	}
+	if len(gotSecond) != 0 {
+		t.Errorf("second ClaimLeaseExpired returned %v, want empty slice", gotSecond)
+	}
+
+	wantLease := []base.Z{
+		{Message: t1, Score: claimUntil.Unix()},
+		{Message: t2, Score: now.Add(20 * time.Second).Unix()},
+	}
+	gotLease := h.GetLeaseEntries(t, r.client, "default")
+	if diff := cmp.Diff(wantLease, gotLease, h.SortZSetEntryOpt); diff != "" {
+		t.Errorf("lease entries mismatch (-want,+got):\n%s", diff)
+	}
+}
+
+func TestRetryAndArchiveIfLeaseMatches(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	now := time.Now()
+	staleClaim := now.Unix()
+	activeLease := now.Add(30 * time.Second).Unix()
+
+	t1 := h.NewTaskMessageWithQueue("task1", nil, "default")
+	t2 := h.NewTaskMessageWithQueue("task2", nil, "default")
+
+	h.FlushDB(t, r.client)
+	h.SeedAllActiveQueues(t, r.client, map[string][]*base.TaskMessage{
+		"default": {t1, t2},
+	})
+	h.SeedAllLease(t, r.client, map[string][]base.Z{
+		"default": {
+			{Message: t1, Score: activeLease},
+			{Message: t2, Score: activeLease},
+		},
+	})
+
+	if err := r.RetryIfLeaseMatches(context.Background(), t1, now.Add(10*time.Second), "stale", true, staleClaim); err == nil {
+		t.Errorf("RetryIfLeaseMatches with stale lease expected error, got nil")
+	}
+	if err := r.ArchiveIfLeaseMatches(context.Background(), t2, "stale", staleClaim); err == nil {
+		t.Errorf("ArchiveIfLeaseMatches with stale lease expected error, got nil")
+	}
+
+	// Active tasks and lease scores must remain intact when lease does not match.
+	gotActive := h.GetActiveMessages(t, r.client, "default")
+	if diff := cmp.Diff([]*base.TaskMessage{t1, t2}, gotActive, h.SortMsgOpt); diff != "" {
+		t.Errorf("active queue mutated on stale lease (-want,+got):\n%s", diff)
+	}
+
+	if err := r.RetryIfLeaseMatches(context.Background(), t1, now.Add(10*time.Second), "matched", true, activeLease); err != nil {
+		t.Errorf("RetryIfLeaseMatches with matching lease returned error: %v", err)
+	}
+	if err := r.ArchiveIfLeaseMatches(context.Background(), t2, "matched", activeLease); err != nil {
+		t.Errorf("ArchiveIfLeaseMatches with matching lease returned error: %v", err)
+	}
+
+	if got := h.GetActiveMessages(t, r.client, "default"); len(got) != 0 {
+		t.Errorf("active queue after matched calls = %v, want empty", got)
+	}
+}
+
 func TestExtendLease(t *testing.T) {
 	r := setup(t)
 	defer r.Close()

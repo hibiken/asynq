@@ -713,7 +713,9 @@ type Broker interface {
 	Schedule(ctx context.Context, msg *TaskMessage, processAt time.Time) error
 	ScheduleUnique(ctx context.Context, msg *TaskMessage, processAt time.Time, ttl time.Duration) error
 	Retry(ctx context.Context, msg *TaskMessage, processAt time.Time, errMsg string, isFailure bool) error
+	RetryIfLeaseMatches(ctx context.Context, msg *TaskMessage, processAt time.Time, errMsg string, isFailure bool, expectedLease int64) error
 	Archive(ctx context.Context, msg *TaskMessage, errMsg string) error
+	ArchiveIfLeaseMatches(ctx context.Context, msg *TaskMessage, errMsg string, expectedLease int64) error
 	ForwardIfReady(qnames ...string) error
 
 	// Group aggregation related methods
@@ -730,6 +732,7 @@ type Broker interface {
 
 	// Lease related methods
 	ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*TaskMessage, error)
+	ClaimLeaseExpired(cutoff, claimUntil time.Time, qnames ...string) ([]*TaskMessage, error)
 	ExtendLease(qname string, ids ...string) (time.Time, error)
 
 	// State snapshot related methods

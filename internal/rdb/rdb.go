@@ -881,7 +881,14 @@ func (r *RDB) ScheduleUnique(ctx context.Context, msg *base.TaskMessage, process
 // ARGV[4] -> stats expiration timestamp
 // ARGV[5] -> is_failure (bool)
 // ARGV[6] -> max int64 value
+// ARGV[7] -> expected lease score (0 to skip check)
 var retryCmd = redis.NewScript(`
+if tonumber(ARGV[7]) > 0 then
+  local score = redis.call("ZSCORE", KEYS[3], ARGV[1])
+  if not score or tonumber(score) ~= tonumber(ARGV[7]) then
+    return redis.error_reply("NOT FOUND")
+  end
+end
 if redis.call("LREM", KEYS[2], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
@@ -914,6 +921,16 @@ return redis.status_reply("OK")`)
 // It also annotates the message with the given error message and
 // if isFailure is true increments the retried counter.
 func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.Time, errMsg string, isFailure bool) error {
+	return r.retry(ctx, msg, processAt, errMsg, isFailure, 0)
+}
+
+// RetryIfLeaseMatches moves the task from active to retry queue only if
+// its lease score in the lease sorted set matches expectedLease.
+func (r *RDB) RetryIfLeaseMatches(ctx context.Context, msg *base.TaskMessage, processAt time.Time, errMsg string, isFailure bool, expectedLease int64) error {
+	return r.retry(ctx, msg, processAt, errMsg, isFailure, expectedLease)
+}
+
+func (r *RDB) retry(ctx context.Context, msg *base.TaskMessage, processAt time.Time, errMsg string, isFailure bool, expectedLease int64) error {
 	var op errors.Op = "rdb.Retry"
 	now := r.clock.Now()
 	modified := *msg
@@ -944,6 +961,7 @@ func (r *RDB) Retry(ctx context.Context, msg *base.TaskMessage, processAt time.T
 		expireAt.Unix(),
 		isFailure,
 		int64(math.MaxInt64),
+		expectedLease,
 	}
 	return r.runScript(ctx, op, retryCmd, keys, argv...)
 }
@@ -970,7 +988,14 @@ const (
 // ARGV[5] -> max number of tasks in archive (e.g., 100)
 // ARGV[6] -> stats expiration timestamp
 // ARGV[7] -> max int64 value
+// ARGV[8] -> expected lease score (0 to skip check)
 var archiveCmd = redis.NewScript(`
+if tonumber(ARGV[8]) > 0 then
+  local score = redis.call("ZSCORE", KEYS[3], ARGV[1])
+  if not score or tonumber(score) ~= tonumber(ARGV[8]) then
+    return redis.error_reply("NOT FOUND")
+  end
+end
 if redis.call("LREM", KEYS[2], 0, ARGV[1]) == 0 then
   return redis.error_reply("NOT FOUND")
 end
@@ -1016,6 +1041,16 @@ return redis.status_reply("OK")`)
 // Archive sends the given task to archive, attaching the error message to the task.
 // It also trims the archive by timestamp and set size.
 func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string) error {
+	return r.archive(ctx, msg, errMsg, 0)
+}
+
+// ArchiveIfLeaseMatches sends the given task to archive only if
+// its lease score in the lease sorted set matches expectedLease.
+func (r *RDB) ArchiveIfLeaseMatches(ctx context.Context, msg *base.TaskMessage, errMsg string, expectedLease int64) error {
+	return r.archive(ctx, msg, errMsg, expectedLease)
+}
+
+func (r *RDB) archive(ctx context.Context, msg *base.TaskMessage, errMsg string, expectedLease int64) error {
 	var op errors.Op = "rdb.Archive"
 	now := r.clock.Now()
 	modified := *msg
@@ -1046,6 +1081,7 @@ func (r *RDB) Archive(ctx context.Context, msg *base.TaskMessage, errMsg string)
 		maxArchiveSize,
 		expireAt.Unix(),
 		int64(math.MaxInt64),
+		expectedLease,
 	}
 	return r.runScript(ctx, op, archiveCmd, keys, argv...)
 }
@@ -1425,6 +1461,7 @@ func (r *RDB) deleteExpiredCompletedTasks(qname string, batchSize int) (int64, e
 // KEYS[1] -> asynq:{<qname>}:lease
 // ARGV[1] -> cutoff in unix time
 // ARGV[2] -> task key prefix
+// ARGV[3] -> claim_until unix time (0 for read-only)
 var listLeaseExpiredCmd = redis.NewScript(`
 local res = {}
 local ids = redis.call("ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
@@ -1432,6 +1469,9 @@ for _, id in ipairs(ids) do
 	local key = ARGV[2] .. id
 	local v = redis.call("HGET", key, "msg")
 	if v then
+		if tonumber(ARGV[3]) > 0 then
+			redis.call("ZADD", KEYS[1], ARGV[3], id)
+		end
 		table.insert(res, v)
 	end
 end
@@ -1440,12 +1480,22 @@ return res
 
 // ListLeaseExpired returns a list of task messages with an expired lease from the given queues.
 func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.TaskMessage, error) {
-	var op errors.Op = "rdb.ListLeaseExpired"
+	return r.listLeaseExpired("rdb.ListLeaseExpired", cutoff, 0, qnames...)
+}
+
+// ClaimLeaseExpired atomically claims task messages with an expired lease by
+// extending their lease score to claimUntil so concurrent recoverers do not
+// process the same expired tasks.
+func (r *RDB) ClaimLeaseExpired(cutoff, claimUntil time.Time, qnames ...string) ([]*base.TaskMessage, error) {
+	return r.listLeaseExpired("rdb.ClaimLeaseExpired", cutoff, claimUntil.Unix(), qnames...)
+}
+
+func (r *RDB) listLeaseExpired(op errors.Op, cutoff time.Time, claimUntilUnix int64, qnames ...string) ([]*base.TaskMessage, error) {
 	var msgs []*base.TaskMessage
 	for _, qname := range qnames {
 		res, err := listLeaseExpiredCmd.Run(context.Background(), r.client,
 			[]string{base.LeaseKey(qname)},
-			cutoff.Unix(), base.TaskKeyPrefix(qname)).Result()
+			cutoff.Unix(), base.TaskKeyPrefix(qname), claimUntilUnix).Result()
 		if err != nil {
 			return nil, errors.E(op, errors.Internal, fmt.Errorf("redis eval error: %w", err))
 		}

@@ -88,17 +88,20 @@ func (r *recoverer) recover() {
 
 func (r *recoverer) recoverLeaseExpiredTasks() {
 	// Get all tasks which have expired 30 seconds ago or earlier to accommodate certain amount of clock skew.
-	cutoff := time.Now().Add(-30 * time.Second)
-	msgs, err := r.broker.ListLeaseExpired(cutoff, r.queues...)
+	now := time.Now()
+	cutoff := now.Add(-30 * time.Second)
+	claimUntil := now
+	msgs, err := r.broker.ClaimLeaseExpired(cutoff, claimUntil, r.queues...)
 	if err != nil {
 		r.logger.Warnf("recoverer: could not list lease expired tasks: %v", err)
 		return
 	}
+	expectedLease := claimUntil.Unix()
 	for _, msg := range msgs {
 		if msg.Retried >= msg.Retry {
-			r.archive(msg, ErrLeaseExpired)
+			r.archive(msg, ErrLeaseExpired, expectedLease)
 		} else {
-			r.retry(msg, ErrLeaseExpired)
+			r.retry(msg, ErrLeaseExpired, expectedLease)
 		}
 	}
 }
@@ -111,16 +114,16 @@ func (r *recoverer) recoverStaleAggregationSets() {
 	}
 }
 
-func (r *recoverer) retry(msg *base.TaskMessage, err error) {
+func (r *recoverer) retry(msg *base.TaskMessage, err error, expectedLease int64) {
 	delay := r.retryDelayFunc(msg.Retried, err, NewTaskWithHeaders(msg.Type, msg.Payload, msg.Headers))
 	retryAt := time.Now().Add(delay)
-	if err := r.broker.Retry(context.Background(), msg, retryAt, err.Error(), r.isFailureFunc(err)); err != nil {
+	if err := r.broker.RetryIfLeaseMatches(context.Background(), msg, retryAt, err.Error(), r.isFailureFunc(err), expectedLease); err != nil {
 		r.logger.Warnf("recoverer: could not retry lease expired task: %v", err)
 	}
 }
 
-func (r *recoverer) archive(msg *base.TaskMessage, err error) {
-	if err := r.broker.Archive(context.Background(), msg, err.Error()); err != nil {
+func (r *recoverer) archive(msg *base.TaskMessage, err error, expectedLease int64) {
+	if err := r.broker.ArchiveIfLeaseMatches(context.Background(), msg, err.Error(), expectedLease); err != nil {
 		r.logger.Warnf("recoverer: could not move task to archive: %v", err)
 	}
 }
