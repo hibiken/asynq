@@ -184,23 +184,38 @@ func (l *Logger) Fatal(args ...interface{}) {
 }
 
 func (l *Logger) Debugf(format string, args ...interface{}) {
-	l.Debug(fmt.Sprintf(format, args...))
+	if !l.canLogAt(DebugLevel) {
+		return
+	}
+	l.base.Debug(fmt.Sprintf(format, args...))
 }
 
 func (l *Logger) Infof(format string, args ...interface{}) {
-	l.Info(fmt.Sprintf(format, args...))
+	if !l.canLogAt(InfoLevel) {
+		return
+	}
+	l.base.Info(fmt.Sprintf(format, args...))
 }
 
 func (l *Logger) Warnf(format string, args ...interface{}) {
-	l.Warn(fmt.Sprintf(format, args...))
+	if !l.canLogAt(WarnLevel) {
+		return
+	}
+	l.base.Warn(fmt.Sprintf(format, args...))
 }
 
 func (l *Logger) Errorf(format string, args ...interface{}) {
-	l.Error(fmt.Sprintf(format, args...))
+	if !l.canLogAt(ErrorLevel) {
+		return
+	}
+	l.base.Error(fmt.Sprintf(format, args...))
 }
 
 func (l *Logger) Fatalf(format string, args ...interface{}) {
-	l.Fatal(fmt.Sprintf(format, args...))
+	if !l.canLogAt(FatalLevel) {
+		return
+	}
+	l.base.Fatal(fmt.Sprintf(format, args...))
 }
 
 // SetLevel sets the logger level.
