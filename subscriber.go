@@ -80,6 +80,9 @@ func (s *subscriber) start(wg *sync.WaitGroup) {
 				s.logger.Debug("Subscriber done")
 				return
 			case msg := <-cancelCh:
+				if msg == nil {
+					return
+				}
 				cancel, ok := s.cancelations.Get(msg.Payload)
 				if ok {
 					cancel()
