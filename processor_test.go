@@ -20,6 +20,7 @@ import (
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/hibiken/asynq/internal/testbroker"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
 )
@@ -990,6 +991,70 @@ func TestReturnPanicError(t *testing.T) {
 			}
 			if tc.IsPanicError && !strings.HasPrefix(got.Error(), "panic error cause by:") {
 				t.Error("wrong text msg for panic error")
+			}
+		})
+	}
+}
+
+// A write that fails is handed to the syncer, which calls the request's fn
+// later, after the processor method that created it has returned. That call
+// must still be able to reach Redis.
+func TestProcessorSyncRequestRetries(t *testing.T) {
+	r := setup(t)
+	defer r.Close()
+	rdbClient := rdb.NewRDB(r)
+
+	tests := []struct {
+		desc      string
+		retention time.Duration
+		call      func(p *processor, l *base.Lease, msg *base.TaskMessage)
+	}{
+		{"markAsDone", 0, func(p *processor, l *base.Lease, msg *base.TaskMessage) { p.markAsDone(l, msg) }},
+		{"markAsComplete", time.Hour, func(p *processor, l *base.Lease, msg *base.TaskMessage) { p.markAsComplete(l, msg) }},
+		{"retry", 0, func(p *processor, l *base.Lease, msg *base.TaskMessage) {
+			p.retry(l, msg, fmt.Errorf("oops"), true)
+		}},
+		{"archive", 0, func(p *processor, l *base.Lease, msg *base.TaskMessage) {
+			p.archive(l, msg, fmt.Errorf("oops"))
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			h.FlushDB(t, r)
+			msg := h.NewTaskMessage("task", nil)
+			msg.Retention = int64(tc.retention.Seconds())
+			h.SeedActiveQueue(t, r, []*base.TaskMessage{msg}, base.DefaultQueueName)
+			h.SeedLease(t, r, []base.Z{{Message: msg, Score: time.Now().Add(time.Minute).Unix()}}, base.DefaultQueueName)
+
+			broker := testbroker.NewTestBroker(rdbClient)
+			syncCh := make(chan *syncRequest, 1)
+			p := newProcessor(processorParams{
+				logger:         testLogger,
+				broker:         broker,
+				baseCtxFn:      context.Background,
+				retryDelayFunc: DefaultRetryDelayFunc,
+				isFailureFunc:  defaultIsFailureFunc,
+				syncCh:         syncCh,
+				cancelations:   base.NewCancelations(),
+				concurrency:    1,
+				queues:         defaultQueueConfig,
+			})
+
+			broker.Sleep() // the first attempt fails
+			tc.call(p, base.NewLease(time.Now().Add(time.Minute)), msg)
+			broker.Wakeup()
+
+			select {
+			case req := <-syncCh:
+				if err := req.fn(); err != nil {
+					t.Fatalf("sync request failed after redis came back: %v", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("no sync request was made")
+			}
+			if got := h.GetActiveMessages(t, r, base.DefaultQueueName); len(got) != 0 {
+				t.Errorf("%d task(s) still active after the sync request, want 0", len(got))
 			}
 		})
 	}
