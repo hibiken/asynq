@@ -104,7 +104,7 @@ func BenchmarkDequeueSingleQueue(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		testutil.FlushDB(b, r.client)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			m := testutil.NewTaskMessageWithQueue(
 				fmt.Sprintf("task%d", i), nil, base.DefaultQueueName)
 			if err := r.Enqueue(ctx, m); err != nil {
@@ -128,7 +128,7 @@ func BenchmarkDequeueMultipleQueues(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		testutil.FlushDB(b, r.client)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			for _, qname := range qnames {
 				m := testutil.NewTaskMessageWithQueue(
 					fmt.Sprintf("%s_task%d", qname, i), nil, qname)

@@ -164,7 +164,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 		base.PausedKey(qname),
 		base.AllGroups(qname),
 	}
-	argv := []interface{}{
+	argv := []any{
 		base.TaskKeyPrefix(qname),
 		base.GroupKeyPrefix(qname),
 	}
@@ -346,7 +346,7 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 		base.CompletedKey(qname),
 		base.AllGroups(qname),
 	}
-	argv := []interface{}{
+	argv := []any{
 		base.TaskKeyPrefix(qname),
 		taskSampleSize,
 		groupSampleSize,
@@ -391,7 +391,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 	now := r.clock.Now().UTC()
 	var days []time.Time
 	var keys []string
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ts := now.Add(-time.Duration(i) * day)
 		days = append(days, ts)
 		keys = append(keys, base.ProcessedKey(qname, ts))
@@ -437,8 +437,8 @@ func (r *RDB) RedisClusterInfo() (map[string]string, error) {
 
 func parseInfo(infoStr string) (map[string]string, error) {
 	info := make(map[string]string)
-	lines := strings.Split(infoStr, "\r\n")
-	for _, l := range lines {
+	lines := strings.SplitSeq(infoStr, "\r\n")
+	for l := range lines {
 		kv := strings.Split(l, ":")
 		if len(kv) == 2 {
 			info[kv[0]] = kv[1]
@@ -503,7 +503,7 @@ func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 		return nil, errors.E(op, errors.CanonicalCode(err), err)
 	}
 	keys := []string{base.TaskKey(qname, id)}
-	argv := []interface{}{
+	argv := []any{
 		id,
 		r.clock.Now().Unix(),
 		base.QueueKeyPrefix(qname),
@@ -593,7 +593,7 @@ return res
 func (r *RDB) GroupStats(qname string) ([]*GroupStat, error) {
 	var op errors.Op = "RDB.GroupStats"
 	keys := []string{base.AllGroups(qname)}
-	argv := []interface{}{base.GroupKeyPrefix(qname)}
+	argv := []any{base.GroupKeyPrefix(qname)}
 	res, err := groupStatsCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
 		return nil, errors.E(op, errors.Unknown, err)
@@ -973,7 +973,7 @@ func (r *RDB) RunAllAggregatingTasks(qname, gname string) (int64, error) {
 		base.PendingKey(qname),
 		base.AllGroups(qname),
 	}
-	argv := []interface{}{
+	argv := []any{
 		base.TaskKeyPrefix(qname),
 		gname,
 	}
@@ -1050,7 +1050,7 @@ func (r *RDB) RunTask(qname, id string) error {
 		base.PendingKey(qname),
 		base.AllGroups(qname),
 	}
-	argv := []interface{}{
+	argv := []any{
 		id,
 		base.QueueKeyPrefix(qname),
 		base.GroupKeyPrefix(qname),
@@ -1105,7 +1105,7 @@ func (r *RDB) runAll(zset, qname string) (int64, error) {
 		zset,
 		base.PendingKey(qname),
 	}
-	argv := []interface{}{
+	argv := []any{
 		base.TaskKeyPrefix(qname),
 	}
 	res, err := runAllCmd.Run(context.Background(), r.client, keys, argv...).Result()
@@ -1167,14 +1167,13 @@ func (r *RDB) ArchiveAllScheduledTasks(qname string) (int64, error) {
 //
 // Output:
 // integer: Number of tasks archived
-var archiveAllAggregatingCmd = redis.NewScript(`
+var archiveAllAggregatingCmd = redis.NewScript(archiveTrimLua + `
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
 	redis.call("HSET", ARGV[4] .. id, "state", "archived")
 end
-redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
+trimArchive(KEYS[2], ARGV[4], ARGV[2], ARGV[3])
 redis.call("DEL", KEYS[1])
 redis.call("SREM", KEYS[3], ARGV[5])
 return table.getn(ids)
@@ -1194,7 +1193,7 @@ func (r *RDB) ArchiveAllAggregatingTasks(qname, gname string) (int64, error) {
 		base.AllGroups(qname),
 	}
 	now := r.clock.Now()
-	argv := []interface{}{
+	argv := []any{
 		now.Unix(),
 		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
 		maxArchiveSize,
@@ -1226,14 +1225,13 @@ func (r *RDB) ArchiveAllAggregatingTasks(qname, gname string) (int64, error) {
 //
 // Output:
 // integer: Number of tasks archived
-var archiveAllPendingCmd = redis.NewScript(`
+var archiveAllPendingCmd = redis.NewScript(archiveTrimLua + `
 local ids = redis.call("LRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
 	redis.call("HSET", ARGV[4] .. id, "state", "archived")
 end
-redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
+trimArchive(KEYS[2], ARGV[4], ARGV[2], ARGV[3])
 redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
 
@@ -1250,7 +1248,7 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 		base.ArchivedKey(qname),
 	}
 	now := r.clock.Now()
-	argv := []interface{}{
+	argv := []any{
 		now.Unix(),
 		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
 		maxArchiveSize,
@@ -1279,7 +1277,8 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 // ARGV[3] -> cutoff timestamp (e.g., 90 days ago)
 // ARGV[4] -> max number of tasks in archived state (e.g., 100)
 // ARGV[5] -> queue key prefix (asynq:{<qname>}:)
-// ARGV[6] -> group key prefix (asynq:{<qname>}:g:)
+// ARGV[6] -> group key prefix
+// ARGV[7] -> task key prefix (asynq:{<qname>}:t:) (asynq:{<qname>}:g:)
 //
 // Output:
 // Numeric code indicating the status:
@@ -1288,7 +1287,7 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 // Returns -1 if task is already archived.
 // Returns -2 if task is in active state.
 // Returns error reply if unexpected error occurs.
-var archiveTaskCmd = redis.NewScript(`
+var archiveTaskCmd = redis.NewScript(archiveTrimLua + `
 if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
 end
@@ -1317,8 +1316,7 @@ else
 end
 redis.call("ZADD", KEYS[2], ARGV[2], ARGV[1])
 redis.call("HSET", KEYS[1], "state", "archived")
-redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[3])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[4])
+trimArchive(KEYS[2], ARGV[7], ARGV[3], ARGV[4])
 return 1
 `)
 
@@ -1340,13 +1338,14 @@ func (r *RDB) ArchiveTask(qname, id string) error {
 		base.AllGroups(qname),
 	}
 	now := r.clock.Now()
-	argv := []interface{}{
+	argv := []any{
 		id,
 		now.Unix(),
 		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
 		maxArchiveSize,
 		base.QueueKeyPrefix(qname),
 		base.GroupKeyPrefix(qname),
+		base.TaskKeyPrefix(qname),
 	}
 	res, err := archiveTaskCmd.Run(context.Background(), r.client, keys, argv...).Result()
 	if err != nil {
@@ -1386,14 +1385,13 @@ func (r *RDB) ArchiveTask(qname, id string) error {
 //
 // Output:
 // integer: number of tasks archived
-var archiveAllCmd = redis.NewScript(`
+var archiveAllCmd = redis.NewScript(archiveTrimLua + `
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
 	redis.call("HSET", ARGV[4] .. id, "state", "archived")
 end
-redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
-redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
+trimArchive(KEYS[2], ARGV[4], ARGV[2], ARGV[3])
 redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
 
@@ -1406,7 +1404,7 @@ func (r *RDB) archiveAll(src, dst, qname string) (int64, error) {
 		dst,
 	}
 	now := r.clock.Now()
-	argv := []interface{}{
+	argv := []any{
 		now.Unix(),
 		now.AddDate(0, 0, -archivedExpirationInDays).Unix(),
 		maxArchiveSize,
@@ -1490,7 +1488,7 @@ func (r *RDB) UpdateTaskPayload(qname, id string, payload []byte) error {
 	keys := []string{
 		base.TaskKey(qname, id),
 	}
-	argv := []interface{}{
+	argv := []any{
 		encoded,
 	}
 
@@ -1573,7 +1571,7 @@ func (r *RDB) DeleteTask(qname, id string) error {
 		base.TaskKey(qname, id),
 		base.AllGroups(qname),
 	}
-	argv := []interface{}{
+	argv := []any{
 		id,
 		base.QueueKeyPrefix(qname),
 		base.GroupKeyPrefix(qname),
@@ -1680,7 +1678,7 @@ func (r *RDB) deleteAll(key, qname string) (int64, error) {
 	if err := r.checkQueueExists(qname); err != nil {
 		return 0, err
 	}
-	argv := []interface{}{
+	argv := []any{
 		base.TaskKeyPrefix(qname),
 		qname,
 	}
@@ -1724,7 +1722,7 @@ func (r *RDB) DeleteAllAggregatingTasks(qname, gname string) (int64, error) {
 		base.GroupKey(qname, gname),
 		base.AllGroups(qname),
 	}
-	argv := []interface{}{
+	argv := []any{
 		base.TaskKeyPrefix(qname),
 		gname,
 	}
@@ -1734,7 +1732,7 @@ func (r *RDB) DeleteAllAggregatingTasks(qname, gname string) (int64, error) {
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return 0, errors.E(op, errors.Internal, "command error: unexpected return value %v", res)
+		return 0, errors.E(op, errors.Internal, fmt.Sprintf("command error: unexpected return value %v", res))
 	}
 	return n, nil
 }
@@ -1766,7 +1764,7 @@ func (r *RDB) DeleteAllPendingTasks(qname string) (int64, error) {
 	keys := []string{
 		base.PendingKey(qname),
 	}
-	argv := []interface{}{
+	argv := []any{
 		base.TaskKeyPrefix(qname),
 	}
 	res, err := deleteAllPendingCmd.Run(context.Background(), r.client, keys, argv...).Result()
@@ -1775,7 +1773,7 @@ func (r *RDB) DeleteAllPendingTasks(qname string) (int64, error) {
 	}
 	n, ok := res.(int64)
 	if !ok {
-		return 0, errors.E(op, errors.Internal, "command error: unexpected return value %v", res)
+		return 0, errors.E(op, errors.Internal, fmt.Sprintf("command error: unexpected return value %v", res))
 	}
 	return n, nil
 }

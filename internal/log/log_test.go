@@ -164,7 +164,7 @@ func TestLoggerError(t *testing.T) {
 type formatTester struct {
 	desc        string
 	format      string
-	args        []interface{}
+	args        []any
 	wantPattern string // regexp that log output must match
 }
 
@@ -173,7 +173,7 @@ func TestLoggerDebugf(t *testing.T) {
 		{
 			desc:   "Formats message with DEBUG prefix",
 			format: "hello, %s!",
-			args:   []interface{}{"Gopher"},
+			args:   []any{"Gopher"},
 			wantPattern: fmt.Sprintf("^asynq: pid=%s %s %s%s DEBUG: hello, Gopher!\n$",
 				rgxPID, rgxdate, rgxtime, rgxmicroseconds),
 		},
@@ -202,7 +202,7 @@ func TestLoggerInfof(t *testing.T) {
 		{
 			desc:   "Formats message with INFO prefix",
 			format: "%d,%d,%d",
-			args:   []interface{}{1, 2, 3},
+			args:   []any{1, 2, 3},
 			wantPattern: fmt.Sprintf("^asynq: pid=%s %s %s%s INFO: 1,2,3\n$",
 				rgxPID, rgxdate, rgxtime, rgxmicroseconds),
 		},
@@ -231,7 +231,7 @@ func TestLoggerWarnf(t *testing.T) {
 		{
 			desc:   "Formats message with WARN prefix",
 			format: "hello, %s",
-			args:   []interface{}{"Gophers"},
+			args:   []any{"Gophers"},
 			wantPattern: fmt.Sprintf("^asynq: pid=%s %s %s%s WARN: hello, Gophers\n$",
 				rgxPID, rgxdate, rgxtime, rgxmicroseconds),
 		},
@@ -260,7 +260,7 @@ func TestLoggerErrorf(t *testing.T) {
 		{
 			desc:   "Formats message with ERROR prefix",
 			format: "hello, %s",
-			args:   []interface{}{"Gophers"},
+			args:   []any{"Gophers"},
 			wantPattern: fmt.Sprintf("^asynq: pid=%s %s %s%s ERROR: hello, Gophers\n$",
 				rgxPID, rgxdate, rgxtime, rgxmicroseconds),
 		},

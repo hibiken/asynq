@@ -40,7 +40,7 @@ func BenchmarkEndToEndSimple(b *testing.B) {
 			LogLevel: testLogLevel,
 		})
 		// Create a bunch of tasks
-		for i := 0; i < count; i++ {
+		for i := range count {
 			if _, err := client.Enqueue(makeTask(i)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
@@ -80,12 +80,12 @@ func BenchmarkEndToEnd(b *testing.B) {
 			LogLevel: testLogLevel,
 		})
 		// Create a bunch of tasks
-		for i := 0; i < count; i++ {
+		for i := range count {
 			if _, err := client.Enqueue(makeTask(i)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
-		for i := 0; i < count; i++ {
+		for i := range count {
 			if _, err := client.Enqueue(makeTask(i), ProcessIn(1*time.Second)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
@@ -149,17 +149,17 @@ func BenchmarkEndToEndMultipleQueues(b *testing.B) {
 			LogLevel: testLogLevel,
 		})
 		// Create a bunch of tasks
-		for i := 0; i < highCount; i++ {
+		for i := range highCount {
 			if _, err := client.Enqueue(makeTask(i), Queue("high")); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
-		for i := 0; i < defaultCount; i++ {
+		for i := range defaultCount {
 			if _, err := client.Enqueue(makeTask(i)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
-		for i := 0; i < lowCount; i++ {
+		for i := range lowCount {
 			if _, err := client.Enqueue(makeTask(i), Queue("low")); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
@@ -200,13 +200,13 @@ func BenchmarkClientWhileServerRunning(b *testing.B) {
 			LogLevel: testLogLevel,
 		})
 		// Enqueue 10,000 tasks.
-		for i := 0; i < count; i++ {
+		for i := range count {
 			if _, err := client.Enqueue(makeTask(i)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
 		}
 		// Schedule 10,000 tasks.
-		for i := 0; i < count; i++ {
+		for i := range count {
 			if _, err := client.Enqueue(makeTask(i), ProcessIn(1*time.Second)); err != nil {
 				b.Fatalf("could not enqueue a task: %v", err)
 			}
@@ -222,7 +222,7 @@ func BenchmarkClientWhileServerRunning(b *testing.B) {
 		b.Log("Starting enqueueing")
 		enqueued := 0
 		for enqueued < 100000 {
-			t := NewTask(fmt.Sprintf("enqueued%d", enqueued), h.JSON(map[string]interface{}{"data": enqueued}))
+			t := NewTask(fmt.Sprintf("enqueued%d", enqueued), h.JSON(map[string]any{"data": enqueued}))
 			if _, err := client.Enqueue(t); err != nil {
 				b.Logf("could not enqueue task %d: %v", enqueued, err)
 				continue

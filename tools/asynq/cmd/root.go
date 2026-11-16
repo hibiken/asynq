@@ -449,8 +449,8 @@ func getTLSConfig() *tls.Config {
 func printTable(cols []string, printRows func(w io.Writer, tmpl string)) {
 	format := strings.Repeat("%v\t", len(cols)) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	var headers []interface{}
-	var seps []interface{}
+	var headers []any
+	var seps []any
 	for _, name := range cols {
 		headers = append(headers, name)
 		seps = append(seps, strings.Repeat("-", len(name)))

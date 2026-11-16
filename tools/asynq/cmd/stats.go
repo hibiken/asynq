@@ -255,8 +255,8 @@ func printClusterInfo(info map[string]string) {
 	)
 }
 
-func toInterfaceSlice(strs []string) []interface{} {
-	var res []interface{}
+func toInterfaceSlice(strs []string) []any {
+	var res []any
 	for _, s := range strs {
 		res = append(res, s)
 	}

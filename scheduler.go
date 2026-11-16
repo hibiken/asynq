@@ -105,7 +105,7 @@ func newScheduler(opts *SchedulerOpts) *Scheduler {
 		state:             &serverState{value: srvStateNew},
 		heartbeatInterval: heartbeatInterval,
 		logger:            logger,
-		cron:              cron.New(cron.WithLocation(loc)),
+		cron:              cron.New(cron.WithLocation(loc), cron.WithChain(cron.Recover(cronLogger{logger}))),
 		location:          loc,
 		done:              make(chan struct{}),
 		preEnqueueFunc:    opts.PreEnqueueFunc,
@@ -113,6 +113,19 @@ func newScheduler(opts *SchedulerOpts) *Scheduler {
 		errHandler:        opts.EnqueueErrorHandler,
 		idmap:             make(map[string]cron.EntryID),
 	}
+}
+
+// cronLogger adapts the internal logger to cron.Logger so that panics in
+// scheduled jobs (including Pre/PostEnqueueFunc) are recovered and reported
+// instead of crashing the process.
+type cronLogger struct{ l *log.Logger }
+
+func (c cronLogger) Info(msg string, keysAndValues ...any) {
+	c.l.Debug(append([]any{"cron: ", msg, " "}, keysAndValues...)...)
+}
+
+func (c cronLogger) Error(err error, msg string, keysAndValues ...any) {
+	c.l.Error(append([]any{"cron: ", msg, ": ", err, " "}, keysAndValues...)...)
 }
 
 func generateSchedulerID() string {

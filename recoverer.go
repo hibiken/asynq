@@ -43,7 +43,7 @@ func newRecoverer(params recovererParams) *recoverer {
 	return &recoverer{
 		logger:         params.logger,
 		broker:         params.broker,
-		done:           make(chan struct{}),
+		done:           make(chan struct{}, 1), // 緩衝 1：shutdown 只投遞訊號，不等待迴圈處理完當前工作
 		queues:         params.queues,
 		interval:       params.interval,
 		retryDelayFunc: params.retryDelayFunc,
@@ -91,8 +91,12 @@ func (r *recoverer) recoverLeaseExpiredTasks() {
 	cutoff := time.Now().Add(-30 * time.Second)
 	msgs, err := r.broker.ListLeaseExpired(cutoff, r.queues...)
 	if err != nil {
-		r.logger.Warnf("recoverer: could not list lease expired tasks: %v", err)
-		return
+		// The result may be partial (e.g. one queue failed): still recover
+		// what was read instead of leaving those tasks stuck in active.
+		r.logger.Warnf("recoverer: could not list lease expired tasks completely: %v", err)
+		if len(msgs) == 0 {
+			return
+		}
 	}
 	for _, msg := range msgs {
 		if msg.Retried >= msg.Retry {

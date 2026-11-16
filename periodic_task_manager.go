@@ -181,13 +181,18 @@ func (mgr *PeriodicTaskManager) initialSync() error {
 
 func (mgr *PeriodicTaskManager) add(configs []*PeriodicTaskConfig) {
 	for _, c := range configs {
+		hash := c.hash()
+		// 相同 hash 視為同一設定；重複註冊會覆蓋 entryID，造成無法移除的孤兒 entry。
+		if _, exists := mgr.m[hash]; exists {
+			continue
+		}
 		entryID, err := mgr.s.Register(c.Cronspec, c.Task, c.Opts...)
 		if err != nil {
 			mgr.s.logger.Errorf("Failed to register periodic task: cronspec=%q task=%q err=%v",
 				c.Cronspec, c.Task.Type(), err)
 			continue
 		}
-		mgr.m[c.hash()] = entryID
+		mgr.m[hash] = entryID
 		mgr.s.logger.Infof("Successfully registered periodic task: cronspec=%q task=%q, entryID=%s",
 			c.Cronspec, c.Task.Type(), entryID)
 	}

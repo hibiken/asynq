@@ -252,6 +252,55 @@ type Config struct {
 	// If unset or zero, default batch size of 100 is used.
 	// Make sure to not put a big number as the batch size to prevent a long-running script.
 	JanitorBatchSize int
+
+	// StateChanged called when a task state changed
+	//
+	TaskStateProber *TaskStateProber
+}
+
+// TaskStateProber tell there's a state changed happening
+type TaskStateProber struct {
+	Probers map[string]string // map[state-string]data-name
+	Handler func(map[string]any)
+}
+
+func (p TaskStateProber) Changed(out map[string]any) {
+	if p.Handler != nil {
+		p.Handler(out)
+	}
+}
+
+func (p TaskStateProber) Result(state base.TaskState, raw *base.TaskInfo) (key string, data any) {
+	defer func() {
+		if len(key) == 0 {
+			key = "task"
+		}
+		if data == nil {
+			data = *newTaskInfo(raw.Message, raw.State, raw.NextProcessAt, raw.Result)
+		}
+	}()
+
+	probers := p.Probers
+	if len(probers) == 0 {
+		probers = map[string]string{"*": "task"}
+	}
+	key, ok := probers["*"]
+	if !ok {
+		key, ok = probers[state.String()]
+	}
+	if !ok {
+		return
+	}
+
+	switch key {
+	case "next":
+		data = raw.NextProcessAt
+	case "result":
+		if len(raw.Result) > 0 {
+			data = raw.Result
+		}
+	}
+	return
 }
 
 // GroupAggregator aggregates a group of tasks into one before the tasks are passed to the Handler.
@@ -299,20 +348,20 @@ type RetryDelayFunc func(n int, e error, t *Task) time.Duration
 // Logger supports logging at various log levels.
 type Logger interface {
 	// Debug logs a message at Debug level.
-	Debug(args ...interface{})
+	Debug(args ...any)
 
 	// Info logs a message at Info level.
-	Info(args ...interface{})
+	Info(args ...any)
 
 	// Warn logs a message at Warning level.
-	Warn(args ...interface{})
+	Warn(args ...any)
 
 	// Error logs a message at Error level.
-	Error(args ...interface{})
+	Error(args ...any)
 
 	// Fatal logs a message at Fatal level
 	// and process will exit with status set to 1.
-	Fatal(args ...interface{})
+	Fatal(args ...any)
 }
 
 // LogLevel represents logging level.
@@ -510,6 +559,11 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	srvState := &serverState{value: srvStateNew}
 	cancels := base.NewCancelations()
 
+	taskStateProber := cfg.TaskStateProber
+	if taskStateProber != nil {
+		rdb.SetTaskProber(*taskStateProber)
+	}
+
 	syncer := newSyncer(syncerParams{
 		logger:     logger,
 		requestsCh: syncCh,
@@ -681,11 +735,14 @@ func (srv *Server) Start(handler Handler) error {
 	if handler == nil {
 		return fmt.Errorf("asynq: server cannot run with nil handler")
 	}
-	srv.processor.handler = handler
 
+	// The state check must come first: a rejected Start call (already running,
+	// stopped or closed) must not touch the handler that workers are using.
+	// Workers are only launched below, after the handler has been set.
 	if err := srv.start(); err != nil {
 		return err
 	}
+	srv.processor.handler = handler
 	srv.logger.Info("Starting processing")
 
 	srv.heartbeater.start(&srv.wg)
@@ -749,6 +806,9 @@ func (srv *Server) Shutdown() {
 
 	if !srv.sharedConnection {
 		srv.broker.Close()
+	} else if s, ok := srv.broker.(interface{ StopTaskProbers() }); ok {
+		// The redis client is owned by the caller; only release what we created.
+		s.StopTaskProbers()
 	}
 	srv.logger.Info("Exiting")
 }
@@ -777,11 +837,19 @@ func (srv *Server) Stop() {
 //
 // This is an alternative to the HealthCheckFunc available in the Config object.
 func (srv *Server) Ping() error {
+	// Only read the state under the lock; the network round trip must not hold
+	// it, otherwise a slow redis would also block the heartbeater.
 	srv.state.mu.Lock()
-	defer srv.state.mu.Unlock()
-	if srv.state.value == srvStateClosed {
+	closed := srv.state.value == srvStateClosed
+	srv.state.mu.Unlock()
+	if closed {
 		return nil
 	}
 
 	return srv.broker.Ping()
+}
+
+// StateChanged watch state updates, with more customized detail
+func (srv *Server) SetTaskStateProber(prober base.TaskProber) {
+	srv.broker.SetTaskProber(prober)
 }

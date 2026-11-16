@@ -44,7 +44,7 @@ func newJanitor(params janitorParams) *janitor {
 	return &janitor{
 		logger:      params.logger,
 		broker:      params.broker,
-		done:        make(chan struct{}),
+		done:        make(chan struct{}, 1), // 緩衝 1：shutdown 只投遞訊號，不等待迴圈處理完當前工作
 		queues:      params.queues,
 		avgInterval: params.interval,
 		batchSize:   params.batchSize,

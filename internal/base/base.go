@@ -53,6 +53,11 @@ const (
 	TaskStateAggregating // describes a state where task is waiting in a group to be aggregated
 )
 
+type TaskProber interface {
+	Changed(map[string]any)
+	Result(state TaskState, raw *TaskInfo) (string, any)
+}
+
 func (s TaskState) String() string {
 	switch s {
 	case TaskStateActive:
@@ -198,7 +203,8 @@ func SchedulerHistoryKey(entryID string) string {
 
 // UniqueKey returns a redis key with the given type, payload, and queue name.
 func UniqueKey(qname, tasktype string, payload []byte) string {
-	if payload == nil {
+	// A nil and an empty payload are the same payload.
+	if len(payload) == 0 {
 		return QueueKeyPrefix(qname) + "unique:" + tasktype + ":"
 	}
 	checksum := md5.Sum(payload)
@@ -741,4 +747,7 @@ type Broker interface {
 	PublishCancelation(id string) error
 
 	WriteResult(qname, id string, data []byte) (n int, err error)
+
+	// StateChanged watch state updates, with more customized detail
+	SetTaskProber(prober TaskProber)
 }

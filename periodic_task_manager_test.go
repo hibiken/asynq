@@ -338,3 +338,37 @@ type cronEntry struct {
 	Cronspec string
 	TaskType string
 }
+
+// 相同 hash 的重複設定只應註冊一個 entry，否則移除時會遺留孤兒 entry 持續排程。
+func TestPeriodicTaskManagerDuplicateConfigsDoNotLeakEntries(t *testing.T) {
+	dup := func() *PeriodicTaskConfig {
+		return &PeriodicTaskConfig{Task: NewTask("dup", nil), Cronspec: "* * * * *"}
+	}
+	provider := &FakeConfigProvider{cfgs: []*PeriodicTaskConfig{dup(), dup(), {Task: NewTask("other", nil), Cronspec: "* * * * *"}}}
+	mgr, err := NewPeriodicTaskManager(PeriodicTaskManagerOpts{
+		RedisConnOpt:               getRedisConnOpt(t),
+		PeriodicTaskConfigProvider: provider,
+	})
+	if err != nil {
+		t.Fatalf("NewPeriodicTaskManager: %v", err)
+	}
+	if err := mgr.initialSync(); err != nil {
+		t.Fatalf("initialSync: %v", err)
+	}
+	if got := len(mgr.s.cron.Entries()); got != 2 {
+		t.Fatalf("after initial sync: %d scheduler entries, want 2", got)
+	}
+
+	// 同一批次內的重複項，經 sync 也不得重複註冊。
+	provider.SetConfigs([]*PeriodicTaskConfig{dup(), dup(), dup()})
+	mgr.sync()
+	if got := len(mgr.s.cron.Entries()); got != 1 {
+		t.Fatalf("after sync with duplicates: %d scheduler entries, want 1", got)
+	}
+
+	provider.SetConfigs(nil)
+	mgr.sync()
+	if got := len(mgr.s.cron.Entries()); got != 0 {
+		t.Errorf("after removing all configs: %d orphan scheduler entries remain", got)
+	}
+}
