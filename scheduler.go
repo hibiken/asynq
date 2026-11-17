@@ -206,12 +206,19 @@ func (j *enqueueJob) Run() {
 // Register registers a task to be enqueued on the given schedule specified by the cronspec.
 // It returns an ID of the newly registered entry.
 func (s *Scheduler) Register(cronspec string, task *Task, opts ...Option) (entryID string, err error) {
+	return s.RegisterWithTimezone(cronspec, task, s.location, opts...)
+}
+
+// Register registers a task to be enqueued on the given schedule specified by the cronspec.
+// The task will be enqueued in the provided timezone.
+// It returns an ID of the newly registered entry.
+func (s *Scheduler) RegisterWithTimezone(cronspec string, task *Task, location *time.Location, opts ...Option) (entryID string, err error) {
 	job := &enqueueJob{
 		id:              uuid.New(),
 		cronspec:        cronspec,
 		task:            task,
 		opts:            opts,
-		location:        s.location,
+		location:        location,
 		client:          s.client,
 		rdb:             s.rdb,
 		logger:          s.logger,
