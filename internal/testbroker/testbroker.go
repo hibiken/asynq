@@ -172,11 +172,11 @@ func (tb *TestBroker) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*b
 	return tb.real.ListLeaseExpired(cutoff, qnames...)
 }
 
-func (tb *TestBroker) ExtendLease(qname string, ids ...string) (time.Time, error) {
+func (tb *TestBroker) ExtendLease(qname string, ids ...string) (time.Time, []string, error) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 	if tb.sleeping {
-		return time.Time{}, errRedisDown
+		return time.Time{}, nil, errRedisDown
 	}
 	return tb.real.ExtendLease(qname, ids...)
 }
