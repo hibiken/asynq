@@ -1785,12 +1785,16 @@ func (r *RDB) DeleteAllPendingTasks(qname string) (int64, error) {
 // It only check whether active queue is empty before removing.
 //
 // Input:
-// KEYS[1] -> asynq:{<qname>}
+// KEYS[1] -> asynq:{<qname>}:pending
 // KEYS[2] -> asynq:{<qname>}:active
 // KEYS[3] -> asynq:{<qname>}:scheduled
 // KEYS[4] -> asynq:{<qname>}:retry
 // KEYS[5] -> asynq:{<qname>}:archived
-// KEYS[6] -> asynq:{<qname>}:lease
+// KEYS[6] -> asynq:{<qname>}:completed
+// KEYS[7] -> asynq:{<qname>}:lease
+// KEYS[8] -> asynq:{<qname>}:paused
+// KEYS[9] -> asynq:{<qname>}:processed
+// KEYS[10] -> asynq:{<qname>}:failed
 // --
 // ARGV[1] -> task key prefix
 //
@@ -1818,6 +1822,9 @@ end
 for _, id in ipairs(redis.call("ZRANGE", KEYS[5], 0, -1)) do
 	redis.call("DEL", ARGV[1] .. id)
 end
+for _, id in ipairs(redis.call("ZRANGE", KEYS[6], 0, -1)) do
+	redis.call("DEL", ARGV[1] .. id)
+end
 for _, id in ipairs(redis.call("LRANGE", KEYS[1], 0, -1)) do
 	redis.call("DEL", ARGV[1] .. id)
 end
@@ -1833,12 +1840,19 @@ end
 for _, id in ipairs(redis.call("ZRANGE", KEYS[5], 0, -1)) do
 	redis.call("DEL", ARGV[1] .. id)
 end
+for _, id in ipairs(redis.call("ZRANGE", KEYS[6], 0, -1)) do
+	redis.call("DEL", ARGV[1] .. id)
+end
 redis.call("DEL", KEYS[1])
 redis.call("DEL", KEYS[2])
 redis.call("DEL", KEYS[3])
 redis.call("DEL", KEYS[4])
 redis.call("DEL", KEYS[5])
 redis.call("DEL", KEYS[6])
+redis.call("DEL", KEYS[7])
+redis.call("DEL", KEYS[8])
+redis.call("DEL", KEYS[9])
+redis.call("DEL", KEYS[10])
 return 1`)
 
 // removeQueueCmd removes the given queue.
@@ -1850,7 +1864,11 @@ return 1`)
 // KEYS[3] -> asynq:{<qname>}:scheduled
 // KEYS[4] -> asynq:{<qname>}:retry
 // KEYS[5] -> asynq:{<qname>}:archived
-// KEYS[6] -> asynq:{<qname>}:lease
+// KEYS[6] -> asynq:{<qname>}:completed
+// KEYS[7] -> asynq:{<qname>}:lease
+// KEYS[8] -> asynq:{<qname>}:paused
+// KEYS[9] -> asynq:{<qname>}:processed
+// KEYS[10] -> asynq:{<qname>}:failed
 // --
 // ARGV[1] -> task key prefix
 //
@@ -1890,6 +1908,10 @@ redis.call("DEL", KEYS[3])
 redis.call("DEL", KEYS[4])
 redis.call("DEL", KEYS[5])
 redis.call("DEL", KEYS[6])
+redis.call("DEL", KEYS[7])
+redis.call("DEL", KEYS[8])
+redis.call("DEL", KEYS[9])
+redis.call("DEL", KEYS[10])
 return 1`)
 
 // RemoveQueue removes the specified queue.
@@ -1919,7 +1941,11 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 		base.ScheduledKey(qname),
 		base.RetryKey(qname),
 		base.ArchivedKey(qname),
+		base.CompletedKey(qname),
 		base.LeaseKey(qname),
+		base.PausedKey(qname),
+		base.ProcessedTotalKey(qname),
+		base.FailedTotalKey(qname),
 	}
 	res, err := script.Run(context.Background(), r.client, keys, base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
