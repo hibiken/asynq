@@ -295,7 +295,9 @@ func (p *processor) markAsComplete(l *base.Lease, msg *base.TaskMessage) {
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.MarkAsComplete(ctx, msg)
+				syncCtx, syncCancel := context.WithDeadline(context.Background(), l.Deadline())
+				defer syncCancel()
+				return p.broker.MarkAsComplete(syncCtx, msg)
 			},
 			errMsg:   errMsg,
 			deadline: l.Deadline(),
@@ -316,7 +318,9 @@ func (p *processor) markAsDone(l *base.Lease, msg *base.TaskMessage) {
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.Done(ctx, msg)
+				syncCtx, syncCancel := context.WithDeadline(context.Background(), l.Deadline())
+				defer syncCancel()
+				return p.broker.Done(syncCtx, msg)
 			},
 			errMsg:   errMsg,
 			deadline: l.Deadline(),
@@ -340,8 +344,8 @@ func (p *processor) handleFailedMessage(ctx context.Context, l *base.Lease, msg 
 	case errors.Is(err, RevokeTask):
 		p.logger.Warnf("revoke task id=%s", msg.ID)
 		p.markAsDone(l, msg)
-	case msg.Retried >= msg.Retry || errors.Is(err, SkipRetry):
-		p.logger.Warnf("Retry exhausted for task id=%s", msg.ID)
+	case msg.Retried >= msg.Retry || errors.Is(err, SkipRetry) || (msg.Deadline != 0 && p.clock.Now().Unix() >= msg.Deadline):
+		p.logger.Warnf("Retry exhausted or deadline exceeded for task id=%s", msg.ID)
 		p.archive(l, msg, err)
 	default:
 		p.retry(l, msg, err, p.isFailureFunc(err))
@@ -363,7 +367,9 @@ func (p *processor) retry(l *base.Lease, msg *base.TaskMessage, e error, isFailu
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.Retry(ctx, msg, retryAt, e.Error(), isFailure)
+				syncCtx, syncCancel := context.WithDeadline(context.Background(), l.Deadline())
+				defer syncCancel()
+				return p.broker.Retry(syncCtx, msg, retryAt, e.Error(), isFailure)
 			},
 			errMsg:   errMsg,
 			deadline: l.Deadline(),
@@ -384,7 +390,9 @@ func (p *processor) archive(l *base.Lease, msg *base.TaskMessage, e error) {
 		p.logger.Warnf("%s; Will retry syncing", errMsg)
 		p.syncRequestCh <- &syncRequest{
 			fn: func() error {
-				return p.broker.Archive(ctx, msg, e.Error())
+				syncCtx, syncCancel := context.WithDeadline(context.Background(), l.Deadline())
+				defer syncCancel()
+				return p.broker.Archive(syncCtx, msg, e.Error())
 			},
 			errMsg:   errMsg,
 			deadline: l.Deadline(),

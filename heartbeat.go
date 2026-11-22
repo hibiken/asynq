@@ -174,9 +174,10 @@ func (h *heartbeater) beat() {
 			Deadline: w.deadline,
 		})
 		// Check lease before adding to the set to make sure not to extend the lease if the lease is already expired.
-		if w.lease.IsValid() {
+		// Also do not extend the lease if the task deadline has already passed.
+		if w.lease.IsValid() && (w.deadline.IsZero() || h.clock.Now().Before(w.deadline)) {
 			idsByQueue[w.msg.Queue] = append(idsByQueue[w.msg.Queue], id)
-		} else {
+		} else if !w.lease.IsValid() {
 			w.lease.NotifyExpiration() // notify processor if the lease is expired
 		}
 	}
