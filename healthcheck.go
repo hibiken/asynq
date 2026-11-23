@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -72,9 +73,20 @@ func (hc *healthchecker) start(wg *sync.WaitGroup) {
 				return
 			case <-timer.C:
 				err := hc.broker.Ping()
-				hc.healthcheckFunc(err)
+				hc.invokeHealthCheck(err)
 				timer.Reset(hc.interval)
 			}
 		}
 	}()
+}
+
+// invokeHealthCheck calls the user-provided HealthCheckFunc, recovering from
+// panics so a buggy callback doesn't crash the worker process.
+func (hc *healthchecker) invokeHealthCheck(err error) {
+	defer func() {
+		if x := recover(); x != nil {
+			hc.logger.Errorf("recovering from panic in HealthCheckFunc. See the stack trace below for details:\n%s", string(debug.Stack()))
+		}
+	}()
+	hc.healthcheckFunc(err)
 }
