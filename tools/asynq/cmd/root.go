@@ -104,7 +104,7 @@ func (l *displayLine) String() string {
 type displayLines []*displayLine
 
 func (dls displayLines) String() string {
-	var lines []string
+	lines := make([]string, 0, len(dls))
 	for _, dl := range dls {
 		lines = append(lines, dl.String())
 	}
@@ -449,8 +449,8 @@ func getTLSConfig() *tls.Config {
 func printTable(cols []string, printRows func(w io.Writer, tmpl string)) {
 	format := strings.Repeat("%v\t", len(cols)) + "\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	var headers []interface{}
-	var seps []interface{}
+	headers := make([]interface{}, 0, len(cols))
+	seps := make([]interface{}, 0, len(cols))
 	for _, name := range cols {
 		headers = append(headers, name)
 		seps = append(seps, strings.Repeat("-", len(name)))
