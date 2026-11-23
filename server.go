@@ -66,7 +66,7 @@ type serverStateValue int
 const (
 	// StateNew represents a new server. Server begins in
 	// this state and then transition to StatusActive when
-	// Start or Run is callled.
+	// Start or Run is called.
 	srvStateNew serverStateValue = iota
 
 	// StateActive indicates the server is up and active.
