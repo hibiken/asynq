@@ -6,6 +6,7 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"io"
 	stdlog "log"
@@ -90,6 +91,7 @@ func NewLogger(base Base) *Logger {
 // Logger logs message to io.Writer at various log levels.
 type Logger struct {
 	base Base
+	slog *slogLogger
 
 	mu sync.Mutex
 	// Minimum log level for this logger.
@@ -149,6 +151,10 @@ func (l *Logger) canLogAt(v Level) bool {
 }
 
 func (l *Logger) Debug(args ...interface{}) {
+	if l.slog != nil {
+		l.slog.log(context.Background(), DebugLevel, fmt.Sprint(args...), nil)
+		return
+	}
 	if !l.canLogAt(DebugLevel) {
 		return
 	}
@@ -156,6 +162,10 @@ func (l *Logger) Debug(args ...interface{}) {
 }
 
 func (l *Logger) Info(args ...interface{}) {
+	if l.slog != nil {
+		l.slog.log(context.Background(), InfoLevel, fmt.Sprint(args...), nil)
+		return
+	}
 	if !l.canLogAt(InfoLevel) {
 		return
 	}
@@ -163,6 +173,10 @@ func (l *Logger) Info(args ...interface{}) {
 }
 
 func (l *Logger) Warn(args ...interface{}) {
+	if l.slog != nil {
+		l.slog.log(context.Background(), WarnLevel, fmt.Sprint(args...), nil)
+		return
+	}
 	if !l.canLogAt(WarnLevel) {
 		return
 	}
@@ -170,6 +184,10 @@ func (l *Logger) Warn(args ...interface{}) {
 }
 
 func (l *Logger) Error(args ...interface{}) {
+	if l.slog != nil {
+		l.slog.log(context.Background(), ErrorLevel, fmt.Sprint(args...), nil)
+		return
+	}
 	if !l.canLogAt(ErrorLevel) {
 		return
 	}
@@ -177,6 +195,11 @@ func (l *Logger) Error(args ...interface{}) {
 }
 
 func (l *Logger) Fatal(args ...interface{}) {
+	if l.slog != nil {
+		l.slog.log(context.Background(), FatalLevel, fmt.Sprint(args...), nil)
+		os.Exit(1)
+		return
+	}
 	if !l.canLogAt(FatalLevel) {
 		return
 	}

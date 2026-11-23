@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"time"
@@ -78,6 +79,25 @@ func ExampleServer_Stop() {
 	}
 
 	srv.Shutdown()
+}
+
+func ExampleWithStructuredLogger() {
+	cfg := asynq.Config{
+		Concurrency: 10,
+		LogLevel:    asynq.InfoLevel,
+	}
+	asynq.WithStructuredLogger(slog.Default())(&cfg)
+
+	srv := asynq.NewServer(
+		asynq.RedisClientOpt{Addr: ":6379"},
+		cfg,
+	)
+
+	h := asynq.NewServeMux()
+	// ... Register handlers
+
+	_ = srv
+	_ = h
 }
 
 func ExampleScheduler() {

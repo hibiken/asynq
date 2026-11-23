@@ -5,7 +5,9 @@
 package asynq
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -88,12 +90,7 @@ func newScheduler(opts *SchedulerOpts) *Scheduler {
 		heartbeatInterval = defaultHeartbeatInterval
 	}
 
-	logger := log.NewLogger(opts.Logger)
-	loglevel := opts.LogLevel
-	if loglevel == level_unspecified {
-		loglevel = InfoLevel
-	}
-	logger.SetLevel(toInternalLogLevel(loglevel))
+	logger := newLogger(opts.Logger, opts.StructuredLogger, opts.LogLevel)
 
 	loc := opts.Location
 	if loc == nil {
@@ -137,7 +134,13 @@ type SchedulerOpts struct {
 	// Logger specifies the logger used by the scheduler instance.
 	//
 	// If unset, the default logger is used.
+	// Ignored when StructuredLogger is set.
 	Logger Logger
+
+	// StructuredLogger specifies a log/slog logger for context-aware structured logging.
+	//
+	// If set, asynq uses slog's context methods for internal logs and ignores Logger.
+	StructuredLogger *slog.Logger
 
 	// LogLevel specifies the minimum log level to enable.
 	//
@@ -192,14 +195,14 @@ func (j *enqueueJob) Run() {
 		}
 		return
 	}
-	j.logger.Debugf("scheduler enqueued a task: %+v", info)
+	j.logger.DebugContext(context.Background(), "scheduler enqueued a task", "component", "scheduler", "task", info)
 	event := &base.SchedulerEnqueueEvent{
 		TaskID:     info.ID,
 		EnqueuedAt: time.Now().In(j.location),
 	}
 	err = j.rdb.RecordSchedulerEnqueueEvent(j.id.String(), event)
 	if err != nil {
-		j.logger.Warnf("scheduler could not record enqueue event of enqueued task %s: %v", info.ID, err)
+		j.logger.WarnContext(context.Background(), "scheduler could not record enqueue event of enqueued task", "component", "scheduler", "task_id", info.ID, "error", err)
 	}
 }
 
@@ -260,8 +263,8 @@ func (s *Scheduler) Start() error {
 	if err := s.start(); err != nil {
 		return err
 	}
-	s.logger.Info("Scheduler starting")
-	s.logger.Infof("Scheduler timezone is set to %v", s.location)
+	s.logger.InfoContext(context.Background(), "Scheduler starting", "component", "scheduler")
+	s.logger.InfoContext(context.Background(), "Scheduler timezone is set", "component", "scheduler", "timezone", s.location)
 	s.cron.Start()
 	s.wg.Add(1)
 	go s.runHeartbeater()
@@ -294,7 +297,7 @@ func (s *Scheduler) Shutdown() {
 	s.state.value = srvStateClosed
 	s.state.mu.Unlock()
 
-	s.logger.Info("Scheduler shutting down")
+	s.logger.InfoContext(context.Background(), "Scheduler shutting down", "component", "scheduler")
 	close(s.done) // signal heartbeater to stop
 	ctx := s.cron.Stop()
 	<-ctx.Done()
@@ -302,9 +305,9 @@ func (s *Scheduler) Shutdown() {
 
 	s.clearHistory()
 	if err := s.client.Close(); err != nil {
-		s.logger.Errorf("Failed to close redis client connection: %v", err)
+		s.logger.ErrorContext(context.Background(), "Failed to close redis client connection", "component", "scheduler", "error", err)
 	}
-	s.logger.Info("Scheduler stopped")
+	s.logger.InfoContext(context.Background(), "Scheduler stopped", "component", "scheduler")
 }
 
 func (s *Scheduler) runHeartbeater() {
@@ -313,9 +316,9 @@ func (s *Scheduler) runHeartbeater() {
 	for {
 		select {
 		case <-s.done:
-			s.logger.Debugf("Scheduler heatbeater shutting down")
+			s.logger.DebugContext(context.Background(), "Scheduler heatbeater shutting down", "component", "scheduler")
 			if err := s.rdb.ClearSchedulerEntries(s.id); err != nil {
-				s.logger.Errorf("Failed to clear the scheduler entries: %v", err)
+				s.logger.ErrorContext(context.Background(), "Failed to clear the scheduler entries", "component", "scheduler", "error", err)
 			}
 			ticker.Stop()
 			return
@@ -342,7 +345,7 @@ func (s *Scheduler) beat() {
 		entries = append(entries, e)
 	}
 	if err := s.rdb.WriteSchedulerEntries(s.id, entries, s.heartbeatInterval*2); err != nil {
-		s.logger.Warnf("Scheduler could not write heartbeat data: %v", err)
+		s.logger.WarnContext(context.Background(), "Scheduler could not write heartbeat data", "component", "scheduler", "error", err)
 	}
 }
 
@@ -358,7 +361,7 @@ func (s *Scheduler) clearHistory() {
 	for _, entry := range s.cron.Entries() {
 		job := entry.Job.(*enqueueJob)
 		if err := s.rdb.ClearSchedulerHistory(job.id.String()); err != nil {
-			s.logger.Warnf("Could not clear scheduler history for entry %q: %v", job.id.String(), err)
+			s.logger.WarnContext(context.Background(), "Could not clear scheduler history for entry", "component", "scheduler", "entry_id", job.id.String(), "error", err)
 		}
 	}
 }

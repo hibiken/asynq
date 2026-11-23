@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"math/rand/v2"
 	"runtime"
@@ -66,7 +67,7 @@ type serverStateValue int
 const (
 	// StateNew represents a new server. Server begins in
 	// this state and then transition to StatusActive when
-	// Start or Run is callled.
+	// Start or Run is called.
 	srvStateNew serverStateValue = iota
 
 	// StateActive indicates the server is up and active.
@@ -188,7 +189,13 @@ type Config struct {
 	// Logger specifies the logger used by the server instance.
 	//
 	// If unset, default logger is used.
+	// Ignored when StructuredLogger is set.
 	Logger Logger
+
+	// StructuredLogger specifies a log/slog logger for context-aware structured logging.
+	//
+	// If set, asynq uses slog's context methods for internal logs and ignores Logger.
+	StructuredLogger *slog.Logger
 
 	// LogLevel specifies the minimum log level to enable.
 	//
@@ -496,12 +503,7 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 	if groupGracePeriod < time.Second {
 		panic("GroupGracePeriod cannot be less than a second")
 	}
-	logger := log.NewLogger(cfg.Logger)
-	loglevel := cfg.LogLevel
-	if loglevel == level_unspecified {
-		loglevel = InfoLevel
-	}
-	logger.SetLevel(toInternalLogLevel(loglevel))
+	logger := newLogger(cfg.Logger, cfg.StructuredLogger, cfg.LogLevel)
 
 	rdb := rdb.NewRDB(c)
 	starting := make(chan *workerInfo)
@@ -583,8 +585,8 @@ func NewServerFromRedisClient(c redis.UniversalClient, cfg Config) *Server {
 		janitorBatchSize = defaultJanitorBatchSize
 	}
 	if janitorBatchSize > defaultJanitorBatchSize {
-		logger.Warnf("Janitor batch size of %d is greater than the recommended batch size of %d. "+
-			"This might cause a long-running script", janitorBatchSize, defaultJanitorBatchSize)
+		logger.WarnContext(context.Background(), "Janitor batch size is greater than the recommended batch size; this might cause a long-running script",
+			"component", "server", "batch_size", janitorBatchSize, "recommended_batch_size", defaultJanitorBatchSize)
 	}
 	janitor := newJanitor(janitorParams{
 		logger:    logger,
@@ -686,7 +688,7 @@ func (srv *Server) Start(handler Handler) error {
 	if err := srv.start(); err != nil {
 		return err
 	}
-	srv.logger.Info("Starting processing")
+	srv.logger.InfoContext(context.Background(), "Starting processing", "component", "server")
 
 	srv.heartbeater.start(&srv.wg)
 	srv.healthchecker.start(&srv.wg)
@@ -731,7 +733,7 @@ func (srv *Server) Shutdown() {
 	srv.state.value = srvStateClosed
 	srv.state.mu.Unlock()
 
-	srv.logger.Info("Starting graceful shutdown")
+	srv.logger.InfoContext(context.Background(), "Starting graceful shutdown", "component", "server")
 	// Note: The order of shutdown is important.
 	// Sender goroutines should be terminated before the receiver goroutines.
 	// processor -> syncer (via syncCh)
@@ -750,7 +752,7 @@ func (srv *Server) Shutdown() {
 	if !srv.sharedConnection {
 		srv.broker.Close()
 	}
-	srv.logger.Info("Exiting")
+	srv.logger.InfoContext(context.Background(), "Exiting", "component", "server")
 }
 
 // Stop signals the server to stop pulling new tasks off queues.
@@ -768,9 +770,9 @@ func (srv *Server) Stop() {
 	srv.state.value = srvStateStopped
 	srv.state.mu.Unlock()
 
-	srv.logger.Info("Stopping processor")
+	srv.logger.InfoContext(context.Background(), "Stopping processor", "component", "server")
 	srv.processor.stop()
-	srv.logger.Info("Processor stopped")
+	srv.logger.InfoContext(context.Background(), "Processor stopped", "component", "server")
 }
 
 // Ping performs a ping against the redis connection.

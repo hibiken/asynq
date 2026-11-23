@@ -85,7 +85,7 @@ func (a *aggregator) shutdown() {
 	if a.ga == nil {
 		return
 	}
-	a.logger.Debug("Aggregator shutting down...")
+	a.logger.DebugContext(context.Background(), "Aggregator shutting down", "component", "aggregator")
 	// Signal the aggregator goroutine to stop.
 	a.done <- struct{}{}
 }
@@ -101,12 +101,12 @@ func (a *aggregator) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-a.done:
-				a.logger.Debug("Waiting for all aggregation checks to finish...")
+				a.logger.DebugContext(context.Background(), "Waiting for all aggregation checks to finish", "component", "aggregator")
 				// block until all aggregation checks released the token
 				for i := 0; i < cap(a.sema); i++ {
 					a.sema <- struct{}{}
 				}
-				a.logger.Debug("Aggregator done")
+				a.logger.DebugContext(context.Background(), "Aggregator done", "component", "aggregator")
 				ticker.Stop()
 				return
 			case t := <-ticker.C:
@@ -123,7 +123,7 @@ func (a *aggregator) exec(t time.Time) {
 	default:
 		// If the semaphore blocks, then we are currently running max number of
 		// aggregation checks. Skip this round and log warning.
-		a.logger.Warnf("Max number of aggregation checks in flight. Skipping")
+		a.logger.WarnContext(context.Background(), "Max number of aggregation checks in flight. Skipping", "component", "aggregator")
 	}
 }
 
@@ -132,26 +132,26 @@ func (a *aggregator) aggregate(t time.Time) {
 	for _, qname := range a.queues {
 		groups, err := a.broker.ListGroups(qname)
 		if err != nil {
-			a.logger.Errorf("Failed to list groups in queue: %q", qname)
+			a.logger.ErrorContext(context.Background(), "Failed to list groups in queue", "component", "aggregator", "queue", qname)
 			continue
 		}
 		for _, gname := range groups {
 			aggregationSetID, err := a.broker.AggregationCheck(
 				qname, gname, t, a.gracePeriod, a.maxDelay, a.maxSize)
 			if err != nil {
-				a.logger.Errorf("Failed to run aggregation check: queue=%q group=%q", qname, gname)
+				a.logger.ErrorContext(context.Background(), "Failed to run aggregation check", "component", "aggregator", "queue", qname, "group", gname)
 				continue
 			}
 			if aggregationSetID == "" {
-				a.logger.Debugf("No aggregation needed at this time: queue=%q group=%q", qname, gname)
+				a.logger.DebugContext(context.Background(), "No aggregation needed at this time", "component", "aggregator", "queue", qname, "group", gname)
 				continue
 			}
 
 			// Aggregate and enqueue.
 			msgs, deadline, err := a.broker.ReadAggregationSet(qname, gname, aggregationSetID)
 			if err != nil {
-				a.logger.Errorf("Failed to read aggregation set: queue=%q, group=%q, setID=%q",
-					qname, gname, aggregationSetID)
+				a.logger.ErrorContext(context.Background(), "Failed to read aggregation set",
+					"component", "aggregator", "queue", qname, "group", gname, "set_id", aggregationSetID)
 				continue
 			}
 			tasks := make([]*Task, len(msgs))
@@ -161,14 +161,14 @@ func (a *aggregator) aggregate(t time.Time) {
 			aggregatedTask := a.ga.Aggregate(gname, tasks)
 			ctx, cancel := context.WithDeadline(context.Background(), deadline)
 			if _, err := a.client.EnqueueContext(ctx, aggregatedTask, Queue(qname)); err != nil {
-				a.logger.Errorf("Failed to enqueue aggregated task (queue=%q, group=%q, setID=%q): %v",
-					qname, gname, aggregationSetID, err)
+				a.logger.ErrorContext(ctx, "Failed to enqueue aggregated task",
+					"component", "aggregator", "queue", qname, "group", gname, "set_id", aggregationSetID, "error", err)
 				cancel()
 				continue
 			}
 			if err := a.broker.DeleteAggregationSet(ctx, qname, gname, aggregationSetID); err != nil {
-				a.logger.Warnf("Failed to delete aggregation set: queue=%q, group=%q, setID=%q",
-					qname, gname, aggregationSetID)
+				a.logger.WarnContext(ctx, "Failed to delete aggregation set",
+					"component", "aggregator", "queue", qname, "group", gname, "set_id", aggregationSetID)
 			}
 			cancel()
 		}

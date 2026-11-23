@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -47,7 +48,7 @@ func newSyncer(params syncerParams) *syncer {
 }
 
 func (s *syncer) shutdown() {
-	s.logger.Debug("Syncer shutting down...")
+	s.logger.DebugContext(context.Background(), "Syncer shutting down", "component", "syncer")
 	// Signal the syncer goroutine to stop.
 	s.done <- struct{}{}
 }
@@ -63,10 +64,10 @@ func (s *syncer) start(wg *sync.WaitGroup) {
 				// Try sync one last time before shutting down.
 				for _, req := range requests {
 					if err := req.fn(); err != nil {
-						s.logger.Error(req.errMsg)
+						s.logger.ErrorContext(context.Background(), req.errMsg, "component", "syncer")
 					}
 				}
-				s.logger.Debug("Syncer done")
+				s.logger.DebugContext(context.Background(), "Syncer done", "component", "syncer")
 				return
 			case req := <-s.requestsCh:
 				requests = append(requests, req)

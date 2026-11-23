@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"os"
 	"sync"
 	"time"
@@ -90,7 +91,7 @@ func newHeartbeater(params heartbeaterParams) *heartbeater {
 }
 
 func (h *heartbeater) shutdown() {
-	h.logger.Debug("Heartbeater shutting down...")
+	h.logger.DebugContext(context.Background(), "Heartbeater shutting down", "component", "heartbeater")
 	// Signal the heartbeater goroutine to stop.
 	h.done <- struct{}{}
 }
@@ -121,9 +122,9 @@ func (h *heartbeater) start(wg *sync.WaitGroup) {
 			select {
 			case <-h.done:
 				if err := h.broker.ClearServerState(h.host, h.pid, h.serverID); err != nil {
-					h.logger.Errorf("Failed to clear server state: %v", err)
+					h.logger.ErrorContext(context.Background(), "Failed to clear server state", "component", "heartbeater", "error", err)
 				}
-				h.logger.Debug("Heartbeater done")
+				h.logger.DebugContext(context.Background(), "Heartbeater done", "component", "heartbeater")
 				timer.Stop()
 				return
 
@@ -184,18 +185,18 @@ func (h *heartbeater) beat() {
 	// Note: Set TTL to be long enough so that it won't expire before we write again
 	// and short enough to expire quickly once the process is shut down or killed.
 	if err := h.broker.WriteServerState(&info, ws, h.interval*2); err != nil {
-		h.logger.Errorf("Failed to write server state data: %v", err)
+		h.logger.ErrorContext(context.Background(), "Failed to write server state data", "component", "heartbeater", "error", err)
 	}
 
 	for qname, ids := range idsByQueue {
 		expirationTime, err := h.broker.ExtendLease(qname, ids...)
 		if err != nil {
-			h.logger.Errorf("Failed to extend lease for tasks %v: %v", ids, err)
+			h.logger.ErrorContext(context.Background(), "Failed to extend lease for tasks", "component", "heartbeater", "task_ids", ids, "error", err)
 			continue
 		}
 		for _, id := range ids {
 			if l := h.workers[id].lease; !l.Reset(expirationTime) {
-				h.logger.Warnf("Lease reset failed for %s; lease deadline: %v", id, l.Deadline())
+				h.logger.WarnContext(context.Background(), "Lease reset failed", "component", "heartbeater", "task_id", id, "lease_deadline", l.Deadline())
 			}
 		}
 	}

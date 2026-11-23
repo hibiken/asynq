@@ -5,6 +5,7 @@
 package asynq
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -46,7 +47,7 @@ func newForwarder(params forwarderParams) *forwarder {
 }
 
 func (f *forwarder) shutdown() {
-	f.logger.Debug("Forwarder shutting down...")
+	f.logger.DebugContext(context.Background(), "Forwarder shutting down", "component", "forwarder")
 	// Signal the forwarder goroutine to stop polling.
 	f.done <- struct{}{}
 }
@@ -60,7 +61,7 @@ func (f *forwarder) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-f.done:
-				f.logger.Debug("Forwarder done")
+				f.logger.DebugContext(context.Background(), "Forwarder done", "component", "forwarder")
 				return
 			case <-timer.C:
 				f.exec()
@@ -72,6 +73,6 @@ func (f *forwarder) start(wg *sync.WaitGroup) {
 
 func (f *forwarder) exec() {
 	if err := f.broker.ForwardIfReady(f.queues...); err != nil {
-		f.logger.Errorf("Failed to forward scheduled tasks: %v", err)
+		f.logger.ErrorContext(context.Background(), "Failed to forward scheduled tasks", "component", "forwarder", "error", err)
 	}
 }

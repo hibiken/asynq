@@ -52,7 +52,7 @@ func newRecoverer(params recovererParams) *recoverer {
 }
 
 func (r *recoverer) shutdown() {
-	r.logger.Debug("Recoverer shutting down...")
+	r.logger.DebugContext(context.Background(), "Recoverer shutting down", "component", "recoverer")
 	// Signal the recoverer goroutine to stop polling.
 	r.done <- struct{}{}
 }
@@ -66,7 +66,7 @@ func (r *recoverer) start(wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-r.done:
-				r.logger.Debug("Recoverer done")
+				r.logger.DebugContext(context.Background(), "Recoverer done", "component", "recoverer")
 				timer.Stop()
 				return
 			case <-timer.C:
@@ -91,7 +91,7 @@ func (r *recoverer) recoverLeaseExpiredTasks() {
 	cutoff := time.Now().Add(-30 * time.Second)
 	msgs, err := r.broker.ListLeaseExpired(cutoff, r.queues...)
 	if err != nil {
-		r.logger.Warnf("recoverer: could not list lease expired tasks: %v", err)
+		r.logger.WarnContext(context.Background(), "recoverer: could not list lease expired tasks", "component", "recoverer", "error", err)
 		return
 	}
 	for _, msg := range msgs {
@@ -106,7 +106,7 @@ func (r *recoverer) recoverLeaseExpiredTasks() {
 func (r *recoverer) recoverStaleAggregationSets() {
 	for _, qname := range r.queues {
 		if err := r.broker.ReclaimStaleAggregationSets(qname); err != nil {
-			r.logger.Warnf("recoverer: could not reclaim stale aggregation sets in queue %q: %v", qname, err)
+			r.logger.WarnContext(context.Background(), "recoverer: could not reclaim stale aggregation sets", "component", "recoverer", "queue", qname, "error", err)
 		}
 	}
 }
@@ -115,12 +115,12 @@ func (r *recoverer) retry(msg *base.TaskMessage, err error) {
 	delay := r.retryDelayFunc(msg.Retried, err, NewTaskWithHeaders(msg.Type, msg.Payload, msg.Headers))
 	retryAt := time.Now().Add(delay)
 	if err := r.broker.Retry(context.Background(), msg, retryAt, err.Error(), r.isFailureFunc(err)); err != nil {
-		r.logger.Warnf("recoverer: could not retry lease expired task: %v", err)
+		r.logger.WarnContext(context.Background(), "recoverer: could not retry lease expired task", "component", "recoverer", "error", err)
 	}
 }
 
 func (r *recoverer) archive(msg *base.TaskMessage, err error) {
 	if err := r.broker.Archive(context.Background(), msg, err.Error()); err != nil {
-		r.logger.Warnf("recoverer: could not move task to archive: %v", err)
+		r.logger.WarnContext(context.Background(), "recoverer: could not move task to archive", "component", "recoverer", "error", err)
 	}
 }
