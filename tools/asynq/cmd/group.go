@@ -38,7 +38,10 @@ func groupLists(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	inspector := createInspector()
+	defer closeInspector(inspector)
+
 	groups, err := inspector.Groups(qname)
 	if err != nil {
 		return fmt.Errorf("could not fetch groups: %v", err)
