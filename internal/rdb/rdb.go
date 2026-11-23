@@ -8,6 +8,7 @@ package rdb
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"sync"
 	"time"
@@ -1305,7 +1306,10 @@ func (r *RDB) ReadAggregationSet(qname, gname, setID string) ([]*base.TaskMessag
 	for _, s := range data {
 		msg, err := base.DecodeMessage([]byte(s))
 		if err != nil {
-			return nil, time.Time{}, errors.E(op, errors.Internal, fmt.Sprintf("cannot decode message: %v", err))
+			// Skip undecodable task messages instead of aborting the whole batch.
+			// See the analogous ListLeaseExpired comment for the failure mode.
+			log.Printf("asynq[rdb.readAggregationSet]: skipping undecodable task message in queue %q (len=%d): %v", qname, len(s), err)
+			continue
 		}
 		msgs = append(msgs, msg)
 	}
@@ -1456,7 +1460,14 @@ func (r *RDB) ListLeaseExpired(cutoff time.Time, qnames ...string) ([]*base.Task
 		for _, s := range data {
 			msg, err := base.DecodeMessage([]byte(s))
 			if err != nil {
-				return nil, errors.E(op, errors.Internal, fmt.Sprintf("cannot decode message: %v", err))
+				// A single undecodable task message must not abort the entire batch.
+				// Otherwise the recoverer goroutine wedges on every tick (default 1m),
+				// preventing any lease-expired task from being retried or archived,
+				// which effectively halts the worker until the bad message is removed
+				// from Redis manually.
+				// Skip the bad message, log a warning, and continue with the rest.
+				log.Printf("asynq[rdb.ListLeaseExpired]: skipping undecodable task message in queue %q (len=%d): %v", qname, len(s), err)
+				continue
 			}
 			msgs = append(msgs, msg)
 		}
