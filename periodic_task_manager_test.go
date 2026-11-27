@@ -338,3 +338,52 @@ type cronEntry struct {
 	Cronspec string
 	TaskType string
 }
+
+func TestPeriodicTaskConfigHashFieldBoundaries(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b *PeriodicTaskConfig
+	}{
+		{"type and payload", &PeriodicTaskConfig{Cronspec: "* * * * *", Task: NewTask("ab", []byte("c"))}, &PeriodicTaskConfig{Cronspec: "* * * * *", Task: NewTask("a", []byte("bc"))}},
+		{"payload and options", &PeriodicTaskConfig{Cronspec: "* * * * *", Task: NewTask("a", []byte(Queue("default").String()))}, &PeriodicTaskConfig{Cronspec: "* * * * *", Task: NewTask("a", nil), Opts: []Option{Queue("default")}}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.a.hash() == tc.b.hash() {
+				t.Fatal("distinct fields have the same config hash")
+			}
+		})
+	}
+}
+
+func TestPeriodicTaskManagerSyncChangedFieldBoundaries(t *testing.T) {
+	before := &PeriodicTaskConfig{Cronspec: "* * * * *", Task: NewTask("ab", []byte("c"))}
+	after := &PeriodicTaskConfig{Cronspec: "* * * * *", Task: NewTask("a", []byte("bc"))}
+	provider := &FakeConfigProvider{cfgs: []*PeriodicTaskConfig{before}}
+	mgr, err := NewPeriodicTaskManager(PeriodicTaskManagerOpts{PeriodicTaskConfigProvider: provider, RedisConnOpt: RedisClientOpt{Addr: "127.0.0.1:1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mgr.s.client.Close()
+	if err := mgr.initialSync(); err != nil {
+		t.Fatal(err)
+	}
+	entries := mgr.s.cron.Entries()
+	if len(entries) != 1 {
+		t.Fatalf("initial entries=%d", len(entries))
+	}
+	oldID := entries[0].ID
+	provider.SetConfigs([]*PeriodicTaskConfig{after})
+	mgr.sync()
+	entries = mgr.s.cron.Entries()
+	if len(entries) != 1 {
+		t.Fatalf("updated entries=%d", len(entries))
+	}
+	if entries[0].ID == oldID {
+		t.Error("configuration change left the old scheduler entry registered")
+	}
+	job := entries[0].Job.(*enqueueJob)
+	if job.task.Type() != after.Task.Type() || string(job.task.Payload()) != string(after.Task.Payload()) {
+		t.Errorf("retained stale task %q payload %q", job.task.Type(), job.task.Payload())
+	}
+}
