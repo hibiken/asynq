@@ -6,6 +6,7 @@ package asynq
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"sort"
 	"sync"
@@ -89,13 +90,20 @@ type PeriodicTaskConfig struct {
 
 func (c *PeriodicTaskConfig) hash() string {
 	h := sha256.New()
-	_, _ = h.Write([]byte(c.Cronspec))
-	_, _ = h.Write([]byte(c.Task.Type()))
-	h.Write(c.Task.Payload())
+	// Frame each field so moving bytes across field boundaries changes the hash.
+	var size [8]byte
+	writeField := func(value []byte) {
+		binary.BigEndian.PutUint64(size[:], uint64(len(value)))
+		_, _ = h.Write(size[:])
+		_, _ = h.Write(value)
+	}
+	writeField([]byte(c.Cronspec))
+	writeField([]byte(c.Task.Type()))
+	writeField(c.Task.Payload())
 	opts := stringifyOptions(c.Opts)
 	sort.Strings(opts)
 	for _, opt := range opts {
-		_, _ = h.Write([]byte(opt))
+		writeField([]byte(opt))
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
